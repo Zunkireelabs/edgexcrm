@@ -1,0 +1,616 @@
+{
+  "info": {
+    "_postman_id": "genxcrm-integration-api-v1",
+    "name": "GenX CRM Integration API",
+    "description": "External integration API for the GenX CRM multi-tenant lead management platform.\n\nAll endpoints require a Bearer API key.\nAll endpoints are scoped to a single tenant determined by the API key.\n\nBase URL: {{base_url}}\nAPI Key: {{api_key}}",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{api_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://lead-crm.zunkireelabs.com",
+      "type": "string"
+    },
+    {
+      "key": "api_key",
+      "value": "crm_live_YOUR_API_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "lead_id",
+      "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "type": "string"
+    },
+    {
+      "key": "stage_id",
+      "value": "s1a2b3c4-d5e6-7890-abcd-ef1234567890",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "u1a2b3c4-d5e6-7890-abcd-ef1234567890",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Leads",
+      "item": [
+        {
+          "name": "List Leads",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads?limit=50&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "description": "Results per page (1-100, default 50)"
+                },
+                {
+                  "key": "offset",
+                  "value": "0",
+                  "description": "Number of results to skip (default 0)"
+                },
+                {
+                  "key": "stage_id",
+                  "value": "",
+                  "description": "Filter by pipeline stage UUID",
+                  "disabled": true
+                },
+                {
+                  "key": "assigned_to",
+                  "value": "",
+                  "description": "Filter by assigned user UUID",
+                  "disabled": true
+                },
+                {
+                  "key": "email",
+                  "value": "",
+                  "description": "Case-insensitive exact match on email. Returns 200 with empty array if not found.",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Search across name, email, phone (case-insensitive)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List CRM leads with optional filtering and offset-based pagination. Results ordered by created_at descending."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "originalRequest": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{base_url}}/api/v1/integrations/crm/leads?limit=10&offset=0",
+                  "host": ["{{base_url}}"],
+                  "path": ["api", "v1", "integrations", "crm", "leads"],
+                  "query": [
+                    { "key": "limit", "value": "10" },
+                    { "key": "offset", "value": "0" }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"leads\": [\n      {\n        \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n        \"first_name\": \"John\",\n        \"last_name\": \"Doe\",\n        \"email\": \"john@example.com\",\n        \"phone\": \"+919876543210\",\n        \"city\": \"Mumbai\",\n        \"country\": \"India\",\n        \"status\": \"new\",\n        \"stage_id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n        \"stage_slug\": \"new\",\n        \"stage_name\": \"New\",\n        \"assigned_to\": null,\n        \"assigned_name\": null,\n        \"custom_fields\": {},\n        \"file_urls\": {},\n        \"intake_source\": \"integration\",\n        \"intake_medium\": null,\n        \"intake_campaign\": null,\n        \"preferred_contact_method\": null,\n        \"is_final\": true,\n        \"created_at\": \"2026-02-26T10:30:00.000Z\",\n        \"updated_at\": \"2026-02-26T10:30:00.000Z\"\n      }\n    ],\n    \"total\": 1,\n    \"limit\": 10,\n    \"offset\": 0\n  }\n}"
+            },
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"UNAUTHORIZED\",\n    \"message\": \"Authentication required\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Lead by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads", "{{lead_id}}"]
+            },
+            "description": "Get a single lead by UUID with checklist summary counts (checklist_total, checklist_completed)."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Mumbai\",\n    \"country\": \"India\",\n    \"status\": \"contacted\",\n    \"stage_id\": \"s2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"contacted\",\n    \"stage_name\": \"Contacted\",\n    \"assigned_to\": \"u1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"assigned_name\": \"admin@zunkireelabs.com\",\n    \"custom_fields\": {\"course_interested\": \"MBA\"},\n    \"file_urls\": {},\n    \"intake_source\": \"integration\",\n    \"intake_medium\": null,\n    \"intake_campaign\": null,\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-20T10:30:00.000Z\",\n    \"updated_at\": \"2026-02-25T14:00:00.000Z\",\n    \"checklist_total\": 3,\n    \"checklist_completed\": 1\n  }\n}"
+            },
+            {
+              "name": "404 — Not Found",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"NOT_FOUND\",\n    \"message\": \"Lead not found\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Create Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Optional. Prevents duplicate lead creation.",
+                "disabled": false
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Jane\",\n  \"last_name\": \"Smith\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"+919876543210\",\n  \"city\": \"Delhi\",\n  \"country\": \"India\",\n  \"status\": \"new\",\n  \"custom_fields\": {\n    \"course_interested\": \"BBA\",\n    \"referral_code\": \"REF2026\"\n  },\n  \"intake_source\": \"partner_api\",\n  \"intake_campaign\": \"spring-2026\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads"]
+            },
+            "description": "Create a new lead. Required: first_name, email. Stage resolved from stage_id → status slug → tenant default. Supports Idempotency-Key header."
+          },
+          "response": [
+            {
+              "name": "201 — Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"b2c3d4e5-f6a7-8901-bcde-f12345678901\",\n    \"first_name\": \"Jane\",\n    \"last_name\": \"Smith\",\n    \"email\": \"jane@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Delhi\",\n    \"country\": \"India\",\n    \"status\": \"new\",\n    \"stage_id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"new\",\n    \"stage_name\": \"New\",\n    \"assigned_to\": null,\n    \"assigned_name\": null,\n    \"custom_fields\": {\"course_interested\": \"BBA\", \"referral_code\": \"REF2026\"},\n    \"file_urls\": {},\n    \"intake_source\": \"partner_api\",\n    \"intake_medium\": null,\n    \"intake_campaign\": \"spring-2026\",\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-26T12:00:00.000Z\",\n    \"updated_at\": \"2026-02-26T12:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "200 — Idempotent Duplicate",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"b2c3d4e5-f6a7-8901-bcde-f12345678901\",\n    \"first_name\": \"Jane\",\n    \"last_name\": \"Smith\",\n    \"email\": \"jane@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Delhi\",\n    \"country\": \"India\",\n    \"status\": \"new\",\n    \"stage_id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"new\",\n    \"stage_name\": \"New\",\n    \"assigned_to\": null,\n    \"assigned_name\": null,\n    \"custom_fields\": {\"course_interested\": \"BBA\", \"referral_code\": \"REF2026\"},\n    \"file_urls\": {},\n    \"intake_source\": \"partner_api\",\n    \"intake_medium\": null,\n    \"intake_campaign\": \"spring-2026\",\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-26T12:00:00.000Z\",\n    \"updated_at\": \"2026-02-26T12:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "422 — Validation Error",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": {\n      \"first_name\": [\"first_name is required\"],\n      \"email\": [\"email is required\", \"Invalid email address\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Update Lead",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"contacted\",\n  \"assigned_to\": \"{{user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads/{{lead_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads", "{{lead_id}}"]
+            },
+            "description": "Partial update of lead fields. Dual-mode: provide status (slug) OR stage_id, not both. At least one field required."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Mumbai\",\n    \"country\": \"India\",\n    \"status\": \"contacted\",\n    \"stage_id\": \"s2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"contacted\",\n    \"stage_name\": \"Contacted\",\n    \"assigned_to\": \"u1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"assigned_name\": \"admin@zunkireelabs.com\",\n    \"custom_fields\": {},\n    \"file_urls\": {},\n    \"intake_source\": \"integration\",\n    \"intake_medium\": null,\n    \"intake_campaign\": null,\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-20T10:30:00.000Z\",\n    \"updated_at\": \"2026-02-26T15:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "422 — Status and stage_id conflict",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": {\n      \"status\": [\"Cannot provide both status and stage_id. Use one or the other.\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Assign Lead",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Optional. Prevents duplicate assignment.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{user_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads/{{lead_id}}/assign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads", "{{lead_id}}", "assign"]
+            },
+            "description": "Assign a lead to a team member. user_id must be a member of the tenant."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Mumbai\",\n    \"country\": \"India\",\n    \"status\": \"new\",\n    \"stage_id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"new\",\n    \"stage_name\": \"New\",\n    \"assigned_to\": \"u1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"assigned_name\": \"admin@zunkireelabs.com\",\n    \"custom_fields\": {},\n    \"file_urls\": {},\n    \"intake_source\": \"integration\",\n    \"intake_medium\": null,\n    \"intake_campaign\": null,\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-20T10:30:00.000Z\",\n    \"updated_at\": \"2026-02-26T15:00:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "422 — Not a tenant member",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": {\n      \"user_id\": [\"User is not a member of this tenant\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Move Lead Stage",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Idempotency-Key",
+                "value": "{{$guid}}",
+                "description": "Optional. Prevents duplicate stage move.",
+                "disabled": true
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"stage_id\": \"{{stage_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads/{{lead_id}}/move-stage",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads", "{{lead_id}}", "move-stage"]
+            },
+            "description": "Move a lead to a different pipeline stage. Cannot move from terminal stages (e.g., Enrolled, Rejected)."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n    \"first_name\": \"John\",\n    \"last_name\": \"Doe\",\n    \"email\": \"john@example.com\",\n    \"phone\": \"+919876543210\",\n    \"city\": \"Mumbai\",\n    \"country\": \"India\",\n    \"status\": \"contacted\",\n    \"stage_id\": \"s2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n    \"stage_slug\": \"contacted\",\n    \"stage_name\": \"Contacted\",\n    \"assigned_to\": null,\n    \"assigned_name\": null,\n    \"custom_fields\": {},\n    \"file_urls\": {},\n    \"intake_source\": \"integration\",\n    \"intake_medium\": null,\n    \"intake_campaign\": null,\n    \"preferred_contact_method\": null,\n    \"is_final\": true,\n    \"created_at\": \"2026-02-20T10:30:00.000Z\",\n    \"updated_at\": \"2026-02-26T15:30:00.000Z\"\n  }\n}"
+            },
+            {
+              "name": "422 — Terminal stage",
+              "status": "Unprocessable Entity",
+              "code": 422,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"VALIDATION_ERROR\",\n    \"message\": \"Validation failed\",\n    \"details\": {\n      \"stage_id\": [\"Cannot move lead from terminal stage \\\"Enrolled\\\"\"]\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Lead Checklists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads/{{lead_id}}/checklists",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads", "{{lead_id}}", "checklists"]
+            },
+            "description": "Get all checklist items for a lead, ordered by position ascending."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"c1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"title\": \"Verify documents\",\n      \"is_completed\": true,\n      \"completed_at\": \"2026-02-25T10:00:00.000Z\",\n      \"completed_by\": \"u1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"position\": 0,\n      \"created_at\": \"2026-02-20T10:30:00.000Z\"\n    },\n    {\n      \"id\": \"c2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"title\": \"Schedule counseling call\",\n      \"is_completed\": false,\n      \"completed_at\": null,\n      \"completed_by\": null,\n      \"position\": 1,\n      \"created_at\": \"2026-02-20T10:30:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Pipeline",
+      "item": [
+        {
+          "name": "List Stages",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/stages",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "stages"]
+            },
+            "description": "List all pipeline stages for the tenant, ordered by position ascending."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"slug\": \"new\",\n      \"name\": \"New\",\n      \"position\": 0,\n      \"color\": \"#3b82f6\",\n      \"is_default\": true,\n      \"is_terminal\": false\n    },\n    {\n      \"id\": \"s2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"slug\": \"partial\",\n      \"name\": \"Partial\",\n      \"position\": 1,\n      \"color\": \"#f97316\",\n      \"is_default\": false,\n      \"is_terminal\": false\n    },\n    {\n      \"id\": \"s3a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"slug\": \"contacted\",\n      \"name\": \"Contacted\",\n      \"position\": 2,\n      \"color\": \"#a855f7\",\n      \"is_default\": false,\n      \"is_terminal\": false\n    },\n    {\n      \"id\": \"s4a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"slug\": \"enrolled\",\n      \"name\": \"Enrolled\",\n      \"position\": 3,\n      \"color\": \"#22c55e\",\n      \"is_default\": false,\n      \"is_terminal\": true\n    },\n    {\n      \"id\": \"s5a2b3c4-d5e6-7890-abcd-ef1234567890\",\n      \"slug\": \"rejected\",\n      \"name\": \"Rejected\",\n      \"position\": 4,\n      \"color\": \"#ef4444\",\n      \"is_default\": false,\n      \"is_terminal\": true\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Pipeline View",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/pipeline",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "pipeline"]
+            },
+            "description": "Get the full pipeline view with stages and their grouped leads. All stages returned even if empty."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": [\n    {\n      \"stage\": {\n        \"id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n        \"slug\": \"new\",\n        \"name\": \"New\",\n        \"position\": 0,\n        \"color\": \"#3b82f6\",\n        \"is_default\": true,\n        \"is_terminal\": false\n      },\n      \"leads\": [\n        {\n          \"id\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n          \"first_name\": \"John\",\n          \"last_name\": \"Doe\",\n          \"email\": \"john@example.com\",\n          \"phone\": null,\n          \"city\": null,\n          \"country\": null,\n          \"status\": \"new\",\n          \"stage_id\": \"s1a2b3c4-d5e6-7890-abcd-ef1234567890\",\n          \"stage_slug\": \"new\",\n          \"stage_name\": \"New\",\n          \"assigned_to\": null,\n          \"assigned_name\": null,\n          \"custom_fields\": {},\n          \"file_urls\": {},\n          \"intake_source\": \"integration\",\n          \"intake_medium\": null,\n          \"intake_campaign\": null,\n          \"preferred_contact_method\": null,\n          \"is_final\": true,\n          \"created_at\": \"2026-02-26T10:30:00.000Z\",\n          \"updated_at\": \"2026-02-26T10:30:00.000Z\"\n        }\n      ]\n    },\n    {\n      \"stage\": {\n        \"id\": \"s2a2b3c4-d5e6-7890-abcd-ef1234567890\",\n        \"slug\": \"partial\",\n        \"name\": \"Partial\",\n        \"position\": 1,\n        \"color\": \"#f97316\",\n        \"is_default\": false,\n        \"is_terminal\": false\n      },\n      \"leads\": []\n    }\n  ]\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Tools",
+      "item": [
+        {
+          "name": "Get Tool Manifest",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/tools",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "tools"]
+            },
+            "description": "Get the AI agent tool manifest describing all available integration endpoints."
+          },
+          "response": [
+            {
+              "name": "200 — Success",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"data\": {\n    \"name\": \"Zunkiree CRM\",\n    \"version\": \"1.0\",\n    \"tools\": [\n      {\n        \"name\": \"list_leads\",\n        \"description\": \"List CRM leads with optional filtering\",\n        \"method\": \"GET\",\n        \"endpoint\": \"/api/v1/integrations/crm/leads\",\n        \"parameters\": {\n          \"stage_id\": \"uuid (optional)\",\n          \"assigned_to\": \"uuid (optional)\",\n          \"search\": \"string (optional)\",\n          \"limit\": \"number (optional, default 50, max 100)\",\n          \"offset\": \"number (optional, default 0)\"\n        }\n      },\n      {\n        \"name\": \"create_lead\",\n        \"description\": \"Create a new lead\",\n        \"method\": \"POST\",\n        \"endpoint\": \"/api/v1/integrations/crm/leads\",\n        \"parameters\": {\n          \"first_name\": \"string (required)\",\n          \"email\": \"string (required)\"\n        }\n      },\n      {\n        \"name\": \"list_stages\",\n        \"description\": \"List all pipeline stages ordered by position\",\n        \"method\": \"GET\",\n        \"endpoint\": \"/api/v1/integrations/crm/stages\",\n        \"parameters\": {}\n      }\n    ]\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error Examples",
+      "item": [
+        {
+          "name": "401 — Unauthorized",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads"]
+            },
+            "description": "Example: Request without Authorization header returns 401."
+          },
+          "response": [
+            {
+              "name": "401 — Unauthorized",
+              "status": "Unauthorized",
+              "code": 401,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"UNAUTHORIZED\",\n    \"message\": \"Authentication required\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "403 — Forbidden (read-only key)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"first_name\": \"Test\",\n  \"email\": \"test@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads"]
+            },
+            "description": "Example: POST with a read-only API key returns 403."
+          },
+          "response": [
+            {
+              "name": "403 — Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"FORBIDDEN\",\n    \"message\": \"Insufficient permissions\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "429 — Rate Limited",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/integrations/crm/leads",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "integrations", "crm", "leads"]
+            },
+            "description": "Example: Exceeding 120 requests/minute returns 429 with Retry-After header."
+          },
+          "response": [
+            {
+              "name": "429 — Rate Limited",
+              "status": "Too Many Requests",
+              "code": 429,
+              "header": [
+                { "key": "Content-Type", "value": "application/json" },
+                { "key": "Retry-After", "value": "45" }
+              ],
+              "body": "{\n  \"error\": {\n    \"code\": \"RATE_LIMITED\",\n    \"message\": \"Too many requests\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set base_url from environment or collection variable",
+          "if (!pm.variables.get('base_url')) {",
+          "    pm.variables.set('base_url', 'https://lead-crm.zunkireelabs.com');",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-capture lead_id from create/list responses for chaining",
+          "if (pm.response.code === 201 || pm.response.code === 200) {",
+          "    try {",
+          "        const json = pm.response.json();",
+          "        if (json.data && json.data.id) {",
+          "            pm.collectionVariables.set('lead_id', json.data.id);",
+          "        }",
+          "        if (json.data && json.data.leads && json.data.leads.length > 0) {",
+          "            pm.collectionVariables.set('lead_id', json.data.leads[0].id);",
+          "        }",
+          "    } catch (e) {}",
+          "}"
+        ]
+      }
+    }
+  ]
+}
