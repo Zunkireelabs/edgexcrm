@@ -251,7 +251,7 @@ export function PipelineBoard({
     const overId = over.id as string;
 
     const fromCol = findLeadColumn(columns, activeLeadId);
-    let toCol = stageMap.has(overId)
+    const toCol = stageMap.has(overId)
       ? overId
       : findLeadColumn(columns, overId);
 

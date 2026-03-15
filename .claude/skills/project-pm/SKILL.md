@@ -34,6 +34,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 | `/widget-perf` | Widget Speed | Embeddable form load speed, TTFB, static generation, embed optimization |
 | `/test-engineer` | Testing | Unit tests, integration tests, component tests, test infrastructure |
 | `/security-auditor` | Security | RLS review, auth audit, OWASP compliance, tenant isolation verification |
+| `/ci-cd` | CI/CD | GitHub Actions pipelines, PR checks, auto-deploy, rollback workflows |
 | `/skill-architect` | Meta | Create new skills, analyze skill gaps, optimize existing skills |
 
 ## WORKFLOW
@@ -57,6 +58,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 - Writing tests, test infrastructure → `/test-engineer`
 - Security review, hardening → `/security-auditor`
 - Skill creation/optimization → `/skill-architect`
+- CI/CD pipelines, GitHub Actions, deploy automation → `/ci-cd`
 - Cross-cutting tasks → break into domain-specific subtasks
 
 ## QUALITY GATES

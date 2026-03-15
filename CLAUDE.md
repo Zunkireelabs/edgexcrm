@@ -42,6 +42,7 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 | `/widget-perf` | **Widget Speed** | Embeddable form TTFB, static generation, bundle reduction, embed optimization |
 | `/test-engineer` | **Testing** | Unit/integration/component tests, test infrastructure |
 | `/security-auditor` | **Security** | RLS review, auth audit, OWASP, tenant isolation verification |
+| `/ci-cd` | **CI/CD** | GitHub Actions pipelines, PR checks, auto-deploy, rollback |
 | `/skill-architect` | **Meta** | Create/optimize skills, analyze coverage |
 
 ---

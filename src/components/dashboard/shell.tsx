@@ -68,7 +68,7 @@ export function DashboardShell({
 
   const hasManyForms = formConfigs.length > 1;
 
-  const NavContent = () => (
+  const navContent = (
     <div className="flex flex-col h-full">
       <div className="p-4">
         <div className="flex items-center gap-2">
@@ -171,7 +171,7 @@ export function DashboardShell({
     <div className="flex h-screen">
       {/* Desktop sidebar */}
       <aside className="hidden md:flex w-64 flex-col border-r bg-card">
-        <NavContent />
+        {navContent}
       </aside>
 
       {/* Mobile header + sheet */}
@@ -193,7 +193,7 @@ export function DashboardShell({
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <NavContent />
+              {navContent}
             </SheetContent>
           </Sheet>
         </header>
