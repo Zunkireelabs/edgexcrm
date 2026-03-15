@@ -34,12 +34,35 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
   );
 
-  // Read bg color from URL query param client-side (keeps page statically generated)
-  const [bg, setBg] = useState<string | undefined>(undefined);
+  // Read URL query params client-side (keeps page statically generated)
+  const [bg] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    return new URLSearchParams(window.location.search).get("bg") ?? undefined;
+  });
+  const [compact] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).get("compact") === "1";
+  });
+
+  // Auto-select the first option for country fields linked to a phone field,
+  // so the displayed dial code matches the actual form state.
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const bgParam = params.get("bg");
-    if (bgParam) setBg(bgParam);
+    for (const step of steps) {
+      for (const field of step.fields) {
+        if (field.type === "tel" && field.country_field) {
+          const countryField = step.fields.find(
+            (f) => f.name === field.country_field
+          );
+          if (countryField?.options?.length && !formData[countryField.name]) {
+            setFormData((d) => {
+              if (d[countryField.name]) return d;
+              return { ...d, [countryField.name]: countryField.options![0].value };
+            });
+          }
+        }
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const steps: FormStep[] = formConfig.steps || [];
@@ -50,8 +73,16 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
 
   const isLastStep = currentStep === steps.length - 1;
   const fieldBg = hideLabels ? "bg-[#F9FAFB]" : "bg-white";
-  const compactInput = hideLabels ? `!h-11 rounded-[10px] text-[15px] px-4 py-2 ${fieldBg}` : "bg-white";
-  const compactSelect = hideLabels ? `!h-11 rounded-[10px] text-[15px] px-4 ${fieldBg}` : "bg-white";
+  const compactInput = hideLabels
+    ? compact
+      ? `!h-9 rounded-[10px] text-[13px] px-3 py-1 ${fieldBg}`
+      : `!h-11 rounded-[10px] text-[15px] px-4 py-2 ${fieldBg}`
+    : "bg-white";
+  const compactSelect = hideLabels
+    ? compact
+      ? `!h-9 rounded-[10px] text-[13px] px-3 ${fieldBg}`
+      : `!h-11 rounded-[10px] text-[15px] px-4 ${fieldBg}`
+    : "bg-white";
 
   // Check field visibility based on conditional logic
   const isFieldVisible = useCallback(
@@ -346,7 +377,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
   return (
     <div className="flex items-start justify-center">
       {bgGradient && <style>{`html, body { background: ${bgGradient} !important; min-height: 100%; }`}</style>}
-      <div className={`w-full ${hideLabels ? "p-5" : ""}`}>
+      <div className={`w-full ${hideLabels ? (compact ? "p-3" : "p-5") : ""}`}>
         {/* Logo only */}
         {branding.logo_url && (
           <div className="text-center mb-6">
@@ -400,7 +431,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
             <h2 className="text-lg font-semibold mb-4">{step.title}</h2>
           )}
 
-          <div className={`flex flex-wrap ${hideLabels ? "gap-5" : "gap-4"}`}>
+          <div className={`flex flex-wrap ${hideLabels ? (compact ? "gap-3" : "gap-5") : "gap-4"}`}>
             {step.fields.map((field) => {
               if (!isFieldVisible(field)) return null;
 
@@ -434,7 +465,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         setFormData((d) => ({ ...d, [field.name]: val }))
                       }
                     >
-                      <SelectTrigger className={`w-full ${compactSelect}`} style={hideLabels ? { height: 44 } : undefined}>
+                      <SelectTrigger className={`w-full ${compactSelect}`} style={hideLabels ? { height: compact ? 36 : 44 } : undefined}>
                         <SelectValue
                           placeholder={field.placeholder || "Select..."}
                         />
@@ -503,7 +534,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       type={field.type}
                       placeholder={field.placeholder}
                       className={compactInput}
-                      style={hideLabels ? { height: 44 } : undefined}
+                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
                       value={String(formData[field.name] || "")}
                       onChange={(e) =>
                         setFormData((d) => ({
@@ -527,11 +558,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       dialCode = selectedOption?.dial_code || "";
                     }
                     return (
-                      <div className="flex" style={hideLabels ? { height: 44 } : undefined}>
+                      <div className="flex" style={hideLabels ? { height: compact ? 36 : 44 } : undefined}>
                         {dialCode && (
                           <span
-                            className={`inline-flex items-center px-4 border border-r-0 text-sm text-muted-foreground whitespace-nowrap ${hideLabels ? `rounded-l-[10px] ${fieldBg}` : "rounded-l-md bg-white"}`}
-                            style={hideLabels ? { height: 44 } : undefined}
+                            className={`inline-flex items-center border border-r-0 text-muted-foreground whitespace-nowrap ${hideLabels ? `rounded-l-[10px] ${fieldBg}` : "rounded-l-md bg-white"} ${compact ? "px-3 text-[13px]" : "px-4 text-sm"}`}
+                            style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
                           >
                             {dialCode}
                           </span>
@@ -542,7 +573,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                           placeholder={field.placeholder}
                           value={String(formData[field.name] || "")}
                           className={`${compactInput} ${dialCode ? (hideLabels ? "rounded-l-none rounded-r-[10px]" : "rounded-l-none") : ""}`}
-                          style={hideLabels ? { height: 44 } : undefined}
+                          style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
                           onChange={(e) =>
                             setFormData((d) => ({
                               ...d,
@@ -617,7 +648,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       id={field.name}
                       type="date"
                       className={compactInput}
-                      style={hideLabels ? { height: 44 } : undefined}
+                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
                       value={String(formData[field.name] || "")}
                       min={field.validation?.min_date}
                       max={field.validation?.max_date}
@@ -635,7 +666,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       id={field.name}
                       type="number"
                       className={compactInput}
-                      style={hideLabels ? { height: 44 } : undefined}
+                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
                       placeholder={field.placeholder}
                       value={String(formData[field.name] ?? "")}
                       min={field.validation?.min}
@@ -658,7 +689,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
           </div>
 
           {/* Navigation buttons */}
-          <div className={`flex mt-6 ${hideLabels ? "flex-col" : "justify-center"}`}>
+          <div className={`flex ${compact ? "mt-3" : "mt-6"} ${hideLabels ? "flex-col" : "justify-center"}`}>
             {currentStep > 0 ? (
               <Button
                 variant="outline"
