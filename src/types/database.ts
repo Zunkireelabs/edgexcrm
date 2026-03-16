@@ -103,6 +103,7 @@ export interface FormField {
   options?: { label: string; value: string; dial_code?: string }[];
   width?: "half" | "third" | "two-thirds" | "full";
   country_field?: string;
+  terms_url?: string;
   conditional?: { field: string; values: string[] };
   validation?: {
     pattern?: string;

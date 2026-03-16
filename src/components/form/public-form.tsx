@@ -17,6 +17,10 @@ import {
 import { CheckCircle, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 
+function toTitleCase(str: string): string {
+  return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 interface PublicFormProps {
   tenant: Tenant;
   formConfig: FormConfig;
@@ -75,13 +79,13 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
   const fieldBg = hideLabels ? "bg-[#F9FAFB]" : "bg-white";
   const compactInput = hideLabels
     ? compact
-      ? `!h-9 rounded-[10px] text-[13px] px-3 py-1 ${fieldBg}`
-      : `!h-11 rounded-[10px] text-[15px] px-4 py-2 ${fieldBg}`
+      ? `!h-8 rounded-[10px] text-[12px] px-3 py-1 ${fieldBg}`
+      : `!h-10 rounded-[10px] text-[13px] px-4 py-2 ${fieldBg}`
     : "bg-white";
   const compactSelect = hideLabels
     ? compact
-      ? `!h-9 rounded-[10px] text-[13px] px-3 ${fieldBg}`
-      : `!h-11 rounded-[10px] text-[15px] px-4 ${fieldBg}`
+      ? `!h-8 rounded-[10px] text-[12px] px-3 ${fieldBg}`
+      : `!h-10 rounded-[10px] text-[13px] px-4 ${fieldBg}`
     : "bg-white";
 
   // Check field visibility based on conditional logic
@@ -428,7 +432,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         {/* Form card */}
         <div>
           {!hideLabels && step.title && (
-            <h2 className="text-lg font-semibold mb-4">{step.title}</h2>
+            <h2 className="text-base font-semibold mb-4">{toTitleCase(step.title!)}</h2>
           )}
 
           <div className={`flex flex-wrap ${hideLabels ? (compact ? "gap-3" : "gap-5") : "gap-4"}`}>
@@ -451,7 +455,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                 >
                   {!hideLabels && (
                     <Label htmlFor={field.name}>
-                      {field.label}
+                      {toTitleCase(field.label)}
                       {field.required && (
                         <span className="text-red-500 ml-1">*</span>
                       )}
@@ -465,15 +469,15 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         setFormData((d) => ({ ...d, [field.name]: val }))
                       }
                     >
-                      <SelectTrigger className={`w-full ${compactSelect}`} style={hideLabels ? { height: compact ? 36 : 44 } : undefined}>
+                      <SelectTrigger className={`w-full font-normal text-muted-foreground ${compactSelect}`} style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
                         <SelectValue
-                          placeholder={field.placeholder || "Select..."}
+                          placeholder={field.placeholder ? toTitleCase(field.placeholder) : "Select..."}
                         />
                       </SelectTrigger>
                       <SelectContent>
                         {field.options?.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
+                            {toTitleCase(opt.label)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -483,7 +487,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                   {field.type === "textarea" && (
                     <Textarea
                       id={field.name}
-                      placeholder={field.placeholder}
+                      placeholder={field.placeholder ? toTitleCase(field.placeholder) : undefined}
                       value={String(formData[field.name] || "")}
                       className={fieldBg}
                       onChange={(e) =>
@@ -532,9 +536,9 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                     <Input
                       id={field.name}
                       type={field.type}
-                      placeholder={field.placeholder}
+                      placeholder={field.placeholder ? toTitleCase(field.placeholder) : undefined}
                       className={compactInput}
-                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
+                      style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
                       value={String(formData[field.name] || "")}
                       onChange={(e) =>
                         setFormData((d) => ({
@@ -558,11 +562,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       dialCode = selectedOption?.dial_code || "";
                     }
                     return (
-                      <div className="flex" style={hideLabels ? { height: compact ? 36 : 44 } : undefined}>
+                      <div className="flex" style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
                         {dialCode && (
                           <span
-                            className={`inline-flex items-center border border-r-0 text-muted-foreground whitespace-nowrap ${hideLabels ? `rounded-l-[10px] ${fieldBg}` : "rounded-l-md bg-white"} ${compact ? "px-3 text-[13px]" : "px-4 text-sm"}`}
-                            style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
+                            className={`inline-flex items-center border border-r-0 text-muted-foreground whitespace-nowrap ${hideLabels ? `rounded-l-[10px] ${fieldBg}` : "rounded-l-md bg-white"} ${compact ? "px-3 text-[12px]" : "px-4 text-xs"}`}
+                            style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
                           >
                             {dialCode}
                           </span>
@@ -570,10 +574,10 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         <Input
                           id={field.name}
                           type="tel"
-                          placeholder={field.placeholder}
+                          placeholder={field.placeholder ? toTitleCase(field.placeholder) : undefined}
                           value={String(formData[field.name] || "")}
                           className={`${compactInput} ${dialCode ? (hideLabels ? "rounded-l-none rounded-r-[10px]" : "rounded-l-none") : ""}`}
-                          style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
+                          style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
                           onChange={(e) =>
                             setFormData((d) => ({
                               ...d,
@@ -601,16 +605,20 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       />
                       {field.placeholder && (
                         <span className="text-sm text-muted-foreground">
-                          {field.placeholder.includes("terms & conditions") ? (
+                          {field.placeholder.toLowerCase().includes("terms & conditions") ? (
                             <>
-                              {field.placeholder.split("terms & conditions")[0]}
-                              <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
-                                terms &amp; conditions
-                              </a>
-                              {field.placeholder.split("terms & conditions")[1]}
+                              {toTitleCase(field.placeholder.split(/terms & conditions/i)[0])}
+                              {field.terms_url ? (
+                                <a href={field.terms_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">
+                                  Terms &amp; Conditions
+                                </a>
+                              ) : (
+                                <span>Terms &amp; Conditions</span>
+                              )}
+                              {toTitleCase(field.placeholder.split(/terms & conditions/i)[1] || "")}
                             </>
                           ) : (
-                            field.placeholder
+                            toTitleCase(field.placeholder)
                           )}
                         </span>
                       )}
@@ -637,7 +645,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                             }
                             className="h-4 w-4 border-gray-300"
                           />
-                          <span className="text-sm">{opt.label}</span>
+                          <span className="text-sm">{toTitleCase(opt.label)}</span>
                         </label>
                       ))}
                     </div>
@@ -648,7 +656,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       id={field.name}
                       type="date"
                       className={compactInput}
-                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
+                      style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
                       value={String(formData[field.name] || "")}
                       min={field.validation?.min_date}
                       max={field.validation?.max_date}
@@ -666,8 +674,8 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       id={field.name}
                       type="number"
                       className={compactInput}
-                      style={hideLabels ? { height: compact ? 36 : 44 } : undefined}
-                      placeholder={field.placeholder}
+                      style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
+                      placeholder={field.placeholder ? toTitleCase(field.placeholder) : undefined}
                       value={String(formData[field.name] ?? "")}
                       min={field.validation?.min}
                       max={field.validation?.max}
@@ -715,7 +723,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                     Submitting...
                   </>
                 ) : (
-                  buttonText
+                  toTitleCase(buttonText)
                 )}
               </Button>
             ) : (
