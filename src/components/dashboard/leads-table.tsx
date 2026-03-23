@@ -2,9 +2,11 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -20,7 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Download, Eye, Search } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Download, Search, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 
 interface LeadsTableProps {
@@ -31,9 +42,13 @@ interface LeadsTableProps {
 }
 
 export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }: LeadsTableProps) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
@@ -57,6 +72,76 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
       return matchesStatus && matchesSearch && matchesForm;
     });
   }, [leads, search, statusFilter, formFilter, memberMap]);
+
+  const filteredIds = useMemo(() => new Set(filtered.map((l) => l.id)), [filtered]);
+
+  const selectedCount = selectedIds.size;
+  const allSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+  const someSelected = filtered.some((l) => selectedIds.has(l.id)) && !allSelected;
+
+  function toggleSelectAll() {
+    if (allSelected) {
+      // Deselect all filtered
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((l) => next.delete(l.id));
+        return next;
+      });
+    } else {
+      // Select all filtered
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        filtered.forEach((l) => next.add(l.id));
+        return next;
+      });
+    }
+  }
+
+  function toggleSelect(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  async function handleBulkDelete() {
+    // Only delete selected items that are in the current filtered view
+    const idsToDelete = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+
+    if (idsToDelete.length === 0) {
+      toast.error("No leads selected");
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const response = await fetch("/api/v1/leads/bulk", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: idsToDelete }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to delete leads");
+      }
+
+      toast.success(`Deleted ${data.data.deleted} lead${data.data.deleted !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      setDeleteDialogOpen(false);
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete leads");
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   function exportCSV() {
     const headers = [
@@ -95,6 +180,24 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
 
   return (
     <div className="space-y-4">
+      {/* Bulk Action Bar */}
+      {selectedCount > 0 && (
+        <div className="flex items-center justify-between bg-muted/50 border rounded-lg px-4 py-3">
+          <span className="text-sm font-medium">
+            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteDialogOpen(true)}
+          >
+            <Trash2 className="h-4 w-4 mr-2" />
+            Delete
+          </Button>
+        </div>
+      )}
+
+      {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -139,11 +242,18 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
         </Button>
       </div>
 
+      {/* Table */}
       <div className="rounded-md border">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">#</TableHead>
+              <TableHead className="w-12">
+                <Checkbox
+                  checked={someSelected ? "indeterminate" : allSelected}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Name</TableHead>
               <TableHead className="hidden md:table-cell">Email</TableHead>
@@ -154,37 +264,49 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
               {hasMultipleForms && (
                 <TableHead className="hidden md:table-cell">Form</TableHead>
               )}
-              <TableHead className="w-10"></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={hasMultipleForms ? 10 : 9}
+                  colSpan={hasMultipleForms ? 9 : 8}
                   className="text-center py-8 text-muted-foreground"
                 >
                   No leads found
                 </TableCell>
               </TableRow>
             ) : (
-              filtered.map((lead, i) => {
+              filtered.map((lead) => {
                 const assignedEmail = lead.assigned_to
                   ? memberMap[lead.assigned_to]
                   : null;
                 const formName = lead.form_config_id
                   ? formMap[lead.form_config_id]
                   : null;
+                const isSelected = selectedIds.has(lead.id);
                 return (
-                  <TableRow key={lead.id}>
-                    <TableCell className="text-muted-foreground">
-                      {i + 1}
+                  <TableRow
+                    key={lead.id}
+                    className={`hover:bg-muted/50 ${isSelected ? "bg-muted/30" : ""}`}
+                  >
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        checked={isSelected}
+                        onCheckedChange={() => toggleSelect(lead.id)}
+                        aria-label={`Select ${lead.first_name} ${lead.last_name}`}
+                      />
                     </TableCell>
                     <TableCell className="text-sm">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {lead.first_name} {lead.last_name}
+                      <Link
+                        href={`/leads/${lead.id}`}
+                        className="hover:underline text-primary hover:text-primary/80"
+                      >
+                        {lead.first_name} {lead.last_name}
+                      </Link>
                     </TableCell>
                     <TableCell className="hidden md:table-cell text-sm">
                       {lead.email}
@@ -230,13 +352,6 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                         )}
                       </TableCell>
                     )}
-                    <TableCell>
-                      <Link href={`/leads/${lead.id}`}>
-                        <Button variant="ghost" size="icon">
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                      </Link>
-                    </TableCell>
                   </TableRow>
                 );
               })
@@ -247,6 +362,35 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
       <p className="text-xs text-muted-foreground">
         Showing {filtered.length} of {leads.length} leads
       </p>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?</DialogTitle>
+            <DialogDescription>
+              This action cannot be undone. The selected leads will be permanently
+              removed from your workspace.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
