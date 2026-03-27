@@ -29,7 +29,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, isAdmin },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, isAdmin: _isAdmin },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);

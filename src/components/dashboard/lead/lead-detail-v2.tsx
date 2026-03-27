@@ -38,9 +38,9 @@ export function LeadDetailV2({
   checklists: initialChecklists,
   activities,
   stages,
-  tenant,
+  tenant: _tenant,
   role,
-  userId,
+  userId: _userId,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -48,7 +48,7 @@ export function LeadDetailV2({
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
-  const [status, setStatus] = useState(lead.status);
+  const [_status, setStatus] = useState(lead.status);
   const [stageId, setStageId] = useState(lead.stage_id);
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to || "");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);

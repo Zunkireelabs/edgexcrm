@@ -375,7 +375,7 @@ function AIInsightsError({ error, onRetry }: { error: string; onRetry: () => voi
       <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center">
         <AlertTriangle className="size-6 text-amber-600" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold">Couldn't generate insights</h3>
+      <h3 className="mt-4 text-lg font-semibold">Could not generate insights</h3>
       <p className="mt-2 text-sm text-muted-foreground max-w-sm">
         {error || "We ran into an issue analyzing this lead. This is usually temporary."}
       </p>
