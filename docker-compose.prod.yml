@@ -1,0 +1,43 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: https://pirhnklvtjjpuvbvibxf.supabase.co
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBpcmhua2x2dGpqcHV2YnZpYnhmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE1ODU2MDksImV4cCI6MjA4NzE2MTYwOX0.19d9xaOyUdnhGXc-MMTbRIdLH-_sUgOWqdRxenhJr5A
+        NEXT_PUBLIC_APP_URL: https://lead-crm.zunkireelabs.com
+    container_name: leads-crm
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    networks:
+      - hosting
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=hosting"
+
+      # HTTPS
+      - "traefik.http.routers.leads-crm-secure.entrypoints=websecure"
+      - "traefik.http.routers.leads-crm-secure.rule=Host(`lead-crm.zunkireelabs.com`)"
+      - "traefik.http.routers.leads-crm-secure.tls=true"
+      - "traefik.http.routers.leads-crm-secure.tls.certresolver=letsencrypt"
+
+      # HTTP redirect
+      - "traefik.http.routers.leads-crm.entrypoints=web"
+      - "traefik.http.routers.leads-crm.rule=Host(`lead-crm.zunkireelabs.com`)"
+      - "traefik.http.middlewares.leads-crm-redirect.redirectscheme.scheme=https"
+      - "traefik.http.routers.leads-crm.middlewares=leads-crm-redirect"
+
+      # Service
+      - "traefik.http.services.leads-crm.loadbalancer.server.port=3000"
+
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  hosting:
+    external: true
