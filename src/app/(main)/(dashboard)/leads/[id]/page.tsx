@@ -4,9 +4,10 @@ import {
   getLead,
   getLeadNotes,
   getLeadChecklists,
+  getLeadActivity,
   getPipelineStages,
 } from "@/lib/supabase/queries";
-import { LeadDetail } from "@/components/dashboard/lead-detail";
+import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 
 export default async function LeadDetailPage({
   params,
@@ -23,17 +24,19 @@ export default async function LeadDetailPage({
   });
   if (!lead) notFound();
 
-  const [notes, checklists, stages] = await Promise.all([
+  const [notes, checklists, activities, stages] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
+    getLeadActivity(lead.id, tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
   ]);
 
   return (
-    <LeadDetail
+    <LeadDetailV2
       lead={lead}
       notes={notes}
       checklists={checklists}
+      activities={activities}
       stages={stages}
       tenant={tenantData.tenant}
       role={tenantData.role}
