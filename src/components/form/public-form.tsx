@@ -696,6 +696,22 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
             })}
           </div>
 
+          {/* Privacy policy text */}
+          {isLastStep && branding.privacy_url && (
+            <p className={`text-sm text-muted-foreground ${compact ? "mt-3" : "mt-6"}`}>
+              By submitting, I agree to the processing of my personal data in accordance with our{" "}
+              <a
+                href={branding.privacy_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-foreground"
+              >
+                Privacy Policy
+              </a>
+              .
+            </p>
+          )}
+
           {/* Navigation buttons */}
           <div className={`flex ${compact ? "mt-3" : "mt-6"} ${hideLabels ? "flex-col" : "justify-center"}`}>
             {currentStep > 0 ? (

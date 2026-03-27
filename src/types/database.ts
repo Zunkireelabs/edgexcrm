@@ -128,6 +128,7 @@ export interface FormBranding {
   hide_labels?: boolean;
   input_bg_color?: string;
   input_border_radius?: string;
+  privacy_url?: string;
 }
 
 export interface AuditLog {
