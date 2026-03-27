@@ -54,6 +54,7 @@ jobs:
           script: |
             cd /home/zunkireelabs/devprojects/lead-gen-crm-dev
             git pull origin stage
+            rm -rf .next
             docker compose build --no-cache
             docker compose up -d
             echo "Waiting for container to be healthy..."
