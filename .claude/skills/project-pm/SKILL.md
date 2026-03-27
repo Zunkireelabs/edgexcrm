@@ -26,6 +26,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 
 | Skill | Domain | When to Delegate |
 |-------|--------|------------------|
+| `/crm-expert` | CRM Domain | Lead workflows, pipeline design, Salesforce/HubSpot patterns, CRM best practices |
 | `/db-engineer` | Database | Schema changes, migrations, SQL queries, data validation, tenant isolation |
 | `/frontend-dev` | Frontend | Pages, components, forms, layouts, styling, React/shadcn/Tailwind |
 | `/api-dev` | API Routes | API endpoints, auth, validation, rate limiting, audit logging |
@@ -36,6 +37,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 | `/security-auditor` | Security | RLS review, auth audit, OWASP compliance, tenant isolation verification |
 | `/ci-cd` | CI/CD | GitHub Actions pipelines, PR checks, auto-deploy, rollback workflows |
 | `/skill-architect` | Meta | Create new skills, analyze skill gaps, optimize existing skills |
+| `/ui-ux-expert` | Design | Visual hierarchy, accessibility, interaction patterns, UX flows, design decisions |
 
 ## WORKFLOW
 
@@ -59,6 +61,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 - Security review, hardening → `/security-auditor`
 - Skill creation/optimization → `/skill-architect`
 - CI/CD pipelines, GitHub Actions, deploy automation → `/ci-cd`
+- Design decisions, UX reviews, accessibility audits → `/ui-ux-expert`
 - Cross-cutting tasks → break into domain-specific subtasks
 
 ## QUALITY GATES
