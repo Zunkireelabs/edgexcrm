@@ -34,6 +34,7 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 | Skill | Domain | When to Use |
 |-------|--------|-------------|
 | `/project-pm` | **Orchestrator** | All development tasks (routes to specialists) |
+| `/crm-expert` | **CRM Domain** | Lead workflows, pipeline design, Salesforce/HubSpot patterns, best practices |
 | `/db-engineer` | **Database** | Schema, migrations, SQL, RLS, tenant isolation |
 | `/frontend-dev` | **Frontend** | Pages, components, forms, layouts, React/shadcn/Tailwind |
 | `/api-dev` | **API** | API routes, auth, validation, rate limiting, audit logging |
@@ -44,6 +45,7 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 | `/security-auditor` | **Security** | RLS review, auth audit, OWASP, tenant isolation verification |
 | `/ci-cd` | **CI/CD** | GitHub Actions pipelines, PR checks, auto-deploy, rollback |
 | `/skill-architect` | **Meta** | Create/optimize skills, analyze coverage |
+| `/ui-ux-expert` | **Design** | Visual hierarchy, accessibility, interaction patterns, UX reviews, design decisions |
 
 ---
 
@@ -90,6 +92,7 @@ lead-gen-crm/
 │   ├── settings.local.json         # MCP + permissions
 │   └── skills/
 │       ├── api-dev/SKILL.md        # API route specialist
+│       ├── crm-expert/SKILL.md     # CRM domain expert (Salesforce/HubSpot patterns)
 │       ├── db-engineer/SKILL.md    # DB engineer skill
 │       ├── deploy/SKILL.md         # Deployment specialist
 │       ├── frontend-dev/SKILL.md   # Frontend specialist

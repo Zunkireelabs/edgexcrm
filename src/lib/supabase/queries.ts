@@ -246,3 +246,27 @@ export async function getLeadChecklists(leadId: string): Promise<LeadChecklist[]
   if (error) throw error;
   return (data as LeadChecklist[]) || [];
 }
+
+export interface LeadActivity {
+  id: string;
+  action: string;
+  entity_type: string;
+  changes: Record<string, { old: unknown; new: unknown }>;
+  user_id: string | null;
+  created_at: string;
+}
+
+export async function getLeadActivity(leadId: string, tenantId: string): Promise<LeadActivity[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, entity_type, changes, user_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("entity_id", leadId)
+    .eq("entity_type", "lead")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return (data as LeadActivity[]) || [];
+}

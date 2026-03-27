@@ -6,8 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Tenant } from "@/types/database";
 import type { User } from "@supabase/supabase-js";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
   SheetContent,
@@ -24,6 +22,9 @@ import {
   UsersRound,
   ChevronDown,
   ExternalLink,
+  User as UserIcon,
+  Search,
+  Bell,
 } from "lucide-react";
 
 const navItems = [
@@ -58,6 +59,7 @@ export function DashboardShell({
   const router = useRouter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [formsExpanded, setFormsExpanded] = useState(false);
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -68,24 +70,21 @@ export function DashboardShell({
 
   const hasManyForms = formConfigs.length > 1;
 
-  const navContent = (
-    <div className="flex flex-col h-full">
-      <div className="p-4">
-        <div className="flex items-center gap-2">
-          <div
-            className="h-8 w-8 rounded-md flex items-center justify-center text-white text-sm font-bold"
-            style={{ backgroundColor: tenant.primary_color }}
-          >
-            {tenant.name.charAt(0)}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate">{tenant.name}</p>
-            <p className="text-xs text-muted-foreground capitalize">{role}</p>
-          </div>
+  const sidebarContent = (
+    <div className="flex flex-col h-full bg-[#f7f7f7]">
+      {/* Logo and Tenant Info - edge-flow style */}
+      <div className="px-5 py-4 border-b border-gray-100 h-[60px] flex items-center gap-3">
+        <div
+          className="w-8 h-8 rounded-md flex items-center justify-center text-white font-semibold text-base"
+          style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
+        >
+          {tenant.name.charAt(0)}
         </div>
+        <span className="text-lg font-semibold text-gray-900">{tenant.name}</span>
       </div>
-      <Separator />
-      <nav className="flex-1 p-2 space-y-1">
+
+      {/* Navigation */}
+      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -95,32 +94,39 @@ export function DashboardShell({
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+              className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors group ${
                 isActive
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  ? "bg-blue-50 text-blue-600"
+                  : "text-gray-600 hover:bg-blue-50 hover:text-gray-900"
               }`}
             >
-              <item.icon className="h-4 w-4" />
-              {item.label}
+              <span className="flex items-center gap-2.5">
+                <item.icon className="w-[18px] h-[18px]" />
+                <span className={`text-sm ${isActive ? "font-medium" : "font-normal"}`}>
+                  {item.label}
+                </span>
+              </span>
             </Link>
           );
         })}
 
+        {/* Public Forms Section */}
         {hasManyForms ? (
           <div>
             <button
               onClick={() => setFormsExpanded(!formsExpanded)}
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors w-full"
+              className="w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-gray-600 hover:bg-blue-50 hover:text-gray-900"
             >
-              <FileText className="h-4 w-4" />
-              <span className="flex-1 text-left">Public Forms</span>
+              <span className="flex items-center gap-2.5">
+                <FileText className="w-[18px] h-[18px]" />
+                <span className="text-sm font-normal">Public Forms</span>
+              </span>
               <ChevronDown
-                className={`h-3 w-3 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
+                className={`w-4 h-4 text-gray-400 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
               />
             </button>
             {formsExpanded && (
-              <div className="ml-4 pl-3 border-l space-y-0.5 mt-0.5">
+              <div className="ml-7 pl-3 border-l border-gray-200 space-y-0.5 mt-1">
                 {formConfigs.map((form) => (
                   <a
                     key={form.slug}
@@ -128,7 +134,7 @@ export function DashboardShell({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                    className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-blue-50 hover:text-gray-900 transition-colors"
                   >
                     <span className="flex-1 truncate">{form.name}</span>
                     <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
@@ -142,63 +148,174 @@ export function DashboardShell({
             href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-gray-600 hover:bg-blue-50 hover:text-gray-900"
           >
-            <FileText className="h-4 w-4" />
-            View Public Form
+            <span className="flex items-center gap-2.5">
+              <FileText className="w-[18px] h-[18px]" />
+              <span className="text-sm font-normal">View Public Form</span>
+            </span>
+            <ExternalLink className="h-4 w-4 text-gray-400" />
           </a>
         )}
       </nav>
-      <Separator />
-      <div className="p-4">
-        <p className="text-xs text-muted-foreground truncate mb-2">
-          {user.email}
-        </p>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="w-full justify-start"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4 mr-2" />
-          Sign Out
-        </Button>
+
+      {/* User Profile - edge-flow style */}
+      <div className="border-t border-gray-100 p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
+            <UserIcon className="w-4 h-4 text-white" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-900 truncate">
+              {user.email?.split("@")[0] || "User"}
+            </p>
+            <p className="text-xs text-gray-500 capitalize">{role}</p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="flex h-screen">
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-64 flex-col border-r bg-card">
-        {navContent}
+    <div className="flex h-screen bg-[#f7f7f7]">
+      {/* Desktop sidebar - edge-flow style */}
+      <aside className="hidden md:flex w-60 flex-col h-full bg-[#f7f7f7]">
+        {sidebarContent}
       </aside>
 
-      {/* Mobile header + sheet */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="md:hidden flex items-center justify-between border-b px-4 py-3">
-          <div className="flex items-center gap-2">
-            <div
-              className="h-7 w-7 rounded-md flex items-center justify-center text-white text-xs font-bold"
-              style={{ backgroundColor: tenant.primary_color }}
-            >
-              {tenant.name.charAt(0)}
-            </div>
-            <span className="text-sm font-semibold">{tenant.name}</span>
+      {/* Main content area with header */}
+      <div className="flex flex-col flex-1 h-full bg-[#f7f7f7] md:pl-2">
+        {/* Top Header Bar - edge-flow style */}
+        <header className="bg-[#f7f7f7] px-6 py-3 relative h-[60px] flex items-center gap-4 w-full">
+          {/* Mobile menu button */}
+          <div className="md:hidden">
+            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+              <SheetTrigger asChild>
+                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <Menu className="h-5 w-5 text-gray-600" />
+                </button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-60 p-0">
+                {sidebarContent}
+              </SheetContent>
+            </Sheet>
           </div>
-          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
-              {navContent}
-            </SheetContent>
-          </Sheet>
+
+          {/* Spacer for centering */}
+          <div className="flex-1"></div>
+
+          {/* Search Bar - Centered, edge-flow style */}
+          <div className="relative w-full max-w-[500px]">
+            <div className="flex items-center bg-white rounded-xl px-4 py-2 border border-gray-300 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
+              <Search className="w-4 h-4 text-gray-500 mr-3" />
+              <input
+                type="text"
+                placeholder="Search leads, team members, and more..."
+                className="bg-transparent w-full text-sm outline-none text-gray-700 placeholder-gray-500"
+              />
+              <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">CTRL + K</span>
+            </div>
+          </div>
+
+          {/* Spacer for centering */}
+          <div className="flex-1"></div>
+
+          {/* Right Section - Notifications & Tenant Dropdown */}
+          <div className="flex items-center gap-3">
+            {/* Notification Bell */}
+            <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+              <Bell className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
+              {/* Notification Badge */}
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#f7f7f7]"></span>
+            </button>
+
+            {/* Tenant Dropdown */}
+            <div className="relative">
+              <button
+                onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                className="flex items-center gap-2 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors"
+              >
+                <div
+                  className="w-6 h-6 rounded flex items-center justify-center text-white font-semibold text-xs"
+                  style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
+                >
+                  {tenant.name.charAt(0)}
+                </div>
+                <span className="text-sm font-medium hidden sm:inline">{tenant.name}</span>
+                <ChevronDown
+                  className={`w-4 h-4 text-gray-500 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`}
+                />
+              </button>
+
+              {/* Account Dropdown */}
+              {showAccountDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowAccountDropdown(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+                    {/* User Info Section */}
+                    <div className="px-4 py-3 border-b border-gray-100">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
+                          <UserIcon className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">
+                            {user.email?.split("@")[0] || "User"}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                          <span className="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium capitalize">
+                            {role}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Menu Items */}
+                    <div className="py-1">
+                      <Link
+                        href="/settings"
+                        onClick={() => setShowAccountDropdown(false)}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                      >
+                        <Settings className="w-4 h-4 text-gray-500" />
+                        <span>Settings</span>
+                      </Link>
+                    </div>
+
+                    {/* Logout */}
+                    <div className="border-t border-gray-100 pt-1">
+                      <button
+                        onClick={() => {
+                          setShowAccountDropdown(false);
+                          handleLogout();
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        <span>Logout</span>
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         </header>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">{children}</main>
+        {/* Content container - edge-flow style with rounded left corners */}
+        <main className="flex-1 overflow-hidden">
+          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-auto">
+            <div className="p-6">
+              {children}
+            </div>
+          </div>
+        </main>
       </div>
     </div>
   );
