@@ -54,7 +54,8 @@ jobs:
           script: |
             cd /home/zunkireelabs/devprojects/lead-gen-crm-dev
             git pull origin stage
-            docker compose up -d --build
+            docker compose build --no-cache
+            docker compose up -d
             echo "Waiting for container to be healthy..."
             sleep 10
             for i in $(seq 1 12); do
