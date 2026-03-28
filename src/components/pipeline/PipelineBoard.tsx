@@ -227,7 +227,7 @@ export function PipelineBoard({
     const now = Date.now();
 
     Object.entries(columns).forEach(([stageId, leadList]) => {
-      let filteredLeads = leadList.filter(l => {
+      const filteredLeads = leadList.filter(l => {
         const matchesSearch = !query ||
           l.first_name?.toLowerCase().includes(query) ||
           l.last_name?.toLowerCase().includes(query) ||

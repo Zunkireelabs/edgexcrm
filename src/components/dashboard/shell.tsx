@@ -64,6 +64,7 @@ export function DashboardShell({
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
   }, []);
 
