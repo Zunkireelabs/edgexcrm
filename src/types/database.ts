@@ -363,3 +363,30 @@ export interface ApiErrorResponse {
     details?: Record<string, string[]>;
   };
 }
+
+// Lead Activity Types (HubSpot-style)
+export type ActivityType = "call" | "email" | "meeting";
+export type CallOutcome = "connected" | "left_voicemail" | "no_answer" | "busy" | "wrong_number";
+
+export interface LeadActivityRecord {
+  id: string;
+  lead_id: string;
+  tenant_id: string;
+  user_id: string;
+  activity_type: ActivityType;
+  subject: string | null;
+  description: string | null;
+  call_outcome: CallOutcome | null;
+  duration_minutes: number | null;
+  scheduled_at: string | null;
+  location: string | null;
+  attendees: string[] | null;
+  email_subject: string | null;
+  email_body: string | null;
+  completed_at: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+  // Joined fields
+  user_email?: string;
+}

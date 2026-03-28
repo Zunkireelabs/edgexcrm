@@ -42,7 +42,7 @@ export function LeadDetailV2({
   stages,
   tenant: _tenant,
   role,
-  userId: _userId,
+  userId,
   entity,
   industry,
 }: LeadDetailV2Props) {
@@ -248,6 +248,7 @@ export function LeadDetailV2({
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
+            currentUserId={userId}
           />
         </div>
 

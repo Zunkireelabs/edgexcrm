@@ -8,9 +8,9 @@ import { AISparkleIcon } from "@/components/ui/ai-sparkle";
 import type { Lead, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { NotesTab } from "./notes-tab";
-import { ActivityTab } from "./activity-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
+import { ActivitiesPanel } from "./activities/activities-panel";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -23,6 +23,7 @@ interface LeadTabsProps {
   onNotesChange: (notes: LeadNote[]) => void;
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
+  currentUserId: string;
 }
 
 export interface LeadTabsRef {
@@ -31,7 +32,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -140,9 +141,14 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         </TabsContent>
 
         <TabsContent value="activity" className="mt-0">
-          <ActivityTab
-            activities={activities}
+          <ActivitiesPanel
+            leadId={lead.id}
+            notes={notes}
+            systemActivities={activities}
             teamMemberEmails={teamMemberEmails}
+            isAdmin={isAdmin}
+            onNotesChange={onNotesChange}
+            currentUserId={currentUserId}
           />
         </TabsContent>
 
@@ -182,12 +188,6 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
       <span className="font-medium">{displayValue}</span>
     </div>
   );
-}
-
-function formatFieldLabel(key: string): string {
-  return key
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function formatRelativeTime(dateString: string): string {
