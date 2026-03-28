@@ -202,6 +202,7 @@ export async function POST(request: NextRequest) {
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},
     form_config_id: body.form_config_id || null,
+    entity_id: body.entity_id || null,
     intake_source: body.intake_source || null,
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,

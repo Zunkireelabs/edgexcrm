@@ -1,5 +1,48 @@
 export type UserRole = "owner" | "admin" | "viewer" | "counselor";
 
+// Industry types for tenant classification
+export type IndustryId =
+  | "education_consultancy"
+  | "it_agency"
+  | "construction"
+  | "real_estate"
+  | "healthcare"
+  | "recruitment"
+  | "general";
+
+export interface PipelineStageTemplate {
+  name: string;
+  slug: string;
+  position: number;
+  color: string;
+  is_default: boolean;
+  is_terminal: boolean;
+}
+
+export interface Industry {
+  id: IndustryId;
+  name: string;
+  description: string | null;
+  entity_type_label: string;
+  entity_type_singular: string;
+  icon: string | null;
+  default_pipeline_stages: PipelineStageTemplate[];
+  created_at: string;
+}
+
+export interface TenantEntity {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  metadata: Record<string, unknown>;
+  is_active: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tenant {
   id: string;
   name: string;
@@ -7,6 +50,7 @@ export interface Tenant {
   logo_url: string | null;
   primary_color: string;
   config: TenantConfig;
+  industry_id: IndustryId | null;
   created_at: string;
   updated_at: string;
 }
@@ -46,6 +90,7 @@ export interface Lead {
   file_urls: Record<string, string>;
   stage_id: string | null;
   assigned_to: string | null;
+  entity_id: string | null;
   intake_source: string | null;
   intake_medium: string | null;
   intake_campaign: string | null;
@@ -97,7 +142,8 @@ export interface FormField {
     | "checkbox"
     | "radio"
     | "date"
-    | "number";
+    | "number"
+    | "entity_select";
   required: boolean;
   placeholder?: string;
   options?: { label: string; value: string; dial_code?: string }[];

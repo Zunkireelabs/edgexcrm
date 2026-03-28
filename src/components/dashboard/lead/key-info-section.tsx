@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, UserCircle } from "lucide-react";
+import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { Lead, PipelineStage } from "@/types/database";
+import type { Lead, PipelineStage, TenantEntity, Industry } from "@/types/database";
 
 interface TeamMember {
   id: string;
@@ -30,6 +30,8 @@ interface KeyInfoSectionProps {
   isAdmin: boolean;
   onStageChange: (stageId: string) => void;
   onAssignmentChange: (userId: string) => void;
+  entity?: TenantEntity | null;
+  industry?: Industry | null;
 }
 
 export function KeyInfoSection({
@@ -42,12 +44,15 @@ export function KeyInfoSection({
   isAdmin,
   onStageChange,
   onAssignmentChange,
+  entity,
+  industry,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
 
   const location = [lead.city, lead.country].filter(Boolean).join(", ");
   const assignedMember = teamMembers.find((m) => m.user_id === assignedTo);
   const hasIntakeInfo = lead.intake_source || lead.intake_medium || lead.intake_campaign;
+  const entityLabel = industry?.entity_type_singular || "Entity";
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
@@ -161,6 +166,24 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+
+          {/* Entity (e.g., College, Service, Project Type) */}
+          {entity && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                  <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-sm font-medium">{entity.name}</span>
+              </div>
+              {entity.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                  {entity.description}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Divider */}
           <div className="border-t border-border" />

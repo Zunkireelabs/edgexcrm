@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EntitySelectField } from "@/components/form/entity-select-field";
 import { CheckCircle, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 
@@ -176,7 +177,24 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     return Object.keys(newErrors).length === 0;
   }
 
+  // Find entity_select field names to exclude from custom_fields
+  const entitySelectFields = steps.flatMap((s) =>
+    s.fields.filter((f) => f.type === "entity_select").map((f) => f.name)
+  );
+
+  // Get entity_id from the first entity_select field that has a value
+  function getEntityId(): string | null {
+    for (const fieldName of entitySelectFields) {
+      const value = formData[fieldName];
+      if (value && typeof value === "string") {
+        return value;
+      }
+    }
+    return null;
+  }
+
   async function savePartial() {
+    const entityId = getEntityId();
     const payload: Record<string, unknown> = {
       tenant_id: tenant.id,
       session_id: sessionId,
@@ -192,12 +210,14 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       custom_fields: Object.fromEntries(
         Object.entries(formData).filter(
           ([k]) =>
-            !["first_name", "last_name", "email", "phone", "city", "country"].includes(k)
+            !["first_name", "last_name", "email", "phone", "city", "country"].includes(k) &&
+            !entitySelectFields.includes(k)
         )
       ),
       form_config_id: formConfig.id,
       idempotency_key: `${sessionId}-step-${currentStep + 1}`,
       ...(leadId && { lead_id: leadId }),
+      ...(entityId && { entity_id: entityId }),
     };
 
     try {
@@ -276,6 +296,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       }
 
       // Final save via API
+      const entityId = getEntityId();
       const payload: Record<string, unknown> = {
         tenant_id: tenant.id,
         session_id: sessionId,
@@ -291,13 +312,15 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         custom_fields: Object.fromEntries(
           Object.entries(formData).filter(
             ([k]) =>
-              !["first_name", "last_name", "email", "phone", "city", "country"].includes(k)
+              !["first_name", "last_name", "email", "phone", "city", "country"].includes(k) &&
+              !entitySelectFields.includes(k)
           )
         ),
         file_urls: fileUrls,
         form_config_id: formConfig.id,
         idempotency_key: `${sessionId}-final`,
         ...(leadId && { lead_id: leadId }),
+        ...(entityId && { entity_id: entityId }),
       };
 
       const res = await fetch("/api/v1/leads", {
@@ -649,6 +672,19 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         </label>
                       ))}
                     </div>
+                  )}
+
+                  {field.type === "entity_select" && (
+                    <EntitySelectField
+                      tenantId={tenant.id}
+                      value={String(formData[field.name] || "")}
+                      onChange={(entityId) =>
+                        setFormData((d) => ({ ...d, [field.name]: entityId }))
+                      }
+                      placeholder={field.placeholder ? toTitleCase(field.placeholder) : "Select..."}
+                      className={`w-full font-normal text-muted-foreground ${compactSelect}`}
+                      style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
+                    />
                   )}
 
                   {field.type === "date" && (

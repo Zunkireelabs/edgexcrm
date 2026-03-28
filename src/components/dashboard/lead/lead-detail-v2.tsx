@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
 import { ContactCard } from "./contact-card";
@@ -30,6 +30,8 @@ interface LeadDetailV2Props {
   tenant: Tenant;
   role: string;
   userId: string;
+  entity?: TenantEntity | null;
+  industry?: Industry | null;
 }
 
 export function LeadDetailV2({
@@ -41,6 +43,8 @@ export function LeadDetailV2({
   tenant: _tenant,
   role,
   userId: _userId,
+  entity,
+  industry,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -225,6 +229,8 @@ export function LeadDetailV2({
             isAdmin={isAdmin}
             onStageChange={handleStageChange}
             onAssignmentChange={handleAssignmentChange}
+            entity={entity}
+            industry={industry}
           />
         </div>
 
