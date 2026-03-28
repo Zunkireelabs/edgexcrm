@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -57,9 +57,15 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+
+  // Fix hydration mismatch: wait until client-side before rendering Radix UI components
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -190,21 +196,27 @@ export function DashboardShell({
       </aside>
 
       {/* Main content area with header */}
-      <div className="flex flex-col flex-1 h-full bg-[#f7f7f7] md:pl-2">
+      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#f7f7f7] md:pl-2">
         {/* Top Header Bar - edge-flow style */}
         <header className="bg-[#f7f7f7] px-6 py-3 relative h-[60px] flex items-center gap-4 w-full">
           {/* Mobile menu button */}
           <div className="md:hidden">
-            <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-              <SheetTrigger asChild>
-                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Menu className="h-5 w-5 text-gray-600" />
-                </button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-60 p-0">
-                {sidebarContent}
-              </SheetContent>
-            </Sheet>
+            {mounted ? (
+              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                <SheetTrigger asChild>
+                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                    <Menu className="h-5 w-5 text-gray-600" />
+                  </button>
+                </SheetTrigger>
+                <SheetContent side="left" className="w-60 p-0">
+                  {sidebarContent}
+                </SheetContent>
+              </Sheet>
+            ) : (
+              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                <Menu className="h-5 w-5 text-gray-600" />
+              </button>
+            )}
           </div>
 
           {/* Spacer for centering */}
@@ -309,9 +321,9 @@ export function DashboardShell({
         </header>
 
         {/* Content container - edge-flow style with rounded left corners */}
-        <main className="flex-1 overflow-hidden">
-          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-auto">
-            <div className="p-6">
+        <main className="flex-1 min-w-0 overflow-hidden">
+          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-y-auto overflow-x-hidden">
+            <div className="p-6 max-w-full">
               {children}
             </div>
           </div>

@@ -20,22 +20,20 @@ export default async function PipelinePage() {
   ]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] md:h-[calc(100vh-3rem)]">
-      <div className="mb-4 shrink-0">
+    <div className="space-y-6">
+      <div>
         <h1 className="text-2xl font-bold">Pipeline</h1>
         <p className="text-muted-foreground">
           Drag leads between stages to update their status
         </p>
       </div>
-      <div className="flex-1 min-h-0">
-        <PipelineBoard
-          stages={stages}
-          leads={leads}
-          role={tenantData.role as UserRole}
-          userId={tenantData.userId}
-          tenantId={tenantData.tenant.id}
-        />
-      </div>
+      <PipelineBoard
+        stages={stages}
+        leads={leads}
+        role={tenantData.role as UserRole}
+        userId={tenantData.userId}
+        tenantId={tenantData.tenant.id}
+      />
     </div>
   );
 }

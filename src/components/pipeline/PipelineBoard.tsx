@@ -18,15 +18,33 @@ import { PipelineColumn } from "./PipelineColumn";
 import { LeadCard } from "./LeadCard";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from "@/components/ui/select";
-import { Search, X, Users2, Globe } from "lucide-react";
+import {
+  Search,
+  X,
+  Users2,
+  Globe,
+  ArrowUpDown,
+  Download,
+  LayoutGrid,
+  Calendar
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu";
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -42,6 +60,7 @@ interface TeamMember {
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
+type SortOption = "updated" | "created" | "name";
 
 function groupByStage(
   leads: PipelineLead[],
@@ -71,6 +90,23 @@ function findLeadColumn(
   return null;
 }
 
+function sortLeads(leads: PipelineLead[], sortBy: SortOption): PipelineLead[] {
+  return [...leads].sort((a, b) => {
+    switch (sortBy) {
+      case "updated":
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+      case "created":
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      case "name":
+        const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+        const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+        return nameA.localeCompare(nameB);
+      default:
+        return 0;
+    }
+  });
+}
+
 export function PipelineBoard({
   stages,
   leads,
@@ -78,6 +114,7 @@ export function PipelineBoard({
   userId,
   tenantId,
 }: PipelineBoardProps) {
+  const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() =>
     groupByStage(leads, stages)
   );
@@ -88,16 +125,23 @@ export function PipelineBoard({
   const [searchQuery, setSearchQuery] = useState("");
   const [counselorFilter, setCounselorFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [createdFilter, setCreatedFilter] = useState<string>("all");
+  const [sortBy, setSortBy] = useState<SortOption>("updated");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const isViewer = role === "viewer";
   const isCounselor = role === "counselor";
   const isAdmin = role === "admin" || role === "owner";
 
+  // Fix hydration mismatch: DnD-kit and Radix Select generate random IDs
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   // Realtime Subscription
   useEffect(() => {
     const supabase = createClient();
-    
+
     const channel = supabase
       .channel(`pipeline-${tenantId}`)
       .on(
@@ -180,31 +224,94 @@ export function PipelineBoard({
   const filteredColumns = useMemo(() => {
     const filtered: ColumnsState = {};
     const query = searchQuery.toLowerCase();
+    const now = Date.now();
 
     Object.entries(columns).forEach(([stageId, leadList]) => {
-      filtered[stageId] = leadList.filter(l => {
-        const matchesSearch = !query || 
+      let filteredLeads = leadList.filter(l => {
+        const matchesSearch = !query ||
           l.first_name?.toLowerCase().includes(query) ||
           l.last_name?.toLowerCase().includes(query) ||
           l.email?.toLowerCase().includes(query) ||
           l.phone?.toLowerCase().includes(query);
-        
-        const matchesCounselor = counselorFilter === "all" || l.assigned_to === counselorFilter;
+
+        const matchesCounselor = counselorFilter === "all" ||
+          (counselorFilter === "unassigned" ? !l.assigned_to : l.assigned_to === counselorFilter);
         const matchesSource = sourceFilter === "all" || l.intake_source === sourceFilter;
 
-        return matchesSearch && matchesCounselor && matchesSource;
+        // Created date filter
+        let matchesCreated = true;
+        if (createdFilter !== "all") {
+          const createdAt = new Date(l.created_at).getTime();
+          const dayMs = 24 * 60 * 60 * 1000;
+          switch (createdFilter) {
+            case "today":
+              matchesCreated = now - createdAt < dayMs;
+              break;
+            case "week":
+              matchesCreated = now - createdAt < 7 * dayMs;
+              break;
+            case "month":
+              matchesCreated = now - createdAt < 30 * dayMs;
+              break;
+          }
+        }
+
+        return matchesSearch && matchesCounselor && matchesSource && matchesCreated;
       });
+
+      // Apply sorting
+      filtered[stageId] = sortLeads(filteredLeads, sortBy);
     });
     return filtered;
-  }, [columns, searchQuery, counselorFilter, sourceFilter]);
+  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, sortBy]);
 
   const clearFilters = () => {
     setSearchQuery("");
     setCounselorFilter("all");
     setSourceFilter("all");
+    setCreatedFilter("all");
   };
 
-  const hasActiveFilters = searchQuery !== "" || counselorFilter !== "all" || sourceFilter !== "all";
+  const activeFiltersCount = [
+    searchQuery !== "",
+    counselorFilter !== "all",
+    sourceFilter !== "all",
+    createdFilter !== "all"
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFiltersCount > 0;
+
+  // Export to CSV
+  const handleExport = () => {
+    const allLeads = Object.values(filteredColumns).flat();
+    if (allLeads.length === 0) {
+      toast.error("No leads to export");
+      return;
+    }
+
+    const headers = ["Name", "Email", "Phone", "Country", "Stage", "Created", "Status"];
+    const stageMap = new Map(stages.map(s => [s.id, s.name]));
+
+    const rows = allLeads.map(lead => [
+      `${lead.first_name || ""} ${lead.last_name || ""}`.trim(),
+      lead.email || "",
+      lead.phone || "",
+      lead.country || "",
+      lead.stage_id ? stageMap.get(lead.stage_id) || "" : "",
+      new Date(lead.created_at).toLocaleDateString(),
+      lead.status || ""
+    ]);
+
+    const csv = [headers, ...rows].map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `pipeline-export-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${allLeads.length} leads`);
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -342,24 +449,114 @@ export function PipelineBoard({
     prevColumnsRef.current = null;
   }
 
+  // Show loading state until mounted to prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="space-y-4">
+        {/* Toolbar skeleton */}
+        <div className="bg-card rounded-lg border p-3">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-60 bg-muted rounded animate-pulse" />
+            <div className="h-9 w-32 bg-muted rounded animate-pulse" />
+            <div className="flex-1" />
+            <div className="h-9 w-24 bg-muted rounded animate-pulse" />
+          </div>
+        </div>
+        {/* Columns skeleton */}
+        <div className="overflow-hidden" style={{ height: "calc(100vh - 320px)" }}>
+          <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+            {stages.map((stage) => (
+              <div
+                key={stage.id}
+                className="flex-shrink-0 w-80 bg-muted/30 rounded-lg animate-pulse h-full"
+              >
+                <div className="h-10 bg-muted rounded-t-lg" />
+                <div className="p-3 space-y-3">
+                  <div className="h-40 bg-muted/50 rounded-xl" />
+                  <div className="h-40 bg-muted/50 rounded-xl" />
+                </div>
+                <div className="h-12 bg-muted rounded-b-lg" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex flex-col h-full space-y-4">
-      {/* Filter Bar */}
-      <div className="flex flex-wrap items-center gap-3 bg-card p-3 rounded-lg border shadow-sm">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search leads..." 
-            className="pl-9 h-9"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+    <div className="space-y-4">
+      {/* Enhanced Toolbar */}
+      <div className="bg-card rounded-lg border">
+        {/* Top Row: Search + Actions */}
+        <div className="flex flex-wrap items-center gap-3 p-3">
+          {/* Search */}
+          <div className="relative w-60">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search leads..."
+              className="pl-9 h-9"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+
+          {/* View Toggle (placeholder) */}
+          <Button variant="outline" size="sm" className="h-9 gap-2" disabled>
+            <LayoutGrid className="h-4 w-4" />
+            Board view
+          </Button>
+
+          <div className="flex-1" />
+
+          {/* Sort */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2">
+                <ArrowUpDown className="h-4 w-4" />
+                Sort
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onClick={() => setSortBy("updated")}
+                className={sortBy === "updated" ? "bg-accent" : ""}
+              >
+                Last updated
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setSortBy("created")}
+                className={sortBy === "created" ? "bg-accent" : ""}
+              >
+                Date created
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setSortBy("name")}
+                className={sortBy === "name" ? "bg-accent" : ""}
+              >
+                Name
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Export */}
+          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={handleExport}>
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Divider */}
+        <div className="h-px bg-border" />
+
+        {/* Filter Row */}
+        <div className="flex flex-wrap items-center gap-2 p-3">
+          {/* Counselor Filter (Admin only) */}
           {isAdmin && (
             <Select value={counselorFilter} onValueChange={setCounselorFilter}>
-              <SelectTrigger className="w-[180px] h-9">
+              <SelectTrigger className="w-[160px] h-8 text-xs">
                 <div className="flex items-center gap-2">
                   <Users2 className="h-3.5 w-3.5 text-muted-foreground" />
                   <SelectValue placeholder="Counselor" />
@@ -377,8 +574,9 @@ export function PipelineBoard({
             </Select>
           )}
 
+          {/* Source Filter */}
           <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-[160px] h-9">
+            <SelectTrigger className="w-[140px] h-8 text-xs">
               <div className="flex items-center gap-2">
                 <Globe className="h-3.5 w-3.5 text-muted-foreground" />
                 <SelectValue placeholder="Source" />
@@ -392,22 +590,46 @@ export function PipelineBoard({
             </SelectContent>
           </Select>
 
+          {/* Created Date Filter */}
+          <Select value={createdFilter} onValueChange={setCreatedFilter}>
+            <SelectTrigger className="w-[140px] h-8 text-xs">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                <SelectValue placeholder="Created" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any time</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">Last 7 days</SelectItem>
+              <SelectItem value="month">Last 30 days</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <div className="flex-1" />
+
+          {/* Active Filters Indicator + Clear */}
           {hasActiveFilters && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={clearFilters}
-              className="h-9 px-2 text-muted-foreground hover:text-foreground"
-            >
-              <X className="h-4 w-4 mr-1" />
-              Clear
-            </Button>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs font-normal">
+                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""} active
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                Clear all
+              </Button>
+            </div>
           )}
         </div>
       </div>
 
       {/* Kanban Board */}
-      <div className="flex-1 min-h-0">
+      <div className="overflow-hidden" style={{ height: "calc(100vh - 320px)" }}>
         <DndContext
           sensors={sensors}
           collisionDetection={closestCorners}
