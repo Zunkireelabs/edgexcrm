@@ -10,16 +10,18 @@ import type { LeadActivity } from "@/lib/supabase/queries";
 import { NotesTab } from "./notes-tab";
 import { ActivityTab } from "./activity-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
+import { ProfessionalDetailsCard } from "./professional-details-card";
 
 interface LeadTabsProps {
   lead: Lead;
   notes: LeadNote[];
   activities: LeadActivity[];
   teamMemberEmails: Record<string, string>;
-  customFields: [string, unknown][];
+  customFields: Record<string, unknown>;
   activeTab: string;
   onTabChange: (tab: string) => void;
   onNotesChange: (notes: LeadNote[]) => void;
+  onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
 }
 
@@ -29,7 +31,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, isAdmin: _isAdmin },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -91,23 +93,13 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardContent>
           </Card>
 
-          {/* Custom Fields */}
-          {customFields.length > 0 && (
-            <Card className="shadow-none rounded-lg py-0">
-              <CardHeader className="pt-4 pb-3">
-                <CardTitle className="text-base">Additional Details</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-3 pb-4">
-                {customFields.map(([key, value]) => (
-                  <InfoGridRow
-                    key={key}
-                    label={formatFieldLabel(key)}
-                    value={String(value)}
-                  />
-                ))}
-              </CardContent>
-            </Card>
-          )}
+          {/* Professional Details (editable) */}
+          <ProfessionalDetailsCard
+            leadId={lead.id}
+            customFields={customFields}
+            onFieldsUpdate={onCustomFieldsChange}
+            isAdmin={isAdmin}
+          />
 
           {/* Recent Notes Preview */}
           {notes.length > 0 && (

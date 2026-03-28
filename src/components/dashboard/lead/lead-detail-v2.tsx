@@ -52,6 +52,7 @@ export function LeadDetailV2({
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
+  const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields || {});
   const [_status, setStatus] = useState(lead.status);
   const [stageId, setStageId] = useState(lead.stage_id);
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to || "");
@@ -61,11 +62,6 @@ export function LeadDetailV2({
 
   const isAdmin = role === "owner" || role === "admin";
   const currentStage = stages.find((s) => s.id === stageId);
-
-  // Computed values for tabs
-  const customFields = Object.entries(lead.custom_fields || {}).filter(
-    ([, v]) => v != null && v !== ""
-  );
 
   // Create email lookup map for activity display
   const teamMemberEmails = teamMembers.reduce<Record<string, string>>(
@@ -173,6 +169,10 @@ export function LeadDetailV2({
     setChecklists(newChecklists);
   };
 
+  const handleCustomFieldsChange = (newFields: Record<string, unknown>) => {
+    setCustomFields(newFields);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -246,6 +246,7 @@ export function LeadDetailV2({
             activeTab={activeTab}
             onTabChange={setActiveTab}
             onNotesChange={handleNotesChange}
+            onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
           />
         </div>
