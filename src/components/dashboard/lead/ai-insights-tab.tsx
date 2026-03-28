@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   RefreshCw,
   TrendingUp,
@@ -19,76 +19,119 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AISparkleIcon, AISparkleIconLarge } from "@/components/ui/ai-sparkle";
-import type { Lead, LeadNote } from "@/types/database";
-
-// Types for AI insights (will be populated by API later)
-interface LeadScoreFactor {
-  label: string;
-  impact: "positive" | "negative" | "neutral";
-  value: string;
-}
-
-interface RecommendedAction {
-  id: string;
-  priority: "high" | "medium" | "low";
-  title: string;
-  description: string;
-  actionType: "call" | "email" | "task" | "update";
-}
-
-interface AIInsights {
-  score: number;
-  scoreLabel: "High" | "Medium" | "Low";
-  factors: LeadScoreFactor[];
-  summary: string;
-  actions: RecommendedAction[];
-  engagement: {
-    totalInteractions: number;
-    lastInteraction: string;
-    responseRate: string;
-    avgResponseTime: string;
-  };
-  generatedAt: string;
-}
+import type { Lead, LeadNote, LeadInsightsResponse } from "@/types/database";
 
 interface AIInsightsTabProps {
   lead: Lead;
   notes: LeadNote[];
 }
 
-export function AIInsightsTab({ lead, notes }: AIInsightsTabProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [insights, setInsights] = useState<AIInsights | null>(null);
+export function AIInsightsTab({ lead }: AIInsightsTabProps) {
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [insights, setInsights] = useState<LeadInsightsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Generate mock insights for now (will be replaced with API call)
-  const generateInsights = () => {
-    setIsLoading(true);
+  // Fetch insights from API
+  const fetchInsights = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}/insights`);
+      if (!res.ok) {
+        throw new Error("Failed to fetch insights");
+      }
+      const data = await res.json();
+      return data.data;
+    } catch (err) {
+      console.error("Fetch insights error:", err);
+      throw err;
+    }
+  }, [lead.id]);
+
+  // Generate new insights
+  const generateInsights = useCallback(async (force = false) => {
+    try {
+      const url = force
+        ? `/api/v1/leads/${lead.id}/insights?force=true`
+        : `/api/v1/leads/${lead.id}/insights`;
+
+      const res = await fetch(url, { method: "POST" });
+      if (!res.ok) {
+        throw new Error("Failed to generate insights");
+      }
+      const data = await res.json();
+      return data.data;
+    } catch (err) {
+      console.error("Generate insights error:", err);
+      throw err;
+    }
+  }, [lead.id]);
+
+  // Initial load
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadInsights() {
+      setIsLoading(true);
+      setError(null);
+
+      try {
+        // First, try to get cached insights
+        const cached = await fetchInsights();
+
+        if (cached.insights && !cached.insights.isExpired) {
+          // Use cached insights
+          if (isMounted) {
+            setInsights(cached.insights);
+            setIsLoading(false);
+          }
+        } else {
+          // No cached insights or expired - generate new ones
+          const generated = await generateInsights(false);
+          if (isMounted) {
+            setInsights(generated.insights);
+            setIsLoading(false);
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setError("Failed to load insights. Please try again.");
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadInsights();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [fetchInsights, generateInsights]);
+
+  // Handle regenerate button
+  const handleRegenerate = async () => {
+    setIsRegenerating(true);
     setError(null);
 
-    // Simulate API call
-    setTimeout(() => {
-      const mockInsights = generateMockInsights(lead, notes);
-      setInsights(mockInsights);
-      setIsLoading(false);
-    }, 2000);
+    try {
+      const result = await generateInsights(true);
+      setInsights(result.insights);
+    } catch {
+      setError("Failed to regenerate insights. Please try again.");
+    } finally {
+      setIsRegenerating(false);
+    }
   };
-
-  // Auto-generate on first render if no insights
-  if (!insights && !isLoading && !error) {
-    generateInsights();
-  }
 
   if (isLoading) {
     return <AIInsightsLoading />;
   }
 
   if (error) {
-    return <AIInsightsError error={error} onRetry={generateInsights} />;
+    return <AIInsightsError error={error} onRetry={handleRegenerate} />;
   }
 
   if (!insights) {
-    return <AIInsightsEmpty onGenerate={generateInsights} />;
+    return <AIInsightsEmpty onGenerate={handleRegenerate} isLoading={isRegenerating} />;
   }
 
   return (
@@ -97,16 +140,21 @@ export function AIInsightsTab({ lead, notes }: AIInsightsTabProps) {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <AISparkleIcon className="size-4" />
-          <span>Generated {formatRelativeTime(insights.generatedAt)}</span>
+          <span>Generated {formatRelativeTime(insights.generated_at)}</span>
+          {insights.isStale && (
+            <Badge variant="outline" className="text-amber-600 border-amber-300">
+              Stale
+            </Badge>
+          )}
         </div>
         <Button
           variant="outline"
           size="sm"
-          onClick={generateInsights}
-          disabled={isLoading}
+          onClick={handleRegenerate}
+          disabled={isRegenerating}
           className="gap-2"
         >
-          <RefreshCw className={`size-3.5 ${isLoading ? "animate-spin" : ""}`} />
+          <RefreshCw className={`size-3.5 ${isRegenerating ? "animate-spin" : ""}`} />
           Regenerate
         </Button>
       </div>
@@ -124,9 +172,9 @@ export function AIInsightsTab({ lead, notes }: AIInsightsTabProps) {
               <span className="text-muted-foreground">/100</span>
               <Badge
                 variant="secondary"
-                className={getScoreBadgeColor(insights.scoreLabel)}
+                className={getScoreBadgeColor(insights.score_label)}
               >
-                {insights.scoreLabel}
+                {insights.score_label}
               </Badge>
             </div>
           </div>
@@ -323,9 +371,9 @@ function AIInsightsLoading() {
           <div className="flex items-center gap-3">
             <AISparkleIcon className="size-5 animate-spin" animated />
             <div>
-              <p className="font-medium">Analyzing lead data...</p>
+              <p className="font-medium">Loading insights...</p>
               <p className="text-sm text-muted-foreground">
-                This usually takes a few seconds
+                Fetching cached data
               </p>
             </div>
           </div>
@@ -352,7 +400,7 @@ function AIInsightsLoading() {
 }
 
 // Empty State
-function AIInsightsEmpty({ onGenerate }: { onGenerate: () => void }) {
+function AIInsightsEmpty({ onGenerate, isLoading }: { onGenerate: () => void; isLoading?: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <AISparkleIconLarge muted />
@@ -360,9 +408,18 @@ function AIInsightsEmpty({ onGenerate }: { onGenerate: () => void }) {
       <p className="mt-2 text-sm text-muted-foreground max-w-sm">
         Get AI-powered analysis of this lead including scoring, recommended actions, and engagement patterns.
       </p>
-      <Button onClick={onGenerate} className="mt-6 gap-2">
-        <AISparkleIcon className="size-4" />
-        Generate Insights
+      <Button onClick={onGenerate} className="mt-6 gap-2" disabled={isLoading}>
+        {isLoading ? (
+          <>
+            <RefreshCw className="size-4 animate-spin" />
+            Generating...
+          </>
+        ) : (
+          <>
+            <AISparkleIcon className="size-4" />
+            Generate Insights
+          </>
+        )}
       </Button>
     </div>
   );
@@ -375,9 +432,9 @@ function AIInsightsError({ error, onRetry }: { error: string; onRetry: () => voi
       <div className="size-12 rounded-full bg-amber-100 flex items-center justify-center">
         <AlertTriangle className="size-6 text-amber-600" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold">Could not generate insights</h3>
+      <h3 className="mt-4 text-lg font-semibold">Could not load insights</h3>
       <p className="mt-2 text-sm text-muted-foreground max-w-sm">
-        {error || "We ran into an issue analyzing this lead. This is usually temporary."}
+        {error || "We ran into an issue. This is usually temporary."}
       </p>
       <Button onClick={onRetry} variant="outline" className="mt-6 gap-2">
         <RefreshCw className="size-4" />
@@ -387,105 +444,7 @@ function AIInsightsError({ error, onRetry }: { error: string; onRetry: () => voi
   );
 }
 
-// Mock data generator (will be replaced with real AI)
-function generateMockInsights(lead: Lead, notes: LeadNote[]): AIInsights {
-  const hasEmail = !!lead.email;
-  const hasPhone = !!lead.phone;
-  const hasLocation = !!(lead.city || lead.country);
-  const noteCount = notes.length;
-
-  // Calculate mock score
-  let score = 50;
-  if (hasEmail) score += 15;
-  if (hasPhone) score += 15;
-  if (hasLocation) score += 10;
-  if (noteCount > 0) score += Math.min(noteCount * 5, 15);
-
-  const factors: LeadScoreFactor[] = [];
-  if (hasEmail && hasPhone) {
-    factors.push({ label: "Complete contact info", impact: "positive", value: "+15%" });
-  }
-  if (noteCount > 0) {
-    factors.push({ label: `${noteCount} interaction${noteCount > 1 ? "s" : ""}`, impact: "positive", value: "+10%" });
-  }
-  if (!hasPhone) {
-    factors.push({ label: "Missing phone", impact: "negative", value: "-10%" });
-  }
-  if (lead.status === "new") {
-    factors.push({ label: "New lead - needs contact", impact: "neutral", value: "" });
-  }
-
-  const fullName = `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "This lead";
-  const location = [lead.city, lead.country].filter(Boolean).join(", ");
-
-  const summary = `${fullName} ${location ? `from ${location}` : ""} submitted an inquiry${
-    lead.created_at ? ` on ${new Date(lead.created_at).toLocaleDateString()}` : ""
-  }. ${
-    noteCount > 0
-      ? `There have been ${noteCount} recorded interaction${noteCount > 1 ? "s" : ""} with this lead.`
-      : "No interactions recorded yet - this lead needs initial contact."
-  }${
-    lead.preferred_contact_method
-      ? ` Preferred contact method: ${lead.preferred_contact_method}.`
-      : ""
-  }`;
-
-  const actions: RecommendedAction[] = [];
-
-  if (noteCount === 0) {
-    actions.push({
-      id: "1",
-      priority: "high",
-      title: "Make initial contact",
-      description: "This lead hasn't been contacted yet. Reach out within 24 hours for best conversion rates.",
-      actionType: "call",
-    });
-  }
-
-  if (!hasPhone && hasEmail) {
-    actions.push({
-      id: "2",
-      priority: "medium",
-      title: "Request phone number",
-      description: "Phone contact typically leads to faster conversions. Ask for their number in next email.",
-      actionType: "email",
-    });
-  }
-
-  if (lead.status === "new" && noteCount > 0) {
-    actions.push({
-      id: "3",
-      priority: "medium",
-      title: "Update lead stage",
-      description: "This lead has been contacted but is still marked as 'New'. Update to reflect current status.",
-      actionType: "update",
-    });
-  }
-
-  actions.push({
-    id: "4",
-    priority: "low",
-    title: "Add follow-up task",
-    description: "Schedule a follow-up to maintain engagement and move the lead forward.",
-    actionType: "task",
-  });
-
-  return {
-    score: Math.min(score, 100),
-    scoreLabel: score >= 70 ? "High" : score >= 40 ? "Medium" : "Low",
-    factors,
-    summary,
-    actions: actions.slice(0, 3),
-    engagement: {
-      totalInteractions: noteCount,
-      lastInteraction: noteCount > 0 && notes[0] ? formatRelativeTime(notes[0].created_at) : "Never",
-      responseRate: noteCount > 0 ? "Good" : "N/A",
-      avgResponseTime: noteCount > 0 ? "< 24 hours" : "N/A",
-    },
-    generatedAt: new Date().toISOString(),
-  };
-}
-
+// Utility functions
 function getScoreBadgeColor(label: string): string {
   switch (label) {
     case "High":

@@ -98,8 +98,62 @@ export interface Lead {
   form_config_id: string | null;
   deleted_at: string | null;
   idempotency_key: string | null;
+  // AI Insights fields
+  ai_score: number | null;
+  ai_priority: AIPriorityTier | null;
+  ai_score_updated_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// AI Insights Types
+export type AIScoreLabel = "High" | "Medium" | "Low";
+export type AIPriorityTier = "hot" | "warm" | "cold" | "unlikely";
+export type AIActionType = "call" | "email" | "task" | "update";
+export type AIFactorImpact = "positive" | "negative" | "neutral";
+
+export interface AIScoreFactor {
+  label: string;
+  impact: AIFactorImpact;
+  points: number;
+}
+
+export interface AIRecommendedAction {
+  id: string;
+  priority: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  actionType: AIActionType;
+}
+
+export interface AIEngagementStats {
+  totalInteractions: number;
+  lastInteraction: string;
+  responseRate: string;
+  avgResponseTime: string;
+}
+
+export interface LeadInsights {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  score: number;
+  score_label: AIScoreLabel;
+  priority_tier: AIPriorityTier;
+  factors: AIScoreFactor[];
+  summary: string;
+  actions: AIRecommendedAction[];
+  engagement: AIEngagementStats;
+  generated_at: string;
+  expires_at: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// API response type for insights endpoint
+export interface LeadInsightsResponse extends LeadInsights {
+  isStale: boolean;
+  isExpired: boolean;
 }
 
 export interface LeadNote {
