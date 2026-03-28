@@ -32,7 +32,7 @@ export default async function LeadsPage() {
           View and manage all lead submissions
         </p>
       </div>
-      <LeadsTable leads={leads} memberMap={memberMap} stages={stages} formMap={formMap} />
+      <LeadsTable leads={leads} memberMap={memberMap} stages={stages} formMap={formMap} role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"} />
     </div>
   );
 }

@@ -38,13 +38,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-  DropdownMenuLabel,
-} from "@/components/ui/dropdown-menu";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -60,7 +57,8 @@ interface TeamMember {
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
-type SortOption = "updated" | "created" | "name";
+type SortField = "created" | "updated" | "name" | "email";
+type SortDirection = "asc" | "desc";
 
 function groupByStage(
   leads: PipelineLead[],
@@ -90,20 +88,30 @@ function findLeadColumn(
   return null;
 }
 
-function sortLeads(leads: PipelineLead[], sortBy: SortOption): PipelineLead[] {
+function sortLeads(leads: PipelineLead[], sortField: SortField, sortDirection: SortDirection): PipelineLead[] {
   return [...leads].sort((a, b) => {
-    switch (sortBy) {
+    let comparison = 0;
+    switch (sortField) {
       case "updated":
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+        break;
       case "created":
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        break;
       case "name":
         const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
         const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
-        return nameA.localeCompare(nameB);
+        comparison = nameA.localeCompare(nameB);
+        break;
+      case "email":
+        const emailA = (a.email || "").toLowerCase();
+        const emailB = (b.email || "").toLowerCase();
+        comparison = emailA.localeCompare(emailB);
+        break;
       default:
-        return 0;
+        comparison = 0;
     }
+    return sortDirection === "asc" ? comparison : -comparison;
   });
 }
 
@@ -126,7 +134,8 @@ export function PipelineBoard({
   const [counselorFilter, setCounselorFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
-  const [sortBy, setSortBy] = useState<SortOption>("updated");
+  const [sortField, setSortField] = useState<SortField>("updated");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
 
   const isViewer = role === "viewer";
@@ -260,10 +269,10 @@ export function PipelineBoard({
       });
 
       // Apply sorting
-      filtered[stageId] = sortLeads(filteredLeads, sortBy);
+      filtered[stageId] = sortLeads(filteredLeads, sortField, sortDirection);
     });
     return filtered;
-  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, sortBy]);
+  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, sortField, sortDirection]);
 
   const clearFilters = () => {
     setSearchQuery("");
@@ -510,36 +519,58 @@ export function PipelineBoard({
           <div className="flex-1" />
 
           {/* Sort */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
+          <Popover>
+            <PopoverTrigger asChild>
               <Button variant="outline" size="sm" className="h-9 gap-2">
                 <ArrowUpDown className="h-4 w-4" />
                 Sort
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuLabel className="text-xs">Sort by</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onClick={() => setSortBy("updated")}
-                className={sortBy === "updated" ? "bg-accent" : ""}
-              >
-                Last updated
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setSortBy("created")}
-                className={sortBy === "created" ? "bg-accent" : ""}
-              >
-                Date created
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setSortBy("name")}
-                className={sortBy === "name" ? "bg-accent" : ""}
-              >
-                Name
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-4">
+              <div className="space-y-4">
+                <p className="text-sm font-medium">Sort by</p>
+                <div className="flex items-center gap-2">
+                  {/* Field selector */}
+                  <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                    <SelectTrigger className="flex-1 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="created">Date created</SelectItem>
+                      <SelectItem value="updated">Last updated</SelectItem>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {/* Direction toggle */}
+                  <div className="flex rounded-md border shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSortDirection("desc")}
+                      className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                        sortDirection === "desc"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      Z→A
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSortDirection("asc")}
+                      className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
+                        sortDirection === "asc"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      A→Z
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* Export */}
           <Button variant="outline" size="sm" className="h-9 gap-2" onClick={handleExport}>

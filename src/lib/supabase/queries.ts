@@ -33,14 +33,15 @@ export async function getCurrentUserTenant(): Promise<{
 
 export async function getLeads(
   tenantId: string,
-  options?: { role?: string; userId?: string }
+  options?: { role?: string; userId?: string; limit?: number }
 ): Promise<Lead[]> {
   const supabase = await createClient();
   let query = supabase
     .from("leads")
     .select("*")
     .eq("tenant_id", tenantId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .limit(options?.limit ?? 1000);
 
   if (options?.role === "counselor" && options.userId) {
     query = query.eq("assigned_to", options.userId);
@@ -158,13 +159,14 @@ export async function getLeadsForPipeline(
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
-  // Fetch leads
+  // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
   let query = supabase
     .from("leads")
     .select("*")
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
-    .not("stage_id", "is", null);
+    .not("stage_id", "is", null)
+    .limit(500);
 
   if (options?.role === "counselor" && options.userId) {
     query = query.eq("assigned_to", options.userId);
@@ -174,18 +176,21 @@ export async function getLeadsForPipeline(
   if (leadsError) throw leadsError;
   if (!leads || leads.length === 0) return [];
 
-  // Fetch checklist counts in a single query
-  const leadIds = leads.map((l) => l.id);
+  // Fetch checklist counts - use tenant_id filter instead of .in() to avoid URL length limits
   const { data: checklistCounts, error: clError } = await supabase
     .from("lead_checklists")
     .select("lead_id, is_completed")
-    .in("lead_id", leadIds);
+    .eq("tenant_id", tenantId);
 
   if (clError) throw clError;
 
-  // Aggregate counts per lead
+  // Create a set of lead IDs for fast lookup
+  const leadIdSet = new Set(leads.map((l) => l.id));
+
+  // Aggregate counts per lead (only for leads we're displaying)
   const countsMap = new Map<string, { total: number; completed: number }>();
   for (const item of checklistCounts || []) {
+    if (!leadIdSet.has(item.lead_id)) continue;
     const entry = countsMap.get(item.lead_id) || { total: 0, completed: 0 };
     entry.total++;
     if (item.is_completed) entry.completed++;

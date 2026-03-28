@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -20,20 +20,39 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import {
   Download,
   Search,
   Trash2,
   Eye,
+  Users2,
+  Globe,
+  Calendar,
+  ArrowUpDown,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Lead, PipelineStage } from "@/types/database";
+import type { Lead, PipelineStage, UserRole } from "@/types/database";
+
+type SortField = "created" | "updated" | "name" | "email";
+type SortDirection = "asc" | "desc";
 
 interface LeadsTableProps {
   leads: Lead[];
   memberMap?: Record<string, string>;
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
+  role?: UserRole;
 }
 
 // Generate consistent color from string
@@ -63,24 +82,79 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   return first + last || "?";
 }
 
-export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }: LeadsTableProps) {
+export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, role = "viewer" }: LeadsTableProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
+  const [counselorFilter, setCounselorFilter] = useState<string>("all");
+  const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [createdFilter, setCreatedFilter] = useState<string>("all");
+  const [sortField, setSortField] = useState<SortField>("created");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  const isAdmin = role === "admin" || role === "owner";
+
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
 
+  // Get unique sources from leads
+  const sources = useMemo(() => {
+    const s = new Set<string>();
+    leads.forEach(l => {
+      if (l.intake_source) s.add(l.intake_source);
+    });
+    return Array.from(s).sort();
+  }, [leads]);
+
+  // Get unique counselors (assigned_to users)
+  const counselors = useMemo(() => {
+    const c = new Map<string, string>();
+    Object.entries(memberMap).forEach(([userId, email]) => {
+      c.set(userId, email);
+    });
+    return Array.from(c.entries());
+  }, [memberMap]);
+
   const filtered = useMemo(() => {
-    return leads.filter((lead) => {
+    const now = Date.now();
+
+    let result = leads.filter((lead) => {
       const matchesStatus =
         statusFilter === "all" || lead.status === statusFilter;
       const matchesForm =
         formFilter === "all" || lead.form_config_id === formFilter;
+      const matchesCounselor =
+        counselorFilter === "all" ||
+        (counselorFilter === "unassigned" ? !lead.assigned_to : lead.assigned_to === counselorFilter);
+      const matchesSource =
+        sourceFilter === "all" || lead.intake_source === sourceFilter;
+
+      // Created date filter
+      let matchesCreated = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(lead.created_at).getTime();
+        const dayMs = 24 * 60 * 60 * 1000;
+        switch (createdFilter) {
+          case "today":
+            matchesCreated = now - createdAt < dayMs;
+            break;
+          case "week":
+            matchesCreated = now - createdAt < 7 * dayMs;
+            break;
+          case "month":
+            matchesCreated = now - createdAt < 30 * dayMs;
+            break;
+        }
+      }
+
       const searchLower = search.toLowerCase();
       const assignedEmail = lead.assigned_to ? memberMap[lead.assigned_to] || "" : "";
       const matchesSearch =
@@ -91,27 +165,91 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm;
+      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesCreated;
     });
-  }, [leads, search, statusFilter, formFilter, memberMap]);
 
-  const filteredIds = useMemo(() => new Set(filtered.map((l) => l.id)), [filtered]);
+    // Apply sorting
+    result = [...result].sort((a, b) => {
+      let comparison = 0;
+      switch (sortField) {
+        case "updated":
+          comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
+          break;
+        case "created":
+          comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+          break;
+        case "name":
+          const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
+          const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+          comparison = nameA.localeCompare(nameB);
+          break;
+        case "email":
+          const emailA = (a.email || "").toLowerCase();
+          const emailB = (b.email || "").toLowerCase();
+          comparison = emailA.localeCompare(emailB);
+          break;
+        default:
+          comparison = 0;
+      }
+      return sortDirection === "asc" ? comparison : -comparison;
+    });
+
+    return result;
+  }, [leads, search, statusFilter, formFilter, counselorFilter, sourceFilter, createdFilter, sortField, sortDirection, memberMap]);
+
+  const clearFilters = () => {
+    setSearch("");
+    setStatusFilter("all");
+    setFormFilter("all");
+    setCounselorFilter("all");
+    setSourceFilter("all");
+    setCreatedFilter("all");
+    setCurrentPage(1);
+  };
+
+  const activeFiltersCount = [
+    search !== "",
+    statusFilter !== "all",
+    formFilter !== "all",
+    counselorFilter !== "all",
+    sourceFilter !== "all",
+    createdFilter !== "all"
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFiltersCount > 0;
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filtered.length);
+  const paginatedLeads = useMemo(() => {
+    return filtered.slice(startIndex, endIndex);
+  }, [filtered, startIndex, endIndex]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    if (currentPage > totalPages && totalPages > 0) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
+
+  const filteredIds = useMemo(() => new Set(paginatedLeads.map((l) => l.id)), [paginatedLeads]);
 
   const selectedCount = selectedIds.size;
-  const allSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
-  const someSelected = filtered.some((l) => selectedIds.has(l.id)) && !allSelected;
+  const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
+  const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
 
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        filtered.forEach((l) => next.delete(l.id));
+        paginatedLeads.forEach((l) => next.delete(l.id));
         return next;
       });
     } else {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        filtered.forEach((l) => next.add(l.id));
+        paginatedLeads.forEach((l) => next.add(l.id));
         return next;
       });
     }
@@ -216,31 +354,153 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
         </div>
       )}
 
-      {/* Header Bar with Search, Filters, Actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        {/* Lead count */}
-        <div className="text-sm font-medium text-gray-500 shrink-0">
-          {filtered.length} Leads
-        </div>
+      {/* Enhanced Toolbar - matching pipeline style */}
+      <div className="bg-card rounded-lg border">
+        {/* Top Row: Search + Actions */}
+        <div className="flex flex-wrap items-center gap-3 p-3">
+          {/* Lead count */}
+          <div className="text-sm font-medium text-muted-foreground shrink-0">
+            {filtered.length} Leads
+          </div>
 
-        {/* Search - edge-flow style */}
-        <div className="relative flex-1 w-full sm:max-w-sm">
-          <div className="flex items-center bg-white rounded-xl px-4 py-2 border border-gray-300 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-            <Search className="w-4 h-4 text-gray-500 mr-3" />
+          {/* Search */}
+          <div className="relative w-60">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <input
               type="text"
               placeholder="Search leads..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="bg-transparent w-full text-sm outline-none text-gray-700 placeholder-gray-500"
+              className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
+
+          <div className="flex-1" />
+
+          {/* Sort */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-2">
+                <ArrowUpDown className="h-4 w-4" />
+                Sort
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-72 p-4">
+              <div className="space-y-4">
+                <p className="text-sm font-medium">Sort by</p>
+                <div className="flex items-center gap-2">
+                  {/* Field selector */}
+                  <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                    <SelectTrigger className="flex-1 h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="created">Date created</SelectItem>
+                      <SelectItem value="updated">Last updated</SelectItem>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="email">Email</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {/* Direction toggle */}
+                  <div className="flex rounded-md border shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSortDirection("desc")}
+                      className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                        sortDirection === "desc"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      Z→A
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSortDirection("asc")}
+                      className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
+                        sortDirection === "asc"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      A→Z
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
+
+          {/* Export */}
+          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={exportCSV}>
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
         </div>
 
-        {/* Filters */}
-        <div className="flex items-center gap-2">
+        {/* Divider */}
+        <div className="h-px bg-border" />
+
+        {/* Filter Row - Compact */}
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          {/* Counselor Filter (Admin only) */}
+          {isAdmin && counselors.length > 0 && (
+            <Select value={counselorFilter} onValueChange={setCounselorFilter}>
+              <SelectTrigger className={`h-7 text-xs px-2.5 ${counselorFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
+                <div className="flex items-center gap-1.5">
+                  <Users2 className="h-3 w-3" />
+                  <SelectValue placeholder="Counselor" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Counselors</SelectItem>
+                <SelectItem value="unassigned">Unassigned</SelectItem>
+                {counselors.map(([userId, email]) => (
+                  <SelectItem key={userId} value={userId}>
+                    {email.split("@")[0]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Source Filter */}
+          {sources.length > 0 && (
+            <Select value={sourceFilter} onValueChange={setSourceFilter}>
+              <SelectTrigger className={`h-7 text-xs px-2.5 ${sourceFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
+                <div className="flex items-center gap-1.5">
+                  <Globe className="h-3 w-3" />
+                  <SelectValue placeholder="Source" />
+                </div>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Sources</SelectItem>
+                {sources.map(s => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+
+          {/* Created Date Filter */}
+          <Select value={createdFilter} onValueChange={setCreatedFilter}>
+            <SelectTrigger className={`h-7 text-xs px-2.5 ${createdFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
+              <div className="flex items-center gap-1.5">
+                <Calendar className="h-3 w-3" />
+                <SelectValue placeholder="Created" />
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any time</SelectItem>
+              <SelectItem value="today">Today</SelectItem>
+              <SelectItem value="week">Last 7 days</SelectItem>
+              <SelectItem value="month">Last 30 days</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* Status Filter */}
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[130px] h-9 bg-white border-gray-300">
+            <SelectTrigger className={`h-7 text-xs px-2.5 ${statusFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
               <SelectValue placeholder="All Status" />
             </SelectTrigger>
             <SelectContent>
@@ -252,9 +512,11 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
               <SelectItem value="rejected">Rejected</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Form Filter (if multiple forms) */}
           {hasMultipleForms && (
             <Select value={formFilter} onValueChange={setFormFilter}>
-              <SelectTrigger className="w-[150px] h-9 bg-white border-gray-300">
+              <SelectTrigger className={`h-7 text-xs px-2.5 ${formFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
                 <SelectValue placeholder="All Forms" />
               </SelectTrigger>
               <SelectContent>
@@ -267,42 +529,56 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
               </SelectContent>
             </Select>
           )}
-        </div>
 
-        {/* Actions */}
-        <Button variant="outline" size="sm" onClick={exportCSV} className="h-9">
-          <Download className="h-4 w-4 mr-2" />
-          Export
-        </Button>
+          <div className="flex-1" />
+
+          {/* Active Filters Indicator + Clear */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-1.5">
+              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
+                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
+              </Badge>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearFilters}
+                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Clear
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Table - Databricks style */}
+      {/* Table - Compact style */}
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <table className="w-full min-w-full">
           <thead>
-            <tr className="border-b border-gray-100 bg-gray-50/50">
-              <th className="px-4 py-3 text-left w-12">
+            <tr className="border-b border-gray-200 bg-gray-50/80">
+              <th className="px-3 py-2 text-left w-10">
                 <Checkbox
                   checked={someSelected ? "indeterminate" : allSelected}
                   onCheckedChange={toggleSelectAll}
                   aria-label="Select all"
                 />
               </th>
-              <th className="px-4 py-3 text-left w-12"></th>
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500">Name</th>
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500 hidden md:table-cell">Email</th>
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500 hidden lg:table-cell">Location</th>
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500 hidden lg:table-cell">Assigned</th>
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500">Status</th>
+              <th className="px-2 py-2 text-left w-8"></th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Email</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell">Location</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell">Assigned</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600">Status</th>
               {hasMultipleForms && (
-                <th className="px-4 py-3 text-left text-sm font-normal text-gray-500 hidden md:table-cell">Form</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Form</th>
               )}
-              <th className="px-4 py-3 text-left text-sm font-normal text-gray-500 hidden md:table-cell">Date</th>
-              <th className="px-4 py-3 text-right text-sm font-normal text-gray-500 w-24">Actions</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Date</th>
+              <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
-            {filtered.length === 0 ? (
+          <tbody className="divide-y divide-gray-100">
+            {paginatedLeads.length === 0 ? (
               <tr>
                 <td
                   colSpan={hasMultipleForms ? 10 : 9}
@@ -313,7 +589,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                 </td>
               </tr>
             ) : (
-              filtered.map((lead) => {
+              paginatedLeads.map((lead) => {
                 const assignedEmail = lead.assigned_to
                   ? memberMap[lead.assigned_to]
                   : null;
@@ -329,24 +605,24 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                     key={lead.id}
                     className={`hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
                   >
-                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(lead.id)}
                         aria-label={`Select ${lead.first_name} ${lead.last_name}`}
                       />
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-2 py-1.5">
                       <div
-                        className={`h-8 w-8 rounded-full flex items-center justify-center text-white text-sm font-medium ${avatarColor}`}
+                        className={`h-6 w-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${avatarColor}`}
                       >
                         {initials}
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       <Link
                         href={`/leads/${lead.id}`}
-                        className="text-sm font-normal text-[#2272B4] hover:underline"
+                        className="text-sm font-medium text-[#2272B4] hover:underline"
                       >
                         {lead.first_name} {lead.last_name}
                       </Link>
@@ -354,20 +630,20 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                         {lead.email}
                       </div>
                     </td>
-                    <td className="px-4 py-3 hidden md:table-cell text-sm text-gray-600">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       {lead.email}
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-sm text-gray-600">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
                       {lead.city || <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-3 hidden lg:table-cell text-sm text-gray-600">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
                       {assignedEmail ? (
                         <span>{assignedEmail.split("@")[0]}</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-3 py-1.5">
                       {(() => {
                         const stage = stages.find((s) => s.id === lead.stage_id);
                         const badgeColors: Record<string, string> = {
@@ -378,7 +654,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                         };
                         return (
                           <span
-                            className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                               stage
                                 ? ""
                                 : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
@@ -395,9 +671,9 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                       })()}
                     </td>
                     {hasMultipleForms && (
-                      <td className="px-4 py-3 hidden md:table-cell">
+                      <td className="px-3 py-1.5 hidden md:table-cell">
                         {formName ? (
-                          <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-800">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
                             {formName}
                           </span>
                         ) : (
@@ -405,16 +681,16 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
                         )}
                       </td>
                     )}
-                    <td className="px-4 py-3 hidden md:table-cell text-sm text-gray-500">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Link
                           href={`/leads/${lead.id}`}
-                          className="p-1.5 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
+                          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
                         >
-                          <Eye size={16} />
+                          <Eye size={15} />
                         </Link>
                       </div>
                     </td>
@@ -425,9 +701,77 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {} }:
           </tbody>
         </table>
       </div>
-      <p className="text-xs text-gray-500">
-        Showing {filtered.length} of {leads.length} leads
-      </p>
+      {/* Pagination Controls */}
+      <div className="flex items-center justify-between py-3 px-1">
+        <p className="text-xs text-gray-500">
+          Showing {filtered.length === 0 ? 0 : startIndex + 1} to {endIndex} of {filtered.length}
+        </p>
+
+        <div className="flex items-center gap-4">
+          {/* Items per page */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-500">per page</span>
+            <Select
+              value={String(itemsPerPage)}
+              onValueChange={(v) => {
+                setItemsPerPage(Number(v));
+                setCurrentPage(1);
+              }}
+            >
+              <SelectTrigger className="h-7 w-16 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="10">10</SelectItem>
+                <SelectItem value="25">25</SelectItem>
+                <SelectItem value="50">50</SelectItem>
+                <SelectItem value="100">100</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Page navigation */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setCurrentPage(1)}
+              disabled={currentPage === 1}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="First page"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Previous page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <span className="text-xs text-gray-600 px-2">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Next page"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setCurrentPage(totalPages)}
+              disabled={currentPage >= totalPages}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
+              title="Last page"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* Delete Confirmation Dialog */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

@@ -52,7 +52,7 @@ export default async function DashboardPage() {
       </div>
 
       {/* Leads Table */}
-      <LeadsTable leads={leads} memberMap={memberMap} stages={stages} formMap={formMap} />
+      <LeadsTable leads={leads} memberMap={memberMap} stages={stages} formMap={formMap} role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"} />
     </div>
   );
 }
