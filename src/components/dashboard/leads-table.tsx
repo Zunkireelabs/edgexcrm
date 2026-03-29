@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
+import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
 
 type SortField = "created" | "updated" | "name" | "email";
@@ -121,6 +122,7 @@ export function LeadsTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
+  const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -362,9 +364,13 @@ export function LeadsTable({
     URL.revokeObjectURL(url);
   }
 
+  const previewLead = leads.find((l) => l.id === previewLeadId) || null;
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-2">
-      {/* Bulk Action Bar */}
+    <div className="flex flex-1 min-h-0 gap-0">
+      {/* Main Table Section - shrinks when preview is open */}
+      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
+        {/* Bulk Action Bar */}
       {selectedCount > 0 && (
         <div className="shrink-0 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
           <span className="text-sm font-medium text-blue-700">
@@ -668,12 +674,35 @@ export function LeadsTable({
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <Link
-                        href={`/leads/${lead.id}`}
-                        className="text-sm font-medium text-[#2272B4] hover:underline"
-                      >
-                        {lead.first_name} {lead.last_name}
-                      </Link>
+                      <div className="group flex items-center gap-2">
+                        <Link
+                          href={`/leads/${lead.id}`}
+                          className="text-sm font-medium text-[#2272B4] hover:underline truncate"
+                        >
+                          {lead.first_name} {lead.last_name}
+                        </Link>
+                        {/* Preview button - visible on hover (desktop) or always (mobile icon) */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
+                          }}
+                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
+                        >
+                          <Eye size={12} />
+                          Preview
+                        </button>
+                        {/* Mobile: always show icon */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
+                          }}
+                          className="shrink-0 md:hidden p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                        >
+                          <Eye size={14} />
+                        </button>
+                      </div>
                       <div className="text-xs text-gray-500 md:hidden">
                         {lead.email}
                       </div>
@@ -702,7 +731,7 @@ export function LeadsTable({
                         };
                         return (
                           <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
                               stage
                                 ? ""
                                 : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
@@ -818,6 +847,30 @@ export function LeadsTable({
               <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
+        </div>
+      </div>
+      </div>
+      {/* End of Main Table Section */}
+
+      {/* Lead Preview Panel - side by side with animation */}
+      <div
+        className={`h-full transition-all duration-500 ease-out overflow-hidden ${
+          previewLead ? 'w-[404px] opacity-100' : 'w-0 opacity-0'
+        }`}
+      >
+        <div
+          className={`h-full transition-transform duration-500 ease-out ${
+            previewLead ? 'translate-x-0' : 'translate-x-8'
+          }`}
+        >
+          {previewLead && (
+            <LeadPreviewPanel
+              lead={previewLead}
+              onClose={() => setPreviewLeadId(null)}
+              stages={stages}
+              memberMap={memberMap}
+            />
+          )}
         </div>
       </div>
 

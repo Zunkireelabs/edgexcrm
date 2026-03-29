@@ -47,8 +47,8 @@ export default async function LeadsPage() {
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-90px)]">
-      <h1 className="shrink-0 text-lg font-bold mb-4">All Leads</h1>
+    <div className="flex flex-col h-full min-h-0">
+      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">All Leads</h1>
       <LeadsTable
         leads={leads}
         memberMap={memberMap}

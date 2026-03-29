@@ -323,8 +323,8 @@ export function DashboardShell({
 
         {/* Content container - edge-flow style with rounded left corners */}
         <main className="flex-1 min-w-0 overflow-hidden">
-          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-y-auto overflow-x-hidden">
-            <div className="p-6 max-w-full">
+          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-hidden flex flex-col">
+            <div className="flex-1 min-h-0 p-6 pr-0 overflow-hidden">
               {children}
             </div>
           </div>
