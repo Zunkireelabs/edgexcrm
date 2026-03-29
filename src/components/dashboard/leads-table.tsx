@@ -566,11 +566,11 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
         </div>
       </div>
 
-      {/* Table - Compact style */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      {/* Table - Compact style with sticky header */}
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden max-h-[calc(100vh-340px)] overflow-y-auto">
         <table className="w-full min-w-full">
-          <thead>
-            <tr className="border-b border-gray-200 bg-gray-50/80">
+          <thead className="sticky top-0 z-10">
+            <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-3 py-2 text-left w-10">
                 <Checkbox
                   checked={someSelected ? "indeterminate" : allSelected}
