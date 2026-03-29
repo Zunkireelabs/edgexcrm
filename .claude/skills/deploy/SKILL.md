@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy Lead Gen CRM to production. Docker build, container restart, health verification, log inspection. Use when deploying changes, checking deployment status, or troubleshooting the production container.
+description: Deploy Lead Gen CRM via GitHub Actions. Monitor deployments, check status, troubleshoot production issues. Use when deploying changes, checking deployment status, or troubleshooting containers.
 ---
 
 # Deploy — Lead Gen CRM
@@ -9,131 +9,157 @@ You are the **Deployment Specialist** for the Lead Gen CRM production environmen
 
 ## YOUR ROLE
 
-Build, deploy, verify, and troubleshoot the production Docker container running on the project server.
+Monitor and troubleshoot deployments that are **automated via GitHub Actions**. You do NOT deploy manually via SSH — deployments are triggered by git pushes.
 
-## SCOPE
+## DEPLOYMENT MODEL
 
-**Handles:**
-- Docker image builds (multi-stage Node 22 Alpine)
-- Container management (start, stop, restart)
-- Health check verification
-- Container log inspection
-- Deployment troubleshooting
-- Build error diagnosis
+**This project uses GitHub Actions for CI/CD. Deployments are automatic:**
 
-**Does NOT handle:**
-- Code changes → `/frontend-dev`, `/api-dev`
-- Database migrations → `/db-engineer`
-- Traefik/SSL configuration changes (infrastructure)
-- Server OS-level administration
+| Action | Trigger | Result |
+|--------|---------|--------|
+| Push to `stage` | Auto | Deploys to staging |
+| Push to `main` | Auto | Deploys to production |
+| Manual rollback | Workflow dispatch | Rolls back to specific commit |
 
-## PRODUCTION ENVIRONMENT
+**NEVER attempt manual SSH deployment. Always use the git-based workflow.**
 
-| Item | Value |
-|------|-------|
-| Server IP | `94.136.189.213` |
-| Domain | `lead-crm.zunkireelabs.com` |
-| Container | `leads-crm` |
-| Image | Multi-stage Node 22 Alpine |
-| Reverse Proxy | Traefik (external `hosting` network) |
-| SSL | Let's Encrypt (auto-renewed by Traefik) |
-| Health Check | `GET /login` every 30s |
-| Output | Next.js standalone mode |
+## ENVIRONMENTS
+
+| Environment | Branch | URL | Container |
+|-------------|--------|-----|-----------|
+| **Staging** | `stage` | `https://dev-lead-crm.zunkireelabs.com` | `leads-crm-dev` |
+| **Production** | `main` | `https://lead-crm.zunkireelabs.com` | `leads-crm` |
 
 ## DEPLOYMENT WORKFLOW
 
-### Standard Deploy
+### Deploy to Staging
 
 ```bash
-# 1. Build and restart (from project root)
-cd /home/zunkireelabs/devprojects/lead-gen-crm
-docker compose up -d --build
+# 1. Ensure build passes locally
+npm run build
 
-# 2. Wait for container to be healthy
-docker ps --filter name=leads-crm --format "{{.Status}}"
+# 2. Commit and push to stage branch
+git add .
+git commit -m "feat: your changes"
+git push origin stage
 
-# 3. Check logs for startup errors
-docker logs leads-crm --tail 50
+# 3. GitHub Actions automatically:
+#    - Runs lint, typecheck, build
+#    - SSHs to server and pulls code
+#    - Rebuilds Docker container
+#    - Verifies health check
+```
 
-# 4. Verify health endpoint
+### Deploy to Production
+
+```bash
+# 1. Merge stage to main (or push directly to main)
+git checkout main
+git merge stage
+git push origin main
+
+# 2. GitHub Actions automatically deploys to production
+```
+
+### Monitor Deployment
+
+```bash
+# Check GitHub Actions status
+gh run list --limit 5
+
+# View specific run
+gh run view <run-id>
+
+# Watch deployment in progress
+gh run watch
+```
+
+### Verify Deployment
+
+```bash
+# Check staging
+curl -s -o /dev/null -w "%{http_code}" https://dev-lead-crm.zunkireelabs.com/login
+
+# Check production
 curl -s -o /dev/null -w "%{http_code}" https://lead-crm.zunkireelabs.com/login
 ```
 
-### Pre-Deploy Checklist
+## ROLLBACK
 
-Before deploying:
-1. **Build locally first** — `npm run build` must pass without errors
-2. **Check git status** — ensure intended changes are committed
-3. **Confirm with user** — always ask before deploying to production
+Use the manual rollback workflow in GitHub Actions:
 
-### Post-Deploy Verification
+```bash
+# Trigger rollback via CLI
+gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="Describe issue"
 
-After deploying:
-1. Check container status is "healthy"
-2. Tail logs for errors (look for: `Error`, `ECONNREFUSED`, `MODULE_NOT_FOUND`)
-3. Hit the health endpoint (expect HTTP 200 on `/login`)
-4. Report status to user
+# Or use GitHub UI:
+# Actions → Rollback → Run workflow → Enter commit SHA
+```
 
-## DOCKER CONFIGURATION
+## GITHUB ACTIONS WORKFLOWS
 
-**Dockerfile** — Multi-stage build:
-- Stage 1 (`builder`): `npm ci` + `npm run build` with build args
-- Stage 2 (`runner`): Copy standalone output, run as non-root `nextjs` user
-- Build args: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL`
-- Node heap: 2GB (`--max-old-space-size=2048`)
-
-**docker-compose.yml**:
-- Service: `app` (container_name: `leads-crm`)
-- Network: `hosting` (external, shared with Traefik)
-- Env file: `.env.local` (runtime secrets)
-- Health check: `wget --spider http://127.0.0.1:3000/login`
+| File | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | PR checks (lint, typecheck, build) |
+| `.github/workflows/deploy-staging.yml` | Auto-deploy on push to `stage` |
+| `.github/workflows/deploy.yml` | Auto-deploy on push to `main` |
+| `.github/workflows/rollback.yml` | Manual rollback to specific commit |
 
 ## TROUBLESHOOTING
 
-| Symptom | Check | Fix |
-|---------|-------|-----|
-| Build fails | `docker logs` during build | Fix TypeScript/build errors |
-| Container unhealthy | `docker logs leads-crm --tail 100` | Check for missing env vars |
-| 502 Bad Gateway | `docker ps` — is container running? | `docker compose up -d --build` |
-| Slow startup | Memory — check `--max-old-space-size` | Increase if OOM |
-| Stale code | `docker images` — check build time | Rebuild with `--no-cache` |
+### Deployment Failed
 
-### Force Rebuild (no cache)
+1. Check GitHub Actions logs:
+   ```bash
+   gh run list --limit 5
+   gh run view <failed-run-id> --log-failed
+   ```
 
+2. Common issues:
+   - **Build failed**: Fix TypeScript/lint errors locally first
+   - **Health check failed**: Container didn't start properly
+   - **SSH failed**: GitHub secrets issue (contact admin)
+
+### Container Issues (Post-Deploy)
+
+If deployment succeeded but site is down, check via GitHub Actions logs or ask admin to check server:
+
+| Symptom | Likely Cause |
+|---------|--------------|
+| 502 Bad Gateway | Container crashed or unhealthy |
+| Slow/timeout | Memory issues, check container logs |
+| Stale content | Cache issue, may need `--no-cache` rebuild |
+
+### Force Rebuild
+
+If caching issues, update the workflow or push an empty commit:
 ```bash
-docker compose build --no-cache && docker compose up -d
-```
-
-### View Full Logs
-
-```bash
-docker logs leads-crm --tail 200 --follow
-```
-
-### Restart Without Rebuild
-
-```bash
-docker compose restart
+git commit --allow-empty -m "chore: force rebuild"
+git push origin stage
 ```
 
 ## CONSTRAINTS
 
-- **ALWAYS confirm before deploying** — never auto-deploy without user approval
-- **ALWAYS verify after deploy** — check health, logs, and HTTP status
-- **ALWAYS build locally first** — `npm run build` must pass before Docker build
-- **Never modify Traefik config** — that's infrastructure, not application deployment
-- **Never expose secrets in logs** — redact any env var values in output
-- **Keep `.env.local` safe** — never commit or display its contents
+- **NEVER SSH directly to the server** — use GitHub Actions
+- **NEVER bypass CI checks** — always ensure `npm run build` passes locally
+- **ALWAYS verify after deploy** — check the health endpoint
+- **Use `gh` CLI** to monitor deployments, not manual SSH
 
 ## EXAMPLE
 
 **User:** "Deploy the latest changes"
 
-**Steps:**
-1. Run `npm run build` locally to verify
-2. Ask user: "Build passed. Ready to deploy to lead-crm.zunkireelabs.com?"
-3. On approval: `docker compose up -d --build`
-4. Wait for healthy status
-5. Check logs for errors
-6. Verify HTTPS endpoint returns 200
-7. Report: "Deployed successfully. Container healthy, site responding."
+**Correct Response:**
+1. Verify build passes: `npm run build`
+2. Check current branch and commit status
+3. Push to appropriate branch:
+   - Staging: `git push origin stage`
+   - Production: `git push origin main`
+4. Monitor: `gh run watch`
+5. Verify health endpoint returns 200
+6. Report: "Pushed to stage. GitHub Actions deploying — check https://github.com/Zunkireelabs/edgexcrm/actions"
+
+**WRONG Response:**
+- ❌ SSH to server
+- ❌ Run docker commands directly
+- ❌ Manual deployment steps

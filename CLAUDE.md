@@ -38,12 +38,13 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 | `/db-engineer` | **Database** | Schema, migrations, SQL, RLS, tenant isolation |
 | `/frontend-dev` | **Frontend** | Pages, components, forms, layouts, React/shadcn/Tailwind |
 | `/api-dev` | **API** | API routes, auth, validation, rate limiting, audit logging |
-| `/deploy` | **Deployment** | Docker builds, container restart, health checks, prod troubleshooting |
+| `/deploy` | **Deployment** | GitHub Actions deploys, monitor status, health checks, prod troubleshooting |
 | `/perf-auditor` | **Performance** | Bundle size, query optimization, caching, React re-renders |
 | `/widget-perf` | **Widget Speed** | Embeddable form TTFB, static generation, bundle reduction, embed optimization |
 | `/test-engineer` | **Testing** | Unit/integration/component tests, test infrastructure |
 | `/security-auditor` | **Security** | RLS review, auth audit, OWASP, tenant isolation verification |
 | `/ci-cd` | **CI/CD** | GitHub Actions pipelines, PR checks, auto-deploy, rollback |
+| `/code-reviewer` | **Code Quality** | Bug detection, redundancy, dead code, pattern consistency, logic validation |
 | `/skill-architect` | **Meta** | Create/optimize skills, analyze coverage |
 | `/ui-ux-expert` | **Design** | Visual hierarchy, accessibility, interaction patterns, UX reviews, design decisions |
 
@@ -59,6 +60,43 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 | Backend | Supabase (PostgreSQL + Auth + Storage) | JS SDK 2.97 |
 | Deployment | Docker + Traefik | Node 22 Alpine |
 | React | React 19 | 19.2.3 |
+
+## CI/CD Pipeline
+
+**Deployments are automated via GitHub Actions. Never deploy manually via SSH.**
+
+| Trigger | Action | Environment |
+|---------|--------|-------------|
+| PR to `main` or `stage` | Run lint, typecheck, build | CI checks only |
+| Push to `stage` | Auto-deploy | Staging: `dev-lead-crm.zunkireelabs.com` |
+| Push to `main` | Auto-deploy | Production: `lead-crm.zunkireelabs.com` |
+| Manual workflow dispatch | Rollback | Production (specific commit) |
+
+### Workflow Files
+
+| File | Purpose |
+|------|---------|
+| `.github/workflows/ci.yml` | PR checks (lint, typecheck, build) |
+| `.github/workflows/deploy-staging.yml` | Auto-deploy on push to `stage` |
+| `.github/workflows/deploy.yml` | Auto-deploy on push to `main` |
+| `.github/workflows/rollback.yml` | Manual rollback to specific commit |
+
+### Deploy Commands
+
+```bash
+# Deploy to staging
+git push origin stage
+
+# Deploy to production
+git checkout main && git merge stage && git push origin main
+
+# Monitor deployment
+gh run list --limit 5
+gh run watch
+
+# Rollback (via GitHub Actions)
+gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="Issue description"
+```
 
 ## Live URLs
 
@@ -92,6 +130,7 @@ lead-gen-crm/
 │   ├── settings.local.json         # MCP + permissions
 │   └── skills/
 │       ├── api-dev/SKILL.md        # API route specialist
+│       ├── code-reviewer/SKILL.md  # Code quality auditor
 │       ├── crm-expert/SKILL.md     # CRM domain expert (Salesforce/HubSpot patterns)
 │       ├── db-engineer/SKILL.md    # DB engineer skill
 │       ├── deploy/SKILL.md         # Deployment specialist
@@ -235,15 +274,21 @@ These functions bypass RLS internally since `tenant_users` policies can't refere
 # Development
 npm run dev
 
-# Production build
+# Production build (always run before pushing)
 npm run build
 
-# Deploy (rebuild + restart container)
-cd /home/zunkireelabs/devprojects/lead-gen-crm
-docker compose up -d --build
+# Deploy to staging (auto via GitHub Actions)
+git push origin stage
 
-# View container logs
-docker logs leads-crm
+# Deploy to production (auto via GitHub Actions)
+git checkout main && git merge stage && git push origin main
+
+# Monitor GitHub Actions deployment
+gh run list --limit 5
+gh run watch
+
+# Verify deployment health
+curl -s -o /dev/null -w "%{http_code}" https://lead-crm.zunkireelabs.com/login
 
 # Database access
 psql "postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik#@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
