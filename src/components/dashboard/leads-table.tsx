@@ -70,27 +70,6 @@ interface LeadsTableProps {
   currentUserId?: string;
 }
 
-// Generate consistent color from string
-function stringToColor(str: string): string {
-  const colors = [
-    "bg-blue-600",
-    "bg-purple-600",
-    "bg-pink-600",
-    "bg-orange-600",
-    "bg-green-600",
-    "bg-indigo-600",
-    "bg-rose-600",
-    "bg-cyan-600",
-    "bg-amber-600",
-    "bg-teal-600",
-  ];
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";
   const last = lastName?.charAt(0)?.toUpperCase() || "";
@@ -651,7 +630,6 @@ export function LeadsTable({
                   ? formMap[lead.form_config_id]
                   : null;
                 const isSelected = selectedIds.has(lead.id);
-                const avatarColor = stringToColor(`${lead.first_name}${lead.last_name}${lead.email}`);
                 const initials = getInitials(lead.first_name, lead.last_name);
 
                 return (
@@ -667,9 +645,7 @@ export function LeadsTable({
                       />
                     </td>
                     <td className="px-2 py-1.5">
-                      <div
-                        className={`h-6 w-6 rounded-full flex items-center justify-center text-white text-xs font-medium ${avatarColor}`}
-                      >
+                      <div className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-gray-500 text-xs font-medium">
                         {initials}
                       </div>
                     </td>

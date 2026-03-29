@@ -29,27 +29,6 @@ interface LeadPreviewPanelProps {
   memberMap?: Record<string, string>;
 }
 
-// Generate consistent color from string
-function stringToColor(str: string): string {
-  const colors = [
-    "bg-blue-600",
-    "bg-purple-600",
-    "bg-pink-600",
-    "bg-orange-600",
-    "bg-green-600",
-    "bg-indigo-600",
-    "bg-rose-600",
-    "bg-cyan-600",
-    "bg-amber-600",
-    "bg-teal-600",
-  ];
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";
   const last = lastName?.charAt(0)?.toUpperCase() || "";
@@ -118,7 +97,6 @@ export function LeadPreviewPanel({
   if (!lead) return null;
 
   const currentStage = stages.find((s) => s.id === lead.stage_id);
-  const avatarColor = stringToColor(`${lead.first_name}${lead.last_name}${lead.email}`);
   const initials = getInitials(lead.first_name, lead.last_name);
   const assignedEmail = lead.assigned_to ? memberMap[lead.assigned_to] : null;
   const completedCount = checklists.filter((c) => c.is_completed).length;
@@ -160,9 +138,7 @@ export function LeadPreviewPanel({
         {/* Lead Header with Avatar */}
         <div className="px-4 py-4">
           <div className="flex items-start gap-3">
-            <div
-              className={`h-12 w-12 rounded-full flex items-center justify-center text-white text-lg font-semibold shrink-0 ${avatarColor}`}
-            >
+            <div className="h-12 w-12 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-gray-500 text-lg font-semibold shrink-0">
               {initials}
             </div>
             <div className="flex-1 min-w-0">
