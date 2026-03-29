@@ -25,13 +25,8 @@ export default async function LeadsPage() {
   );
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="shrink-0 mb-4">
-        <h1 className="text-2xl font-bold">All Leads</h1>
-        <p className="text-muted-foreground">
-          View and manage all lead submissions
-        </p>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-90px)]">
+      <h1 className="shrink-0 text-lg font-bold mb-4">All Leads</h1>
       <LeadsTable leads={leads} memberMap={memberMap} stages={stages} formMap={formMap} role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"} />
     </div>
   );

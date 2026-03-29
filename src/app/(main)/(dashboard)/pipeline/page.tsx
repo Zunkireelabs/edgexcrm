@@ -20,13 +20,8 @@ export default async function PipelinePage() {
   ]);
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Pipeline</h1>
-        <p className="text-muted-foreground">
-          Drag leads between stages to update their status
-        </p>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-90px)]">
+      <h1 className="shrink-0 text-lg font-bold mb-4">Pipeline</h1>
       <PipelineBoard
         stages={stages}
         leads={leads}

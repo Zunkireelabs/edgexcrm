@@ -337,7 +337,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
   }
 
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-2">
       {/* Bulk Action Bar */}
       {selectedCount > 0 && (
         <div className="shrink-0 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
@@ -716,7 +716,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
         </table>
       </div>
       {/* Pagination Controls */}
-      <div className="shrink-0 flex items-center justify-between py-3 px-1">
+      <div className="shrink-0 flex items-center justify-between py-1">
         <p className="text-xs text-gray-500">
           Showing {filtered.length === 0 ? 0 : startIndex + 1} to {endIndex} of {filtered.length}
         </p>
