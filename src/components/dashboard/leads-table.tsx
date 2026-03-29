@@ -337,10 +337,10 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       {/* Bulk Action Bar */}
       {selectedCount > 0 && (
-        <div className="flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+        <div className="shrink-0 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
           <span className="text-sm font-medium text-blue-700">
             {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
           </span>
@@ -356,7 +356,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
       )}
 
       {/* Enhanced Toolbar - matching pipeline style */}
-      <div className="bg-card rounded-lg border">
+      <div className="shrink-0 bg-card rounded-lg border">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}
@@ -567,7 +567,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
       </div>
 
       {/* Table - Compact style with sticky header */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden max-h-[calc(100vh-340px)] overflow-y-auto">
+      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 overflow-y-auto">
         <table className="w-full min-w-full">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
@@ -716,7 +716,7 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
         </table>
       </div>
       {/* Pagination Controls */}
-      <div className="flex items-center justify-between py-3 px-1">
+      <div className="shrink-0 flex items-center justify-between py-3 px-1">
         <p className="text-xs text-gray-500">
           Showing {filtered.length === 0 ? 0 : startIndex + 1} to {endIndex} of {filtered.length}
         </p>

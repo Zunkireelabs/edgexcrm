@@ -25,8 +25,8 @@ export default async function LeadsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="flex flex-col h-[calc(100vh-120px)]">
+      <div className="shrink-0 mb-4">
         <h1 className="text-2xl font-bold">All Leads</h1>
         <p className="text-muted-foreground">
           View and manage all lead submissions
