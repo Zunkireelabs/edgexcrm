@@ -17,7 +17,6 @@ import type { PipelineLead, PipelineStage, UserRole } from "@/types/database";
 import { PipelineColumn } from "./PipelineColumn";
 import { LeadCard } from "./LeadCard";
 import { toast } from "sonner";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -25,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {
   Search,
   X,
@@ -32,7 +32,6 @@ import {
   Globe,
   ArrowUpDown,
   Download,
-  LayoutGrid,
   Calendar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -499,22 +498,22 @@ export function PipelineBoard({
       <div className="bg-card rounded-lg border">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
+          {/* Lead count */}
+          <div className="text-sm font-medium text-muted-foreground shrink-0">
+            {Object.values(filteredColumns).flat().length} Leads
+          </div>
+
           {/* Search */}
           <div className="relative w-60">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+            <input
+              type="text"
               placeholder="Search leads..."
-              className="pl-9 h-9"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
-
-          {/* View Toggle (placeholder) */}
-          <Button variant="outline" size="sm" className="h-9 gap-2" disabled>
-            <LayoutGrid className="h-4 w-4" />
-            Board view
-          </Button>
 
           <div className="flex-1" />
 
@@ -582,77 +581,76 @@ export function PipelineBoard({
         {/* Divider */}
         <div className="h-px bg-border" />
 
-        {/* Filter Row */}
-        <div className="flex flex-wrap items-center gap-2 p-3">
+        {/* Filter Row - Compact */}
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
           {/* Counselor Filter (Admin only) */}
           {isAdmin && (
-            <Select value={counselorFilter} onValueChange={setCounselorFilter}>
-              <SelectTrigger className="w-[160px] h-8 text-xs">
-                <div className="flex items-center gap-2">
-                  <Users2 className="h-3.5 w-3.5 text-muted-foreground" />
-                  <SelectValue placeholder="Counselor" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Counselors</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {teamMembers.map(m => (
-                  <SelectItem key={m.user_id} value={m.user_id}>
-                    {m.email.split("@")[0]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterDropdown
+              label="All Counselors"
+              value={counselorFilter}
+              onChange={setCounselorFilter}
+              icon={<Users2 className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Counselors", description: "Show leads from everyone" },
+                { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
+                ...teamMembers.map((m) => ({
+                  value: m.user_id,
+                  label: m.email.split("@")[0],
+                  description: m.email,
+                })),
+              ]}
+            />
           )}
 
           {/* Source Filter */}
-          <Select value={sourceFilter} onValueChange={setSourceFilter}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <div className="flex items-center gap-2">
-                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder="Source" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Sources</SelectItem>
-              {sources.map(s => (
-                <SelectItem key={s} value={s}>{s}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {sources.length > 0 && (
+            <FilterDropdown
+              label="All Sources"
+              value={sourceFilter}
+              onChange={setSourceFilter}
+              icon={<Globe className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Sources", description: "Show leads from all sources" },
+                ...sources.map((s) => ({
+                  value: s,
+                  label: s,
+                  description: `Leads from ${s}`,
+                })),
+              ]}
+            />
+          )}
 
           {/* Created Date Filter */}
-          <Select value={createdFilter} onValueChange={setCreatedFilter}>
-            <SelectTrigger className="w-[140px] h-8 text-xs">
-              <div className="flex items-center gap-2">
-                <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
-                <SelectValue placeholder="Created" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any time</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">Last 7 days</SelectItem>
-              <SelectItem value="month">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterDropdown
+            label="Any time"
+            value={createdFilter}
+            onChange={setCreatedFilter}
+            icon={<Calendar className="h-3 w-3" />}
+            searchable={false}
+            options={[
+              { value: "all", label: "Any time", description: "All time periods" },
+              { value: "today", label: "Today", description: "Last 24 hours" },
+              { value: "week", label: "Last 7 days", description: "Past week" },
+              { value: "month", label: "Last 30 days", description: "Past month" },
+            ]}
+          />
 
           <div className="flex-1" />
 
           {/* Active Filters Indicator + Clear */}
           {hasActiveFilters && (
-            <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs font-normal">
-                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""} active
+            <div className="flex items-center gap-1.5">
+              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
+                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
               </Badge>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={clearFilters}
-                className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
               >
-                <X className="h-3.5 w-3.5 mr-1" />
-                Clear all
+                <X className="h-3 w-3 mr-1" />
+                Clear
               </Button>
             </div>
           )}

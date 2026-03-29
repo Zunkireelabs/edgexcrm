@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import {
   Dialog,
   DialogContent,
@@ -445,89 +446,102 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
         <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
           {/* Counselor Filter (Admin only) */}
           {isAdmin && counselors.length > 0 && (
-            <Select value={counselorFilter} onValueChange={setCounselorFilter}>
-              <SelectTrigger className={`h-7 text-xs px-2.5 ${counselorFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
-                <div className="flex items-center gap-1.5">
-                  <Users2 className="h-3 w-3" />
-                  <SelectValue placeholder="Counselor" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Counselors</SelectItem>
-                <SelectItem value="unassigned">Unassigned</SelectItem>
-                {counselors.map(([userId, email]) => (
-                  <SelectItem key={userId} value={userId}>
-                    {email.split("@")[0]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterDropdown
+              label="All Counselors"
+              value={counselorFilter}
+              onChange={(val) => {
+                setCounselorFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Users2 className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Counselors", description: "Show leads from everyone" },
+                { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
+                ...counselors.map(([userId, email]) => ({
+                  value: userId,
+                  label: email.split("@")[0],
+                  description: email,
+                })),
+              ]}
+            />
           )}
 
           {/* Source Filter */}
           {sources.length > 0 && (
-            <Select value={sourceFilter} onValueChange={setSourceFilter}>
-              <SelectTrigger className={`h-7 text-xs px-2.5 ${sourceFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
-                <div className="flex items-center gap-1.5">
-                  <Globe className="h-3 w-3" />
-                  <SelectValue placeholder="Source" />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Sources</SelectItem>
-                {sources.map(s => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterDropdown
+              label="All Sources"
+              value={sourceFilter}
+              onChange={(val) => {
+                setSourceFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Globe className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Sources", description: "Show leads from all sources" },
+                ...sources.map((s) => ({
+                  value: s,
+                  label: s,
+                  description: `Leads from ${s}`,
+                })),
+              ]}
+            />
           )}
 
           {/* Created Date Filter */}
-          <Select value={createdFilter} onValueChange={setCreatedFilter}>
-            <SelectTrigger className={`h-7 text-xs px-2.5 ${createdFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
-              <div className="flex items-center gap-1.5">
-                <Calendar className="h-3 w-3" />
-                <SelectValue placeholder="Created" />
-              </div>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Any time</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">Last 7 days</SelectItem>
-              <SelectItem value="month">Last 30 days</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterDropdown
+            label="Any time"
+            value={createdFilter}
+            onChange={(val) => {
+              setCreatedFilter(val);
+              setCurrentPage(1);
+            }}
+            icon={<Calendar className="h-3 w-3" />}
+            searchable={false}
+            options={[
+              { value: "all", label: "Any time", description: "All time periods" },
+              { value: "today", label: "Today", description: "Last 24 hours" },
+              { value: "week", label: "Last 7 days", description: "Past week" },
+              { value: "month", label: "Last 30 days", description: "Past month" },
+            ]}
+          />
 
           {/* Status Filter */}
-          <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className={`h-7 text-xs px-2.5 ${statusFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
-              <SelectValue placeholder="All Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Status</SelectItem>
-              <SelectItem value="new">New</SelectItem>
-              <SelectItem value="partial">Partial</SelectItem>
-              <SelectItem value="contacted">Contacted</SelectItem>
-              <SelectItem value="enrolled">Enrolled</SelectItem>
-              <SelectItem value="rejected">Rejected</SelectItem>
-            </SelectContent>
-          </Select>
+          <FilterDropdown
+            label="All Status"
+            value={statusFilter}
+            onChange={(val) => {
+              setStatusFilter(val);
+              setCurrentPage(1);
+            }}
+            searchable={false}
+            options={[
+              { value: "all", label: "All Status", description: "Show all leads" },
+              { value: "new", label: "New", description: "Fresh submissions" },
+              { value: "partial", label: "Partial", description: "Incomplete forms" },
+              { value: "contacted", label: "Contacted", description: "In communication" },
+              { value: "enrolled", label: "Enrolled", description: "Successfully converted" },
+              { value: "rejected", label: "Rejected", description: "Not moving forward" },
+            ]}
+          />
 
           {/* Form Filter (if multiple forms) */}
           {hasMultipleForms && (
-            <Select value={formFilter} onValueChange={setFormFilter}>
-              <SelectTrigger className={`h-7 text-xs px-2.5 ${formFilter !== "all" ? "border-[#2272B4] bg-blue-50 text-[#2272B4]" : ""}`}>
-                <SelectValue placeholder="All Forms" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Forms</SelectItem>
-                {formEntries.map(([id, name]) => (
-                  <SelectItem key={id} value={id}>
-                    {name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <FilterDropdown
+              label="All Forms"
+              value={formFilter}
+              onChange={(val) => {
+                setFormFilter(val);
+                setCurrentPage(1);
+              }}
+              options={[
+                { value: "all", label: "All Forms", description: "Show leads from all forms" },
+                ...formEntries.map(([id, name]) => ({
+                  value: id,
+                  label: name,
+                  description: `Form: ${name}`,
+                })),
+              ]}
+            />
           )}
 
           <div className="flex-1" />
