@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
+import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
 
 export default async function DashboardLayout({
   children,
@@ -33,13 +34,15 @@ export default async function DashboardLayout({
   const formConfigs = await getFormConfigsForTenant(tenantData.tenant.id);
 
   return (
-    <DashboardShell
-      user={user}
-      tenant={tenantData.tenant}
-      role={tenantData.role}
-      formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
-    >
-      {children}
-    </DashboardShell>
+    <AIAssistantProvider>
+      <DashboardShell
+        user={user}
+        tenant={tenantData.tenant}
+        role={tenantData.role}
+        formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
+      >
+        {children}
+      </DashboardShell>
+    </AIAssistantProvider>
   );
 }

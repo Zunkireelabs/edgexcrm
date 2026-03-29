@@ -25,7 +25,10 @@ import {
   User as UserIcon,
   Search,
   Bell,
+  Sparkles,
 } from "lucide-react";
+import { useAIAssistant } from "@/contexts/ai-assistant-context";
+import { AIAssistantPanel } from "./ai-assistant-panel";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -61,6 +64,7 @@ export function DashboardShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
@@ -239,8 +243,21 @@ export function DashboardShell({
           {/* Spacer for centering */}
           <div className="flex-1"></div>
 
-          {/* Right Section - Notifications & Tenant Dropdown */}
+          {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
           <div className="flex items-center gap-3">
+            {/* AI Assistant Button */}
+            <button
+              onClick={toggleAssistant}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                isAssistantOpen
+                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
+                  : "hover:bg-gray-100 text-gray-700"
+              }`}
+            >
+              <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
+              <span className="text-sm font-medium hidden sm:inline">Assistant</span>
+            </button>
+
             {/* Notification Bell */}
             <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors group">
               <Bell className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
@@ -321,14 +338,24 @@ export function DashboardShell({
           </div>
         </header>
 
-        {/* Content container - edge-flow style with rounded left corners */}
-        <main className="flex-1 min-w-0 overflow-hidden">
-          <div className="bg-white rounded-l-xl h-full border border-gray-200 overflow-hidden flex flex-col">
-            <div className="flex-1 min-h-0 p-6 pr-0 overflow-hidden">
-              {children}
+        {/* Content container with AI Panel - flex layout */}
+        <div className="flex-1 min-w-0 overflow-hidden flex gap-3">
+          {/* Main content - shrinks when AI panel opens */}
+          <main className="min-w-0 overflow-hidden transition-all duration-500 ease-out flex-1">
+            <div
+              className={`bg-white h-full border border-gray-200 overflow-hidden flex flex-col transition-[border-radius] duration-500 ease-out ${
+                isAssistantOpen ? "rounded-xl" : "rounded-l-xl"
+              }`}
+            >
+              <div className="flex-1 min-h-0 p-6 pr-6 overflow-hidden">
+                {children}
+              </div>
             </div>
-          </div>
-        </main>
+          </main>
+
+          {/* AI Assistant Panel */}
+          <AIAssistantPanel />
+        </div>
       </div>
     </div>
   );
