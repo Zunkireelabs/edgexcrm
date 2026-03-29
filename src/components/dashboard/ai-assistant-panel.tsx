@@ -14,17 +14,21 @@ interface Message {
   timestamp: Date;
 }
 
-const WELCOME_MESSAGE: Message = {
-  id: "welcome",
-  role: "assistant",
-  content:
-    "Hi! I'm your AI assistant. I can help you with:\n\n• Finding and managing leads\n• Understanding your pipeline\n• Answering questions about your CRM\n\nHow can I help you today?",
-  timestamp: new Date(),
-};
+const WELCOME_CONTENT =
+  "Hi! I'm your AI assistant. I can help you with:\n\n• Finding and managing leads\n• Understanding your pipeline\n• Answering questions about your CRM\n\nHow can I help you today?";
+
+function createWelcomeMessage(): Message {
+  return {
+    id: "welcome",
+    role: "assistant",
+    content: WELCOME_CONTENT,
+    timestamp: new Date(),
+  };
+}
 
 export function AIAssistantPanel() {
   const { isOpen, closeAssistant } = useAIAssistant();
-  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
+  const [messages, setMessages] = useState<Message[]>(() => [createWelcomeMessage()]);
   const [isTyping, setIsTyping] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,6 +69,10 @@ export function AIAssistantPanel() {
 
       const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Request failed");
+      }
+
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",
@@ -85,13 +93,14 @@ export function AIAssistantPanel() {
     }
   };
 
-  const panelWidth = isExpanded ? "w-[600px]" : "w-[420px]";
+  const panelWidth = isExpanded ? 600 : 420;
 
   return (
     <div
       className={`h-full transition-all duration-500 ease-out overflow-hidden ${
-        isOpen ? `${panelWidth} opacity-100` : "w-0 opacity-0"
+        isOpen ? "opacity-100" : "w-0 opacity-0"
       }`}
+      style={{ width: isOpen ? panelWidth : 0 }}
     >
       <div
         className={`h-full transition-transform duration-500 ease-out ${
@@ -100,7 +109,7 @@ export function AIAssistantPanel() {
       >
         <div
           className="h-full bg-white border border-gray-200 rounded-xl flex flex-col overflow-hidden shadow-sm"
-          style={{ width: isExpanded ? 600 : 420 }}
+          style={{ width: panelWidth }}
         >
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
