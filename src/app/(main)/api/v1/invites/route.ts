@@ -13,6 +13,7 @@ import { validate, required, isEmail, isIn } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_request: NextRequest) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({

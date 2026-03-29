@@ -40,6 +40,7 @@ export function LeadDetailV2({
   checklists: initialChecklists,
   activities,
   stages,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   tenant: _tenant,
   role,
   userId,
@@ -53,6 +54,7 @@ export function LeadDetailV2({
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
   const [customFields, setCustomFields] = useState<Record<string, unknown>>(lead.custom_fields || {});
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [_status, setStatus] = useState(lead.status);
   const [stageId, setStageId] = useState(lead.stage_id);
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to || "");

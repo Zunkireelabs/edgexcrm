@@ -84,6 +84,7 @@ export function LeadPreviewPanel({
   // Fetch notes and checklists when lead changes
   useEffect(() => {
     if (lead) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoadingExtras(true);
       Promise.all([
         fetch(`/api/v1/leads/${lead.id}/notes`).then((r) => r.ok ? r.json() : { data: [] }),
@@ -101,7 +102,7 @@ export function LeadPreviewPanel({
       setNotes([]);
       setChecklists([]);
     }
-  }, [lead?.id]);
+  }, [lead]);
 
   // Handle Escape key to close
   useEffect(() => {

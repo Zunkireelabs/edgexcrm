@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiValidationError,

@@ -226,7 +226,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Remove tenant_id from update payload
-    const { tenant_id: _, ...updatePayload } = leadPayload;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { tenant_id: _tenantId, ...updatePayload } = leadPayload;
 
     const { data: updated, error } = await supabase
       .from("leads")

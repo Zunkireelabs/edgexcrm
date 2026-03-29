@@ -64,7 +64,8 @@ export function LeadDetail({
   checklists: initialChecklists,
   stages,
   role,
-  userId,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  userId: _userId,
 }: LeadDetailProps) {
   const router = useRouter();
   const [status, setStatus] = useState(lead.status);

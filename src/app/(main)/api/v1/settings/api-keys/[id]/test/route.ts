@@ -6,7 +6,6 @@ import {
   apiUnauthorized,
   apiForbidden,
   apiNotFound,
-  apiRateLimited,
   apiInternalError,
 } from "@/lib/api/response";
 import { logger } from "@/lib/logger";

@@ -89,11 +89,6 @@ interface StageInfo {
   name: string;
 }
 
-interface UserInfo {
-  user_id: string;
-  email: string;
-}
-
 export interface NormalizedLead {
   id: string;
   first_name: string | null;
