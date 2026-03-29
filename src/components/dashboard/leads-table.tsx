@@ -41,12 +41,20 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
+  Plus,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Lead, PipelineStage, UserRole } from "@/types/database";
+import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
+import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
 
 type SortField = "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
+
+interface TeamMember {
+  user_id: string;
+  email: string;
+  role: string;
+}
 
 interface LeadsTableProps {
   leads: Lead[];
@@ -54,6 +62,11 @@ interface LeadsTableProps {
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
   role?: UserRole;
+  tenantId?: string;
+  teamMembers?: TeamMember[];
+  entities?: TenantEntity[];
+  entityLabel?: string;
+  currentUserId?: string;
 }
 
 // Generate consistent color from string
@@ -83,7 +96,18 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   return first + last || "?";
 }
 
-export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, role = "viewer" }: LeadsTableProps) {
+export function LeadsTable({
+  leads,
+  memberMap = {},
+  stages = [],
+  formMap = {},
+  role = "viewer",
+  tenantId = "",
+  teamMembers = [],
+  entities = [],
+  entityLabel,
+  currentUserId = "",
+}: LeadsTableProps) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -96,12 +120,14 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
   const isAdmin = role === "admin" || role === "owner";
+  const canCreateLead = role !== "viewer";
 
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
@@ -437,6 +463,14 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
             <Download className="h-4 w-4" />
             Export
           </Button>
+
+          {/* Add Lead Button */}
+          {canCreateLead && tenantId && (
+            <Button size="sm" className="h-9 gap-2" onClick={() => setAddLeadOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Lead
+            </Button>
+          )}
         </div>
 
         {/* Divider */}
@@ -815,6 +849,21 @@ export function LeadsTable({ leads, memberMap = {}, stages = [], formMap = {}, r
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Add Lead Sheet */}
+      {canCreateLead && tenantId && (
+        <AddLeadSheet
+          open={addLeadOpen}
+          onOpenChange={setAddLeadOpen}
+          tenantId={tenantId}
+          stages={stages}
+          teamMembers={teamMembers}
+          entities={entities}
+          entityLabel={entityLabel}
+          role={role}
+          currentUserId={currentUserId}
+        />
+      )}
     </div>
   );
 }

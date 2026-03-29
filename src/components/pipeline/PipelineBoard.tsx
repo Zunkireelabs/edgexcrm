@@ -32,7 +32,8 @@ import {
   Globe,
   ArrowUpDown,
   Download,
-  Calendar
+  Calendar,
+  Plus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +42,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
+import type { TenantEntity } from "@/types/database";
+
+interface TeamMemberData {
+  user_id: string;
+  email: string;
+  role: string;
+}
 
 interface PipelineBoardProps {
   stages: PipelineStage[];
@@ -48,6 +57,9 @@ interface PipelineBoardProps {
   role: UserRole;
   userId: string;
   tenantId: string;
+  teamMembersData?: TeamMemberData[];
+  entities?: TenantEntity[];
+  entityLabel?: string;
 }
 
 interface TeamMember {
@@ -120,6 +132,9 @@ export function PipelineBoard({
   role,
   userId,
   tenantId,
+  teamMembersData = [],
+  entities = [],
+  entityLabel,
 }: PipelineBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() =>
@@ -136,10 +151,12 @@ export function PipelineBoard({
   const [sortField, setSortField] = useState<SortField>("updated");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [addLeadOpen, setAddLeadOpen] = useState(false);
 
   const isViewer = role === "viewer";
   const isCounselor = role === "counselor";
   const isAdmin = role === "admin" || role === "owner";
+  const canCreateLead = role !== "viewer";
 
   // Fix hydration mismatch: DnD-kit and Radix Select generate random IDs
   useEffect(() => {
@@ -576,6 +593,14 @@ export function PipelineBoard({
             <Download className="h-4 w-4" />
             Export
           </Button>
+
+          {/* Add Lead Button */}
+          {canCreateLead && (
+            <Button size="sm" className="h-9 gap-2" onClick={() => setAddLeadOpen(true)}>
+              <Plus className="h-4 w-4" />
+              Add Lead
+            </Button>
+          )}
         </div>
 
         {/* Divider */}
@@ -687,6 +712,21 @@ export function PipelineBoard({
           </DragOverlay>
         </DndContext>
       </div>
+
+      {/* Add Lead Sheet */}
+      {canCreateLead && (
+        <AddLeadSheet
+          open={addLeadOpen}
+          onOpenChange={setAddLeadOpen}
+          tenantId={tenantId}
+          stages={stages}
+          teamMembers={teamMembersData}
+          entities={entities}
+          entityLabel={entityLabel}
+          role={role}
+          currentUserId={userId}
+        />
+      )}
     </div>
   );
 }
