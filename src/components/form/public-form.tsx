@@ -492,7 +492,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         setFormData((d) => ({ ...d, [field.name]: val }))
                       }
                     >
-                      <SelectTrigger className={`w-full font-normal text-muted-foreground ${compactSelect}`} style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
+                      <SelectTrigger className={`w-full font-normal ${formData[field.name] ? "text-foreground" : "text-muted-foreground"} ${compactSelect}`} style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
                         <SelectValue
                           placeholder={field.placeholder ? toTitleCase(field.placeholder) : "Select..."}
                         />
@@ -500,7 +500,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       <SelectContent>
                         {field.options?.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {toTitleCase(opt.label)}
+                            {toTitleCase(opt.label)}{opt.dial_code ? ` (${opt.dial_code})` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
