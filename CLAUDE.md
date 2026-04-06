@@ -65,6 +65,32 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 
 **Deployments are automated via GitHub Actions. Never deploy manually via SSH.**
 
+### ⚠️ CRITICAL: Branching Strategy
+
+**ALL feature branches and PRs MUST merge to `stage` first. NEVER merge directly to `main`.**
+
+```
+feature/* ──► stage (staging) ──► main (production)
+                  │                     │
+                  ▼                     ▼
+             Test first!           Only after
+             dev-lead-crm.         staging verified
+             zunkireelabs.com
+```
+
+**Rules:**
+1. Feature branches → PR targets `stage` (NEVER `main`)
+2. Test on staging → Verify at `dev-lead-crm.zunkireelabs.com`
+3. Production → Only merge `stage` into `main` after staging verified
+
+**Before merging ANY PR, check the base branch:**
+```bash
+gh pr view <num> --json baseRefName
+# Must be "stage", NOT "main"
+```
+
+### Environments
+
 | Trigger | Action | Environment |
 |---------|--------|-------------|
 | PR to `main` or `stage` | Run lint, typecheck, build | CI checks only |
@@ -84,10 +110,10 @@ When the user gives ANY development request, **automatically invoke `/project-pm
 ### Deploy Commands
 
 ```bash
-# Deploy to staging
+# Deploy to staging (feature work goes here FIRST)
 git push origin stage
 
-# Deploy to production
+# Deploy to production (ONLY after staging is verified)
 git checkout main && git merge stage && git push origin main
 
 # Monitor deployment
@@ -96,6 +122,16 @@ gh run watch
 
 # Rollback (via GitHub Actions)
 gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="Issue description"
+```
+
+### ❌ NEVER DO THIS
+
+```bash
+# WRONG: Merging PR that targets main directly
+gh pr merge <num>  # if PR base is "main" — STOP!
+
+# WRONG: Pushing feature directly to main
+git checkout main && git merge feature/x  # ❌
 ```
 
 ## Live URLs
