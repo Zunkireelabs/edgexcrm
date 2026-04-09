@@ -12,7 +12,7 @@ import { createRequestLogger } from "@/lib/logger";
  * POST /api/v1/notifications/read-all
  * Mark all notifications as read for the current user
  */
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({
     requestId,

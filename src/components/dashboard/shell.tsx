@@ -24,7 +24,6 @@ import {
   ExternalLink,
   User as UserIcon,
   Search,
-  Bell,
   Sparkles,
 } from "lucide-react";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";

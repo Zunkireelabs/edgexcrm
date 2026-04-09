@@ -35,7 +35,7 @@ export function NotificationsDropdown() {
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
+  const [loading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
   const fetchNotifications = useCallback(async () => {
@@ -192,7 +192,7 @@ export function NotificationsDropdown() {
                     <Inbox className="w-7 h-7 text-gray-300" />
                   </div>
                   <p className="text-sm font-medium text-gray-900 mb-1">No notifications</p>
-                  <p className="text-sm text-gray-500">You're all caught up!</p>
+                  <p className="text-sm text-gray-500">You&apos;re all caught up!</p>
                 </div>
               ) : (
                 <div>
