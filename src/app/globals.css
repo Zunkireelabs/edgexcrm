@@ -49,38 +49,48 @@
 
 :root {
   --radius: 0.5rem;
-  /* Edge-flow color system */
+  /* Zunkireelabs unified color system (matches agentic-commerce) */
   --background: #f7f7f7;
   --foreground: #171717;
   --card: #ffffff;
   --card-foreground: #171717;
   --popover: #ffffff;
   --popover-foreground: #171717;
-  /* Primary: Edge-flow blue #2272B4 */
+  /* Primary: Zunkireelabs blue #2272B4 */
   --primary: #2272B4;
   --primary-foreground: #ffffff;
+  --primary-hover: #0E538B;
   --secondary: #f5f5f5;
   --secondary-foreground: #374151;
   --muted: #f5f5f5;
   --muted-foreground: #6b7280;
-  --accent: #f5f5f5;
-  --accent-foreground: #171717;
+  --accent: #dbeafe;
+  --accent-foreground: #2563eb;
   --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
   --border: #e5e7eb;
   --input: #d1d5db;
   --ring: #2272B4;
+  /* Status colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  /* Chart colors */
   --chart-1: #2272B4;
   --chart-2: #10b981;
   --chart-3: #8b5cf6;
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
+  /* Layout colors (Zunkireelabs standard) */
+  --sidebar-bg: #ebebeb;
+  --content-bg: #f1f1f1;
+  --nav-active: #fafafa;
   /* Sidebar */
-  --sidebar: #f7f7f7;
+  --sidebar: #ebebeb;
   --sidebar-foreground: #171717;
   --sidebar-primary: #2272B4;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #dbeafe;
-  --sidebar-accent-foreground: #2563eb;
+  --sidebar-accent: #fafafa;
+  --sidebar-accent-foreground: #171717;
   --sidebar-border: #e5e7eb;
   --sidebar-ring: #2272B4;
 }
