@@ -82,9 +82,9 @@ export function DashboardShell({
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#f7f7f7]">
-      {/* Logo and Tenant Info - edge-flow style */}
-      <div className="px-5 py-4 border-b border-gray-100 h-[60px] flex items-center gap-3">
+    <div className="flex flex-col h-full bg-[#ebebeb]">
+      {/* Logo and Tenant Info - Zunkireelabs style */}
+      <div className="px-5 py-3 h-[52px] flex items-center gap-3">
         <div
           className="w-8 h-8 rounded-md flex items-center justify-center text-white font-semibold text-base"
           style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
@@ -95,7 +95,7 @@ export function DashboardShell({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -105,18 +105,14 @@ export function DashboardShell({
               key={item.href}
               href={item.href}
               onClick={() => setMobileOpen(false)}
-              className={`w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors group ${
+              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-blue-50 text-blue-600"
-                  : "text-gray-600 hover:bg-blue-50 hover:text-gray-900"
+                  ? "bg-[#fafafa] text-gray-900"
+                  : "text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
               }`}
             >
-              <span className="flex items-center gap-2.5">
-                <item.icon className="w-[18px] h-[18px]" />
-                <span className={`text-sm ${isActive ? "font-medium" : "font-normal"}`}>
-                  {item.label}
-                </span>
-              </span>
+              <item.icon className="w-[18px] h-[18px]" />
+              {item.label}
             </Link>
           );
         })}
@@ -126,18 +122,18 @@ export function DashboardShell({
           <div>
             <button
               onClick={() => setFormsExpanded(!formsExpanded)}
-              className="w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-gray-600 hover:bg-blue-50 hover:text-gray-900"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
             >
-              <span className="flex items-center gap-2.5">
+              <div className="flex items-center gap-3">
                 <FileText className="w-[18px] h-[18px]" />
-                <span className="text-sm font-normal">Public Forms</span>
-              </span>
+                Public Forms
+              </div>
               <ChevronDown
-                className={`w-4 h-4 text-gray-400 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
+                className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
               />
             </button>
             {formsExpanded && (
-              <div className="ml-7 pl-3 border-l border-gray-200 space-y-0.5 mt-1">
+              <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
                 {formConfigs.map((form) => (
                   <a
                     key={form.slug}
@@ -145,7 +141,7 @@ export function DashboardShell({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-blue-50 hover:text-gray-900 transition-colors"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#fafafa] hover:text-gray-900 transition-colors"
                   >
                     <span className="flex-1 truncate">{form.name}</span>
                     <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
@@ -159,51 +155,41 @@ export function DashboardShell({
             href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center justify-between px-3 py-2 rounded-md transition-colors text-gray-600 hover:bg-blue-50 hover:text-gray-900"
+            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
           >
-            <span className="flex items-center gap-2.5">
+            <div className="flex items-center gap-3">
               <FileText className="w-[18px] h-[18px]" />
-              <span className="text-sm font-normal">View Public Form</span>
-            </span>
-            <ExternalLink className="h-4 w-4 text-gray-400" />
+              View Public Form
+            </div>
+            <ExternalLink className="h-4 w-4" />
           </a>
         )}
       </nav>
 
-      {/* User Profile - edge-flow style */}
-      <div className="border-t border-gray-100 p-4">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600 rounded-full flex items-center justify-center">
-            <UserIcon className="w-4 h-4 text-white" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-900 truncate">
-              {user.email?.split("@")[0] || "User"}
-            </p>
-            <p className="text-xs text-gray-500 capitalize">{role}</p>
-          </div>
-          <button
-            onClick={handleLogout}
-            className="p-2 hover:bg-gray-100 rounded-lg transition-colors text-gray-500 hover:text-gray-700"
-          >
-            <LogOut className="w-4 h-4" />
-          </button>
-        </div>
+      {/* User Section - Zunkireelabs style */}
+      <div className="p-3">
+        <button
+          onClick={handleLogout}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+        >
+          <LogOut className="w-[18px] h-[18px]" />
+          Sign Out
+        </button>
       </div>
     </div>
   );
 
   return (
-    <div className="flex h-screen bg-[#f7f7f7]">
-      {/* Desktop sidebar - edge-flow style */}
-      <aside className="hidden md:flex w-60 flex-col h-full bg-[#f7f7f7]">
+    <div className="flex h-screen bg-[#f1f1f1]">
+      {/* Desktop sidebar - Zunkireelabs style */}
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#ebebeb]">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
-      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#f7f7f7] md:pl-2">
-        {/* Top Header Bar - edge-flow style */}
-        <header className="bg-[#f7f7f7] px-6 py-3 relative h-[60px] flex items-center gap-4 w-full">
+      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#ebebeb]">
+        {/* Top Header Bar - Zunkireelabs style */}
+        <header className="bg-[#ebebeb] px-6 py-3 h-[52px] flex items-center gap-4 w-full">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -227,16 +213,18 @@ export function DashboardShell({
           {/* Spacer for centering */}
           <div className="flex-1"></div>
 
-          {/* Search Bar - Centered, edge-flow style */}
-          <div className="relative w-full max-w-[500px]">
-            <div className="flex items-center bg-white rounded-xl px-4 py-2 border border-gray-300 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition-all">
-              <Search className="w-4 h-4 text-gray-500 mr-3" />
+          {/* Search Bar - Centered, Zunkireelabs style */}
+          <div className="w-full max-w-lg">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
               <input
                 type="text"
-                placeholder="Search leads, team members, and more..."
-                className="bg-transparent w-full text-sm outline-none text-gray-700 placeholder-gray-500"
+                placeholder="Search..."
+                className="w-full h-10 pl-9 pr-12 rounded-xl border border-gray-300 bg-white text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
               />
-              <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">CTRL + K</span>
+              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                ⌘K
+              </kbd>
             </div>
           </div>
 
@@ -261,22 +249,19 @@ export function DashboardShell({
             {/* Notifications Dropdown */}
             <NotificationsDropdown />
 
-            {/* Tenant Dropdown */}
+            {/* User/Tenant Dropdown */}
             <div className="relative">
               <button
                 onClick={() => setShowAccountDropdown(!showAccountDropdown)}
-                className="flex items-center gap-2 hover:bg-gray-100 text-gray-700 px-3 py-2 rounded-lg transition-colors"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
               >
                 <div
-                  className="w-6 h-6 rounded flex items-center justify-center text-white font-semibold text-xs"
+                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium"
                   style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
                 >
                   {tenant.name.charAt(0)}
                 </div>
-                <span className="text-sm font-medium hidden sm:inline">{tenant.name}</span>
-                <ChevronDown
-                  className={`w-4 h-4 text-gray-500 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`}
-                />
+                <span className="text-sm font-medium text-gray-900 hidden sm:inline">{tenant.name}</span>
               </button>
 
               {/* Account Dropdown */}
@@ -335,18 +320,16 @@ export function DashboardShell({
         </header>
 
         {/* Content container with AI Panel - flex layout */}
-        <div className="flex-1 min-w-0 overflow-hidden flex gap-3">
+        <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
-          <main className="min-w-0 overflow-hidden transition-all duration-500 ease-out flex-1">
-            <div
-              className={`bg-white h-full border border-gray-200 overflow-hidden flex flex-col transition-[border-radius] duration-500 ease-out ${
-                isAssistantOpen ? "rounded-xl" : "rounded-l-xl"
-              }`}
-            >
-              <div className="flex-1 min-h-0 p-6 pr-6 overflow-hidden">
-                {children}
-              </div>
-            </div>
+          <main
+            className="flex-1 min-h-0 overflow-auto p-4 bg-[#f1f1f1] transition-all duration-500 ease-out"
+            style={{
+              borderRadius: isAssistantOpen ? '16px' : '16px 0 0 16px',
+              borderLeft: '1px solid #e5e7eb'
+            }}
+          >
+            {children}
           </main>
 
           {/* AI Assistant Panel */}
