@@ -12,6 +12,7 @@ import {
 import { validate, required, isEmail, isIn } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { sendInviteEmail } from "@/lib/email/send-invite";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_request: NextRequest) {
@@ -134,6 +135,13 @@ export async function POST(request: NextRequest) {
 
   log.info({ inviteId: invite.id, email, role }, "Invite created");
 
+  // Fetch tenant info for email
+  const { data: tenant } = await supabase
+    .from("tenants")
+    .select("name, primary_color")
+    .eq("id", auth.tenantId)
+    .single();
+
   Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -155,6 +163,29 @@ export async function POST(request: NextRequest) {
       requestId,
     }),
   ]);
+
+  // Send invite email (fire and forget - don't block on email failure)
+  if (tenant) {
+    log.info({ to: email, tenantName: tenant.name, role }, "Attempting to send invite email");
+    sendInviteEmail({
+      to: email,
+      inviterEmail: auth.email || "team@company.com",
+      tenantName: tenant.name,
+      role,
+      token,
+      primaryColor: tenant.primary_color || undefined,
+    }).then((result) => {
+      if (result.success) {
+        log.info({ messageId: result.messageId, to: email }, "Invite email sent successfully");
+      } else {
+        log.error({ error: result.error, to: email }, "Failed to send invite email");
+      }
+    }).catch((err) => {
+      log.error({ err, email }, "Exception sending invite email");
+    });
+  } else {
+    log.warn({ tenantId: auth.tenantId }, "Tenant not found, skipping invite email");
+  }
 
   return apiSuccess(invite, 201);
 }

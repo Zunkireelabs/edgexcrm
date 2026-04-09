@@ -42,6 +42,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Plus,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
@@ -100,6 +101,9 @@ export function LeadsTable({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [isAssigning, setIsAssigning] = useState(false);
+  const [assignTo, setAssignTo] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
 
@@ -308,6 +312,44 @@ export function LeadsTable({
     }
   }
 
+  async function handleBulkAssign() {
+    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+
+    if (idsToAssign.length === 0) {
+      toast.error("No leads selected");
+      return;
+    }
+
+    setIsAssigning(true);
+    try {
+      const response = await fetch("/api/v1/leads/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: idsToAssign,
+          assigned_to: assignTo === "unassign" ? null : assignTo,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to assign leads");
+      }
+
+      const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
+      toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      setAssignDialogOpen(false);
+      setAssignTo("");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign leads");
+    } finally {
+      setIsAssigning(false);
+    }
+  }
+
   function exportCSV() {
     const headers = [
       "Date",
@@ -355,14 +397,27 @@ export function LeadsTable({
           <span className="text-sm font-medium text-blue-700">
             {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
           </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            Delete
-          </Button>
+          <div className="flex items-center gap-2">
+            {isAdmin && teamMembers.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setAssignDialogOpen(true)}
+                className="bg-white"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Assign to
+              </Button>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Delete
+            </Button>
+          </div>
         </div>
       )}
 
@@ -585,9 +640,9 @@ export function LeadsTable({
         </div>
       </div>
 
-      {/* Table - Compact style with sticky header */}
-      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 overflow-y-auto">
-        <table className="w-full min-w-full">
+      {/* Table - Compact style with sticky header and horizontal scroll */}
+      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 overflow-auto">
+        <table className="w-full min-w-[900px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-3 py-2 text-left w-10">
@@ -598,15 +653,15 @@ export function LeadsTable({
                 />
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Email</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell">Location</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell">Assigned</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600">Status</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[180px]">Email</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
               {hasMultipleForms && (
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Form</th>
+                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Form</th>
               )}
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell">Date</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Date</th>
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
             </tr>
           </thead>
@@ -724,9 +779,9 @@ export function LeadsTable({
                       })()}
                     </td>
                     {hasMultipleForms && (
-                      <td className="px-3 py-1.5 hidden md:table-cell">
+                      <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
                         {formName ? (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700">
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
                             {formName}
                           </span>
                         ) : (
@@ -874,6 +929,61 @@ export function LeadsTable({
               disabled={isDeleting}
             >
               {isDeleting ? "Deleting..." : "Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Assign Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={(open) => {
+        setAssignDialogOpen(open);
+        if (!open) setAssignTo("");
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""}</DialogTitle>
+            <DialogDescription>
+              Select a team member to assign the selected leads to, or unassign them.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select value={assignTo} onValueChange={setAssignTo}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select team member..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassign">
+                  <span className="text-muted-foreground">Unassign (remove assignment)</span>
+                </SelectItem>
+                {teamMembers
+                  .filter((m) => m.role !== "viewer")
+                  .map((member) => (
+                    <SelectItem key={member.user_id} value={member.user_id}>
+                      <div className="flex items-center gap-2">
+                        <span>{member.email.split("@")[0]}</span>
+                        <span className="text-xs text-muted-foreground">({member.role})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAssignDialogOpen(false);
+                setAssignTo("");
+              }}
+              disabled={isAssigning}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkAssign}
+              disabled={isAssigning || !assignTo}
+            >
+              {isAssigning ? "Assigning..." : assignTo === "unassign" ? "Unassign" : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>

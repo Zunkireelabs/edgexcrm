@@ -11,6 +11,8 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { createNotification, NotificationTypes } from "@/lib/notifications";
+import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -269,6 +271,63 @@ export async function PATCH(
         ]
       : []),
   ]);
+
+  // Create notifications for assignment changes
+  if (assignedChanged) {
+    const leadName = `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || "A lead";
+
+    // Notify new assignee
+    if (updated.assigned_to) {
+      createNotification({
+        tenantId: auth.tenantId,
+        userId: updated.assigned_to,
+        type: NotificationTypes.LEAD_ASSIGNED,
+        title: "Lead assigned to you",
+        message: `${leadName} has been assigned to you`,
+        link: `/leads/${id}`,
+      });
+
+      // Send email to new assignee (fire and forget)
+      (async () => {
+        try {
+          const { data: assignee } = await supabase.auth.admin.getUserById(updated.assigned_to);
+          const { data: tenant } = await supabase
+            .from("tenants")
+            .select("name, primary_color")
+            .eq("id", auth.tenantId)
+            .single();
+
+          if (assignee?.user?.email && tenant) {
+            sendLeadAssignedEmail({
+              to: assignee.user.email,
+              assignerEmail: auth.email || "admin",
+              tenantName: tenant.name,
+              leadId: id,
+              leadName,
+              leadEmail: updated.email || undefined,
+              primaryColor: tenant.primary_color || undefined,
+            }).catch((err) => {
+              log.error({ err }, "Failed to send lead assigned email");
+            });
+          }
+        } catch (err) {
+          log.error({ err }, "Error fetching data for lead assigned email");
+        }
+      })();
+    }
+
+    // Notify previous assignee (if there was one)
+    if (existingLead.assigned_to && existingLead.assigned_to !== updated.assigned_to) {
+      createNotification({
+        tenantId: auth.tenantId,
+        userId: existingLead.assigned_to,
+        type: NotificationTypes.LEAD_UNASSIGNED,
+        title: "Lead reassigned",
+        message: `${leadName} has been reassigned to someone else`,
+        link: `/leads/${id}`,
+      });
+    }
+  }
 
   return apiSuccess(updated as Lead);
 }
