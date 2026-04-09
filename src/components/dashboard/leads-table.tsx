@@ -639,8 +639,9 @@ export function LeadsTable({
       </div>
 
       {/* Table - Compact style with sticky header and horizontal scroll */}
-      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 overflow-auto">
-        <table className="w-full min-w-[900px]">
+      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full min-w-[900px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
               <th className="px-3 py-2 text-left w-10">
@@ -805,31 +806,32 @@ export function LeadsTable({
               })
             )}
           </tbody>
-        </table>
-      </div>
-      {/* Pagination Controls - Zunkireelabs style */}
-      <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
-        <span className="text-xs text-gray-500">
-          Showing {paginatedLeads.length} of {filtered.length}
-        </span>
-        <div className="flex items-center gap-1">
-          <button
-            disabled={currentPage <= 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span className="text-xs text-gray-600 px-2">
-            Page {currentPage} of {totalPages || 1}
+          </table>
+        </div>
+        {/* Pagination Controls - Zunkireelabs style (inside white card) */}
+        <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
+          <span className="text-xs text-gray-500">
+            Showing {paginatedLeads.length} of {filtered.length}
           </span>
-          <button
-            disabled={currentPage >= totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
-            className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <span className="text-xs text-gray-600 px-2">
+              Page {currentPage} of {totalPages || 1}
+            </span>
+            <button
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => p + 1)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
       </div>
