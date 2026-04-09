@@ -808,32 +808,30 @@ export function LeadsTable({
         </table>
       </div>
       {/* Pagination Controls - Zunkireelabs style */}
-      {totalPages > 1 && (
-        <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
-          <span className="text-xs text-gray-500">
-            Showing {paginatedLeads.length} of {filtered.length}
+      <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
+        <span className="text-xs text-gray-500">
+          Showing {paginatedLeads.length} of {filtered.length}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            disabled={currentPage <= 1}
+            onClick={() => setCurrentPage((p) => p - 1)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs text-gray-600 px-2">
+            Page {currentPage} of {totalPages || 1}
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => p - 1)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs text-gray-600 px-2">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => p + 1)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={() => setCurrentPage((p) => p + 1)}
+            className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
-      )}
+      </div>
       </div>
       {/* End of Main Table Section */}
 
