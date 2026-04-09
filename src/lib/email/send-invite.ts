@@ -1,14 +1,9 @@
-import { resend, EMAIL_FROM, APP_URL } from "./index";
+import { getResendClient, EMAIL_FROM, APP_URL } from "./index";
 import {
   getInviteEmailTemplate,
   getInviteEmailSubject,
 } from "./templates/invite";
 import { createRequestLogger } from "@/lib/logger";
-
-// Debug: log configuration on module load
-console.log("[Email] EMAIL_FROM:", EMAIL_FROM);
-console.log("[Email] APP_URL:", APP_URL);
-console.log("[Email] RESEND_API_KEY exists:", !!process.env.RESEND_API_KEY);
 
 interface SendInviteEmailParams {
   to: string;
@@ -38,6 +33,12 @@ export async function sendInviteEmail({
     method: "EMAIL",
     path: "send-invite",
   });
+
+  const resend = getResendClient();
+  if (!resend) {
+    log.warn({ to, tenantName }, "Email disabled - RESEND_API_KEY not configured");
+    return { success: false, error: "Email not configured" };
+  }
 
   const inviteLink = `${APP_URL}/register?token=${token}`;
 

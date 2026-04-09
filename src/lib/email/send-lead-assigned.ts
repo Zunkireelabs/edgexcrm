@@ -1,4 +1,4 @@
-import { resend, EMAIL_FROM, APP_URL } from "./index";
+import { getResendClient, EMAIL_FROM, APP_URL } from "./index";
 import {
   getLeadAssignedEmailTemplate,
   getLeadAssignedEmailSubject,
@@ -45,6 +45,12 @@ export async function sendLeadAssignedEmail({
     method: "EMAIL",
     path: "send-lead-assigned",
   });
+
+  const resend = getResendClient();
+  if (!resend) {
+    log.warn({ to, leadId, tenantName }, "Email disabled - RESEND_API_KEY not configured");
+    return { success: false, error: "Email not configured" };
+  }
 
   const leadLink = `${APP_URL}/leads/${leadId}`;
 
@@ -95,6 +101,12 @@ export async function sendBulkAssignedEmail({
     method: "EMAIL",
     path: "send-bulk-assigned",
   });
+
+  const resend = getResendClient();
+  if (!resend) {
+    log.warn({ to, leadCount, tenantName }, "Email disabled - RESEND_API_KEY not configured");
+    return { success: false, error: "Email not configured" };
+  }
 
   const leadsLink = `${APP_URL}/leads`;
 
