@@ -39,8 +39,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  ChevronsLeft,
-  ChevronsRight,
   Plus,
   UserPlus,
 } from "lucide-react";
@@ -809,77 +807,33 @@ export function LeadsTable({
           </tbody>
         </table>
       </div>
-      {/* Pagination Controls */}
-      <div className="shrink-0 flex items-center justify-between py-1">
-        <p className="text-xs text-gray-500">
-          Showing {filtered.length === 0 ? 0 : startIndex + 1} to {endIndex} of {filtered.length}
-        </p>
-
-        <div className="flex items-center gap-4">
-          {/* Items per page */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">per page</span>
-            <Select
-              value={String(itemsPerPage)}
-              onValueChange={(v) => {
-                setItemsPerPage(Number(v));
-                setCurrentPage(1);
-              }}
-            >
-              <SelectTrigger className="h-7 w-16 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="10">10</SelectItem>
-                <SelectItem value="25">25</SelectItem>
-                <SelectItem value="50">50</SelectItem>
-                <SelectItem value="100">100</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Page navigation */}
+      {/* Pagination Controls - Zunkireelabs style */}
+      {totalPages > 1 && (
+        <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
+          <span className="text-xs text-gray-500">
+            Showing {paginatedLeads.length} of {filtered.length}
+          </span>
           <div className="flex items-center gap-1">
             <button
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-              title="First page"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => p - 1)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <ChevronsLeft className="h-4 w-4" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-              title="Previous page"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
             <span className="text-xs text-gray-600 px-2">
-              Page {currentPage} of {totalPages || 1}
+              Page {currentPage} of {totalPages}
             </span>
-
             <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
               disabled={currentPage >= totalPages}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-              title="Next page"
+              onClick={() => setCurrentPage((p) => p + 1)}
+              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
             >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage >= totalPages}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:hover:bg-transparent disabled:cursor-not-allowed transition-colors"
-              title="Last page"
-            >
-              <ChevronsRight className="h-4 w-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
         </div>
-      </div>
+      )}
       </div>
       {/* End of Main Table Section */}
 
