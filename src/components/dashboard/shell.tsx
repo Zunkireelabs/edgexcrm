@@ -320,22 +320,16 @@ export function DashboardShell({
         </header>
 
         {/* Content container with AI Panel - flex layout */}
-        <div className="flex-1 min-w-0 overflow-hidden flex gap-3 p-4 pt-0">
+        <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
-          <main className="min-w-0 overflow-hidden transition-all duration-500 ease-out flex-1">
-            <div
-              className={`bg-[#f1f1f1] h-full overflow-hidden flex flex-col transition-[border-radius] duration-500 ease-out ${
-                isAssistantOpen ? "rounded-xl" : ""
-              }`}
-              style={{
-                borderRadius: isAssistantOpen ? '16px' : '16px 0 0 16px',
-                borderLeft: '1px solid #e5e7eb'
-              }}
-            >
-              <div className="flex-1 min-h-0 p-6 overflow-auto bg-white rounded-tl-2xl">
-                {children}
-              </div>
-            </div>
+          <main
+            className="flex-1 min-h-0 overflow-auto p-4 bg-[#f1f1f1] transition-all duration-500 ease-out"
+            style={{
+              borderRadius: isAssistantOpen ? '16px' : '16px 0 0 16px',
+              borderLeft: '1px solid #e5e7eb'
+            }}
+          >
+            {children}
           </main>
 
           {/* AI Assistant Panel */}
