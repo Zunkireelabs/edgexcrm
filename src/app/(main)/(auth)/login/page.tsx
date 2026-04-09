@@ -1,13 +1,31 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
+import Link from 'next/link';
 
 type AuthMode = 'signin' | 'signup';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginPageSkeleton />}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageSkeleton() {
+  return (
+    <div style={{ height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ width: 40, height: 40, border: '3px solid #e5e7eb', borderTopColor: '#2272B4', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <style jsx>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  );
+}
+
+function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,8 +33,12 @@ export default function LoginPage() {
   const [message, setMessage] = useState('');
   const [mode, setMode] = useState<AuthMode>('signin');
   const [dbStatus, setDbStatus] = useState<'checking' | 'online' | 'offline'>('checking');
+  const [inviteInfo, setInviteInfo] = useState<{ tenant_name: string; role: string } | null>(null);
 
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const token = searchParams.get('token');
+  const registered = searchParams.get('registered');
 
   const supabase = useMemo(() => {
     try {
@@ -50,11 +72,62 @@ export default function LoginPage() {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // If user is logged in and has a token, try to accept the invite
+        if (token) {
+          await acceptInvite(token);
+        }
         router.push('/dashboard');
       }
     };
     checkUser();
-  }, [supabase, router]);
+  }, [supabase, router, token]);
+
+  // Show success message if just registered
+  useEffect(() => {
+    if (registered === 'true') {
+      setMessage('Account created successfully! Please sign in.');
+    }
+  }, [registered]);
+
+  // Validate invite token and show info
+  useEffect(() => {
+    if (!token) return;
+
+    const validateToken = async () => {
+      try {
+        const res = await fetch(`/api/v1/invites/validate?token=${token}`);
+        const json = await res.json();
+
+        if (json.data?.valid) {
+          setInviteInfo({
+            tenant_name: json.data.tenant?.name || 'the team',
+            role: json.data.role,
+          });
+        }
+      } catch {
+        // Token validation failed, but we'll still allow login
+      }
+    };
+
+    validateToken();
+  }, [token]);
+
+  // Helper function to accept invite after login
+  const acceptInvite = async (inviteToken: string) => {
+    try {
+      const res = await fetch('/api/v1/invites/accept', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: inviteToken }),
+      });
+
+      if (res.ok) {
+        setMessage('Invite accepted! Redirecting to dashboard...');
+      }
+    } catch {
+      // Invite acceptance failed, but user can still proceed
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -84,6 +157,12 @@ export default function LoginPage() {
           password,
         });
         if (error) throw error;
+
+        // If there's an invite token, accept it
+        if (token) {
+          await acceptInvite(token);
+        }
+
         router.push('/dashboard');
       }
     } catch (err) {
@@ -152,8 +231,16 @@ export default function LoginPage() {
               <path d="M12 8.5C12 7.67157 12.6716 7 13.5 7H15.5C16.3284 7 17 7.67157 17 8.5V10.5C17 11.3284 16.3284 12 15.5 12H13.5C12.6716 12 12 11.3284 12 10.5V8.5Z" fill="white" fillOpacity="0.5"/>
             </svg>
           </div>
-          <h1 className="login-title">Sign in or sign up</h1>
-          <p className="login-subtitle">Start using Lead Gen CRM</p>
+          <h1 className="login-title">
+            {inviteInfo ? 'Sign in to accept invite' : 'Sign in or sign up'}
+          </h1>
+          <p className="login-subtitle">
+            {inviteInfo ? (
+              <>Join <strong>{inviteInfo.tenant_name}</strong> as <span className="role-badge" style={{ backgroundColor: inviteInfo.role === 'admin' ? '#3b82f6' : inviteInfo.role === 'counselor' ? '#8b5cf6' : '#6b7280' }}>{inviteInfo.role}</span></>
+            ) : (
+              'Start using Lead Gen CRM'
+            )}
+          </p>
 
           <div className="login-card">
           {error && (
@@ -225,7 +312,11 @@ export default function LoginPage() {
             {mode === 'signin' ? (
               <span>
                 Don&apos;t have an account?{' '}
-                <button type="button" onClick={() => setMode('signup')}>Sign up</button>
+                {token ? (
+                  <Link href={`/register?token=${token}`}>Create account</Link>
+                ) : (
+                  <button type="button" onClick={() => setMode('signup')}>Sign up</button>
+                )}
               </span>
             ) : (
               <span>
@@ -340,6 +431,20 @@ export default function LoginPage() {
           margin-bottom: 32px;
           text-align: center;
           letter-spacing: -0.01em;
+        }
+        .login-subtitle strong {
+          color: var(--foreground);
+          font-weight: 600;
+        }
+        .role-badge {
+          display: inline-block;
+          padding: 2px 8px;
+          border-radius: 4px;
+          color: white;
+          font-size: 12px;
+          font-weight: 500;
+          text-transform: capitalize;
+          vertical-align: middle;
         }
         .login-card {
           width: 100%;
@@ -491,6 +596,15 @@ export default function LoginPage() {
           text-underline-offset: 2px;
         }
         .auth-toggle button:hover {
+          opacity: 0.8;
+        }
+        .auth-toggle a {
+          color: var(--foreground);
+          font-weight: 500;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+        }
+        .auth-toggle a:hover {
           opacity: 0.8;
         }
         .login-footer {

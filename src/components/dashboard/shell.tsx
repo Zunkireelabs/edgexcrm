@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
+import { NotificationsDropdown } from "./notifications-dropdown";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -258,12 +259,8 @@ export function DashboardShell({
               <span className="text-sm font-medium hidden sm:inline">Assistant</span>
             </button>
 
-            {/* Notification Bell */}
-            <button className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors group">
-              <Bell className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
-              {/* Notification Badge */}
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full border-2 border-[#f7f7f7]"></span>
-            </button>
+            {/* Notifications Dropdown */}
+            <NotificationsDropdown />
 
             {/* Tenant Dropdown */}
             <div className="relative">

@@ -12,6 +12,7 @@ import {
 import { validate, required } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { createNotifications, NotificationTypes } from "@/lib/notifications";
 
 export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -133,6 +134,28 @@ export async function POST(request: NextRequest) {
       requestId,
     }),
   ]);
+
+  // Notify all admins/owners that a new member joined
+  const { data: admins } = await supabase
+    .from("tenant_users")
+    .select("user_id")
+    .eq("tenant_id", invite.tenant_id)
+    .in("role", ["owner", "admin"])
+    .neq("user_id", user.userId);
+
+  if (admins && admins.length > 0) {
+    const memberName = invite.email.split("@")[0];
+    createNotifications(
+      admins.map((admin) => ({
+        tenantId: invite.tenant_id,
+        userId: admin.user_id,
+        type: NotificationTypes.TEAM_MEMBER_JOINED,
+        title: "New team member joined",
+        message: `${memberName} joined as ${invite.role}`,
+        link: "/team",
+      }))
+    );
+  }
 
   return apiSuccess({
     tenant_id: invite.tenant_id,
