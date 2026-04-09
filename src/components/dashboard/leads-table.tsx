@@ -639,7 +639,7 @@ export function LeadsTable({
       </div>
 
       {/* Table - Compact style with sticky header and horizontal scroll */}
-      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col">
+      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full min-w-[900px]">
           <thead className="sticky top-0 z-10">
@@ -811,26 +811,50 @@ export function LeadsTable({
         {/* Pagination Controls - Zunkireelabs style (inside white card) */}
         <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
           <span className="text-xs text-gray-500">
-            Showing {paginatedLeads.length} of {filtered.length}
+            Showing {startIndex + 1}-{endIndex} of {filtered.length}
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => p - 1)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <span className="text-xs text-gray-600 px-2">
-              Page {currentPage} of {totalPages || 1}
-            </span>
-            <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => p + 1)}
-              className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-4">
+            {/* Per page dropdown */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">per page</span>
+              <Select
+                value={String(itemsPerPage)}
+                onValueChange={(v) => {
+                  setItemsPerPage(Number(v));
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="h-7 w-16 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10</SelectItem>
+                  <SelectItem value="25">25</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Page navigation */}
+            <div className="flex items-center gap-1">
+              <button
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-xs text-gray-600 px-2">
+                Page {currentPage} of {totalPages || 1}
+              </span>
+              <button
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
