@@ -396,35 +396,6 @@ export function LeadsTable({
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
       <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
-        {/* Bulk Action Bar */}
-      {selectedCount > 0 && (
-        <div className="shrink-0 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-blue-700">
-            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex items-center gap-2">
-            {isAdmin && teamMembers.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAssignDialogOpen(true)}
-                className="bg-white"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Assign to
-              </Button>
-            )}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Enhanced Toolbar - matching pipeline style */}
       <div className="shrink-0 bg-card rounded-lg border">
@@ -642,6 +613,45 @@ export function LeadsTable({
               </Button>
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Bulk Action Bar - animated container between filters and table */}
+      <div
+        className={`shrink-0 overflow-hidden transition-all duration-300 ease-out ${
+          selectedCount > 0 ? 'max-h-[52px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 py-2 bg-white rounded-lg border border-gray-200">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-1">
+            {isAdmin && teamMembers.length > 0 && (
+              <button
+                onClick={() => setAssignDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <UserPlus className="h-4 w-4" />
+                Assign
+              </button>
+            )}
+            <button
+              onClick={() => setDeleteDialogOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+            <div className="w-px h-4 bg-gray-200 mx-1" />
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              aria-label="Deselect all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
 
