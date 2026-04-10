@@ -46,9 +46,16 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
+import { TruncatedText } from "@/components/ui/truncated-text";
 
 type SortField = "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
+
+// Column width constants for consistent sizing
+const NAME_COLUMN_WIDTH = 180;
+const EMAIL_COLUMN_WIDTH = 200;
+const EMAIL_MOBILE_WIDTH = 140;
+// Note: Preview button padding (72px) is defined in Tailwind class `group-hover/name:pr-[72px]`
 
 interface TeamMember {
   user_id: string;
@@ -652,8 +659,8 @@ export function LeadsTable({
                 />
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[180px]">Email</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
@@ -704,41 +711,47 @@ export function LeadsTable({
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <div className="group flex items-center gap-2">
+                      {/* Fixed width container for consistent Preview button alignment */}
+                      <div className="group/name relative" style={{ width: NAME_COLUMN_WIDTH }}>
+                        {/* Name link - padding increases on hover to make room for Preview button */}
                         <Link
                           href={`/leads/${lead.id}`}
-                          className="text-sm font-medium text-[#2272B4] hover:underline truncate"
+                          className="text-sm font-medium text-[#2272B4] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
                         >
-                          {lead.first_name} {lead.last_name}
+                          <TruncatedText
+                            text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
+                          />
                         </Link>
-                        {/* Preview button - visible on hover (desktop) or always (mobile icon) */}
+                        {/* Preview button - absolute positioned at right edge */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
                           }}
-                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
                         >
                           <Eye size={12} />
                           Preview
                         </button>
-                        {/* Mobile: always show icon */}
+                      </div>
+                      {/* Mobile: email + preview icon */}
+                      <div className="flex items-center gap-2 md:hidden">
+                        <div className="text-xs text-gray-500">
+                          <TruncatedText text={lead.email || ""} maxWidth={EMAIL_MOBILE_WIDTH} />
+                        </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
                           }}
-                          className="shrink-0 md:hidden p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                          className="shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
                         >
                           <Eye size={14} />
                         </button>
                       </div>
-                      <div className="text-xs text-gray-500 md:hidden">
-                        {lead.email}
-                      </div>
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
-                      {lead.email}
+                      <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
                     <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
                       {lead.city || <span className="text-gray-400">—</span>}
