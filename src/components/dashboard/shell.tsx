@@ -25,6 +25,7 @@ import {
   User as UserIcon,
   Search,
   Sparkles,
+  Brain,
 } from "lucide-react";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
@@ -64,6 +65,17 @@ export function DashboardShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const [orcaExpanded, setOrcaExpanded] = useState(true);
+
+  // Orca sub-navigation items
+  const orcaSubItems = [
+    { href: "/orca", label: "Overview" },
+    { href: "/orca/structure", label: "Org. Structure" },
+    { href: "/orca/roles", label: "Roles" },
+    { href: "/orca/tasks", label: "Tasks" },
+    { href: "/orca/agents", label: "Agents" },
+    { href: "/orca/compare", label: "Compare" },
+  ];
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
@@ -116,6 +128,106 @@ export function DashboardShell({
             </Link>
           );
         })}
+
+        {/* Orca AI Orchestration - Expandable */}
+        <div className="mt-2">
+          {/* Parent button */}
+          <button
+            onClick={() => setOrcaExpanded(!orcaExpanded)}
+            className="cta-shimmer w-full flex items-center justify-between px-3 py-2 rounded-md bg-[#eb1600] hover:bg-[#cc1300] text-white transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <Brain className="w-[18px] h-[18px]" />
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-sm font-semibold">Orca</span>
+                <span className="text-[11px] font-normal opacity-80">(AI Orchestration)</span>
+              </span>
+            </div>
+            <ChevronDown
+              className={`w-4 h-4 transition-transform ${orcaExpanded ? "rotate-180" : ""}`}
+            />
+          </button>
+
+          {/* Sub-items with curved connector */}
+          {orcaExpanded && (() => {
+            const activeIndex = orcaSubItems.findIndex(
+              (item) => pathname === item.href ||
+                (item.href !== "/orca" && pathname.startsWith(item.href))
+            );
+            // If on /orca exactly, activeIndex should be 0
+            const effectiveActiveIndex = pathname === "/orca" ? 0 : activeIndex;
+
+            return (
+              <div className="relative mt-1">
+                {/* Vertical line - from parent to top of active row */}
+                {effectiveActiveIndex >= 0 && (
+                  <div
+                    className="absolute bg-gray-300"
+                    style={{
+                      left: '20px',
+                      top: '-4px',
+                      width: '1.5px',
+                      height: `calc(${effectiveActiveIndex} * 32px + 4px)`
+                    }}
+                  />
+                )}
+
+                {orcaSubItems.map((item, index) => {
+                  const isChildActive = index === effectiveActiveIndex;
+
+                  return (
+                    <div key={item.href} className="relative flex items-center pl-3 h-[32px]">
+                      {/* Curved corner connector - for active item */}
+                      {isChildActive && (
+                        <>
+                          {/* Curved corner using borders */}
+                          <div
+                            className="absolute"
+                            style={{
+                              left: '19.25px',
+                              top: 0,
+                              height: 'calc(50% + 1px)',
+                              width: '12px',
+                              borderLeft: '1.5px solid #d1d5db',
+                              borderBottom: '1.5px solid #d1d5db',
+                              borderBottomLeftRadius: '6px'
+                            }}
+                          />
+                          {/* Arrow */}
+                          <div
+                            className="absolute text-gray-300 text-xs"
+                            style={{
+                              left: '30px',
+                              top: '50%',
+                              transform: 'translateY(-50%)'
+                            }}
+                          >
+                            →
+                          </div>
+                        </>
+                      )}
+
+                      {/* Spacer to align text */}
+                      <div className="w-[38px] shrink-0" />
+
+                      <Link
+                        href={item.href}
+                        onClick={() => setMobileOpen(false)}
+                        className={`flex-1 px-2 py-1.5 rounded-md text-sm transition-colors ${
+                          isChildActive
+                            ? "text-gray-900 font-medium bg-[#fafafa]"
+                            : "text-gray-500 hover:text-gray-900"
+                        }`}
+                      >
+                        {item.label}
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
 
         {/* Public Forms Section */}
         {hasManyForms ? (
