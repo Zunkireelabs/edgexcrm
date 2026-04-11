@@ -161,11 +161,27 @@ export async function POST(request: NextRequest) {
   // Resolve status
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
-  // Resolve stage_id from status slug, fall back to tenant's default stage
+  // Get the default pipeline for this tenant
+  const { data: defaultPipeline } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("is_default", true)
+    .single();
+
+  if (!defaultPipeline) {
+    return apiValidationError({
+      tenant_id: ["Tenant has no default pipeline configured"],
+    });
+  }
+
+  const pipelineId = (body.pipeline_id as string) || defaultPipeline.id;
+
+  // Resolve stage_id from status slug, fall back to pipeline's default stage
   let { data: stage } = await supabase
     .from("pipeline_stages")
     .select("id, slug")
-    .eq("tenant_id", tenantId)
+    .eq("pipeline_id", pipelineId)
     .eq("slug", resolvedStatus)
     .single();
 
@@ -173,7 +189,7 @@ export async function POST(request: NextRequest) {
     const { data: defaultStage } = await supabase
       .from("pipeline_stages")
       .select("id, slug")
-      .eq("tenant_id", tenantId)
+      .eq("pipeline_id", pipelineId)
       .eq("is_default", true)
       .single();
     stage = defaultStage;
@@ -188,6 +204,7 @@ export async function POST(request: NextRequest) {
   // Build payload from body
   const leadPayload: Record<string, unknown> = {
     tenant_id: tenantId,
+    pipeline_id: pipelineId,
     session_id: sessionId || body.session_id || null,
     step: body.step ?? 1,
     is_final: body.is_final ?? false,

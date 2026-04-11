@@ -57,6 +57,7 @@ interface PipelineBoardProps {
   role: UserRole;
   userId: string;
   tenantId: string;
+  pipelineId?: string;
   teamMembersData?: TeamMemberData[];
   entities?: TenantEntity[];
   entityLabel?: string;
@@ -132,6 +133,7 @@ export function PipelineBoard({
   role,
   userId,
   tenantId,
+  pipelineId,
   teamMembersData = [],
   entities = [],
   entityLabel,
@@ -719,6 +721,7 @@ export function PipelineBoard({
           open={addLeadOpen}
           onOpenChange={setAddLeadOpen}
           tenantId={tenantId}
+          pipelineId={pipelineId}
           stages={stages}
           teamMembers={teamMembersData}
           entities={entities}

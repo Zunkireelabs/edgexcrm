@@ -39,6 +39,7 @@ interface AddLeadSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   tenantId: string;
+  pipelineId?: string;
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   entities?: TenantEntity[];
@@ -126,6 +127,7 @@ export function AddLeadSheet({
   open,
   onOpenChange,
   tenantId,
+  pipelineId,
   stages,
   teamMembers,
   entities = [],
@@ -213,6 +215,7 @@ export function AddLeadSheet({
     try {
       const payload = {
         tenant_id: tenantId,
+        pipeline_id: pipelineId || undefined,
         first_name: formData.firstName || null,
         last_name: formData.lastName || null,
         email: formData.email || null,
