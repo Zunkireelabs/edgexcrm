@@ -33,7 +33,6 @@ export function PipelineSelector({
 
   const isAdmin = role === "owner" || role === "admin";
   const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
-  const defaultPipeline = pipelines.find((p) => p.is_default);
   const isNonDefaultSelected = selectedPipeline && !selectedPipeline.is_default;
 
   // Filter pipelines by search query
@@ -156,6 +155,7 @@ export function PipelineSelector({
     } catch {
       // localStorage might not be available
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -302,7 +302,6 @@ export function PipelineSelector({
           open={settingsOpen}
           onClose={handleSettingsClose}
           pipeline={selectedPipeline}
-          tenantId={tenantId}
         />
       )}
 

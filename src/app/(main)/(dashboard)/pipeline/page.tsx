@@ -5,7 +5,6 @@ import {
   getLeadsForPipeline,
   getTeamMembers,
   getPipelines,
-  getDefaultPipeline,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";

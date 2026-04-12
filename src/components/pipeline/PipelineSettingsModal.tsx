@@ -42,7 +42,6 @@ interface PipelineSettingsModalProps {
   open: boolean;
   onClose: () => void;
   pipeline: PipelineWithCounts;
-  tenantId: string;
 }
 
 interface SortableStageItemProps {
@@ -145,7 +144,6 @@ export function PipelineSettingsModal({
   open,
   onClose,
   pipeline,
-  tenantId,
 }: PipelineSettingsModalProps) {
   const [name, setName] = useState(pipeline.name);
   const [isDefault, setIsDefault] = useState(pipeline.is_default);
@@ -162,13 +160,6 @@ export function PipelineSettingsModal({
     })
   );
 
-  // Fetch pipeline details with stages
-  useEffect(() => {
-    if (open) {
-      fetchPipelineDetails();
-    }
-  }, [open, pipeline.id]);
-
   const fetchPipelineDetails = async () => {
     setIsLoading(true);
     try {
@@ -179,12 +170,20 @@ export function PipelineSettingsModal({
         setIsDefault(json.data.is_default);
         setStages(json.data.stages || []);
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to load pipeline details");
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Fetch pipeline details with stages
+  useEffect(() => {
+    if (open) {
+      fetchPipelineDetails();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, pipeline.id]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -207,7 +206,7 @@ export function PipelineSettingsModal({
       if (!res.ok) {
         throw new Error("Failed to reorder");
       }
-    } catch (error) {
+    } catch {
       toast.error("Failed to save stage order");
       // Revert on error
       fetchPipelineDetails();
@@ -413,7 +412,7 @@ export function PipelineSettingsModal({
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
-                        Pipeline must have at least one "Won" and one "Lost" stage.
+                        Pipeline must have at least one &quot;Won&quot; and one &quot;Lost&quot; stage.
                       </span>
                     </div>
                   )}
@@ -500,7 +499,7 @@ export function PipelineSettingsModal({
               <DialogTitle>Delete Stage</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground py-4">
-              Are you sure you want to delete the stage "{deleteConfirm.name}"?
+              Are you sure you want to delete the stage &quot;{deleteConfirm.name}&quot;?
               This action cannot be undone.
             </p>
             <DialogFooter>
