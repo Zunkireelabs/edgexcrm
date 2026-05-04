@@ -113,6 +113,7 @@ export function PipelineSelector({
   const handleSettingsClose = () => {
     setSettingsOpen(false);
     refreshPipelines();
+    router.refresh();
   };
 
   const handleCreateClose = (newPipelineId?: string) => {

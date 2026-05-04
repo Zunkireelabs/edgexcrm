@@ -13,11 +13,13 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
+import { processEmailForwardRules } from "@/lib/email/email-forward";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
   "status",
   "stage_id",
+  "pipeline_id",
   "assigned_to",
   "first_name",
   "last_name",
@@ -271,6 +273,18 @@ export async function PATCH(
         ]
       : []),
   ]);
+
+  // Trigger email auto-forward rules on stage change (fire-and-forget)
+  const stageChanged = updated.stage_id && updated.stage_id !== existingLead.stage_id;
+  if (stageChanged) {
+    processEmailForwardRules({
+      tenantId: auth.tenantId,
+      lead: updated as Lead,
+      newStageId: updated.stage_id,
+    }).catch((err) => {
+      log.error({ err }, "Email forward processing failed");
+    });
+  }
 
   // Create notifications for assignment changes
   if (assignedChanged) {

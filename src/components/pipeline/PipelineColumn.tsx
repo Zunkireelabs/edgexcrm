@@ -13,6 +13,8 @@ interface PipelineColumnProps {
   stage: PipelineStage;
   leads: PipelineLead[];
   canDragLead: (lead: PipelineLead) => boolean;
+  pipelineId?: string;
+  onMovedToPipeline?: (leadId: string) => void;
 }
 
 function calculateAvgDaysInStage(leads: PipelineLead[]): number {
@@ -24,7 +26,7 @@ function calculateAvgDaysInStage(leads: PipelineLead[]): number {
   return Math.round((totalDays / leads.length) * 10) / 10;
 }
 
-export function PipelineColumn({ stage, leads, canDragLead }: PipelineColumnProps) {
+export function PipelineColumn({ stage, leads, canDragLead, pipelineId, onMovedToPipeline }: PipelineColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
   });
@@ -65,6 +67,8 @@ export function PipelineColumn({ stage, leads, canDragLead }: PipelineColumnProp
                 key={lead.id}
                 lead={lead}
                 disabled={!canDragLead(lead)}
+                pipelineId={pipelineId}
+                onMovedToPipeline={onMovedToPipeline}
               />
             ))
           ) : (

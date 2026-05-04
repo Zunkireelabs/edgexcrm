@@ -165,6 +165,31 @@ export function PipelineBoard({
     setMounted(true);
   }, []);
 
+  // Sync columns state when stages prop changes (e.g. after adding/removing stages)
+  useEffect(() => {
+    setColumns((prev) => {
+      const next = { ...prev };
+      // Add new stages that don't exist in columns yet
+      for (const stage of stages) {
+        if (!next[stage.id]) {
+          next[stage.id] = [];
+        }
+      }
+      // Remove stages that no longer exist
+      for (const stageId of Object.keys(next)) {
+        if (!stages.find((s) => s.id === stageId)) {
+          // Move orphaned leads to the first stage
+          const orphanedLeads = next[stageId];
+          delete next[stageId];
+          if (orphanedLeads.length > 0 && stages.length > 0) {
+            next[stages[0].id] = [...(next[stages[0].id] || []), ...orphanedLeads];
+          }
+        }
+      }
+      return next;
+    });
+  }, [stages]);
+
   // Realtime Subscription
   useEffect(() => {
     const supabase = createClient();
@@ -347,6 +372,17 @@ export function PipelineBoard({
   );
 
   const stageMap = new Map(stages.map((s) => [s.id, s]));
+
+  // Remove a lead from the board after it's moved to another pipeline
+  const handleLeadMovedToPipeline = useCallback((leadId: string) => {
+    setColumns((prev) => {
+      const next = { ...prev };
+      for (const stageId of Object.keys(next)) {
+        next[stageId] = next[stageId].filter((l) => l.id !== leadId);
+      }
+      return next;
+    });
+  }, []);
 
   const canDragLead = useCallback(
     (lead: PipelineLead): boolean => {
@@ -700,6 +736,8 @@ export function PipelineBoard({
                 stage={stage}
                 leads={filteredColumns[stage.id] || []}
                 canDragLead={canDragLead}
+                pipelineId={pipelineId}
+                onMovedToPipeline={handleLeadMovedToPipeline}
               />
             ))}
           </div>
