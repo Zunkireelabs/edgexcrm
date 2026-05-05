@@ -20,6 +20,7 @@ import {
   FileText,
   Kanban,
   UsersRound,
+  UserCheck,
   ChevronDown,
   ExternalLink,
   User as UserIcon,
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
+  { href: "/check-in", label: "Check-In", icon: UserCheck },
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
