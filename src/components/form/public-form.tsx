@@ -492,7 +492,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                         setFormData((d) => ({ ...d, [field.name]: val }))
                       }
                     >
-                      <SelectTrigger className={`w-full font-normal ${formData[field.name] ? "text-foreground" : "text-muted-foreground"} ${compactSelect}`} style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
+                      <SelectTrigger className={`w-full font-normal ${compactSelect}`} style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}>
                         <SelectValue
                           placeholder={field.placeholder ? toTitleCase(field.placeholder) : "Select..."}
                         />
