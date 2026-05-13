@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -179,9 +180,9 @@ export function AddLeadSheet({
 
   const validatePhone = (phone: string): boolean => {
     if (!phone) return true;
-    // Basic phone validation - allows digits, spaces, dashes, parentheses, plus sign
-    const phoneRegex = /^[+]?[(]?[0-9]{1,4}[)]?[-\s./0-9]*$/;
-    return phoneRegex.test(phone) && phone.replace(/\D/g, "").length >= 7;
+    // Strip dial code prefix (e.g. "+977-") before validating digits
+    const local = phone.replace(/^\+\d{1,4}[-\s]?/, "");
+    return local.replace(/\D/g, "").length >= 7;
   };
 
   const validate = (): boolean => {
@@ -365,14 +366,11 @@ export function AddLeadSheet({
                 <Label htmlFor="phone" className="text-xs text-gray-600">
                   Phone
                 </Label>
-                <Input
-                  id="phone"
-                  type="tel"
+                <PhoneInput
                   value={formData.phone}
-                  onChange={(e) => updateField("phone", e.target.value)}
-                  placeholder="+1 234 567 8900"
+                  onChange={(v) => updateField("phone", v)}
                   disabled={isSubmitting}
-                  className={errors.phone ? "border-red-500" : ""}
+                  error={!!errors.phone}
                 />
                 {errors.phone && (
                   <p className="text-xs text-red-500">{errors.phone}</p>

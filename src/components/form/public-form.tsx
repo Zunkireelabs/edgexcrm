@@ -306,7 +306,27 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         first_name: formData.first_name || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
-        phone: formData.phone || null,
+        phone: (() => {
+          const raw = formData.phone as string;
+          if (!raw) return null;
+          // If phone already has country code, use as-is
+          if (raw.startsWith("+")) return raw;
+          // Find dial code from linked country field in form config
+          let dialCode = "";
+          for (const step of steps) {
+            const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
+            if (phoneField?.country_field) {
+              const countryValue = formData[phoneField.country_field];
+              const countryField = step.fields.find((f) => f.name === phoneField.country_field);
+              const selectedOption = countryValue
+                ? countryField?.options?.find((o) => o.value === countryValue)
+                : countryField?.options?.[0];
+              dialCode = selectedOption?.dial_code || "";
+              break;
+            }
+          }
+          return dialCode ? `${dialCode}-${raw}` : raw;
+        })(),
         city: formData.city || null,
         country: formData.country || null,
         custom_fields: Object.fromEntries(

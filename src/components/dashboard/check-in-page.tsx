@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -470,13 +471,11 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="phone" className="text-xs">Phone</Label>
-                        <Input
-                          id="phone"
-                          type="tel"
+                        <PhoneInput
                           value={phone}
-                          onChange={(e) => setPhone(e.target.value)}
-                          placeholder="+977..."
-                          className="h-9"
+                          onChange={setPhone}
+                          placeholder="Phone number"
+                          size="sm"
                         />
                       </div>
                     </div>
