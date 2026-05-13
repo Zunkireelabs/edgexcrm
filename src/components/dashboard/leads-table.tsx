@@ -366,20 +366,23 @@ export function LeadsTable({
       "Country",
       "Status",
       "Assigned To",
-      ...(hasMultipleForms ? ["Form"] : []),
+      "Source",
     ];
-    const rows = filtered.map((l) => [
-      new Date(l.created_at).toLocaleDateString(),
-      l.first_name || "",
-      l.last_name || "",
-      l.email || "",
-      l.phone || "",
-      l.city || "",
-      l.country || "",
-      l.status,
-      l.assigned_to ? memberMap[l.assigned_to] || "" : "",
-      ...(hasMultipleForms ? [l.form_config_id ? formMap[l.form_config_id] || "" : ""] : []),
-    ]);
+    const rows = filtered.map((l) => {
+      const source = l.form_config_id ? formMap[l.form_config_id] || "" : l.intake_source?.replace(/_/g, " ") || "";
+      return [
+        new Date(l.created_at).toLocaleDateString(),
+        l.first_name || "",
+        l.last_name || "",
+        l.email || "",
+        l.phone || "",
+        l.city || "",
+        l.country || "",
+        l.status,
+        l.assigned_to ? memberMap[l.assigned_to] || "" : "",
+        source,
+      ];
+    });
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -674,9 +677,7 @@ export function LeadsTable({
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
-              {hasMultipleForms && (
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Form</th>
-              )}
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Source</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Date</th>
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
             </tr>
@@ -800,17 +801,18 @@ export function LeadsTable({
                         );
                       })()}
                     </td>
-                    {hasMultipleForms && (
-                      <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-                        {formName ? (
+                    <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+                      {(() => {
+                        const source = formName || lead.intake_source;
+                        if (!source) return <span className="text-gray-400">—</span>;
+                        const label = formName || source.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                        return (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-                            {formName}
+                            {label}
                           </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                    )}
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </td>
