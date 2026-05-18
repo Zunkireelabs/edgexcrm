@@ -65,6 +65,33 @@ export interface TenantConfig {
   accepted_file_types?: string[];
 }
 
+export interface ConnectedEmailAccount {
+  id: string;
+  tenant_id: string;
+  provider: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailForwardRule {
+  id: string;
+  tenant_id: string;
+  name: string;
+  is_active: boolean;
+  from_name: string | null;
+  pipeline_id: string;
+  stage_id: string;
+  subject: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  // Joined fields (from API responses)
+  pipeline_name?: string;
+  stage_name?: string;
+  stage_color?: string;
+}
+
 export interface TenantUser {
   id: string;
   tenant_id: string;

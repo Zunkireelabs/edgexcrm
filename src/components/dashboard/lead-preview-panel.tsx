@@ -20,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatPhoneForTel } from "@/lib/phone-utils";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage } from "@/types/database";
 
 interface LeadPreviewPanelProps {
@@ -263,7 +264,7 @@ export function LeadPreviewPanel({
               <div className="flex items-center gap-1.5 text-sm">
                 <Phone className="h-3.5 w-3.5 text-gray-400" />
                 {lead.phone ? (
-                  <a href={`tel:${lead.phone}`} className="text-primary hover:underline truncate">
+                  <a href={`tel:${formatPhoneForTel(lead.phone)}`} className="text-primary hover:underline truncate">
                     {lead.phone}
                   </a>
                 ) : (

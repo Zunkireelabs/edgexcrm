@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
@@ -12,7 +13,9 @@ import {
   ExternalLink,
   FileText,
   User,
+  ArrowRightLeft,
 } from "lucide-react";
+import { MoveToPipelineModal } from "./MoveToPipelineModal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,6 +35,8 @@ import {
 interface LeadCardProps {
   lead: PipelineLead;
   disabled: boolean;
+  pipelineId?: string;
+  onMovedToPipeline?: (leadId: string) => void;
 }
 
 function getDaysInStage(updatedAt: string): number {
@@ -61,7 +66,8 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength) + "...";
 }
 
-export function LeadCard({ lead, disabled }: LeadCardProps) {
+export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: LeadCardProps) {
+  const [moveModalOpen, setMoveModalOpen] = useState(false);
   const {
     attributes,
     listeners,
@@ -156,6 +162,14 @@ export function LeadCard({ lead, disabled }: LeadCardProps) {
                 View Details
               </Link>
             </DropdownMenuItem>
+            {pipelineId && onMovedToPipeline && (
+              <DropdownMenuItem
+                onClick={() => setMoveModalOpen(true)}
+              >
+                <ArrowRightLeft className="mr-2 h-3.5 w-3.5" />
+                Move to Pipeline
+              </DropdownMenuItem>
+            )}
             <DropdownMenuSeparator />
             {lead.email && (
               <DropdownMenuItem onClick={() => copyToClipboard(lead.email!, "Email")}>
@@ -268,6 +282,17 @@ export function LeadCard({ lead, disabled }: LeadCardProps) {
           </div>
         )}
       </div>
+
+      {/* Move to Pipeline Modal */}
+      {pipelineId && onMovedToPipeline && (
+        <MoveToPipelineModal
+          open={moveModalOpen}
+          onClose={() => setMoveModalOpen(false)}
+          lead={lead}
+          currentPipelineId={pipelineId}
+          onMoved={onMovedToPipeline}
+        />
+      )}
     </div>
   );
 }

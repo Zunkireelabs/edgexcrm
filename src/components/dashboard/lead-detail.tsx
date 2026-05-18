@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
+import { formatPhoneForTel } from "@/lib/phone-utils";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -316,7 +317,7 @@ export function LeadDetail({
               <div className="flex items-center gap-2">
                 <Phone className="h-4 w-4 text-muted-foreground" />
                 <a
-                  href={`tel:${lead.phone}`}
+                  href={`tel:${formatPhoneForTel(lead.phone)}`}
                   className="text-sm text-blue-600 hover:underline"
                 >
                   {lead.phone}
