@@ -213,7 +213,31 @@ export async function POST(request: NextRequest) {
     first_name: body.first_name || null,
     last_name: body.last_name || null,
     email: body.email || null,
-    phone: body.phone || null,
+    phone: await (async () => {
+      const rawPhone = String(body.phone || "").trim();
+      if (!rawPhone || rawPhone.startsWith("+")) return rawPhone || null;
+      // Look up dial code from form config's country field options
+      if (body.form_config_id && body.country) {
+        try {
+          const { data: fc } = await supabase
+            .from("form_configs")
+            .select("steps")
+            .eq("id", body.form_config_id)
+            .single();
+          if (fc?.steps) {
+            for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
+              const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
+              if (phoneField?.country_field) {
+                const countryField = step.fields.find((f) => f.name === phoneField.country_field);
+                const opt = countryField?.options?.find((o) => o.value === body.country);
+                if (opt?.dial_code) return `${opt.dial_code}-${rawPhone}`;
+              }
+            }
+          }
+        } catch { /* fall through to raw phone */ }
+      }
+      return rawPhone || null;
+    })(),
     city: body.city || null,
     country: body.country || null,
     custom_fields: body.custom_fields || {},
