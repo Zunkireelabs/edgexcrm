@@ -182,6 +182,27 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     s.fields.filter((f) => f.type === "entity_select").map((f) => f.name)
   );
 
+  // Format phone with country code from linked country field
+  function formatPhoneWithCode(rawPhone: string | undefined | null): string | null {
+    const raw = String(rawPhone || "").trim();
+    if (!raw) return null;
+    if (raw.startsWith("+")) return raw;
+    let dialCode = "";
+    for (const step of steps) {
+      const phoneField = step.fields.find((f: { type: string; country_field?: string }) => f.type === "tel" && f.country_field);
+      if (phoneField?.country_field) {
+        const countryValue = formData[phoneField.country_field];
+        const countryField = step.fields.find((f: { name: string }) => f.name === phoneField.country_field);
+        const selectedOption = countryValue
+          ? countryField?.options?.find((o: { value: string }) => o.value === countryValue)
+          : countryField?.options?.[0];
+        dialCode = selectedOption?.dial_code || "";
+        break;
+      }
+    }
+    return dialCode ? `${dialCode}-${raw}` : raw;
+  }
+
   // Get entity_id from the first entity_select field that has a value
   function getEntityId(): string | null {
     for (const fieldName of entitySelectFields) {
@@ -204,7 +225,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       first_name: (formData.first_name as string) || null,
       last_name: (formData.last_name as string) || null,
       email: (formData.email as string) || null,
-      phone: (formData.phone as string) || null,
+      phone: formatPhoneWithCode(formData.phone as string),
       city: (formData.city as string) || null,
       country: (formData.country as string) || null,
       custom_fields: Object.fromEntries(
@@ -306,27 +327,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         first_name: formData.first_name || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
-        phone: (() => {
-          const raw = formData.phone as string;
-          if (!raw) return null;
-          // If phone already has country code, use as-is
-          if (raw.startsWith("+")) return raw;
-          // Find dial code from linked country field in form config
-          let dialCode = "";
-          for (const step of steps) {
-            const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
-            if (phoneField?.country_field) {
-              const countryValue = formData[phoneField.country_field];
-              const countryField = step.fields.find((f) => f.name === phoneField.country_field);
-              const selectedOption = countryValue
-                ? countryField?.options?.find((o) => o.value === countryValue)
-                : countryField?.options?.[0];
-              dialCode = selectedOption?.dial_code || "";
-              break;
-            }
-          }
-          return dialCode ? `${dialCode}-${raw}` : raw;
-        })(),
+        phone: formatPhoneWithCode(formData.phone as string),
         city: formData.city || null,
         country: formData.country || null,
         custom_fields: Object.fromEntries(
