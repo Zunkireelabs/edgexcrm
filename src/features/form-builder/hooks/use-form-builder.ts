@@ -166,8 +166,16 @@ export function useFormBuilder(initialConfig: Parameters<typeof buildInitialStat
       });
 
       if (!res.ok) {
-        const { error } = await res.json();
-        throw new Error(error?.message ?? "Failed to save");
+        const data = await res.json();
+        // Show specific validation errors if available
+        if (data.error?.details) {
+          const details = data.error.details;
+          const messages = Object.entries(details)
+            .map(([key, msgs]) => `${key}: ${(msgs as string[]).join(", ")}`)
+            .join("\n");
+          throw new Error(messages || "Validation failed");
+        }
+        throw new Error(data.error?.message ?? "Failed to save");
       }
 
       dispatch({ type: "MARK_SAVED" });

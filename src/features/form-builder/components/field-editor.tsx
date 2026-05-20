@@ -22,7 +22,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import type { FormField } from "@/types/database";
-import { slugify } from "../lib/validation";
+import { toFieldName } from "../lib/validation";
 
 interface FieldEditorProps {
   field: FormField | null;
@@ -55,7 +55,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
   function handleLabelChange(label: string) {
     setDraft((prev) => {
       if (!prev) return prev;
-      const autoName = slugify(label) || prev.name;
+      const autoName = toFieldName(label) || prev.name;
       return { ...prev, label, name: autoName };
     });
   }
@@ -164,7 +164,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
                 <Input
                   id="field-name"
                   value={draft.name}
-                  onChange={(e) => update({ name: slugify(e.target.value) || e.target.value })}
+                  onChange={(e) => update({ name: toFieldName(e.target.value) || e.target.value })}
                   placeholder="e.g. first_name"
                 />
                 <p className="text-xs text-muted-foreground">Lowercase letters and underscores only</p>

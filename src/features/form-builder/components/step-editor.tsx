@@ -20,7 +20,7 @@ import { FieldRow } from "./field-row";
 import { FieldTypePicker } from "./field-type-picker";
 import { FieldEditor } from "./field-editor";
 import type { BuilderAction } from "../types";
-import { slugify } from "../lib/validation";
+import { toFieldName } from "../lib/validation";
 
 interface StepEditorProps {
   step: FormStep;
@@ -125,7 +125,7 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
                         payload: {
                           stepIndex,
                           fieldIndex,
-                          field: { ...field, label: newLabel, name: slugify(newLabel) || field.name },
+                          field: { ...field, label: newLabel, name: toFieldName(newLabel) || field.name },
                         },
                       });
                     }}

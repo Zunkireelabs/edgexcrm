@@ -9,7 +9,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type { FormField } from "@/types/database";
-import { slugify } from "../lib/validation";
+import { toFieldName } from "../lib/validation";
 
 type FieldType = FormField["type"];
 
@@ -33,7 +33,7 @@ interface FieldTypePickerProps {
 
 function buildDefaultField(type: FieldType, label: string): FormField {
   const base: FormField = {
-    name: slugify(label) || type,
+    name: toFieldName(label) || type,
     label,
     type,
     required: false,

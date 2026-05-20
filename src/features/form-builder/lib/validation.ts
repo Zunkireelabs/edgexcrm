@@ -15,6 +15,17 @@ export function slugify(text: string): string {
     .replace(/^-|-$/g, "");
 }
 
+/** Convert text to a valid field name (lowercase_with_underscores) */
+export function toFieldName(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s_]/g, "")
+    .replace(/\s+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
 export function validateFormConfig(data: {
   name: string;
   slug: string;
