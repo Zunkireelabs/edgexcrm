@@ -2,7 +2,6 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { FormList } from "@/features/form-builder/components/form-list";
-import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import type { FormConfig } from "@/types/database";
 
 export default async function FormsPage() {
@@ -26,27 +25,14 @@ export default async function FormsPage() {
   }
 
   const supabase = await createServiceClient();
-
-  const [formConfigsResult, apiKeysResult] = await Promise.all([
-    supabase
-      .from("form_configs")
-      .select("id, name, slug, is_active, created_at, updated_at, steps, branding, redirect_url, tenant_id")
-      .eq("tenant_id", tenantData.tenant.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("integration_keys")
-      .select("id, name, permissions, created_at, last_used_at, revoked_at")
-      .eq("tenant_id", tenantData.tenant.id)
-      .order("created_at", { ascending: false }),
-  ]);
-
-  const apiKeys = (apiKeysResult.data || []).map((k) => ({
-    ...k,
-    status: (k.revoked_at ? "revoked" : "active") as "active" | "revoked",
-  }));
+  const { data: formConfigs } = await supabase
+    .from("form_configs")
+    .select("id, name, slug, is_active, created_at, updated_at, steps, branding, redirect_url, tenant_id")
+    .eq("tenant_id", tenantData.tenant.id)
+    .order("created_at", { ascending: false });
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Forms</h1>
         <p className="text-muted-foreground text-sm mt-1">
@@ -54,12 +40,8 @@ export default async function FormsPage() {
         </p>
       </div>
       <FormList
-        forms={(formConfigsResult.data ?? []) as FormConfig[]}
+        forms={(formConfigs ?? []) as FormConfig[]}
         tenantSlug={tenantData.tenant.slug}
-      />
-      <ApiKeysManager
-        tenantId={tenantData.tenant.id}
-        initialKeys={apiKeys}
       />
     </div>
   );
