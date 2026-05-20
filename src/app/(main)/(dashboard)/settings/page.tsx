@@ -32,7 +32,7 @@ export default async function SettingsPage() {
       .order("created_at", { ascending: true }),
     serviceClient
       .from("integration_keys")
-      .select("id, name, permissions, created_at, last_used_at, revoked_at")
+      .select("id, name, permissions, permissions_detail, created_at, last_used_at, revoked_at")
       .eq("tenant_id", tenantData.tenant.id)
       .order("created_at", { ascending: false }),
     // Fetch industry if tenant has one assigned
@@ -77,6 +77,7 @@ export default async function SettingsPage() {
       <ApiKeysManager
         tenantId={tenantData.tenant.id}
         initialKeys={apiKeys}
+        category="integration"
       />
     </div>
   );
