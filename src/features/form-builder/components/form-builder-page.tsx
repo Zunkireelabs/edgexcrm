@@ -280,15 +280,6 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
                   dispatch={dispatch}
                 />
               ))}
-
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => dispatch({ type: "ADD_STEP" })}
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Add Step
-              </Button>
             </TabsContent>
 
             <TabsContent value="branding">
