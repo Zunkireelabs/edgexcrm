@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { ChevronUp, ChevronDown, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import type { FormField } from "@/types/database";
 
@@ -14,6 +16,7 @@ interface FieldRowProps {
   onRemove: () => void;
   onMoveUp: () => void;
   onMoveDown: () => void;
+  onUpdateLabel?: (newLabel: string) => void;
 }
 
 const FIELD_TYPE_COLORS: Record<string, string> = {
@@ -39,8 +42,13 @@ export function FieldRow({
   onRemove,
   onMoveUp,
   onMoveDown,
+  onUpdateLabel,
 }: FieldRowProps) {
   const colorClass = FIELD_TYPE_COLORS[field.type] ?? "bg-gray-100 text-gray-700";
+  const [editing, setEditing] = useState(false);
+  const [editLabel, setEditLabel] = useState(field.label);
+
+  useEffect(() => setEditLabel(field.label), [field.label]);
 
   return (
     <div className="flex items-center gap-2 px-3 py-2 rounded-md border bg-background hover:bg-muted/40 group">
@@ -66,7 +74,30 @@ export function FieldRow({
 
       {/* Field info */}
       <div className="flex-1 min-w-0 flex items-center gap-2 flex-wrap">
-        <span className="text-sm font-medium truncate">{field.label}</span>
+        {editing ? (
+          <Input
+            value={editLabel}
+            onChange={(e) => setEditLabel(e.target.value)}
+            onBlur={() => {
+              if (editLabel.trim() && onUpdateLabel) onUpdateLabel(editLabel.trim());
+              setEditing(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") e.currentTarget.blur();
+              if (e.key === "Escape") { setEditLabel(field.label); setEditing(false); }
+            }}
+            className="h-6 text-sm font-medium px-1 w-40"
+            autoFocus
+          />
+        ) : (
+          <span
+            className="text-sm font-medium truncate cursor-text"
+            onDoubleClick={() => { if (onUpdateLabel) { setEditLabel(field.label); setEditing(true); } }}
+            title="Double-click to rename"
+          >
+            {field.label}
+          </span>
+        )}
         <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${colorClass}`}>
           {field.type}
         </span>

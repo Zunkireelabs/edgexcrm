@@ -89,6 +89,11 @@ export async function POST(request: NextRequest) {
     };
   }
 
+  // Apply branding overrides from wizard
+  if (body.branding_overrides && typeof body.branding_overrides === "object") {
+    branding = { ...branding, ...(body.branding_overrides as Partial<FormBranding>) };
+  }
+
   const supabase = await createServiceClient();
 
   // Check slug uniqueness within tenant

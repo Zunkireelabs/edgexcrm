@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +40,7 @@ const WIDTH_OPTIONS = [
 
 export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) {
   const [draft, setDraft] = useState<FormField | null>(null);
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
     if (field) setDraft({ ...field });
@@ -109,18 +110,6 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             />
           </div>
 
-          {/* Name (field key) */}
-          <div className="space-y-1.5">
-            <Label htmlFor="field-name">Field Name (key)</Label>
-            <Input
-              id="field-name"
-              value={draft.name}
-              onChange={(e) => update({ name: slugify(e.target.value) || e.target.value })}
-              placeholder="e.g. first_name"
-            />
-            <p className="text-xs text-muted-foreground">Lowercase letters and underscores only</p>
-          </div>
-
           {/* Type */}
           <div className="space-y-1.5">
             <Label>Field Type</Label>
@@ -147,37 +136,6 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </Select>
           </div>
 
-          {/* Placeholder */}
-          {draft.type !== "checkbox" && draft.type !== "file" && draft.type !== "entity_select" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="field-placeholder">Placeholder</Label>
-              <Input
-                id="field-placeholder"
-                value={draft.placeholder ?? ""}
-                onChange={(e) => update({ placeholder: e.target.value })}
-                placeholder="Optional placeholder text"
-              />
-            </div>
-          )}
-
-          {/* Width */}
-          <div className="space-y-1.5">
-            <Label>Width</Label>
-            <Select
-              value={draft.width ?? "full"}
-              onValueChange={(val) => update({ width: val as FormField["width"] })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {WIDTH_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
           {/* Required */}
           <div className="flex items-center gap-2">
             <Checkbox
@@ -187,6 +145,63 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             />
             <Label htmlFor="field-required" className="cursor-pointer">Required field</Label>
           </div>
+
+          {/* Advanced settings toggle */}
+          <button
+            type="button"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showAdvanced ? "rotate-90" : ""}`} />
+            Advanced settings
+          </button>
+
+          {showAdvanced && (
+            <>
+              {/* Name (field key) */}
+              <div className="space-y-1.5">
+                <Label htmlFor="field-name">Field Name (key)</Label>
+                <Input
+                  id="field-name"
+                  value={draft.name}
+                  onChange={(e) => update({ name: slugify(e.target.value) || e.target.value })}
+                  placeholder="e.g. first_name"
+                />
+                <p className="text-xs text-muted-foreground">Lowercase letters and underscores only</p>
+              </div>
+
+              {/* Placeholder */}
+              {draft.type !== "checkbox" && draft.type !== "file" && draft.type !== "entity_select" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="field-placeholder">Placeholder</Label>
+                  <Input
+                    id="field-placeholder"
+                    value={draft.placeholder ?? ""}
+                    onChange={(e) => update({ placeholder: e.target.value })}
+                    placeholder="Optional placeholder text"
+                  />
+                </div>
+              )}
+
+              {/* Width */}
+              <div className="space-y-1.5">
+                <Label>Width</Label>
+                <Select
+                  value={draft.width ?? "full"}
+                  onValueChange={(val) => update({ width: val as FormField["width"] })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WIDTH_OPTIONS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           {/* Options for select/radio */}
           {isOptionField && (
@@ -229,8 +244,8 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </>
           )}
 
-          {/* File validation */}
-          {isFileField && (
+          {/* File validation (advanced) */}
+          {showAdvanced && isFileField && (
             <>
               <Separator />
               <div className="space-y-3">
@@ -272,8 +287,8 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </>
           )}
 
-          {/* Number validation */}
-          {draft.type === "number" && (
+          {/* Number validation (advanced) */}
+          {showAdvanced && draft.type === "number" && (
             <>
               <Separator />
               <div className="space-y-3">
@@ -318,8 +333,8 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </>
           )}
 
-          {/* Date validation */}
-          {draft.type === "date" && (
+          {/* Date validation (advanced) */}
+          {showAdvanced && draft.type === "date" && (
             <>
               <Separator />
               <div className="space-y-3">
@@ -362,8 +377,8 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </>
           )}
 
-          {/* Terms URL for checkbox */}
-          {draft.type === "checkbox" && (
+          {/* Terms URL for checkbox (advanced) */}
+          {showAdvanced && draft.type === "checkbox" && (
             <div className="space-y-1.5">
               <Label htmlFor="terms-url">Terms URL (optional)</Label>
               <Input

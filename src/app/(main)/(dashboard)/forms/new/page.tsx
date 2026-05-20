@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { TemplatePicker } from "@/features/form-builder/components/template-picker";
+import { FormCreationWizard } from "@/features/form-builder/components/form-creation-wizard";
 
 export default async function NewFormPage() {
   const tenantData = await getCurrentUserTenant();
@@ -22,5 +22,10 @@ export default async function NewFormPage() {
     );
   }
 
-  return <TemplatePicker />;
+  return (
+    <FormCreationWizard
+      tenantPrimaryColor={tenantData.tenant.primary_color || "#6366f1"}
+      tenantSlug={tenantData.tenant.slug}
+    />
+  );
 }

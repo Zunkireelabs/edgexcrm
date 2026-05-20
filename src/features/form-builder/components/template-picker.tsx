@@ -31,11 +31,23 @@ function TemplateIcon({ name }: { name: string }) {
   return <Icon className="h-6 w-6" />;
 }
 
-export function TemplatePicker() {
+interface TemplatePickerProps {
+  onSelect?: (template: TemplateDefinition) => void;
+  selectedId?: string | null;
+}
+
+export function TemplatePicker({ onSelect, selectedId }: TemplatePickerProps = {}) {
   const router = useRouter();
   const [creating, setCreating] = useState<string | null>(null);
 
   async function handleSelect(template: TemplateDefinition) {
+    // If external handler provided (wizard mode), delegate to it
+    if (onSelect) {
+      onSelect(template);
+      return;
+    }
+
+    // Default behavior: create form immediately
     setCreating(template.id);
     try {
       const res = await fetch("/api/v1/form-configs", {
@@ -83,7 +95,9 @@ export function TemplatePicker() {
               key={template.id}
               className={`cursor-pointer transition-all hover:border-primary hover:shadow-sm ${
                 isBlank ? "border-dashed" : ""
-              } ${isLoading ? "opacity-70 pointer-events-none" : ""}`}
+              } ${isLoading ? "opacity-70 pointer-events-none" : ""} ${
+                selectedId === template.id ? "border-primary ring-2 ring-primary/20" : ""
+              }`}
               onClick={() => !creating && handleSelect(template)}
             >
               <CardHeader className="pb-4">

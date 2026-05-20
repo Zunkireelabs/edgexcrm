@@ -10,6 +10,7 @@ import { FieldRow } from "./field-row";
 import { FieldTypePicker } from "./field-type-picker";
 import { FieldEditor } from "./field-editor";
 import type { BuilderAction } from "../types";
+import { slugify } from "../lib/validation";
 
 interface StepEditorProps {
   step: FormStep;
@@ -134,6 +135,16 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
                 onMoveDown={() =>
                   dispatch({ type: "MOVE_FIELD_DOWN", payload: { stepIndex, fieldIndex } })
                 }
+                onUpdateLabel={(newLabel) => {
+                  dispatch({
+                    type: "UPDATE_FIELD",
+                    payload: {
+                      stepIndex,
+                      fieldIndex,
+                      field: { ...field, label: newLabel, name: slugify(newLabel) || field.name },
+                    },
+                  });
+                }}
               />
             ))}
 
