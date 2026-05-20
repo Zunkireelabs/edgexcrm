@@ -61,9 +61,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   if (!existing) return apiNotFound("Form config");
 
-  // If steps are being updated, validate them
+  // If steps are being updated, auto-fix field names and validate
   if (body.steps) {
-    const steps = body.steps as FormStep[];
+    const steps = (body.steps as FormStep[]).map((step) => ({
+      ...step,
+      fields: step.fields.map((field) => ({
+        ...field,
+        // Auto-fix: convert hyphens to underscores in field names
+        name: field.name.replace(/-/g, "_"),
+      })),
+    }));
+    body.steps = steps;
     const configErrors = validateFormConfig({
       name: String(body.name ?? "placeholder"),
       slug: String(body.slug ?? existing.slug),
