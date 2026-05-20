@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Builder — How It Works</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f172a;
+      color: white;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP NAV ── */
+    .topnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: #1e293b;
+      border-bottom: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    .topnav-title { font-size: 15px; font-weight: 700; color: #f1f5f9; }
+    .topnav-sub { font-size: 12px; color: #64748b; margin-top: 2px; }
+    .step-dots { display: flex; gap: 8px; }
+    .dot {
+      width: 10px; height: 10px; border-radius: 50%;
+      background: #334155; cursor: pointer;
+      transition: background 0.3s, transform 0.3s;
+    }
+    .dot.active { background: #3b82f6; transform: scale(1.3); }
+    .dot.done { background: #22c55e; }
+
+    /* ── STAGE AREA ── */
+    .stage {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+    .scene {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      opacity: 0;
+      transform: translateX(60px);
+      transition: opacity 0.5s ease, transform 0.5s ease;
+      pointer-events: none;
+    }
+    .scene.active {
+      opacity: 1;
+      transform: translateX(0);
+      pointer-events: all;
+    }
+    .scene.exit {
+      opacity: 0;
+      transform: translateX(-60px);
+    }
+
+    .scene-title {
+      font-size: 22px; font-weight: 800;
+      margin-bottom: 6px; text-align: center;
+    }
+    .scene-sub {
+      font-size: 13px; color: #94a3b8;
+      margin-bottom: 28px; text-align: center;
+    }
+
+    /* ── BOTTOM NAV ── */
+    .bottomnav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 32px;
+      background: #1e293b;
+      border-top: 1px solid #334155;
+      flex-shrink: 0;
+    }
+    .btn {
+      padding: 9px 22px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-ghost { background: #334155; color: #94a3b8; }
+    .btn-ghost:hover { background: #475569; color: white; }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    .step-label { font-size: 12px; color: #64748b; }
+
+    /* ════════════════════════════════
+       SCENE 1 — THE PROBLEM
+    ════════════════════════════════ */
+    .problem-cards {
+      display: flex; gap: 24px; align-items: center;
+    }
+    .pcard {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 14px;
+      padding: 20px 24px;
+      width: 200px;
+      text-align: center;
+    }
+    .pcard-icon { font-size: 32px; margin-bottom: 10px; }
+    .pcard-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+    .pcard-desc { font-size: 11px; color: #64748b; }
+    .pcard.bad { border-color: #ef4444; }
+    .pcard.good { border-color: #22c55e; }
+    .vs { font-size: 18px; font-weight: 900; color: #64748b; }
+
+    /* ════════════════════════════════
+       SCENE 2 — ADMIN FLOW
+    ════════════════════════════════ */
+    .admin-flow {
+      display: flex; align-items: center; gap: 0;
+    }
+    .abox {
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 12px;
+      padding: 16px 20px;
+      text-align: center;
+      min-width: 130px;
+      position: relative;
+      transition: border-color 0.3s, box-shadow 0.3s, transform 0.3s;
+    }
+    .abox.lit {
+      border-color: #3b82f6;
+      box-shadow: 0 0 20px rgba(59,130,246,0.4);
+      transform: scale(1.05);
+    }
+    .abox-icon { font-size: 26px; margin-bottom: 6px; }
+    .abox-label { font-size: 12px; font-weight: 700; }
+    .abox-sub { font-size: 10px; color: #64748b; margin-top: 2px; }
+    .aline {
+      width: 40px; height: 2px;
+      background: linear-gradient(90deg, #334155, #3b82f6);
+      position: relative;
+      transition: background 0.3s;
+    }
+    .aline.lit { background: linear-gradient(90deg, #3b82f6, #22c55e); }
+    .aline::after {
+      content: '▶';
+      position: absolute;
+      right: -6px;
+      top: -8px;
+      font-size: 10px;
+      color: #3b82f6;
+    }
+
+    /* ════════════════════════════════
+       SCENE 3 — TEMPLATE PICKER
+    ════════════════════════════════ */
+    .template-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      max-width: 600px;
+    }
+    .tcard {
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.25s;
+      text-align: center;
+    }
+    .tcard:hover, .tcard.selected {
+      border-color: #3b82f6;
+      box-shadow: 0 0 18px rgba(59,130,246,0.35);
+      transform: translateY(-3px);
+    }
+    .tcard.selected { background: #1d3a6b; }
+    .tcard-icon { font-size: 28px; margin-bottom: 8px; }
+    .tcard-name { font-size: 12px; font-weight: 700; }
+    .tcard-steps { font-size: 10px; color: #64748b; margin-top: 3px; }
+
+    /* ════════════════════════════════
+       SCENE 4 — FIELD EDITOR
+    ════════════════════════════════ */
+    .builder-layout {
+      display: flex; gap: 20px; width: 100%; max-width: 760px;
+    }
+    .builder-steps {
+      flex: 1;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #334155;
+    }
+    .builder-step-header {
+      font-size: 12px; font-weight: 700; color: #94a3b8;
+      margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .step-block {
+      background: #0f172a;
+      border-radius: 8px;
+      padding: 12px;
+      margin-bottom: 8px;
+      border: 1px solid #334155;
+    }
+    .step-name { font-size: 12px; font-weight: 700; margin-bottom: 8px; color: #e2e8f0; }
+    .field-row-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 8px;
+      background: #1e293b;
+      border-radius: 6px;
+      margin-bottom: 4px;
+      font-size: 11px;
+      animation: slideIn 0.3s ease forwards;
+      opacity: 0;
+    }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(-10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .field-type-badge {
+      font-size: 9px; font-weight: 700;
+      padding: 2px 6px; border-radius: 4px;
+      background: #334155; color: #94a3b8;
+    }
+    .field-required { color: #ef4444; font-size: 11px; }
+
+    .builder-preview {
+      width: 220px;
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      border: 1px solid #334155;
+    }
+    .preview-header {
+      font-size: 11px; font-weight: 700; color: #3b82f6;
+      margin-bottom: 12px; text-align: center;
+    }
+    .preview-field {
+      margin-bottom: 8px;
+      animation: fadeUp 0.4s ease forwards;
+      opacity: 0;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .preview-label { font-size: 10px; color: #94a3b8; margin-bottom: 3px; }
+    .preview-input {
+      width: 100%; height: 28px;
+      background: #0f172a; border: 1px solid #334155;
+      border-radius: 5px;
+    }
+
+    /* ════════════════════════════════
+       SCENE 5 — SAVE & PERSIST
+    ════════════════════════════════ */
+    .save-flow {
+      display: flex; flex-direction: column; align-items: center; gap: 0;
+      width: 100%; max-width: 500px;
+    }
+    .sbox {
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 12px;
+      padding: 14px 24px;
+      width: 100%;
+      display: flex; align-items: center; gap: 14px;
+      transition: all 0.4s;
+    }
+    .sbox.lit { border-color: #22c55e; box-shadow: 0 0 16px rgba(34,197,94,0.3); }
+    .sbox-icon { font-size: 24px; }
+    .sbox-text { flex: 1; }
+    .sbox-title { font-size: 13px; font-weight: 700; }
+    .sbox-sub { font-size: 11px; color: #64748b; }
+    .sline-v {
+      width: 2px; height: 24px;
+      background: #334155; margin-left: 24px;
+      transition: background 0.4s;
+    }
+    .sline-v.lit { background: #22c55e; }
+    .check {
+      width: 22px; height: 22px;
+      background: #22c55e; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px;
+      opacity: 0; transform: scale(0);
+      transition: all 0.3s;
+      flex-shrink: 0;
+    }
+    .check.show { opacity: 1; transform: scale(1); }
+
+    /* ════════════════════════════════
+       SCENE 6 — PUBLIC FORM
+    ════════════════════════════════ */
+    .public-wrapper {
+      display: flex; gap: 24px; align-items: flex-start; max-width: 700px; width: 100%;
+    }
+    .phone-frame {
+      width: 180px; flex-shrink: 0;
+      background: #1e293b;
+      border: 3px solid #475569;
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.4);
+    }
+    .phone-notch {
+      height: 24px; background: #0f172a;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .phone-notch-bar { width: 50px; height: 6px; background: #334155; border-radius: 3px; }
+    .phone-screen { padding: 12px; background: white; min-height: 300px; }
+    .phone-form-title { font-size: 11px; font-weight: 800; color: #1e293b; margin-bottom: 10px; }
+    .phone-field { margin-bottom: 8px; }
+    .phone-label { font-size: 9px; color: #64748b; margin-bottom: 2px; }
+    .phone-input {
+      width: 100%; height: 22px;
+      border: 1px solid #e2e8f0; border-radius: 4px;
+      background: #f8fafc;
+    }
+    .phone-btn {
+      width: 100%; padding: 7px;
+      background: #3b82f6; border-radius: 5px;
+      color: white; font-size: 10px; font-weight: 700;
+      text-align: center; margin-top: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .phone-btn:hover { background: #2563eb; }
+    .phone-progress {
+      display: flex; gap: 3px; margin-bottom: 8px;
+    }
+    .phone-prog-step {
+      flex: 1; height: 3px; border-radius: 2px; background: #e2e8f0;
+      transition: background 0.4s;
+    }
+    .phone-prog-step.done { background: #3b82f6; }
+
+    .lead-result {
+      flex: 1;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    .lead-arrow {
+      font-size: 28px; color: #334155; text-align: center;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 0.4; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.1); }
+    }
+    .lead-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 10px;
+      padding: 14px;
+    }
+    .lead-box-title { font-size: 11px; font-weight: 700; color: #94a3b8; margin-bottom: 8px; }
+    .lead-row {
+      display: flex; justify-content: space-between;
+      font-size: 11px; padding: 4px 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .lead-key { color: #64748b; }
+    .lead-val { color: #e2e8f0; font-weight: 500; }
+
+    /* ════════════════════════════════
+       SCENE 7 — INDUSTRY GUARD
+    ════════════════════════════════ */
+    .guard-layout {
+      display: flex; gap: 20px; max-width: 680px; width: 100%;
+    }
+    .tenant-list { flex: 1; display: flex; flex-direction: column; gap: 10px; }
+    .tenant-item {
+      background: #1e293b;
+      border: 2px solid #334155;
+      border-radius: 10px;
+      padding: 12px 16px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: all 0.3s;
+      cursor: pointer;
+    }
+    .tenant-item:hover { border-color: #475569; }
+    .tenant-item.edu { border-color: #22c55e; }
+    .tenant-item.other { border-color: #ef4444; }
+    .tenant-name { font-size: 13px; font-weight: 700; }
+    .tenant-ind { font-size: 11px; color: #64748b; }
+    .tenant-badge {
+      font-size: 10px; font-weight: 700;
+      padding: 3px 8px; border-radius: 20px;
+    }
+    .tenant-badge.allow { background: #dcfce7; color: #15803d; }
+    .tenant-badge.block { background: #fee2e2; color: #b91c1c; }
+    .guard-result {
+      width: 220px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .result-box {
+      border-radius: 10px; padding: 14px;
+      text-align: center; font-size: 12px; font-weight: 600;
+      opacity: 0.3; transition: opacity 0.3s, transform 0.3s;
+    }
+    .result-box.show { opacity: 1; transform: scale(1.02); }
+    .result-box.green { background: #14532d; border: 2px solid #22c55e; color: #86efac; }
+    .result-box.red { background: #450a0a; border: 2px solid #ef4444; color: #fca5a5; }
+
+  </style>
+</head>
+<body>
+
+  <!-- TOP NAV -->
+  <div class="topnav">
+    <div>
+      <div class="topnav-title">Form Builder — How It Works</div>
+      <div class="topnav-sub">EdgeX CRM · education_consultancy</div>
+    </div>
+    <div class="step-dots" id="dots"></div>
+  </div>
+
+  <!-- STAGE -->
+  <div class="stage" id="stage">
+
+    <!-- SCENE 1: THE PROBLEM -->
+    <div class="scene active" id="scene-0">
+      <div class="scene-title">The Problem We're Solving</div>
+      <div class="scene-sub">Before this feature, forms were hardcoded in SQL — no admin could change them.</div>
+      <div class="problem-cards">
+        <div class="pcard bad">
+          <div class="pcard-icon">😓</div>
+          <div class="pcard-title">Before</div>
+          <div class="pcard-desc">Forms hardcoded in SQL seeds. Need a developer to change anything.</div>
+        </div>
+        <div class="vs">VS</div>
+        <div class="pcard good">
+          <div class="pcard-icon">✨</div>
+          <div class="pcard-title">After</div>
+          <div class="pcard-desc">Admins build and edit forms visually. Changes go live in real-time.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 2: ADMIN FLOW -->
+    <div class="scene" id="scene-1">
+      <div class="scene-title">The Admin Journey</div>
+      <div class="scene-sub">Step by step — from opening the dashboard to a live form.</div>
+      <div class="admin-flow" id="admin-flow">
+        <div class="abox" id="af0">
+          <div class="abox-icon">🏠</div>
+          <div class="abox-label">Dashboard</div>
+          <div class="abox-sub">Click "Forms"</div>
+        </div>
+        <div class="aline" id="al0"></div>
+        <div class="abox" id="af1">
+          <div class="abox-icon">📋</div>
+          <div class="abox-label">Forms List</div>
+          <div class="abox-sub">See all forms</div>
+        </div>
+        <div class="aline" id="al1"></div>
+        <div class="abox" id="af2">
+          <div class="abox-icon">🎨</div>
+          <div class="abox-label">Pick Template</div>
+          <div class="abox-sub">or start blank</div>
+        </div>
+        <div class="aline" id="al2"></div>
+        <div class="abox" id="af3">
+          <div class="abox-icon">🔧</div>
+          <div class="abox-label">Build Form</div>
+          <div class="abox-sub">add / edit fields</div>
+        </div>
+        <div class="aline" id="al3"></div>
+        <div class="abox" id="af4">
+          <div class="abox-icon">🚀</div>
+          <div class="abox-label">Publish</div>
+          <div class="abox-sub">toggle active</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 3: TEMPLATES -->
+    <div class="scene" id="scene-2">
+      <div class="scene-title">Choose a Template</div>
+      <div class="scene-sub">4 ready-made templates for education consultancy + blank option.</div>
+      <div class="template-grid">
+        <div class="tcard" onclick="selectTemplate(this)">
+          <div class="tcard-icon">🎓</div>
+          <div class="tcard-name">Scholarship<br/>Application</div>
+          <div class="tcard-steps">3 steps · 12 fields</div>
+        </div>
+        <div class="tcard" onclick="selectTemplate(this)">
+          <div class="tcard-icon">🏫</div>
+          <div class="tcard-name">Admission<br/>Inquiry</div>
+          <div class="tcard-steps">3 steps · 10 fields</div>
+        </div>
+        <div class="tcard" onclick="selectTemplate(this)">
+          <div class="tcard-icon">📅</div>
+          <div class="tcard-name">Counseling<br/>Booking</div>
+          <div class="tcard-steps">1 step · 8 fields</div>
+        </div>
+        <div class="tcard" onclick="selectTemplate(this)">
+          <div class="tcard-icon">✉️</div>
+          <div class="tcard-name">General<br/>Contact</div>
+          <div class="tcard-steps">1 step · 6 fields</div>
+        </div>
+        <div class="tcard" onclick="selectTemplate(this)">
+          <div class="tcard-icon">➕</div>
+          <div class="tcard-name">Blank Form</div>
+          <div class="tcard-steps">Start from scratch</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 4: FIELD EDITOR -->
+    <div class="scene" id="scene-3">
+      <div class="scene-title">Build Your Form</div>
+      <div class="scene-sub">Add steps, drag fields, edit properties — preview updates live.</div>
+      <div class="builder-layout">
+        <div class="builder-steps">
+          <div class="builder-step-header">Steps & Fields</div>
+          <div class="step-block">
+            <div class="step-name">📝 Step 1 — Personal Info</div>
+            <div id="builder-fields"></div>
+          </div>
+        </div>
+        <div class="builder-preview">
+          <div class="preview-header">Live Preview</div>
+          <div id="preview-fields"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 5: SAVE & API -->
+    <div class="scene" id="scene-4">
+      <div class="scene-title">Save — What Happens Behind the Scenes</div>
+      <div class="scene-sub">One click on "Save" triggers this chain.</div>
+      <div class="save-flow" id="save-flow">
+        <div class="sbox" id="sb0">
+          <div class="sbox-icon">💾</div>
+          <div class="sbox-text">
+            <div class="sbox-title">Admin clicks Save</div>
+            <div class="sbox-sub">useReducer state → save()</div>
+          </div>
+          <div class="check" id="ck0">✓</div>
+        </div>
+        <div class="sline-v" id="sv0"></div>
+        <div class="sbox" id="sb1">
+          <div class="sbox-icon">⚙️</div>
+          <div class="sbox-text">
+            <div class="sbox-title">PATCH /api/v1/form-configs/[id]</div>
+            <div class="sbox-sub">auth check → validate slug → write</div>
+          </div>
+          <div class="check" id="ck1">✓</div>
+        </div>
+        <div class="sline-v" id="sv1"></div>
+        <div class="sbox" id="sb2">
+          <div class="sbox-icon">🗄</div>
+          <div class="sbox-text">
+            <div class="sbox-title">Supabase — form_configs</div>
+            <div class="sbox-sub">steps + branding stored as JSONB</div>
+          </div>
+          <div class="check" id="ck2">✓</div>
+        </div>
+        <div class="sline-v" id="sv2"></div>
+        <div class="sbox" id="sb3">
+          <div class="sbox-icon">🌐</div>
+          <div class="sbox-text">
+            <div class="sbox-title">Public form reflects changes</div>
+            <div class="sbox-sub">force-dynamic → always fresh</div>
+          </div>
+          <div class="check" id="ck3">✓</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 6: PUBLIC FORM + LEAD -->
+    <div class="scene" id="scene-5">
+      <div class="scene-title">Visitor Fills the Form → Lead Created</div>
+      <div class="scene-sub">The public form fetches config live and saves submissions as leads.</div>
+      <div class="public-wrapper">
+        <div class="phone-frame">
+          <div class="phone-notch"><div class="phone-notch-bar"></div></div>
+          <div class="phone-screen">
+            <div class="phone-progress">
+              <div class="phone-prog-step done" id="ps0"></div>
+              <div class="phone-prog-step" id="ps1"></div>
+              <div class="phone-prog-step" id="ps2"></div>
+            </div>
+            <div class="phone-form-title">Scholarship Application</div>
+            <div class="phone-field">
+              <div class="phone-label">First Name *</div>
+              <div class="phone-input"></div>
+            </div>
+            <div class="phone-field">
+              <div class="phone-label">Email *</div>
+              <div class="phone-input"></div>
+            </div>
+            <div class="phone-field">
+              <div class="phone-label">Phone</div>
+              <div class="phone-input"></div>
+            </div>
+            <div class="phone-btn" onclick="submitForm()">Next Step →</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding-top:60px">
+          <div class="lead-arrow">→</div>
+        </div>
+        <div class="lead-result">
+          <div class="lead-box">
+            <div class="lead-box-title">✅ Lead Created in CRM</div>
+            <div class="lead-row"><span class="lead-key">name</span><span class="lead-val">John Doe</span></div>
+            <div class="lead-row"><span class="lead-key">email</span><span class="lead-val">john@example.com</span></div>
+            <div class="lead-row"><span class="lead-key">source</span><span class="lead-val">scholarship-form</span></div>
+            <div class="lead-row"><span class="lead-key">status</span><span class="lead-val">New</span></div>
+          </div>
+          <div class="lead-box">
+            <div class="lead-box-title">📋 custom_fields JSONB</div>
+            <div class="lead-row"><span class="lead-key">preferred_course</span><span class="lead-val">MBA</span></div>
+            <div class="lead-row"><span class="lead-key">gpa</span><span class="lead-val">3.8</span></div>
+            <div class="lead-row"><span class="lead-key">intake</span><span class="lead-val">Sep 2026</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENE 7: INDUSTRY GUARD -->
+    <div class="scene" id="scene-6">
+      <div class="scene-title">Education Consultancy Only</div>
+      <div class="scene-sub">Click a tenant to see if they get access to the Form Builder.</div>
+      <div class="guard-layout">
+        <div class="tenant-list">
+          <div class="tenant-item edu" onclick="showGuard('edu', 'admizz')">
+            <div>
+              <div class="tenant-name">Admizz Education</div>
+              <div class="tenant-ind">Education Consultancy</div>
+            </div>
+            <div class="tenant-badge allow">✓ Allowed</div>
+          </div>
+          <div class="tenant-item other" onclick="showGuard('other', 'zunkiree')">
+            <div>
+              <div class="tenant-name">Zunkiree Labs</div>
+              <div class="tenant-ind">IT Agency</div>
+            </div>
+            <div class="tenant-badge block">✗ Blocked</div>
+          </div>
+          <div class="tenant-item" onclick="showGuard('other', 'retail')">
+            <div>
+              <div class="tenant-name">Future Tenant (Retail)</div>
+              <div class="tenant-ind">E-commerce</div>
+            </div>
+            <div class="tenant-badge block">✗ Blocked</div>
+          </div>
+        </div>
+        <div class="guard-result">
+          <div class="result-box green" id="guard-allow">
+            <div style="font-size:28px;margin-bottom:8px">✅</div>
+            <div>Forms nav visible</div>
+            <div style="font-size:10px;margin-top:4px;opacity:0.7">Full form builder access</div>
+          </div>
+          <div class="result-box red" id="guard-block">
+            <div style="font-size:28px;margin-bottom:8px">🚫</div>
+            <div>Forms nav hidden</div>
+            <div style="font-size:10px;margin-top:4px;opacity:0.7">Page shows blocked message</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /stage -->
+
+  <!-- BOTTOM NAV -->
+  <div class="bottomnav">
+    <button class="btn btn-ghost" id="btn-prev" onclick="navigate(-1)">← Previous</button>
+    <div class="step-label" id="step-label">Step 1 of 7</div>
+    <button class="btn btn-primary" id="btn-next" onclick="navigate(1)">Next →</button>
+  </div>
+
+  <script>
+    const SCENES = 7;
+    let current = 0;
+    let adminTimer = null;
+    let saveTimer = null;
+    let builderTimer = null;
+
+    // ── DOTS ──
+    const dotsEl = document.getElementById('dots');
+    for (let i = 0; i < SCENES; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i === 0 ? ' active' : '');
+      d.onclick = () => goTo(i);
+      dotsEl.appendChild(d);
+    }
+
+    function updateDots() {
+      document.querySelectorAll('.dot').forEach((d, i) => {
+        d.className = 'dot' + (i < current ? ' done' : i === current ? ' active' : '');
+      });
+    }
+
+    function updateNav() {
+      document.getElementById('btn-prev').disabled = current === 0;
+      document.getElementById('btn-next').textContent = current === SCENES - 1 ? 'Restart' : 'Next →';
+      document.getElementById('step-label').textContent = `Step ${current + 1} of ${SCENES}`;
+    }
+
+    function goTo(n) {
+      // clear timers
+      clearTimeout(adminTimer); clearTimeout(saveTimer); clearTimeout(builderTimer);
+
+      const old = document.getElementById(`scene-${current}`);
+      old.classList.remove('active');
+      old.classList.add('exit');
+      setTimeout(() => old.classList.remove('exit'), 500);
+
+      current = ((n % SCENES) + SCENES) % SCENES;
+      const next = document.getElementById(`scene-${current}`);
+      next.classList.add('active');
+
+      updateDots();
+      updateNav();
+      onSceneEnter(current);
+    }
+
+    function navigate(dir) {
+      if (dir === 1 && current === SCENES - 1) goTo(0);
+      else goTo(current + dir);
+    }
+
+    // ── SCENE ENTER ANIMATIONS ──
+    function onSceneEnter(n) {
+      if (n === 1) animateAdminFlow();
+      if (n === 3) animateBuilder();
+      if (n === 4) animateSave();
+    }
+
+    // Scene 2 — admin flow
+    function animateAdminFlow() {
+      for (let i = 0; i < 5; i++) {
+        const box = document.getElementById(`af${i}`);
+        if (box) { box.classList.remove('lit'); }
+      }
+      for (let i = 0; i < 4; i++) {
+        const line = document.getElementById(`al${i}`);
+        if (line) line.classList.remove('lit');
+      }
+      let step = 0;
+      function tick() {
+        if (current !== 1) return;
+        if (step < 5) {
+          document.getElementById(`af${step}`)?.classList.add('lit');
+          if (step > 0) document.getElementById(`al${step - 1}`)?.classList.add('lit');
+          step++;
+          adminTimer = setTimeout(tick, 600);
+        } else {
+          adminTimer = setTimeout(() => {
+            for (let i = 0; i < 5; i++) document.getElementById(`af${i}`)?.classList.remove('lit');
+            for (let i = 0; i < 4; i++) document.getElementById(`al${i}`)?.classList.remove('lit');
+            step = 0;
+            adminTimer = setTimeout(tick, 400);
+          }, 1200);
+        }
+      }
+      tick();
+    }
+
+    // Scene 4 — builder
+    const DEMO_FIELDS = [
+      { label: 'First Name', type: 'text', req: true },
+      { label: 'Email', type: 'email', req: true },
+      { label: 'Phone', type: 'tel', req: false },
+      { label: 'Country', type: 'select', req: false },
+    ];
+    function animateBuilder() {
+      const bf = document.getElementById('builder-fields');
+      const pf = document.getElementById('preview-fields');
+      bf.innerHTML = ''; pf.innerHTML = '';
+      let i = 0;
+      function addField() {
+        if (current !== 3 || i >= DEMO_FIELDS.length) return;
+        const f = DEMO_FIELDS[i];
+        // builder row
+        const row = document.createElement('div');
+        row.className = 'field-row-item';
+        row.style.animationDelay = '0ms';
+        row.innerHTML = `<span style="flex:1;font-size:11px;color:#e2e8f0">${f.label}</span>
+          <span class="field-type-badge">${f.type}</span>
+          ${f.req ? '<span class="field-required">*</span>' : ''}`;
+        bf.appendChild(row);
+        // preview field
+        const pfield = document.createElement('div');
+        pfield.className = 'preview-field';
+        pfield.style.animationDelay = '100ms';
+        pfield.innerHTML = `<div class="preview-label">${f.label}${f.req ? ' *' : ''}</div>
+          <div class="preview-input"></div>`;
+        pf.appendChild(pfield);
+        i++;
+        builderTimer = setTimeout(addField, 700);
+      }
+      builderTimer = setTimeout(addField, 400);
+    }
+
+    // Scene 5 — save
+    function animateSave() {
+      for (let i = 0; i < 4; i++) {
+        document.getElementById(`sb${i}`)?.classList.remove('lit');
+        document.getElementById(`ck${i}`)?.classList.remove('show');
+        if (i < 3) document.getElementById(`sv${i}`)?.classList.remove('lit');
+      }
+      let step = 0;
+      function tick() {
+        if (current !== 4) return;
+        if (step < 4) {
+          document.getElementById(`sb${step}`)?.classList.add('lit');
+          document.getElementById(`ck${step}`)?.classList.add('show');
+          if (step > 0) document.getElementById(`sv${step - 1}`)?.classList.add('lit');
+          step++;
+          saveTimer = setTimeout(tick, 800);
+        } else {
+          saveTimer = setTimeout(() => {
+            for (let i = 0; i < 4; i++) {
+              document.getElementById(`sb${i}`)?.classList.remove('lit');
+              document.getElementById(`ck${i}`)?.classList.remove('show');
+              if (i < 3) document.getElementById(`sv${i}`)?.classList.remove('lit');
+            }
+            step = 0;
+            saveTimer = setTimeout(tick, 600);
+          }, 1500);
+        }
+      }
+      tick();
+    }
+
+    // Scene 7 — guard
+    function showGuard(type, name) {
+      const allow = document.getElementById('guard-allow');
+      const block = document.getElementById('guard-block');
+      allow.classList.remove('show');
+      block.classList.remove('show');
+      setTimeout(() => {
+        if (type === 'edu') allow.classList.add('show');
+        else block.classList.add('show');
+      }, 150);
+    }
+
+    // Scene 6 — phone
+    let phoneStep = 0;
+    function submitForm() {
+      phoneStep = (phoneStep + 1) % 3;
+      for (let i = 0; i < 3; i++) {
+        const el = document.getElementById(`ps${i}`);
+        if (el) el.className = 'phone-prog-step' + (i <= phoneStep ? ' done' : '');
+      }
+    }
+
+    // Scene 3 — template select
+    function selectTemplate(el) {
+      document.querySelectorAll('.tcard').forEach(c => c.classList.remove('selected'));
+      el.classList.add('selected');
+    }
+
+    updateNav();
+  </script>
+</body>
+</html>

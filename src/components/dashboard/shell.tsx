@@ -31,11 +31,21 @@ import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 
-const navItems = [
+const BASE_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
   { href: "/check-in", label: "Check-In", icon: UserCheck },
+  { href: "/team", label: "Team", icon: UsersRound },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const EDUCATION_NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/pipeline", label: "Pipeline", icon: Kanban },
+  { href: "/leads", label: "All Leads", icon: Users },
+  { href: "/check-in", label: "Check-In", icon: UserCheck },
+  { href: "/forms", label: "Forms", icon: FileText },
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -81,6 +91,7 @@ export function DashboardShell({
     router.refresh();
   }
 
+  const navItems = tenant.industry_id === "education_consultancy" ? EDUCATION_NAV_ITEMS : BASE_NAV_ITEMS;
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (

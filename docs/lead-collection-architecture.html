@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lead Collection Architecture — EdgeX CRM</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: #0f172a; color: #e2e8f0; padding: 40px 20px; }
+  h1 { text-align: center; font-size: 28px; color: #f8fafc; margin-bottom: 8px; }
+  .subtitle { text-align: center; color: #94a3b8; font-size: 14px; margin-bottom: 48px; }
+  .container { max-width: 1100px; margin: 0 auto; position: relative; }
+
+  /* Vertical connector line */
+  .connector { display: flex; justify-content: center; padding: 8px 0; }
+  .connector .line { width: 3px; height: 40px; background: linear-gradient(to bottom, #3b82f6, #6366f1); border-radius: 2px; }
+  .connector .arrow { color: #6366f1; font-size: 20px; text-align: center; margin-top: -4px; }
+
+  /* Section cards */
+  .section { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin: 0 auto; max-width: 900px; position: relative; }
+  .section-label { position: absolute; top: -12px; left: 24px; background: #6366f1; color: white; font-size: 11px; font-weight: 700; padding: 3px 12px; border-radius: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .section-label.green { background: #059669; }
+  .section-label.amber { background: #d97706; }
+  .section-label.blue { background: #2563eb; }
+  .section-label.purple { background: #7c3aed; }
+  .section-label.rose { background: #e11d48; }
+  .section-label.cyan { background: #0891b2; }
+  .section h2 { font-size: 18px; color: #f1f5f9; margin-bottom: 4px; }
+  .section .desc { font-size: 13px; color: #94a3b8; margin-bottom: 16px; }
+
+  /* Route boxes */
+  .routes { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .route { background: #0f172a; border: 1px solid #475569; border-radius: 8px; padding: 10px 14px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 12px; color: #7dd3fc; flex: 1; min-width: 200px; }
+  .route .label { color: #94a3b8; font-size: 11px; font-family: 'Segoe UI', sans-serif; margin-bottom: 4px; }
+
+  /* Key-value items */
+  .kv { display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px; font-size: 13px; }
+  .kv .k { color: #64748b; font-weight: 600; }
+  .kv .v { color: #cbd5e1; }
+  .kv .v code { background: #0f172a; padding: 1px 6px; border-radius: 4px; font-size: 12px; color: #7dd3fc; }
+
+  /* Step flow */
+  .steps-flow { display: flex; gap: 0; align-items: center; justify-content: center; margin: 16px 0; flex-wrap: wrap; }
+  .step-box { background: #0f172a; border: 1px solid #475569; border-radius: 8px; padding: 12px 16px; text-align: center; min-width: 120px; }
+  .step-box .num { font-size: 11px; color: #6366f1; font-weight: 700; margin-bottom: 4px; }
+  .step-box .name { font-size: 13px; color: #e2e8f0; }
+  .step-box .fields { font-size: 11px; color: #64748b; margin-top: 4px; }
+  .step-arrow { color: #475569; font-size: 24px; padding: 0 4px; }
+
+  /* Inner boxes */
+  .inner { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 16px; margin: 12px 0; }
+  .inner h3 { font-size: 14px; color: #f1f5f9; margin-bottom: 8px; }
+  .inner ul { list-style: none; padding: 0; }
+  .inner ul li { font-size: 13px; color: #94a3b8; padding: 3px 0; padding-left: 16px; position: relative; }
+  .inner ul li::before { content: '→'; position: absolute; left: 0; color: #6366f1; }
+
+  /* Pipeline boxes */
+  .pipeline { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 12px 0; }
+  .pipe-step { display: flex; align-items: center; gap: 8px; }
+  .pipe-box { background: #0f172a; border-radius: 6px; padding: 8px 14px; font-size: 12px; font-weight: 600; text-align: center; border: 1px solid; }
+  .pipe-box.rate { border-color: #ef4444; color: #fca5a5; }
+  .pipe-box.idemp { border-color: #f59e0b; color: #fcd34d; }
+  .pipe-box.tenant { border-color: #3b82f6; color: #93c5fd; }
+  .pipe-box.resolve { border-color: #8b5cf6; color: #c4b5fd; }
+  .pipe-box.phone { border-color: #06b6d4; color: #67e8f9; }
+  .pipe-box.save { border-color: #10b981; color: #6ee7b7; }
+  .pipe-box.audit { border-color: #ec4899; color: #f9a8d4; }
+  .pipe-arrow { color: #475569; font-size: 16px; }
+
+  /* DB tables */
+  .tables { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 12px 0; }
+  .table-card { background: #0f172a; border: 1px solid #475569; border-radius: 8px; padding: 12px; }
+  .table-card h4 { font-size: 13px; color: #7dd3fc; margin-bottom: 6px; font-family: monospace; }
+  .table-card .cols { font-size: 11px; color: #64748b; line-height: 1.6; }
+  .table-card .cols span { display: block; }
+  .table-card .cols .pk { color: #fbbf24; }
+  .table-card .cols .fk { color: #a78bfa; }
+
+  /* File types grid */
+  .field-types { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+  .field-tag { background: #1e293b; border: 1px solid #475569; border-radius: 4px; padding: 3px 10px; font-size: 11px; color: #94a3b8; font-family: monospace; }
+
+  /* Code block */
+  .code { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 14px; font-family: 'Fira Code', monospace; font-size: 12px; color: #7dd3fc; overflow-x: auto; margin: 8px 0; line-height: 1.7; white-space: pre; }
+  .code .comment { color: #475569; }
+  .code .key { color: #c084fc; }
+  .code .str { color: #86efac; }
+  .code .bool { color: #fbbf24; }
+
+  /* Thank you section */
+  .thankyou { text-align: center; padding: 20px; }
+  .thankyou .icon { font-size: 40px; margin-bottom: 8px; }
+  .thankyou .title { font-size: 16px; color: #10b981; font-weight: 600; }
+  .thankyou .msg { font-size: 13px; color: #64748b; margin-top: 4px; }
+
+  /* File path references */
+  .files { margin: 12px 0; }
+  .file-ref { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #1e293b; font-size: 12px; }
+  .file-ref:last-child { border-bottom: none; }
+  .file-ref .path { font-family: monospace; color: #7dd3fc; flex: 1; }
+  .file-ref .role { color: #64748b; font-size: 11px; }
+
+  /* Two column */
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 700px) { .two-col { grid-template-columns: 1fr; } }
+
+  .legend { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; margin: 32px 0 0; padding: 16px; border-top: 1px solid #1e293b; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #64748b; }
+  .legend-dot { width: 10px; height: 10px; border-radius: 50%; }
+</style>
+</head>
+<body>
+
+<h1>Lead Collection Architecture</h1>
+<p class="subtitle">How leads flow from external websites into EdgeX CRM</p>
+
+<div class="container">
+
+  <!-- 1. External Website -->
+  <div class="section">
+    <span class="section-label">1 — Source</span>
+    <h2>External Website / Iframe Embed</h2>
+    <p class="desc">Client websites embed the CRM form via iframe or users visit the form URL directly.</p>
+    <div class="routes">
+      <div class="route">
+        <div class="label">Iframe embed</div>
+        &lt;iframe src="lead-crm.zunkireelabs.com<br>/form/rku/scholarship" /&gt;
+      </div>
+      <div class="route">
+        <div class="label">Direct visit</div>
+        lead-crm.zunkireelabs.com/form/rku
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 2. Widget Route Group -->
+  <div class="section">
+    <span class="section-label blue">2 — Widget Route Group</span>
+    <h2>(widget) Layout — Lightweight, Embeddable</h2>
+    <p class="desc">Separate route group with transparent background, no fonts/theme. Designed for iframe embedding.</p>
+    <div class="two-col">
+      <div class="inner">
+        <h3>Server Component (SSG + ISR)</h3>
+        <ul>
+          <li>Static generation via <code>generateStaticParams()</code></li>
+          <li>Revalidates every <strong>1 hour</strong></li>
+          <li>Calls <code>getFormConfigByTenantSlug(slug, formSlug)</code></li>
+          <li>Fetches <code>form_configs</code> + <code>tenants</code> data</li>
+          <li>Passes config as props to PublicForm</li>
+        </ul>
+      </div>
+      <div class="inner">
+        <h3>Two URL Patterns</h3>
+        <ul>
+          <li><code>/form/[slug]/[formSlug]</code> — specific form</li>
+          <li><code>/form/[slug]</code> — default (first active) form</li>
+        </ul>
+        <h3 style="margin-top: 12px;">Layout Features</h3>
+        <ul>
+          <li>Transparent background</li>
+          <li>DNS prefetch to Supabase</li>
+          <li>No Toaster, no fonts, no theme</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 3. PublicForm Component -->
+  <div class="section">
+    <span class="section-label purple">3 — Form Rendering</span>
+    <h2>&lt;PublicForm /&gt; — Multi-Step Dynamic Form</h2>
+    <p class="desc">Client component (817 LOC) that renders form steps from <code>form_configs.steps</code> JSONB.</p>
+
+    <div class="inner">
+      <h3>Client State</h3>
+      <div class="code"><span class="key">currentStep</span>   — which step user is on (0-indexed)
+<span class="key">formData</span>      — { field_name: value } for all text/select inputs
+<span class="key">fileData</span>      — { field_name: File } for file inputs
+<span class="key">sessionId</span>     — generated once per visit (links all partial saves)
+<span class="key">leadId</span>        — set after first save (used for updates)
+<span class="key">errors</span>        — { field_name: error_message }
+<span class="key">submitted</span>     — shows thank-you screen when true</div>
+    </div>
+
+    <div class="inner">
+      <h3>Supported Field Types</h3>
+      <div class="field-types">
+        <span class="field-tag">text</span>
+        <span class="field-tag">email</span>
+        <span class="field-tag">tel</span>
+        <span class="field-tag">select</span>
+        <span class="field-tag">file</span>
+        <span class="field-tag">textarea</span>
+        <span class="field-tag">checkbox</span>
+        <span class="field-tag">radio</span>
+        <span class="field-tag">date</span>
+        <span class="field-tag">number</span>
+        <span class="field-tag">entity_select</span>
+      </div>
+    </div>
+
+    <div class="inner">
+      <h3>Multi-Step Flow</h3>
+      <div class="steps-flow">
+        <div class="step-box">
+          <div class="num">STEP 1</div>
+          <div class="name">Personal Info</div>
+          <div class="fields">name, email, phone</div>
+        </div>
+        <span class="step-arrow">→</span>
+        <div class="step-box" style="border-color: #6366f1;">
+          <div class="num">STEP 2</div>
+          <div class="name">Details</div>
+          <div class="fields">course, intake, etc.</div>
+        </div>
+        <span class="step-arrow">→</span>
+        <div class="step-box">
+          <div class="num">STEP N</div>
+          <div class="name">Documents</div>
+          <div class="fields">files, terms</div>
+        </div>
+      </div>
+      <p style="text-align: center; font-size: 12px; color: #64748b; margin-top: 8px;">
+        Each "Next" click → <strong>validateStep()</strong> → <strong>savePartial()</strong> → POST /api/v1/leads
+      </p>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 4. Submission -->
+  <div class="section">
+    <span class="section-label amber">4 — Submission</span>
+    <h2>Form Submission (Partial + Final)</h2>
+    <p class="desc">Partial saves on each step, final submit on last step with file uploads.</p>
+
+    <div class="two-col">
+      <div class="inner">
+        <h3>Partial Save (each "Next")</h3>
+        <div class="code"><span class="comment">// POST /api/v1/leads</span>
+{
+  <span class="key">tenant_id</span>: <span class="str">"uuid"</span>,
+  <span class="key">session_id</span>: <span class="str">"abc123def"</span>,
+  <span class="key">step</span>: 1,
+  <span class="key">is_final</span>: <span class="bool">false</span>,
+  <span class="key">idempotency_key</span>: <span class="str">"{sessionId}-step-1"</span>,
+  <span class="key">first_name</span>: <span class="str">"John"</span>,
+  <span class="key">email</span>: <span class="str">"john@example.com"</span>,
+  ...
+}</div>
+      </div>
+      <div class="inner">
+        <h3>Final Submit (last step)</h3>
+        <div class="code"><span class="comment">// POST /api/v1/leads</span>
+{
+  <span class="key">tenant_id</span>: <span class="str">"uuid"</span>,
+  <span class="key">session_id</span>: <span class="str">"abc123def"</span>,
+  <span class="key">step</span>: 3,
+  <span class="key">is_final</span>: <span class="bool">true</span>,
+  <span class="key">status</span>: <span class="str">"new"</span>,
+  <span class="key">idempotency_key</span>: <span class="str">"{sessionId}-final"</span>,
+  <span class="key">lead_id</span>: <span class="str">"uuid (from partial)"</span>,
+  <span class="key">entity_id</span>: <span class="str">"uuid"</span>,
+  <span class="key">form_config_id</span>: <span class="str">"uuid"</span>,
+  <span class="key">phone</span>: <span class="str">"+977-9841234567"</span>,
+  <span class="key">custom_fields</span>: { ... },
+  <span class="key">file_urls</span>: { ... }
+}</div>
+      </div>
+    </div>
+
+    <div class="inner">
+      <h3>File Upload Flow (before final submit)</h3>
+      <div class="steps-flow">
+        <div class="step-box">
+          <div class="num">1</div>
+          <div class="name">POST /api/v1/upload</div>
+          <div class="fields">get signed URL</div>
+        </div>
+        <span class="step-arrow">→</span>
+        <div class="step-box">
+          <div class="num">2</div>
+          <div class="name">Upload to Supabase</div>
+          <div class="fields">via signed URL + token</div>
+        </div>
+        <span class="step-arrow">→</span>
+        <div class="step-box">
+          <div class="num">3</div>
+          <div class="name">Get public_url</div>
+          <div class="fields">stored in file_urls</div>
+        </div>
+      </div>
+      <p style="text-align: center; font-size: 12px; color: #64748b; margin-top: 8px;">
+        Storage path: <code>{tenant_slug}/{session_id}/{field_name}.{ext}</code> → Bucket: <code>lead-documents</code>
+      </p>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 5. API Processing -->
+  <div class="section">
+    <span class="section-label rose">5 — API Processing</span>
+    <h2>POST /api/v1/leads — Server-Side Pipeline</h2>
+    <p class="desc">Request flows through validation, deduplication, and data enrichment before storage.</p>
+
+    <div class="pipeline">
+      <div class="pipe-step">
+        <div class="pipe-box rate">Rate Limit<br><span style="font-size:10px">form_submit:{tenant}:{ip}</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box idemp">Idempotency<br><span style="font-size:10px">return 200 if exists</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box tenant">Tenant Verify<br><span style="font-size:10px">check tenant exists</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box resolve">Resolve Stage<br><span style="font-size:10px">status → stage_id</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box phone">Format Phone<br><span style="font-size:10px">+{dial}-{number}</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box save">INSERT/UPDATE<br><span style="font-size:10px">leads table</span></div>
+        <span class="pipe-arrow">→</span>
+      </div>
+      <div class="pipe-step">
+        <div class="pipe-box audit">Audit + Event<br><span style="font-size:10px">log & emit</span></div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="inner">
+        <h3>Create Path (no lead_id)</h3>
+        <ul>
+          <li>INSERT INTO leads (...)</li>
+          <li>Handle 23505 (duplicate idempotency)</li>
+          <li>Returns <strong>201 Created</strong></li>
+        </ul>
+      </div>
+      <div class="inner">
+        <h3>Update Path (has lead_id + session_id)</h3>
+        <ul>
+          <li>Verify lead exists with matching session</li>
+          <li>UPDATE leads SET ... WHERE id = ?</li>
+          <li>Returns <strong>200 OK</strong></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 6. Database -->
+  <div class="section">
+    <span class="section-label green">6 — Database Storage</span>
+    <h2>Supabase (PostgreSQL + Storage)</h2>
+    <p class="desc">Lead data stored in PostgreSQL, files in Supabase Storage bucket.</p>
+
+    <div class="tables">
+      <div class="table-card">
+        <h4>leads</h4>
+        <div class="cols">
+          <span class="pk">id (PK, UUID)</span>
+          <span class="fk">tenant_id (FK)</span>
+          <span class="fk">pipeline_id (FK)</span>
+          <span class="fk">stage_id (FK)</span>
+          <span class="fk">entity_id (FK)</span>
+          <span class="fk">form_config_id (FK)</span>
+          <span>session_id, step, is_final</span>
+          <span>first_name, last_name</span>
+          <span>email, phone</span>
+          <span>status, assigned_to</span>
+          <span>custom_fields (JSONB)</span>
+          <span>file_urls (JSONB)</span>
+          <span>idempotency_key (UNIQUE)</span>
+          <span>deleted_at (soft delete)</span>
+        </div>
+      </div>
+      <div class="table-card">
+        <h4>form_configs</h4>
+        <div class="cols">
+          <span class="pk">id (PK, UUID)</span>
+          <span class="fk">tenant_id (FK)</span>
+          <span>name, slug</span>
+          <span>is_active</span>
+          <span>steps (JSONB)</span>
+          <span>branding (JSONB)</span>
+          <span>redirect_url</span>
+        </div>
+      </div>
+      <div class="table-card">
+        <h4>pipeline_stages</h4>
+        <div class="cols">
+          <span class="pk">id (PK, UUID)</span>
+          <span class="fk">pipeline_id (FK)</span>
+          <span>name, slug</span>
+          <span>position, color</span>
+          <span>is_terminal</span>
+        </div>
+      </div>
+      <div class="table-card">
+        <h4>audit_logs + events</h4>
+        <div class="cols">
+          <span class="fk">tenant_id (FK)</span>
+          <span>action / type</span>
+          <span>entity_type, entity_id</span>
+          <span>changes / payload (JSONB)</span>
+          <span>ip_address, user_agent</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="inner">
+      <h3>Supabase Storage</h3>
+      <div class="code"><span class="comment">// Bucket: lead-documents (public)</span>
+<span class="comment">// Path pattern:</span>
+<span class="str">{tenant_slug}/{session_id}/{field_name}.{ext}</span>
+
+<span class="comment">// Example:</span>
+<span class="str">rku/abc123def456/resume.pdf</span>
+<span class="str">admizz/xyz789ghi012/passport.jpg</span></div>
+    </div>
+  </div>
+
+  <div class="connector"><div><div class="line"></div><div class="arrow">▼</div></div></div>
+
+  <!-- 7. Response -->
+  <div class="section">
+    <span class="section-label cyan">7 — Response</span>
+    <h2>Thank You Screen</h2>
+    <p class="desc">User sees confirmation, optionally redirected to custom URL.</p>
+    <div class="thankyou">
+      <div class="icon">✅</div>
+      <div class="title">branding.thank_you_title</div>
+      <div class="msg">branding.thank_you_message</div>
+      <div style="margin-top: 12px; font-size: 12px; color: #475569;">Optional redirect → <code>form_config.redirect_url</code></div>
+    </div>
+  </div>
+
+  <!-- Key Files -->
+  <div style="margin-top: 40px;">
+    <div class="section">
+      <span class="section-label">Key Files</span>
+      <h2 style="margin-bottom: 16px;">File Reference</h2>
+      <div class="files">
+        <div class="file-ref">
+          <span class="path">src/app/(widget)/layout.tsx</span>
+          <span class="role">Lightweight embed layout</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/app/(widget)/form/[slug]/[formSlug]/page.tsx</span>
+          <span class="role">Form page (SSG + ISR)</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/components/form/public-form.tsx</span>
+          <span class="role">Multi-step form component (817 LOC)</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/app/(main)/api/v1/leads/route.ts</span>
+          <span class="role">Lead create/update API (362 LOC)</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/app/(main)/api/v1/upload/route.ts</span>
+          <span class="role">File upload signed URL API</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/app/(main)/api/v1/entities/public/route.ts</span>
+          <span class="role">Entity list for entity_select</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/lib/supabase/queries.ts</span>
+          <span class="role">getFormConfigByTenantSlug()</span>
+        </div>
+        <div class="file-ref">
+          <span class="path">src/types/database.ts</span>
+          <span class="role">FormStep, FormField, FormBranding types</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#6366f1"></div> Widget / Rendering</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d97706"></div> Submission</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#e11d48"></div> API Processing</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#059669"></div> Database</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0891b2"></div> Response</div>
+  </div>
+
+</div>
+</body>
+</html>

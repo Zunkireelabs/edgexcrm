@@ -1,6 +1,26 @@
-# Lead Gen CRM — Zunkiree Labs
+# CLAUDE.md
 
-Multi-tenant lead generation CRM SaaS product. White-label system where each client (university, business, etc.) gets their own tenant with configurable forms, branding, and a dashboard to manage leads.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## Git Hooks
+
+A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.
+
+---
+
+## Industry Feature Development
+
+**Current focus: `education_consultancy` industry only.** Build all new industry-specific features for education_consultancy first.
+
+**Folder convention:** When creating a new feature, create a dedicated folder for it (e.g., `src/features/<feature-name>/`). This makes it easy to replicate the feature for other industries later — just point to the folder.
+
+---
+
+## What This Is
+
+Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where each client (university, business) gets their own tenant with configurable forms, branding, and a dashboard to manage leads.
 
 ---
 
@@ -8,137 +28,168 @@ Multi-tenant lead generation CRM SaaS product. White-label system where each cli
 
 **IMPORTANT: This project uses orchestrated development.**
 
-### Default: Route Development Tasks to PM
+When the user gives ANY development request (build, create, implement, fix, update, change, refactor, feature requests, bug fixes, multi-step work), **automatically invoke `/project-pm`**.
 
-When the user gives ANY development request, **automatically invoke `/project-pm`**.
-
-#### Trigger Patterns (auto-invoke PM):
-
-- "Build/Create/Implement/Add X"
-- "Fix/Update/Change/Refactor X"
-- Feature requests or bug fixes
-- Any multi-step development work
-
-#### Exceptions (do NOT auto-invoke):
-
-- Questions: "How does X work?"
-- Reading: "Show me X"
-- Documentation tasks
-- Direct skill invocation (`/skill-name`)
-- Simple one-liner changes explicitly described
-
----
+**Exceptions** (do NOT auto-invoke): questions ("How does X work?"), reading ("Show me X"), documentation tasks, direct skill invocation (`/skill-name`), simple one-liner changes.
 
 ## Available Skills
 
-| Skill | Domain | When to Use |
-|-------|--------|-------------|
-| `/project-pm` | **Orchestrator** | All development tasks (routes to specialists) |
-| `/crm-expert` | **CRM Domain** | Lead workflows, pipeline design, Salesforce/HubSpot patterns, best practices |
-| `/db-engineer` | **Database** | Schema, migrations, SQL, RLS, tenant isolation |
-| `/frontend-dev` | **Frontend** | Pages, components, forms, layouts, React/shadcn/Tailwind |
-| `/api-dev` | **API** | API routes, auth, validation, rate limiting, audit logging |
-| `/deploy` | **Deployment** | GitHub Actions deploys, monitor status, health checks, prod troubleshooting |
-| `/perf-auditor` | **Performance** | Bundle size, query optimization, caching, React re-renders |
-| `/widget-perf` | **Widget Speed** | Embeddable form TTFB, static generation, bundle reduction, embed optimization |
-| `/test-engineer` | **Testing** | Unit/integration/component tests, test infrastructure |
-| `/security-auditor` | **Security** | RLS review, auth audit, OWASP, tenant isolation verification |
-| `/ci-cd` | **CI/CD** | GitHub Actions pipelines, PR checks, auto-deploy, rollback |
-| `/code-reviewer` | **Code Quality** | Bug detection, redundancy, dead code, pattern consistency, logic validation |
-| `/skill-architect` | **Meta** | Create/optimize skills, analyze coverage |
-| `/ui-ux-expert` | **Design** | Visual hierarchy, accessibility, interaction patterns, UX reviews, design decisions |
+| Skill | Domain |
+|-------|--------|
+| `/project-pm` | Orchestrator for all dev tasks |
+| `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
+| `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
+| `/frontend-dev` | Pages, components, forms, React/shadcn/Tailwind |
+| `/api-dev` | API routes, auth, validation, rate limiting |
+| `/deploy` | GitHub Actions deploys, monitoring, health checks |
+| `/perf-auditor` | Bundle size, query optimization, caching |
+| `/widget-perf` | Embeddable form TTFB, bundle reduction |
+| `/test-engineer` | Unit/integration/component tests |
+| `/security-auditor` | RLS review, auth audit, OWASP, tenant isolation |
+| `/ci-cd` | GitHub Actions pipelines, PR checks, auto-deploy |
+| `/code-reviewer` | Bug detection, dead code, pattern consistency |
+| `/skill-architect` | Create/optimize skills |
+| `/ui-ux-expert` | Visual hierarchy, accessibility, UX reviews |
 
 ---
 
 ## Tech Stack
 
-| Layer | Tech | Version |
-|-------|------|---------|
-| Framework | Next.js (App Router) | 16.1.6 |
-| Language | TypeScript | 5.x |
-| UI | Tailwind CSS v4 + shadcn/ui | latest |
-| Backend | Supabase (PostgreSQL + Auth + Storage) | JS SDK 2.97 |
-| Deployment | Docker + Traefik | Node 22 Alpine |
-| React | React 19 | 19.2.3 |
+| Layer | Tech |
+|-------|------|
+| Framework | Next.js 16 (App Router), React 19 |
+| Language | TypeScript 5.x |
+| UI | Tailwind CSS v4 + shadcn/ui |
+| Backend | Supabase (PostgreSQL + Auth + Storage) |
+| Deployment | Docker + Traefik on Node 22 Alpine |
+| Logging | pino (structured) |
+| Drag & Drop | @dnd-kit |
+| Charts | recharts |
+| Email | nodemailer + resend |
 
-## CI/CD Pipeline
+## Commands
 
-**Deployments are automated via GitHub Actions. Never deploy manually via SSH.**
+```bash
+npm run dev          # Dev server (localhost:3000)
+npm run build        # Production build — always run before pushing
+npm run lint         # ESLint (next/core-web-vitals + typescript)
+npm run start        # Start production server
+```
 
-### ⚠️ CRITICAL: Branching Strategy
+No test runner is configured. Path alias: `@/*` maps to `./src/*`.
+
+---
+
+## CI/CD & Branching
 
 **ALL feature branches and PRs MUST merge to `stage` first. NEVER merge directly to `main`.**
 
 ```
 feature/* ──► stage (staging) ──► main (production)
-                  │                     │
-                  ▼                     ▼
-             Test first!           Only after
-             dev-lead-crm.         staging verified
-             zunkireelabs.com
 ```
 
-**Rules:**
-1. Feature branches → PR targets `stage` (NEVER `main`)
-2. Test on staging → Verify at `dev-lead-crm.zunkireelabs.com`
-3. Production → Only merge `stage` into `main` after staging verified
-
-**Before merging ANY PR, check the base branch:**
-```bash
-gh pr view <num> --json baseRefName
-# Must be "stage", NOT "main"
-```
-
-### Environments
-
-| Trigger | Action | Environment |
-|---------|--------|-------------|
-| PR to `main` or `stage` | Run lint, typecheck, build | CI checks only |
-| Push to `stage` | Auto-deploy | Staging: `dev-lead-crm.zunkireelabs.com` |
-| Push to `main` | Auto-deploy | Production: `lead-crm.zunkireelabs.com` |
-| Manual workflow dispatch | Rollback | Production (specific commit) |
-
-### Workflow Files
-
-| File | Purpose |
-|------|---------|
-| `.github/workflows/ci.yml` | PR checks (lint, typecheck, build) |
-| `.github/workflows/deploy-staging.yml` | Auto-deploy on push to `stage` |
-| `.github/workflows/deploy.yml` | Auto-deploy on push to `main` |
-| `.github/workflows/rollback.yml` | Manual rollback to specific commit |
-
-### Deploy Commands
+| Trigger | Result |
+|---------|--------|
+| PR to `main` or `stage` | CI checks (lint, typecheck, build) |
+| Push to `stage` | Auto-deploy to `dev-lead-crm.zunkireelabs.com` |
+| Push to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` |
+| Manual dispatch | Rollback (specific commit) |
 
 ```bash
-# Deploy to staging (feature work goes here FIRST)
+# Before merging ANY PR, verify base branch
+gh pr view <num> --json baseRefName  # Must be "stage"
+
+# Deploy staging
 git push origin stage
 
-# Deploy to production (ONLY after staging is verified)
+# Deploy production (only after staging verified)
 git checkout main && git merge stage && git push origin main
 
-# Monitor deployment
+# Monitor
 gh run list --limit 5
-gh run watch
 
-# Rollback (via GitHub Actions)
-gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="Issue description"
+# Rollback
+gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="description"
 ```
 
-### ❌ NEVER DO THIS
+---
 
-```bash
-# WRONG: Merging PR that targets main directly
-gh pr merge <num>  # if PR base is "main" — STOP!
+## App Architecture
 
-# WRONG: Pushing feature directly to main
-git checkout main && git merge feature/x  # ❌
-```
+### Route Groups
 
-## Live URLs
+The app uses Next.js route groups to separate concerns:
 
-- **Dashboard**: https://lead-crm.zunkireelabs.com
-- **Login**: https://lead-crm.zunkireelabs.com/login
-- **Public Form (RKU)**: https://lead-crm.zunkireelabs.com/form/rku
+- **`(main)`** — Full app: dashboard, API routes, auth. Has `Toaster`, fonts, metadata.
+- **`(widget)`** — Lightweight embeddable form. Transparent background, minimal layout, preconnects to Supabase. No fonts/theme loaded.
+
+### Dashboard Layout Chain
+
+`(main)/layout.tsx` → `(main)/(dashboard)/layout.tsx` → page
+
+The dashboard layout is a **Server Component** that:
+1. Checks auth via `supabase.auth.getUser()`
+2. Fetches tenant via `getCurrentUserTenant()`
+3. Redirects to `/login` if no user, shows error if no tenant
+4. Wraps children in `AIAssistantProvider` + `DashboardShell`
+
+### Two Auth Systems
+
+1. **Session-based** (`src/lib/api/auth.ts` → `authenticateRequest()`): For dashboard users. Returns `AuthContext` with `userId`, `tenantId`, `role`. Uses cookies + Supabase Auth.
+2. **API key-based** (`src/lib/api/integration-auth.ts`): For external integrations. Bearer tokens prefixed `crm_live_...`, SHA-256 hashed, scope-based permissions.
+
+### API Route Pattern
+
+All API routes live under `src/app/(main)/api/v1/`. Standard pattern:
+1. Create request logger with `createRequestLogger()`
+2. Authenticate with `authenticateRequest()` (or integration auth)
+3. Validate input with `validate()` helpers
+4. Use `createServiceClient()` (bypasses RLS) for queries scoped by `auth.tenantId`
+5. Return via standardized helpers: `apiSuccess()`, `apiPaginated()`, `apiError()`, `apiUnauthorized()`, etc.
+
+### Counselor Role Scoping
+
+Counselor users are automatically filtered to only their assigned leads. This is enforced in API routes by overriding `assignedTo = auth.userId` when `auth.role === "counselor"`. Must be maintained in any new lead-related endpoints.
+
+### Supabase Client Usage
+
+- **Browser**: `src/lib/supabase/client.ts` → `createBrowserClient()` (respects RLS)
+- **Server (user context)**: `src/lib/supabase/server.ts` → `createClient()` (respects RLS, uses cookies)
+- **Server (admin)**: `src/lib/supabase/server.ts` → `createServiceClient()` (bypasses RLS, uses service role key)
+
+API routes use `createServiceClient()` and manually scope queries with `auth.tenantId` from the auth context.
+
+---
+
+## Database
+
+### RLS Architecture
+
+**CRITICAL**: RLS uses `SECURITY DEFINER` functions to avoid infinite recursion:
+- `get_user_tenant_ids()` — returns tenant IDs for current auth user
+- `is_tenant_admin(tenant_id)` — checks if current user is owner/admin
+
+These bypass RLS internally since `tenant_users` policies can't reference `tenant_users` itself. All other table policies call these functions.
+
+### Key Design Patterns
+
+- **`custom_fields` JSONB** on leads — extra form fields per tenant without schema changes
+- **`form_configs.steps` JSONB** — entire form structure (fields, validation, conditional visibility) as JSON, rendered dynamically by `public-form.tsx`
+- **Soft deletes** on leads — `deleted_at` column; all queries must filter `WHERE deleted_at IS NULL`
+- **Idempotency** — `idempotency_key` on leads + `integration_idempotency` table
+- **Multi-pipeline** — tenants can have multiple pipelines with custom stages
+
+### Migrations
+
+Migrations are in `supabase/migrations/` numbered sequentially (001-018). Applied via Supabase MCP or directly.
+
+### Current Data
+
+- 2 tenants: "RK University" (slug: `rku`), "Admizz Education" (slug: `admizz`)
+- Roles: owner, admin, viewer, counselor
+- Default pipeline stages: new / contacted / enrolled / rejected
+
+---
 
 ## Credentials
 
@@ -148,222 +199,24 @@ git checkout main && git merge feature/x  # ❌
 
 ### Supabase Project
 - **Project ref**: `pirhnklvtjjpuvbvibxf`
-- **Region**: Asia-Pacific (ap-south-1)
+- **Region**: ap-south-1
 - **URL**: `https://pirhnklvtjjpuvbvibxf.supabase.co`
 - **DB connection**: `postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik%23@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
-- **Keys**: in `.env.local` (anon key + service role key)
+- **Keys**: in `.env.local`
 
 ### Server
 - IP: `94.136.189.213`
 - Domain: `lead-crm.zunkireelabs.com`
-- Container: `leads-crm` (Docker, Traefik reverse proxy, Let's Encrypt SSL)
+- Container: `leads-crm` (Docker + Traefik + Let's Encrypt)
 
-## Project Structure
-
-```
-lead-gen-crm/
-├── .claude/
-│   ├── settings.local.json         # MCP + permissions
-│   └── skills/
-│       ├── api-dev/SKILL.md        # API route specialist
-│       ├── code-reviewer/SKILL.md  # Code quality auditor
-│       ├── crm-expert/SKILL.md     # CRM domain expert (Salesforce/HubSpot patterns)
-│       ├── db-engineer/SKILL.md    # DB engineer skill
-│       ├── deploy/SKILL.md         # Deployment specialist
-│       ├── frontend-dev/SKILL.md   # Frontend specialist
-│       ├── perf-auditor/SKILL.md   # Performance auditor
-│       ├── project-pm/SKILL.md     # Orchestrator / team lead
-│       ├── security-auditor/SKILL.md # Security auditor
-│       ├── skill-architect/SKILL.md # Skill creation expert
-│       ├── test-engineer/SKILL.md  # Test engineer
-│       └── widget-perf/SKILL.md    # Widget performance optimizer
-├── .mcp.json                       # Supabase MCP server config
-├── .env.local                      # Supabase keys (DO NOT COMMIT)
-├── .env.example                    # Template for .env.local
-├── docker-compose.yml              # Traefik deployment config
-├── Dockerfile                      # Multi-stage Node 22 Alpine build
-├── supabase/
-│   └── migrations/
-│       ├── 001_initial_schema.sql          # Core multi-tenant schema + RLS
-│       ├── 002_phase1_5_foundation.sql     # Soft deletes, audit logs, events, pipeline stages
-│       ├── 003_phase2a_saas_ops.sql        # Stage/assignment on leads, invites, checklists
-│       ├── 004_custom_fields_gin_index.sql # GIN index on custom_fields JSONB
-│       ├── 005_integration_keys.sql        # API key auth for integrations
-│       ├── 006_webhook_system.sql          # Webhook endpoints + delivery tracking
-│       ├── 007_integration_permissions.sql # Scope-based permissions + idempotency
-│       └── 008_integration_keys_last_used.sql # Last used tracking
-├── src/
-│   ├── middleware.ts                # Auth route protection
-│   ├── types/database.ts           # All TypeScript types
-│   ├── lib/
-│   │   ├── utils.ts                # shadcn cn() helper
-│   │   ├── logger.ts              # pino structured logging
-│   │   ├── api/
-│   │   │   ├── auth.ts            # Session-based auth (AuthContext)
-│   │   │   ├── integration-auth.ts # API key auth (Bearer crm_live_...)
-│   │   │   ├── integration-helpers.ts # Shared integration utilities
-│   │   │   ├── integration-permissions.ts # Scope-based permission checks
-│   │   │   ├── response.ts        # Standardized JSON responses
-│   │   │   ├── validation.ts      # Request body validation
-│   │   │   ├── audit.ts           # Audit log + event emission
-│   │   │   └── rate-limit.ts      # In-memory rate limiting
-│   │   ├── security/
-│   │   │   └── api-key.ts         # Key generation + SHA-256 hashing
-│   │   ├── webhooks/
-│   │   │   └── dispatcher.ts      # Webhook delivery with HMAC signatures
-│   │   └── supabase/
-│   │       ├── client.ts           # Browser client (createBrowserClient)
-│   │       ├── server.ts           # Server client + service role client
-│   │       ├── middleware.ts       # Session refresh middleware
-│   │       └── queries.ts          # Reusable server-side queries
-│   ├── components/
-│   │   ├── ui/                     # shadcn/ui components (15+ components)
-│   │   ├── dashboard/
-│   │   │   ├── shell.tsx           # Sidebar + header layout
-│   │   │   ├── stats-cards.tsx     # 5 stat cards (total/new/contacted/enrolled/rejected)
-│   │   │   ├── leads-table.tsx     # Searchable, filterable leads table + CSV export
-│   │   │   ├── lead-detail.tsx     # Lead view with status update, notes, checklists, docs
-│   │   │   ├── settings-form.tsx   # Tenant settings + embed code generator
-│   │   │   ├── api-keys-manager.tsx # API key create/revoke/test
-│   │   │   ├── team-management.tsx # Invite users, manage roles
-│   │   │   └── pipeline/
-│   │   │       ├── PipelineBoard.tsx  # Kanban drag-and-drop (dnd-kit)
-│   │   │       ├── PipelineColumn.tsx # Stage column
-│   │   │       └── LeadCard.tsx       # Lead card in pipeline
-│   │   └── form/
-│   │       └── public-form.tsx     # Multi-step dynamic form with file uploads
-│   └── app/
-│       ├── layout.tsx              # Root layout with Toaster
-│       ├── page.tsx                # Root redirect (→ /dashboard or /login)
-│       ├── globals.css             # Tailwind + shadcn theme variables
-│       ├── (auth)/
-│       │   └── login/page.tsx      # Login page (Supabase Auth)
-│       ├── (dashboard)/
-│       │   ├── layout.tsx          # Protected layout (checks auth + tenant)
-│       │   ├── dashboard/page.tsx  # Stats + leads table
-│       │   ├── leads/page.tsx      # All leads page
-│       │   ├── leads/[id]/page.tsx # Lead detail page
-│       │   ├── pipeline/page.tsx   # Kanban pipeline view
-│       │   ├── team/page.tsx       # Team management
-│       │   └── settings/page.tsx   # Tenant settings + API keys
-│       ├── form/[slug]/page.tsx    # Public form (per-tenant by slug)
-│       └── api/
-│           ├── auth/callback/route.ts      # Supabase auth callback
-│           └── v1/
-│               ├── leads/route.ts          # List + create leads
-│               ├── leads/[id]/route.ts     # Get + update + delete lead
-│               ├── leads/[id]/checklists/  # Checklist CRUD
-│               ├── upload/route.ts         # File upload
-│               ├── team/route.ts           # Team members
-│               ├── invites/route.ts        # Invite management
-│               ├── settings/api-keys/      # API key management
-│               └── integrations/crm/       # External integration API (10 endpoints)
-```
-
-## Database Schema
-
-### Tables (15 total)
-
-| Table | Purpose | Key Columns |
-|-------|---------|-------------|
-| `tenants` | Client organizations | id, name, slug, primary_color, config (JSONB) |
-| `tenant_users` | User→tenant mapping | tenant_id, user_id, role (owner/admin/viewer/counselor) |
-| `form_configs` | Configurable forms per tenant | steps (JSONB), branding (JSONB), redirect_url |
-| `leads` | Lead submissions | tenant_id, status, stage_id, assigned_to, custom_fields (JSONB), file_urls (JSONB), deleted_at |
-| `lead_notes` | Internal notes | lead_id, user_id, content |
-| `lead_checklists` | Task items per lead | lead_id, title, is_completed, completed_by |
-| `pipeline_stages` | Custom stages per tenant | tenant_id, name, slug, position, color, is_terminal |
-| `audit_logs` | Action tracking | tenant_id, user_id, action, entity_type, entity_id, changes (JSONB) |
-| `events` | Async event queue | tenant_id, type, entity_type, payload, status |
-| `invite_tokens` | Email invitations | tenant_id, email, role, token, expires_at |
-| `integration_keys` | API key auth | tenant_id, name, hashed_key, permissions[], last_used_at |
-| `integration_idempotency` | Dedup tracking | tenant_id, idempotency_key, endpoint, response (JSONB) |
-| `webhook_endpoints` | Tenant webhook URLs | tenant_id, url, secret, event_types[] |
-| `webhook_deliveries` | Delivery audit log | endpoint_id, status_code, response_body, retry_count |
-| `rate_limits` | Rate limit tracking | — |
-
-### Storage
-- Bucket: `lead-documents` (public read, anon upload)
-
-### RLS Architecture
-
-**IMPORTANT**: RLS uses two `SECURITY DEFINER` functions to avoid infinite recursion:
-- `get_user_tenant_ids()` — returns tenant IDs for current auth user
-- `is_tenant_admin(tenant_id)` — checks if current user is owner/admin of a tenant
-
-These functions bypass RLS internally since `tenant_users` policies can't reference `tenant_users` itself. All other table policies call these functions instead of subquerying `tenant_users` directly.
-
-### RLS
-- **33 policies** across all 15 tables
-- **5 helper functions**: `get_user_tenant_ids()`, `is_tenant_admin()`, `get_user_tenant_role()`, `update_updated_at()`, `rls_auto_enable()`
-
-### Current Data
-- 2 tenants: "RK University" (slug: `rku`), "Admizz Education" (slug: `admizz`)
-- 4 tenant users (including `admin@zunkireelabs.com` as owner)
-- 2 form configs (one per tenant)
-- 40 leads
-- 4 default pipeline stages per tenant: new / contacted / enrolled / rejected
-
-## Key Commands
-
-```bash
-# Development
-npm run dev
-
-# Production build (always run before pushing)
-npm run build
-
-# Deploy to staging (auto via GitHub Actions)
-git push origin stage
-
-# Deploy to production (auto via GitHub Actions)
-git checkout main && git merge stage && git push origin main
-
-# Monitor GitHub Actions deployment
-gh run list --limit 5
-gh run watch
-
-# Verify deployment health
-curl -s -o /dev/null -w "%{http_code}" https://lead-crm.zunkireelabs.com/login
-
-# Database access
-psql "postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik#@aws-1-ap-south-1.pooler.supabase.com:5432/postgres"
-```
-
-## Architecture Decisions
-
-1. **`custom_fields` JSONB** on leads — instead of fixed columns per client, extra form fields go into a JSONB column. This means adding a new field for a client doesn't require a schema migration.
-
-2. **`form_configs.steps` JSONB** — the entire form structure (fields, validation, conditional visibility) is stored as JSON. The `public-form.tsx` component renders dynamically from this config.
-
-3. **Server Components for data fetching** — dashboard pages are Server Components that fetch data, then pass it to Client Components for interactivity.
-
-4. **`SECURITY DEFINER` functions for RLS** — PostgreSQL RLS policies on `tenant_users` can't subquery `tenant_users` without infinite recursion. The helper functions run with definer privileges (bypassing RLS) to break the cycle.
-
-5. **Supabase Auth (not custom)** — real JWT-based auth with proper session management, replacing the hardcoded credentials from the original RKU project.
-
-6. **Soft deletes** on leads — `deleted_at` column instead of hard deletes; all queries filter `WHERE deleted_at IS NULL`.
-
-7. **Bearer API keys for integrations** — stateless `crm_live_...` keys with SHA-256 hashing, constant-time comparison, scope-based permissions (read/write/admin).
-
-8. **Idempotency tracking** — `idempotency_key` on leads + `integration_idempotency` table prevent duplicate submissions.
-
-9. **Counselor role scoping** — counselor users automatically filtered to only their assigned leads across all views.
-
-10. **Event-driven audit** — `audit_logs` + `events` tables decouple mutations from side effects (webhooks, notifications).
+---
 
 ## Known Issues / TODOs
 
-- Next.js 16 shows "middleware is deprecated, use proxy" warning — cosmetic only, middleware still works
-- Registration page not built yet — users created via Supabase Admin API or email invites
-- Settings page: form field editor not built — form configs currently seeded via SQL
-- No pagination on leads table — loads all leads client-side (fine for <1000 leads)
-- Phone validation in public form is basic regex — could be improved per-country
-- Webhook dispatcher infrastructure exists but not fully wired to events
-- No email/SMS notifications for lead events or team invites
-- No self-service tenant onboarding — tenants created manually
-- No advanced reporting/analytics beyond stats cards + CSV export
-
-## Origin
-
-This project was built by converting the single-client RKU scholarship lead system at `/home/zunkireelabs/devprojects/hardik-dev-space/rku-dev/rku-form-prep/` into a scalable multi-tenant product. The original was static HTML + vanilla JS + Supabase with hardcoded credentials. This version uses proper auth, multi-tenancy, and modern React.
+- Next.js 16 "middleware is deprecated" warning — cosmetic only
+- No registration page — users created via admin API or email invites
+- Form field editor not built — form configs seeded via SQL
+- No pagination on leads table (fine for <1000 leads)
+- Webhook dispatcher exists but not fully wired to events
+- No email/SMS notifications for lead events
+- No self-service tenant onboarding
