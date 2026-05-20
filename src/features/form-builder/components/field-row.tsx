@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   GripVertical,
   Pencil,
@@ -23,13 +25,12 @@ import type { FormField } from "@/types/database";
 
 interface FieldRowProps {
   field: FormField;
+  fieldId: string;
   fieldIndex: number;
   stepIndex: number;
   totalFields: number;
   onEdit: () => void;
   onRemove: () => void;
-  onMoveUp: () => void;
-  onMoveDown: () => void;
   onUpdateLabel?: (newLabel: string) => void;
 }
 
@@ -49,12 +50,11 @@ const FIELD_ICONS: Record<string, React.ElementType> = {
 
 export function FieldRow({
   field,
+  fieldId,
   fieldIndex,
   totalFields,
   onEdit,
   onRemove,
-  onMoveUp,
-  onMoveDown,
   onUpdateLabel,
 }: FieldRowProps) {
   const [editing, setEditing] = useState(false);
@@ -64,12 +64,43 @@ export function FieldRow({
 
   const Icon = FIELD_ICONS[field.type] ?? Type;
 
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: fieldId });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2.5 rounded-lg border bg-background hover:bg-muted/30 group cursor-pointer transition-colors"
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-2 px-2 py-2.5 rounded-lg border bg-background hover:bg-muted/30 group transition-colors ${
+        isDragging ? "shadow-lg ring-2 ring-primary/20" : ""
+      }`}
       onClick={onEdit}
     >
-      {/* Drag handle / field icon */}
+      {/* Drag handle */}
+      <button
+        type="button"
+        className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground hover:text-foreground shrink-0"
+        onClick={(e) => e.stopPropagation()}
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      {/* Field icon */}
       <div className="shrink-0 text-muted-foreground">
         <Icon className="h-4 w-4" />
       </div>

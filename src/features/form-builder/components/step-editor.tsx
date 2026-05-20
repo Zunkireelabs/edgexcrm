@@ -1,6 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,9 +36,44 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
   const [collapsed, setCollapsed] = useState(false);
   const [editingField, setEditingField] = useState<{ field: FormField; fieldIndex: number } | null>(null);
 
+  // Generate stable IDs for sortable — use field name + index as fallback
+  const fieldIds = useMemo(
+    () => step.fields.map((f, i) => `${stepIndex}-${f.name}-${i}`),
+    [step.fields, stepIndex]
+  );
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = fieldIds.indexOf(String(active.id));
+    const newIndex = fieldIds.indexOf(String(over.id));
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const newFields = arrayMove([...step.fields], oldIndex, newIndex);
+    // Dispatch individual moves to match reducer pattern
+    // We update the entire step's fields by dispatching UPDATE_FIELD for each
+    // Simpler: dispatch remove + add in sequence, or use a direct field reorder
+    // For now, use sequential MOVE_FIELD_UP/DOWN to get from oldIndex to newIndex
+    if (oldIndex < newIndex) {
+      for (let i = oldIndex; i < newIndex; i++) {
+        dispatch({ type: "MOVE_FIELD_DOWN", payload: { stepIndex, fieldIndex: i } });
+      }
+    } else {
+      for (let i = oldIndex; i > newIndex; i--) {
+        dispatch({ type: "MOVE_FIELD_UP", payload: { stepIndex, fieldIndex: i } });
+      }
+    }
+  }
+
   function handleAddField(field: FormField) {
     dispatch({ type: "ADD_FIELD", payload: { stepIndex, field } });
-    // Open editor for the new field immediately
     setEditingField({ field, fieldIndex: step.fields.length });
   }
 
@@ -97,35 +145,38 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
 
         {!collapsed && (
           <CardContent className="px-4 pb-4 pt-0 space-y-1.5">
-            {step.fields.map((field, fieldIndex) => (
-              <FieldRow
-                key={`${field.name}-${fieldIndex}`}
-                field={field}
-                fieldIndex={fieldIndex}
-                stepIndex={stepIndex}
-                totalFields={step.fields.length}
-                onEdit={() => setEditingField({ field, fieldIndex })}
-                onRemove={() =>
-                  dispatch({ type: "REMOVE_FIELD", payload: { stepIndex, fieldIndex } })
-                }
-                onMoveUp={() =>
-                  dispatch({ type: "MOVE_FIELD_UP", payload: { stepIndex, fieldIndex } })
-                }
-                onMoveDown={() =>
-                  dispatch({ type: "MOVE_FIELD_DOWN", payload: { stepIndex, fieldIndex } })
-                }
-                onUpdateLabel={(newLabel) => {
-                  dispatch({
-                    type: "UPDATE_FIELD",
-                    payload: {
-                      stepIndex,
-                      fieldIndex,
-                      field: { ...field, label: newLabel, name: slugify(newLabel) || field.name },
-                    },
-                  });
-                }}
-              />
-            ))}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext items={fieldIds} strategy={verticalListSortingStrategy}>
+                {step.fields.map((field, fieldIndex) => (
+                  <FieldRow
+                    key={fieldIds[fieldIndex]}
+                    field={field}
+                    fieldId={fieldIds[fieldIndex]}
+                    fieldIndex={fieldIndex}
+                    stepIndex={stepIndex}
+                    totalFields={step.fields.length}
+                    onEdit={() => setEditingField({ field, fieldIndex })}
+                    onRemove={() =>
+                      dispatch({ type: "REMOVE_FIELD", payload: { stepIndex, fieldIndex } })
+                    }
+                    onUpdateLabel={(newLabel) => {
+                      dispatch({
+                        type: "UPDATE_FIELD",
+                        payload: {
+                          stepIndex,
+                          fieldIndex,
+                          field: { ...field, label: newLabel, name: slugify(newLabel) || field.name },
+                        },
+                      });
+                    }}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
 
             <FieldTypePicker onSelect={handleAddField} />
           </CardContent>
