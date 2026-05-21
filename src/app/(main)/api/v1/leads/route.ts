@@ -79,9 +79,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
-    );
+    // Sanitize search input to prevent PostgREST filter injection
+    const sanitized = search.replace(/[,().]/g, "");
+    if (sanitized) {
+      query = query.or(
+        `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
+      );
+    }
   }
 
   const from = (page - 1) * pageSize;

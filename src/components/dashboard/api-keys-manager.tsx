@@ -420,7 +420,7 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {keys.length === 0 ? (
+        {filteredKeys.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Key className="h-8 w-8 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No API keys yet</p>
