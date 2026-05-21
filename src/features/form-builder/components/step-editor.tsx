@@ -12,7 +12,6 @@ import {
 import {
   SortableContext,
   verticalListSortingStrategy,
-  arrayMove,
 } from "@dnd-kit/sortable";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import type { FormStep, FormField } from "@/types/database";
@@ -52,11 +51,6 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
     const newIndex = fieldIds.indexOf(String(over.id));
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const newFields = arrayMove([...step.fields], oldIndex, newIndex);
-    // Dispatch individual moves to match reducer pattern
-    // We update the entire step's fields by dispatching UPDATE_FIELD for each
-    // Simpler: dispatch remove + add in sequence, or use a direct field reorder
-    // For now, use sequential MOVE_FIELD_UP/DOWN to get from oldIndex to newIndex
     if (oldIndex < newIndex) {
       for (let i = oldIndex; i < newIndex; i++) {
         dispatch({ type: "MOVE_FIELD_DOWN", payload: { stepIndex, fieldIndex: i } });
