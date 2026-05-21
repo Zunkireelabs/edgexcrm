@@ -5,7 +5,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
   GripVertical,
-  Pencil,
   Trash2,
   Type,
   Mail,
@@ -18,8 +17,8 @@ import {
   CircleDot,
   Paperclip,
   ListFilter,
+  ChevronRight,
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { FormField } from "@/types/database";
 
@@ -34,19 +33,21 @@ interface FieldRowProps {
   onUpdateLabel?: (newLabel: string) => void;
 }
 
-const FIELD_ICONS: Record<string, React.ElementType> = {
-  text: Type,
-  email: Mail,
-  tel: Phone,
-  number: Hash,
-  date: Calendar,
-  textarea: AlignLeft,
-  select: ChevronDown,
-  radio: CircleDot,
-  checkbox: CheckSquare,
-  file: Paperclip,
-  entity_select: ListFilter,
+const FIELD_META: Record<string, { icon: React.ElementType; color: string; bg: string; label: string }> = {
+  text:          { icon: Type,        color: "text-blue-600",   bg: "bg-blue-50",    label: "Text" },
+  email:         { icon: Mail,        color: "text-purple-600", bg: "bg-purple-50",  label: "Email" },
+  tel:           { icon: Phone,       color: "text-green-600",  bg: "bg-green-50",   label: "Phone" },
+  number:        { icon: Hash,        color: "text-cyan-600",   bg: "bg-cyan-50",    label: "Number" },
+  date:          { icon: Calendar,    color: "text-teal-600",   bg: "bg-teal-50",    label: "Date" },
+  textarea:      { icon: AlignLeft,   color: "text-indigo-600", bg: "bg-indigo-50",  label: "Text Area" },
+  select:        { icon: ChevronDown, color: "text-orange-600", bg: "bg-orange-50",  label: "Dropdown" },
+  radio:         { icon: CircleDot,   color: "text-rose-600",   bg: "bg-rose-50",    label: "Radio" },
+  checkbox:      { icon: CheckSquare, color: "text-pink-600",   bg: "bg-pink-50",    label: "Checkbox" },
+  file:          { icon: Paperclip,   color: "text-amber-600",  bg: "bg-amber-50",   label: "File" },
+  entity_select: { icon: ListFilter,  color: "text-violet-600", bg: "bg-violet-50",  label: "Entity" },
 };
+
+const DEFAULT_META = { icon: Type, color: "text-gray-600", bg: "bg-gray-50", label: "Field" };
 
 export function FieldRow({
   field,
@@ -61,7 +62,8 @@ export function FieldRow({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setEditLabel(field.label), [field.label]);
 
-  const Icon = FIELD_ICONS[field.type] ?? Type;
+  const meta = FIELD_META[field.type] ?? DEFAULT_META;
+  const Icon = meta.icon;
 
   const {
     attributes,
@@ -83,15 +85,15 @@ export function FieldRow({
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center gap-2 px-2 py-2.5 rounded-lg border bg-background hover:bg-muted/30 group transition-colors ${
-        isDragging ? "shadow-lg ring-2 ring-primary/20" : ""
+      className={`flex items-center gap-3 px-3 py-3 rounded-xl border bg-white hover:shadow-sm group transition-all cursor-pointer ${
+        isDragging ? "shadow-lg ring-2 ring-primary/20 border-primary/30" : "border-gray-100 hover:border-gray-200"
       }`}
       onClick={onEdit}
     >
       {/* Drag handle */}
       <button
         type="button"
-        className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground hover:text-foreground shrink-0"
+        className="cursor-grab active:cursor-grabbing p-0.5 text-gray-300 hover:text-gray-500 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
         onClick={(e) => e.stopPropagation()}
         {...attributes}
         {...listeners}
@@ -99,12 +101,12 @@ export function FieldRow({
         <GripVertical className="h-4 w-4" />
       </button>
 
-      {/* Field icon */}
-      <div className="shrink-0 text-muted-foreground">
+      {/* Field type icon with colored background */}
+      <div className={`w-8 h-8 rounded-lg ${meta.bg} ${meta.color} flex items-center justify-center shrink-0`}>
         <Icon className="h-4 w-4" />
       </div>
 
-      {/* Field label */}
+      {/* Field info */}
       <div className="flex-1 min-w-0">
         {editing ? (
           <Input
@@ -119,48 +121,43 @@ export function FieldRow({
               if (e.key === "Escape") { setEditLabel(field.label); setEditing(false); }
             }}
             onClick={(e) => e.stopPropagation()}
-            className="h-7 text-sm font-medium px-1.5"
+            className="h-7 text-sm font-semibold px-1.5"
             autoFocus
           />
         ) : (
-          <span
-            className="text-sm font-medium truncate block"
-            onDoubleClick={(e) => {
-              e.stopPropagation();
-              if (onUpdateLabel) { setEditLabel(field.label); setEditing(true); }
-            }}
-          >
-            {field.label}
-          </span>
+          <>
+            <span
+              className="text-sm font-semibold text-gray-900 truncate block"
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                if (onUpdateLabel) { setEditLabel(field.label); setEditing(true); }
+              }}
+            >
+              {field.label}
+            </span>
+            <span className="text-[11px] text-gray-400">{meta.label}</span>
+          </>
         )}
       </div>
 
-      {/* Required indicator */}
+      {/* Required badge */}
       {field.required && (
-        <span className="text-xs text-red-400 shrink-0">Required</span>
+        <span className="text-[10px] font-semibold uppercase tracking-wider text-red-500 bg-red-50 px-2 py-0.5 rounded-full shrink-0">
+          Required
+        </span>
       )}
 
-      {/* Actions — visible on hover */}
-      <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={(e) => { e.stopPropagation(); onEdit(); }}
-          aria-label="Edit field"
-        >
-          <Pencil className="h-3 w-3" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive"
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          aria-label="Remove field"
-        >
-          <Trash2 className="h-3 w-3" />
-        </Button>
-      </div>
+      {/* Delete — visible on hover */}
+      <button
+        className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity p-1 text-gray-300 hover:text-red-500 rounded"
+        onClick={(e) => { e.stopPropagation(); onRemove(); }}
+        aria-label="Remove field"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+
+      {/* Edit arrow */}
+      <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />
     </div>
   );
 }

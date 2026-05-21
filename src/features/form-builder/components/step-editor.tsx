@@ -13,7 +13,7 @@ import {
   SortableContext,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+// Card imports removed — using custom div layout for cleaner design
 import type { FormStep, FormField } from "@/types/database";
 import { FieldRow } from "./field-row";
 import { FieldTypePicker } from "./field-type-picker";
@@ -78,23 +78,23 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
 
   return (
     <>
-      <Card className="border shadow-none">
+      <div className="rounded-2xl border border-gray-100 bg-gray-50/50 overflow-hidden">
         {/* Step header — read-only, set by developers */}
         {totalSteps > 1 && (
-          <CardHeader className="py-3 px-4">
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-bold shrink-0">
+          <div className="px-5 py-3 border-b border-gray-100 bg-white">
+            <div className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center text-xs font-bold shrink-0">
                 {stepIndex + 1}
               </div>
-              <span className="text-sm font-semibold">{step.title}</span>
-              <span className="text-xs text-muted-foreground ml-auto">
+              <span className="text-sm font-bold text-gray-900">{step.title}</span>
+              <span className="text-xs text-gray-400 ml-auto">
                 {step.fields.length} {step.fields.length === 1 ? "field" : "fields"}
               </span>
             </div>
-          </CardHeader>
+          </div>
         )}
 
-        <CardContent className={`px-4 pb-4 ${totalSteps > 1 ? "pt-0" : "pt-4"} space-y-1.5`}>
+        <div className={`px-4 pb-4 ${totalSteps > 1 ? "pt-3" : "pt-4"} space-y-2`}>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
@@ -129,8 +129,8 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
             </DndContext>
 
             <FieldTypePicker onSelect={handleAddField} />
-          </CardContent>
-      </Card>
+          </div>
+      </div>
 
       <FieldEditor
         field={editingField?.field ?? null}
