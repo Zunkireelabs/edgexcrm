@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import {
@@ -15,6 +15,24 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function withCors(response: NextResponse): NextResponse {
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+// CORS preflight
+export function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+}
 
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -90,6 +108,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const response = await handlePost(request);
+  return withCors(response);
+}
+
+async function handlePost(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const ip = getClientIp(request);
   const userAgent = request.headers.get("user-agent") || null;
