@@ -2,7 +2,7 @@
 
 import { useReducer, useCallback } from "react";
 import { toast } from "sonner";
-import type { FormStep, FormField, FormBranding } from "@/types/database";
+import type { FormStep, FormBranding } from "@/types/database";
 import type { BuilderState, BuilderAction } from "../types";
 
 function builderReducer(state: BuilderState, action: BuilderAction): BuilderState {

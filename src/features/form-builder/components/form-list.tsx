@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -12,7 +11,6 @@ import {
   Trash2,
   FileText,
   Loader2,
-  MoreHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +33,6 @@ interface FormListProps {
 }
 
 export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
-  const router = useRouter();
   const [forms, setForms] = useState(initialForms);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; form: FormConfig | null }>({

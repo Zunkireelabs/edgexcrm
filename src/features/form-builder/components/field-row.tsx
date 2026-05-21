@@ -51,8 +51,6 @@ const FIELD_ICONS: Record<string, React.ElementType> = {
 export function FieldRow({
   field,
   fieldId,
-  fieldIndex,
-  totalFields,
   onEdit,
   onRemove,
   onUpdateLabel,
@@ -60,6 +58,7 @@ export function FieldRow({
   const [editing, setEditing] = useState(false);
   const [editLabel, setEditLabel] = useState(field.label);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setEditLabel(field.label), [field.label]);
 
   const Icon = FIELD_ICONS[field.type] ?? Type;

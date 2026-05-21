@@ -43,7 +43,10 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   useEffect(() => {
-    if (field) setDraft({ ...field });
+    if (field) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setDraft({ ...field });
+    }
   }, [field]);
 
   if (!draft) return null;
