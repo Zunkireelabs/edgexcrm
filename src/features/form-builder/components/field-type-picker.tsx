@@ -69,7 +69,7 @@ export function FieldTypePicker({ onSelect }: FieldTypePickerProps) {
           Add Field
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-72 p-2" align="start">
+      <PopoverContent className="w-72 p-2" align="start" side="top">
         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1 mb-1">
           Choose field type
         </p>
