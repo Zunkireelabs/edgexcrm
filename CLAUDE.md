@@ -140,7 +140,7 @@ The dashboard layout is a **Server Component** that:
 
 ### API Route Pattern
 
-All API routes live under `src/app/(main)/api/v1/`. Standard pattern:
+Most API routes live under `src/app/(main)/api/v1/`. Public submission API at `src/app/api/public/submit/`. Standard pattern:
 1. Create request logger with `createRequestLogger()`
 2. Authenticate with `authenticateRequest()` (or integration auth)
 3. Validate input with `validate()` helpers
@@ -185,7 +185,7 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-018). Applie
 
 ### Current Data
 
-- 2 tenants: "RK University" (slug: `rku`), "Admizz Education" (slug: `admizz`)
+- 2 tenants: "Zunkiree Labs" (slug: `zunkireelabs-crm`, industry: IT Agency), "Admizz Education" (slug: `admizz`, industry: Education Consultancy)
 - Roles: owner, admin, viewer, counselor
 - Default pipeline stages: new / contacted / enrolled / rejected
 
@@ -211,11 +211,30 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-018). Applie
 
 ---
 
+## Form Builder Feature (`src/features/form-builder/`)
+
+Visual form builder for education_consultancy tenants. Admin manages fields and branding; developers control step structure via API/templates.
+
+- **Wizard**: 3-step creation at `/forms/new` (Pick Template → Customize → Publish)
+- **Builder**: Split layout with editor (left) + live preview (right) at `/forms/[id]`
+- **Templates**: 4 education templates + blank (`src/features/form-builder/templates/`)
+- **Public submit API**: `POST /api/public/submit/[tenantSlug]/[formSlug]` — requires API key (Bearer token), CORS enabled
+- **API keys split**: Form keys shown on `/forms`, integration keys on `/settings` — differentiated by `permissions_detail.category`
+- **Public forms**: `force-dynamic` — fetches config in real-time from `form_configs` JSONB
+
+### Builder UI decisions
+- Field editor: Label/Type/Required visible by default, advanced settings behind toggle
+- Branding editor: Title/Color/Button visible by default, rest behind "More options"
+- Fields reorderable via drag-and-drop (@dnd-kit)
+- Step management (add/remove/reorder steps) hidden from admin — developer-controlled
+- Inline field label rename via double-click
+
+---
+
 ## Known Issues / TODOs
 
 - Next.js 16 "middleware is deprecated" warning — cosmetic only
 - No registration page — users created via admin API or email invites
-- Form field editor not built — form configs seeded via SQL
 - No pagination on leads table (fine for <1000 leads)
 - Webhook dispatcher exists but not fully wired to events
 - No email/SMS notifications for lead events
