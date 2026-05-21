@@ -45,6 +45,7 @@ interface ApiKeyRow {
   id: string;
   name: string;
   permissions: string[];
+  permissions_detail?: Record<string, unknown>;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
@@ -62,9 +63,10 @@ interface CreatedKeyResponse {
 interface ApiKeysManagerProps {
   tenantId: string;
   initialKeys: ApiKeyRow[];
+  category?: "form" | "integration";
 }
 
-export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
+export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
   const [keys, setKeys] = useState<ApiKeyRow[]>(initialKeys);
   const [createOpen, setCreateOpen] = useState(false);
   const [keyName, setKeyName] = useState("");
@@ -75,6 +77,13 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
   const [confirmed, setConfirmed] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+
+  const filteredKeys = category
+    ? keys.filter((k) => {
+        const detail = k.permissions_detail as Record<string, unknown> | undefined;
+        return detail?.category === category;
+      })
+    : keys;
 
   const refreshKeys = useCallback(async () => {
     try {
@@ -99,7 +108,7 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
       const res = await fetch("/api/v1/settings/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: keyName.trim(), scope: keyScope }),
+        body: JSON.stringify({ name: keyName.trim(), scope: keyScope, category: category || "integration" }),
       });
 
       const json = await res.json();
@@ -220,7 +229,7 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
     return "secondary" as const;
   }
 
-  const activeCount = keys.filter((k) => k.status === "active").length;
+  const activeCount = filteredKeys.filter((k) => k.status === "active").length;
 
   return (
     <Card>
@@ -229,10 +238,12 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
           <div>
             <CardTitle className="flex items-center gap-2">
               <Key className="h-5 w-5" />
-              API Keys
+              {category === "form" ? "Form API Keys" : "API Keys"}
             </CardTitle>
             <CardDescription>
-              Manage integration keys for external services like Orca.
+              {category === "form"
+                ? "API keys for developers to submit form data from external websites."
+                : "Manage integration keys for external services like Orca."}
               {activeCount > 0 && (
                 <span className="ml-1">
                   {activeCount}/20 active keys
@@ -409,7 +420,7 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
         </div>
       </CardHeader>
       <CardContent>
-        {keys.length === 0 ? (
+        {filteredKeys.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             <Key className="h-8 w-8 mx-auto mb-3 opacity-50" />
             <p className="text-sm">No API keys yet</p>
@@ -431,7 +442,7 @@ export function ApiKeysManager({ initialKeys }: ApiKeysManagerProps) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {keys.map((key) => {
+                {filteredKeys.map((key) => {
                   const isRevoked = key.status === "revoked";
                   return (
                     <TableRow

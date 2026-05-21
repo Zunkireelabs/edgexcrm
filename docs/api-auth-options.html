@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Public API Auth Options — EdgeX CRM</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0f1e;
+      --surface: #111827;
+      --surface2: #1f2937;
+      --border: #2d3748;
+      --primary: #6366f1;
+      --green: #10b981;
+      --orange: #f59e0b;
+      --red: #ef4444;
+      --text: #f1f5f9;
+      --muted: #64748b;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ═══ TOP BAR ═══ */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .topbar-title { font-size: 15px; font-weight: 800; }
+    .topbar-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+    /* ═══ OPTION TABS ═══ */
+    .tabs {
+      display: flex; gap: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      padding: 0 28px;
+    }
+    .tab {
+      padding: 12px 24px;
+      font-size: 13px; font-weight: 700;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab .tab-badge {
+      font-size: 9px; padding: 2px 6px; border-radius: 10px;
+      margin-left: 6px; font-weight: 800; vertical-align: middle;
+    }
+    .tab .easy { background: #dcfce7; color: #15803d; }
+    .tab .secure { background: #dbeafe; color: #1d4ed8; }
+    .tab .best { background: #faf5ff; color: #7e22ce; }
+
+    /* ═══ STAGE ═══ */
+    .stage {
+      flex: 1; overflow-y: auto;
+      padding: 24px 28px;
+    }
+    .option-panel {
+      display: none;
+      animation: fadeIn 0.35s ease;
+    }
+    .option-panel.active { display: block; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* ═══ LAYOUT ═══ */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 20px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+    }
+    .card-title {
+      font-size: 12px; font-weight: 800; color: var(--primary);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 12px;
+    }
+
+    .section-title {
+      font-size: 18px; font-weight: 800; margin-bottom: 6px;
+    }
+    .section-sub {
+      font-size: 12px; color: var(--muted); margin-bottom: 20px;
+    }
+
+    /* ═══ FLOW ANIMATION ═══ */
+    .flow-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+    .flow-title {
+      font-size: 11px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .flow-row {
+      display: flex; align-items: center; gap: 0;
+      margin-bottom: 12px;
+    }
+    .flow-node {
+      border-radius: 10px;
+      padding: 10px 14px;
+      text-align: center;
+      min-width: 100px;
+      transition: all 0.4s;
+      border: 2px solid var(--border);
+      background: var(--surface2);
+    }
+    .flow-node.lit { border-color: var(--primary); box-shadow: 0 0 16px rgba(99,102,241,0.3); }
+    .flow-node.green-lit { border-color: var(--green); box-shadow: 0 0 16px rgba(16,185,129,0.3); }
+    .flow-node.red-lit { border-color: var(--red); box-shadow: 0 0 16px rgba(239,68,68,0.3); }
+    .flow-node.orange-lit { border-color: var(--orange); box-shadow: 0 0 16px rgba(245,158,11,0.3); }
+    .fn-icon { font-size: 18px; margin-bottom: 4px; }
+    .fn-label { font-size: 11px; font-weight: 700; }
+    .fn-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+    .flow-arrow {
+      width: 36px; display: flex; align-items: center; justify-content: center;
+      font-size: 16px; color: var(--border);
+      transition: color 0.4s;
+    }
+    .flow-arrow.lit { color: var(--primary); }
+    .flow-arrow.green-lit { color: var(--green); }
+
+    /* ═══ CODE BLOCK ═══ */
+    .code-block {
+      background: #0d1117;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px;
+      line-height: 1.8;
+      overflow-x: auto;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .code-block .comment { color: #6a737d; }
+    .code-block .keyword { color: #ff7b72; }
+    .code-block .string { color: #a5d6ff; }
+    .code-block .func { color: #d2a8ff; }
+    .code-block .const { color: #79c0ff; }
+    .code-block .highlight-line {
+      background: rgba(99,102,241,0.12);
+      display: block;
+      margin: 0 -16px;
+      padding: 0 16px;
+      border-left: 3px solid var(--primary);
+    }
+
+    .code-tab-row {
+      display: flex; gap: 8px; margin-bottom: 8px;
+    }
+    .code-tab {
+      padding: 5px 12px; border-radius: 6px;
+      font-size: 11px; font-weight: 600;
+      background: var(--surface2); color: var(--muted);
+      cursor: pointer; border: 1px solid transparent;
+      transition: all 0.2s;
+    }
+    .code-tab.active { border-color: var(--primary); color: var(--text); background: rgba(99,102,241,0.1); }
+
+    /* ═══ PROS / CONS ═══ */
+    .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+    .pro-list, .con-list { list-style: none; }
+    .pro-list li, .con-list li {
+      font-size: 11px; padding: 5px 0;
+      display: flex; align-items: flex-start; gap: 6px;
+    }
+    .pro-list li::before { content: '✅'; font-size: 10px; }
+    .con-list li::before { content: '⚠️'; font-size: 10px; }
+
+    /* ═══ COMPARISON TABLE ═══ */
+    .cmp-table {
+      width: 100%; border-collapse: collapse;
+      font-size: 12px;
+    }
+    .cmp-table th {
+      text-align: left; padding: 10px 12px;
+      background: var(--surface2);
+      font-weight: 700; color: var(--muted);
+      border-bottom: 2px solid var(--border);
+    }
+    .cmp-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .cmp-table tr:last-child td { border-bottom: none; }
+    .badge-sm {
+      font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+    }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-blue { background: #dbeafe; color: #1d4ed8; }
+    .badge-orange { background: #ffedd5; color: #c2410c; }
+    .badge-red { background: #fee2e2; color: #b91c1c; }
+    .badge-purple { background: #f3e8ff; color: #7e22ce; }
+
+    /* ═══ SCENARIO SIMULATOR ═══ */
+    .simulator {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+    }
+    .sim-title { font-size: 12px; font-weight: 800; color: var(--orange); margin-bottom: 12px; }
+    .sim-scenarios { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .sim-btn {
+      padding: 7px 14px; border-radius: 8px;
+      font-size: 11px; font-weight: 600;
+      background: var(--surface2); color: var(--muted);
+      border: 1px solid var(--border);
+      cursor: pointer; transition: all 0.2s;
+    }
+    .sim-btn:hover, .sim-btn.active { border-color: var(--orange); color: var(--orange); background: rgba(245,158,11,0.08); }
+    .sim-result {
+      font-size: 12px; padding: 12px;
+      border-radius: 8px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      min-height: 60px;
+      transition: all 0.3s;
+    }
+    .sim-result.success { border-color: var(--green); background: rgba(16,185,129,0.06); }
+    .sim-result.fail { border-color: var(--red); background: rgba(239,68,68,0.06); }
+    .sim-result.warn { border-color: var(--orange); background: rgba(245,158,11,0.06); }
+
+    .play-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 18px; border-radius: 8px;
+      background: var(--primary); color: white;
+      font-size: 12px; font-weight: 700;
+      cursor: pointer; border: none;
+      transition: filter 0.2s;
+      margin-bottom: 12px;
+    }
+    .play-btn:hover { filter: brightness(1.15); }
+    .play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ═══ LOCK ANIMATION ═══ */
+    .lock-visual {
+      display: flex; align-items: center; justify-content: center;
+      gap: 16px; padding: 20px;
+    }
+    .lock-icon {
+      font-size: 48px;
+      transition: all 0.4s;
+    }
+    .lock-icon.unlocked { filter: grayscale(0); }
+    .lock-icon.locked { filter: grayscale(0.5); }
+
+    .shield-bar {
+      display: flex; gap: 4px; align-items: flex-end;
+      height: 40px;
+    }
+    .shield-level {
+      width: 16px; border-radius: 3px 3px 0 0;
+      transition: all 0.4s;
+      background: var(--border);
+    }
+    .shield-level.on-green { background: var(--green); }
+    .shield-level.on-orange { background: var(--orange); }
+    .shield-level.on-red { background: var(--red); }
+
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div>
+      <div class="topbar-title">Public Form Submission API — Auth Options</div>
+      <div class="topbar-sub">Choose how external developers authenticate when submitting forms</div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <div class="tab active" onclick="showOption(0)">Option A <span class="tab-badge easy">Easiest</span></div>
+    <div class="tab" onclick="showOption(1)">Option B <span class="tab-badge secure">Most Secure</span></div>
+    <div class="tab" onclick="showOption(2)">Option C <span class="tab-badge best">Recommended</span></div>
+    <div class="tab" onclick="showOption(3)">Compare All</div>
+  </div>
+
+  <!-- STAGE -->
+  <div class="stage">
+
+    <!-- ════════════════════════════════════
+         OPTION A — NO AUTH (SLUG-BASED)
+    ════════════════════════════════════ -->
+    <div class="option-panel active" id="opt-0">
+      <div class="section-title">Option A — No Auth (Slug-Based)</div>
+      <div class="section-sub">Anyone who knows the URL can submit. Protected only by rate limiting.</div>
+
+      <!-- Flow Animation -->
+      <div class="flow-container">
+        <div class="flow-title">Request Flow — Click Play to animate</div>
+        <button class="play-btn" onclick="playFlowA()">▶ Play Animation</button>
+        <div class="flow-row" id="flow-a">
+          <div class="flow-node" id="fa-0">
+            <div class="fn-icon">🌐</div>
+            <div class="fn-label">Developer's Website</div>
+            <div class="fn-sub">fetch() call</div>
+          </div>
+          <div class="flow-arrow" id="fa-a0">→</div>
+          <div class="flow-node" id="fa-1">
+            <div class="fn-icon">🚦</div>
+            <div class="fn-label">Rate Limiter</div>
+            <div class="fn-sub">20 req / 10 min</div>
+          </div>
+          <div class="flow-arrow" id="fa-a1">→</div>
+          <div class="flow-node" id="fa-2">
+            <div class="fn-icon">🔍</div>
+            <div class="fn-label">Lookup by Slug</div>
+            <div class="fn-sub">tenant + form</div>
+          </div>
+          <div class="flow-arrow" id="fa-a2">→</div>
+          <div class="flow-node" id="fa-3">
+            <div class="fn-icon">✅</div>
+            <div class="fn-label">Create Lead</div>
+            <div class="fn-sub">INSERT into leads</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Code Example -->
+        <div>
+          <div class="card">
+            <div class="card-title">Developer's Code</div>
+            <div class="code-block">
+<span class="comment">// External website — no API key needed</span>
+<span class="keyword">const</span> res = <span class="keyword">await</span> <span class="func">fetch</span>(
+  <span class="string">'https://lead-crm.zunkireelabs.com<br>  /api/public/submit/admizz<br>  /scholarship-application'</span>,
+  {
+    <span class="const">method</span>: <span class="string">'POST'</span>,
+    <span class="const">headers</span>: { <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span> },
+    <span class="const">body</span>: JSON.<span class="func">stringify</span>({
+      <span class="const">first_name</span>: <span class="string">'John'</span>,
+      <span class="const">email</span>: <span class="string">'john@example.com'</span>,
+      <span class="const">custom_fields</span>: { <span class="const">gpa</span>: <span class="string">'3.8'</span> }
+    })
+  }
+);
+<span class="comment">// ✅ No auth header required</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pros / Cons -->
+        <div>
+          <div class="card">
+            <div class="card-title">Security Level</div>
+            <div class="lock-visual">
+              <div class="lock-icon" id="lock-a">🔓</div>
+              <div class="shield-bar">
+                <div class="shield-level on-green" style="height:12px"></div>
+                <div class="shield-level" style="height:20px"></div>
+                <div class="shield-level" style="height:28px"></div>
+                <div class="shield-level" style="height:36px"></div>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">Low — rate limiting only</div>
+          </div>
+          <div class="pros-cons" style="margin-top:12px">
+            <div>
+              <ul class="pro-list">
+                <li>Zero setup for developers</li>
+                <li>Works from any website instantly</li>
+                <li>No key management overhead</li>
+                <li>Same security as public form page</li>
+              </ul>
+            </div>
+            <div>
+              <ul class="con-list">
+                <li>Anyone can spam the endpoint</li>
+                <li>No audit trail per developer</li>
+                <li>Can't revoke access per developer</li>
+                <li>Can't set per-developer limits</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario Simulator -->
+      <div class="simulator">
+        <div class="sim-title">🧪 Try Scenarios</div>
+        <div class="sim-scenarios">
+          <div class="sim-btn" onclick="simA(this,'ok')">✅ Normal submit</div>
+          <div class="sim-btn" onclick="simA(this,'spam')">🤖 Bot spams 100x</div>
+          <div class="sim-btn" onclick="simA(this,'wrong-slug')">❌ Wrong form slug</div>
+          <div class="sim-btn" onclick="simA(this,'inactive')">🔒 Inactive form</div>
+        </div>
+        <div class="sim-result" id="sim-a-result">Click a scenario above to see what happens</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         OPTION B — API KEY AUTH
+    ════════════════════════════════════ -->
+    <div class="option-panel" id="opt-1">
+      <div class="section-title">Option B — API Key Auth</div>
+      <div class="section-sub">Developer gets a secret key from CRM Settings → must send it with every request.</div>
+
+      <!-- Flow Animation -->
+      <div class="flow-container">
+        <div class="flow-title">Request Flow — Click Play to animate</div>
+        <button class="play-btn" onclick="playFlowB()">▶ Play Animation</button>
+        <div class="flow-row" id="flow-b">
+          <div class="flow-node" id="fb-0">
+            <div class="fn-icon">🌐</div>
+            <div class="fn-label">Developer's Website</div>
+            <div class="fn-sub">fetch() + Bearer token</div>
+          </div>
+          <div class="flow-arrow" id="fb-a0">→</div>
+          <div class="flow-node" id="fb-1">
+            <div class="fn-icon">🔑</div>
+            <div class="fn-label">Verify API Key</div>
+            <div class="fn-sub">SHA-256 hash lookup</div>
+          </div>
+          <div class="flow-arrow" id="fb-a1">→</div>
+          <div class="flow-node" id="fb-2">
+            <div class="fn-icon">🚦</div>
+            <div class="fn-label">Rate Limiter</div>
+            <div class="fn-sub">120 req / 1 min</div>
+          </div>
+          <div class="flow-arrow" id="fb-a2">→</div>
+          <div class="flow-node" id="fb-3">
+            <div class="fn-icon">🔍</div>
+            <div class="fn-label">Validate Form</div>
+            <div class="fn-sub">is_active check</div>
+          </div>
+          <div class="flow-arrow" id="fb-a3">→</div>
+          <div class="flow-node" id="fb-4">
+            <div class="fn-icon">✅</div>
+            <div class="fn-label">Create Lead</div>
+            <div class="fn-sub">with audit log</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Code Example -->
+        <div>
+          <div class="card">
+            <div class="card-title">Developer's Code</div>
+            <div class="code-block">
+<span class="comment">// External website — API key required</span>
+<span class="keyword">const</span> API_KEY = <span class="string">'crm_live_sk_a1b2c3...'</span>;
+
+<span class="keyword">const</span> res = <span class="keyword">await</span> <span class="func">fetch</span>(
+  <span class="string">'https://lead-crm.zunkireelabs.com<br>  /api/public/submit/admizz<br>  /scholarship-application'</span>,
+  {
+    <span class="const">method</span>: <span class="string">'POST'</span>,
+    <span class="const">headers</span>: {
+      <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+<span class="highlight-line">      <span class="string">'Authorization'</span>: <span class="string">`Bearer ${API_KEY}`</span>,</span>
+    },
+    <span class="const">body</span>: JSON.<span class="func">stringify</span>({
+      <span class="const">first_name</span>: <span class="string">'John'</span>,
+      <span class="const">email</span>: <span class="string">'john@example.com'</span>,
+    })
+  }
+);
+<span class="comment">// ⚠️ Key must be kept server-side!</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-title">Security Level</div>
+            <div class="lock-visual">
+              <div class="lock-icon">🔐</div>
+              <div class="shield-bar">
+                <div class="shield-level on-green" style="height:12px"></div>
+                <div class="shield-level on-green" style="height:20px"></div>
+                <div class="shield-level on-green" style="height:28px"></div>
+                <div class="shield-level on-green" style="height:36px"></div>
+              </div>
+            </div>
+            <div style="text-align:center;font-size:11px;color:var(--muted);margin-top:8px">High — key + rate limit + audit</div>
+          </div>
+          <div class="pros-cons" style="margin-top:12px">
+            <div>
+              <ul class="pro-list">
+                <li>Full audit trail per developer</li>
+                <li>Revoke any key instantly</li>
+                <li>Higher rate limits (120/min)</li>
+                <li>Track usage per integration</li>
+              </ul>
+            </div>
+            <div>
+              <ul class="con-list">
+                <li>Developer must get key first</li>
+                <li>Key exposed if used in browser JS</li>
+                <li>More setup friction</li>
+                <li>Must manage key rotation</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Key Lifecycle -->
+      <div class="flow-container">
+        <div class="flow-title">API Key Lifecycle</div>
+        <div class="flow-row">
+          <div class="flow-node green-lit">
+            <div class="fn-icon">⚙️</div>
+            <div class="fn-label">Admin creates key</div>
+            <div class="fn-sub">Settings → API Keys</div>
+          </div>
+          <div class="flow-arrow green-lit">→</div>
+          <div class="flow-node green-lit">
+            <div class="fn-icon">📋</div>
+            <div class="fn-label">Copy crm_live_...</div>
+            <div class="fn-sub">shown once only</div>
+          </div>
+          <div class="flow-arrow green-lit">→</div>
+          <div class="flow-node green-lit">
+            <div class="fn-icon">🔒</div>
+            <div class="fn-label">Hashed + stored</div>
+            <div class="fn-sub">SHA-256 in DB</div>
+          </div>
+          <div class="flow-arrow green-lit">→</div>
+          <div class="flow-node green-lit">
+            <div class="fn-icon">📊</div>
+            <div class="fn-label">Track usage</div>
+            <div class="fn-sub">last_used_at</div>
+          </div>
+          <div class="flow-arrow" style="color:var(--red)">→</div>
+          <div class="flow-node red-lit">
+            <div class="fn-icon">🚫</div>
+            <div class="fn-label">Revoke anytime</div>
+            <div class="fn-sub">instant block</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Scenario Simulator -->
+      <div class="simulator">
+        <div class="sim-title">🧪 Try Scenarios</div>
+        <div class="sim-scenarios">
+          <div class="sim-btn" onclick="simB(this,'ok')">✅ Valid key + submit</div>
+          <div class="sim-btn" onclick="simB(this,'no-key')">❌ No API key</div>
+          <div class="sim-btn" onclick="simB(this,'revoked')">🚫 Revoked key</div>
+          <div class="sim-btn" onclick="simB(this,'wrong-tenant')">⛔ Key from wrong tenant</div>
+          <div class="sim-btn" onclick="simB(this,'rate')">🤖 Exceed rate limit</div>
+        </div>
+        <div class="sim-result" id="sim-b-result">Click a scenario above to see what happens</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         OPTION C — BOTH (HYBRID)
+    ════════════════════════════════════ -->
+    <div class="option-panel" id="opt-2">
+      <div class="section-title">Option C — Hybrid (Both)</div>
+      <div class="section-sub">No key = works but strict limits. With key = higher limits + audit trail. Best of both worlds.</div>
+
+      <!-- Flow Animation -->
+      <div class="flow-container">
+        <div class="flow-title">Smart Auth Detection — Click Play to animate</div>
+        <button class="play-btn" onclick="playFlowC()">▶ Play Animation</button>
+        <div style="display:flex;flex-direction:column;gap:16px">
+          <!-- Check header -->
+          <div class="flow-row" id="flow-c-check">
+            <div class="flow-node" id="fc-0">
+              <div class="fn-icon">🌐</div>
+              <div class="fn-label">Incoming Request</div>
+              <div class="fn-sub">POST with body</div>
+            </div>
+            <div class="flow-arrow" id="fc-a0">→</div>
+            <div class="flow-node" id="fc-1">
+              <div class="fn-icon">🤔</div>
+              <div class="fn-label">Has Auth Header?</div>
+              <div class="fn-sub">check Bearer token</div>
+            </div>
+          </div>
+          <!-- Two branches -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div style="border:1px dashed var(--green);border-radius:10px;padding:12px">
+              <div style="font-size:11px;font-weight:700;color:var(--green);margin-bottom:8px">✅ YES — Has API Key</div>
+              <div class="flow-row" style="margin-bottom:0">
+                <div class="flow-node" id="fc-y0" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">🔑</div>
+                  <div class="fn-label" style="font-size:10px">Verify Key</div>
+                </div>
+                <div class="flow-arrow" id="fc-ya0">→</div>
+                <div class="flow-node" id="fc-y1" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">🚦</div>
+                  <div class="fn-label" style="font-size:10px">120/min limit</div>
+                </div>
+                <div class="flow-arrow" id="fc-ya1">→</div>
+                <div class="flow-node" id="fc-y2" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">📊</div>
+                  <div class="fn-label" style="font-size:10px">Audit Trail</div>
+                </div>
+              </div>
+            </div>
+            <div style="border:1px dashed var(--orange);border-radius:10px;padding:12px">
+              <div style="font-size:11px;font-weight:700;color:var(--orange);margin-bottom:8px">❌ NO — Anonymous</div>
+              <div class="flow-row" style="margin-bottom:0">
+                <div class="flow-node" id="fc-n0" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">🚦</div>
+                  <div class="fn-label" style="font-size:10px">20/10min limit</div>
+                </div>
+                <div class="flow-arrow" id="fc-na0">→</div>
+                <div class="flow-node" id="fc-n1" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">🔍</div>
+                  <div class="fn-label" style="font-size:10px">Slug Lookup</div>
+                </div>
+                <div class="flow-arrow" id="fc-na1">→</div>
+                <div class="flow-node" id="fc-n2" style="min-width:80px">
+                  <div class="fn-icon" style="font-size:14px">⚡</div>
+                  <div class="fn-label" style="font-size:10px">Basic Access</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- Converge -->
+          <div class="flow-row">
+            <div style="flex:1"></div>
+            <div class="flow-node" id="fc-end" style="min-width:200px">
+              <div class="fn-icon">✅</div>
+              <div class="fn-label">Create Lead</div>
+              <div class="fn-sub">Same result, different access tier</div>
+            </div>
+            <div style="flex:1"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <!-- Without key -->
+        <div class="card">
+          <div class="card-title">🟠 Without API Key (Quick Start)</div>
+          <div class="code-block" style="font-size:10px">
+<span class="comment">// Works immediately — no setup</span>
+<span class="keyword">await</span> <span class="func">fetch</span>(<span class="string">'/api/public/submit/admizz/scholarship'</span>, {
+  <span class="const">method</span>: <span class="string">'POST'</span>,
+  <span class="const">headers</span>: { <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span> },
+  <span class="const">body</span>: JSON.<span class="func">stringify</span>({ ... })
+});
+<span class="comment">// Rate limit: 20 submissions per 10 min</span>
+          </div>
+        </div>
+
+        <!-- With key -->
+        <div class="card">
+          <div class="card-title">🟢 With API Key (Production)</div>
+          <div class="code-block" style="font-size:10px">
+<span class="comment">// Higher limits + audit trail</span>
+<span class="keyword">await</span> <span class="func">fetch</span>(<span class="string">'/api/public/submit/admizz/scholarship'</span>, {
+  <span class="const">method</span>: <span class="string">'POST'</span>,
+  <span class="const">headers</span>: {
+    <span class="string">'Content-Type'</span>: <span class="string">'application/json'</span>,
+<span class="highlight-line">    <span class="string">'Authorization'</span>: <span class="string">'Bearer crm_live_...'</span>,</span>
+  },
+  <span class="const">body</span>: JSON.<span class="func">stringify</span>({ ... })
+});
+<span class="comment">// Rate limit: 120 submissions per 1 min</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="pros-cons">
+        <div>
+          <ul class="pro-list">
+            <li>Zero friction to start — devs can test instantly</li>
+            <li>Upgrade path: add key when going to production</li>
+            <li>API key gives higher rate limits + audit</li>
+            <li>Same endpoint handles both — simple integration</li>
+            <li>Revoke bad actors' keys without breaking others</li>
+          </ul>
+        </div>
+        <div>
+          <ul class="con-list">
+            <li>Slightly more complex endpoint logic</li>
+            <li>Anonymous path still vulnerable to abuse</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- Scenario Simulator -->
+      <div class="simulator">
+        <div class="sim-title">🧪 Try Scenarios — Hybrid Mode</div>
+        <div class="sim-scenarios">
+          <div class="sim-btn" onclick="simC(this,'anon-ok')">🟠 Anonymous submit</div>
+          <div class="sim-btn" onclick="simC(this,'key-ok')">🟢 With API key</div>
+          <div class="sim-btn" onclick="simC(this,'anon-rate')">🤖 Anonymous spam</div>
+          <div class="sim-btn" onclick="simC(this,'key-rate')">🚀 Key user high volume</div>
+          <div class="sim-btn" onclick="simC(this,'bad-key')">🔑 Invalid key</div>
+        </div>
+        <div class="sim-result" id="sim-c-result">Click a scenario above to see what happens</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════════
+         COMPARISON
+    ════════════════════════════════════ -->
+    <div class="option-panel" id="opt-3">
+      <div class="section-title">Side-by-Side Comparison</div>
+      <div class="section-sub">All three options compared across key dimensions.</div>
+
+      <div class="card" style="margin-bottom:20px">
+        <table class="cmp-table">
+          <thead>
+            <tr>
+              <th></th>
+              <th>Option A — No Auth</th>
+              <th>Option B — API Key</th>
+              <th>Option C — Hybrid ⭐</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Developer setup</td>
+              <td><span class="badge-sm badge-green">None</span> just POST</td>
+              <td><span class="badge-sm badge-orange">Get key first</span></td>
+              <td><span class="badge-sm badge-green">None</span> key optional</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Auth header</td>
+              <td>Not needed</td>
+              <td><span class="badge-sm badge-blue">Required</span> Bearer token</td>
+              <td>Optional — upgrades access</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Rate limit</td>
+              <td>20 / 10 min (IP)</td>
+              <td>120 / 1 min (key)</td>
+              <td>20/10min anon · 120/1min keyed</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Audit trail</td>
+              <td><span class="badge-sm badge-red">None</span></td>
+              <td><span class="badge-sm badge-green">Full</span> per key</td>
+              <td>Only keyed requests</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Revoke access</td>
+              <td><span class="badge-sm badge-red">Can't</span></td>
+              <td><span class="badge-sm badge-green">Per key</span></td>
+              <td>Per key (anon stays open)</td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Spam protection</td>
+              <td><span class="badge-sm badge-orange">IP rate limit</span></td>
+              <td><span class="badge-sm badge-green">Strong</span></td>
+              <td><span class="badge-sm badge-green">Good</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Browser-safe?</td>
+              <td><span class="badge-sm badge-green">Yes</span></td>
+              <td><span class="badge-sm badge-red">No</span> key exposed</td>
+              <td><span class="badge-sm badge-green">Anon from browser</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Server-to-server</td>
+              <td>Works but low limits</td>
+              <td><span class="badge-sm badge-green">Ideal</span></td>
+              <td><span class="badge-sm badge-green">Use key tier</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Implementation</td>
+              <td><span class="badge-sm badge-green">Simple</span></td>
+              <td><span class="badge-sm badge-blue">Medium</span></td>
+              <td><span class="badge-sm badge-blue">Medium</span></td>
+            </tr>
+            <tr>
+              <td style="font-weight:700;color:var(--muted)">Best for</td>
+              <td>Public contact forms</td>
+              <td>Enterprise integrations</td>
+              <td>Both — start free, upgrade</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Visual comparison -->
+      <div class="grid-3">
+        <div class="card" style="border-color:var(--green)">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:36px">🔓</div>
+            <div style="font-size:13px;font-weight:800;margin-top:4px">Option A</div>
+            <div style="font-size:10px;color:var(--muted)">No Auth</div>
+          </div>
+          <div class="shield-bar" style="justify-content:center">
+            <div class="shield-level on-green" style="height:10px"></div>
+            <div class="shield-level" style="height:20px"></div>
+            <div class="shield-level" style="height:30px"></div>
+            <div class="shield-level" style="height:40px"></div>
+          </div>
+          <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:8px">Security: Low</div>
+          <div style="text-align:center;font-size:10px;color:var(--green);margin-top:2px">Friction: Zero</div>
+        </div>
+        <div class="card" style="border-color:var(--primary)">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:36px">🔐</div>
+            <div style="font-size:13px;font-weight:800;margin-top:4px">Option B</div>
+            <div style="font-size:10px;color:var(--muted)">API Key Required</div>
+          </div>
+          <div class="shield-bar" style="justify-content:center">
+            <div class="shield-level on-green" style="height:10px"></div>
+            <div class="shield-level on-green" style="height:20px"></div>
+            <div class="shield-level on-green" style="height:30px"></div>
+            <div class="shield-level on-green" style="height:40px"></div>
+          </div>
+          <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:8px">Security: High</div>
+          <div style="text-align:center;font-size:10px;color:var(--orange);margin-top:2px">Friction: Medium</div>
+        </div>
+        <div class="card" style="border-color:#a855f7">
+          <div style="text-align:center;margin-bottom:12px">
+            <div style="font-size:36px">🛡️</div>
+            <div style="font-size:13px;font-weight:800;margin-top:4px">Option C ⭐</div>
+            <div style="font-size:10px;color:var(--muted)">Hybrid</div>
+          </div>
+          <div class="shield-bar" style="justify-content:center">
+            <div class="shield-level on-green" style="height:10px"></div>
+            <div class="shield-level on-green" style="height:20px"></div>
+            <div class="shield-level on-green" style="height:30px"></div>
+            <div class="shield-level" style="height:40px"></div>
+          </div>
+          <div style="text-align:center;font-size:10px;color:var(--muted);margin-top:8px">Security: Good</div>
+          <div style="text-align:center;font-size:10px;color:var(--green);margin-top:2px">Friction: Zero to start</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // ─── TAB SWITCHING ───
+    function showOption(n) {
+      document.querySelectorAll('.tab').forEach((t,i) => t.classList.toggle('active', i===n));
+      document.querySelectorAll('.option-panel').forEach((p,i) => p.classList.toggle('active', i===n));
+    }
+
+    // ─── FLOW A ANIMATION ───
+    let flowATimer;
+    function playFlowA() {
+      clearTimeout(flowATimer);
+      [0,1,2,3].forEach(i => {
+        document.getElementById(`fa-${i}`).classList.remove('lit','green-lit');
+        if(i<3) document.getElementById(`fa-a${i}`).classList.remove('lit','green-lit');
+      });
+      let step = 0;
+      function tick() {
+        if (step < 4) {
+          document.getElementById(`fa-${step}`).classList.add('lit');
+          if (step > 0) {
+            document.getElementById(`fa-a${step-1}`).classList.add('lit');
+            document.getElementById(`fa-${step-1}`).classList.remove('lit');
+            document.getElementById(`fa-${step-1}`).classList.add('green-lit');
+            document.getElementById(`fa-a${step-1}`).classList.remove('lit');
+            document.getElementById(`fa-a${step-1}`).classList.add('green-lit');
+          }
+          step++;
+          flowATimer = setTimeout(tick, 700);
+        } else {
+          document.getElementById('fa-3').classList.remove('lit');
+          document.getElementById('fa-3').classList.add('green-lit');
+        }
+      }
+      tick();
+    }
+
+    // ─── FLOW B ANIMATION ───
+    let flowBTimer;
+    function playFlowB() {
+      clearTimeout(flowBTimer);
+      [0,1,2,3,4].forEach(i => {
+        document.getElementById(`fb-${i}`).classList.remove('lit','green-lit');
+        if(i<4) document.getElementById(`fb-a${i}`).classList.remove('lit','green-lit');
+      });
+      let step = 0;
+      function tick() {
+        if (step < 5) {
+          document.getElementById(`fb-${step}`).classList.add('lit');
+          if (step > 0) {
+            document.getElementById(`fb-a${step-1}`).classList.add('green-lit');
+            document.getElementById(`fb-${step-1}`).classList.remove('lit');
+            document.getElementById(`fb-${step-1}`).classList.add('green-lit');
+          }
+          step++;
+          flowBTimer = setTimeout(tick, 600);
+        } else {
+          document.getElementById('fb-4').classList.remove('lit');
+          document.getElementById('fb-4').classList.add('green-lit');
+        }
+      }
+      tick();
+    }
+
+    // ─── FLOW C ANIMATION ───
+    let flowCTimer;
+    function playFlowC() {
+      clearTimeout(flowCTimer);
+      ['fc-0','fc-1','fc-y0','fc-y1','fc-y2','fc-n0','fc-n1','fc-n2','fc-end'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.classList.remove('lit','green-lit','orange-lit');
+      });
+      let step = 0;
+      function tick() {
+        if (step===0) { document.getElementById('fc-0').classList.add('lit'); }
+        if (step===1) { document.getElementById('fc-0').classList.replace('lit','green-lit'); document.getElementById('fc-1').classList.add('lit'); }
+        if (step===2) {
+          document.getElementById('fc-1').classList.replace('lit','green-lit');
+          document.getElementById('fc-y0').classList.add('lit');
+          document.getElementById('fc-n0').classList.add('orange-lit');
+        }
+        if (step===3) {
+          document.getElementById('fc-y0').classList.replace('lit','green-lit');
+          document.getElementById('fc-y1').classList.add('lit');
+          document.getElementById('fc-n0').classList.replace('orange-lit','orange-lit');
+          document.getElementById('fc-n1').classList.add('orange-lit');
+        }
+        if (step===4) {
+          document.getElementById('fc-y1').classList.replace('lit','green-lit');
+          document.getElementById('fc-y2').classList.add('lit');
+          document.getElementById('fc-n1').classList.replace('orange-lit','orange-lit');
+          document.getElementById('fc-n2').classList.add('orange-lit');
+        }
+        if (step===5) {
+          document.getElementById('fc-y2').classList.replace('lit','green-lit');
+          document.getElementById('fc-n2').classList.replace('orange-lit','orange-lit');
+          document.getElementById('fc-end').classList.add('green-lit');
+        }
+        step++;
+        if (step <= 5) flowCTimer = setTimeout(tick, 700);
+      }
+      tick();
+    }
+
+    // ─── SIMULATORS ───
+    function clearBtns(parent) { parent.closest('.simulator').querySelectorAll('.sim-btn').forEach(b => b.classList.remove('active')); }
+
+    function simA(el, scenario) {
+      clearBtns(el); el.classList.add('active');
+      const r = document.getElementById('sim-a-result');
+      const responses = {
+        'ok': { cls: 'success', html: '<strong>200 OK</strong> — Lead created!<br><code style="font-size:10px">{ "success": true, "lead_id": "uuid-123" }</code><br><span style="font-size:10px;color:var(--muted)">Rate limit: 19 remaining</span>' },
+        'spam': { cls: 'fail', html: '<strong>429 Too Many Requests</strong> — after 20th attempt<br><code style="font-size:10px">{ "error": "Rate limit exceeded", "retry_after": 342 }</code><br><span style="font-size:10px;color:var(--muted)">Bot blocked for ~5 min. BUT can switch IP to bypass.</span>' },
+        'wrong-slug': { cls: 'fail', html: '<strong>404 Not Found</strong><br><code style="font-size:10px">{ "error": "Form not found" }</code><br><span style="font-size:10px;color:var(--muted)">No tenant or form matches the slug.</span>' },
+        'inactive': { cls: 'fail', html: '<strong>404 Not Found</strong><br><code style="font-size:10px">{ "error": "Form not found" }</code><br><span style="font-size:10px;color:var(--muted)">Form exists but is_active = false. Same 404 — doesn\'t leak info.</span>' },
+      };
+      r.className = 'sim-result ' + responses[scenario].cls;
+      r.innerHTML = responses[scenario].html;
+    }
+
+    function simB(el, scenario) {
+      clearBtns(el); el.classList.add('active');
+      const r = document.getElementById('sim-b-result');
+      const responses = {
+        'ok': { cls: 'success', html: '<strong>201 Created</strong> — Lead created with audit!<br><code style="font-size:10px">{ "success": true, "lead_id": "uuid-123" }</code><br><span style="font-size:10px;color:var(--muted)">Audit log: integration.submit key=abc... · Rate: 119 remaining</span>' },
+        'no-key': { cls: 'fail', html: '<strong>401 Unauthorized</strong><br><code style="font-size:10px">{ "error": "Missing or invalid Authorization header" }</code><br><span style="font-size:10px;color:var(--muted)">Request rejected immediately. No slug lookup, no lead created.</span>' },
+        'revoked': { cls: 'fail', html: '<strong>401 Unauthorized</strong><br><code style="font-size:10px">{ "error": "Invalid or revoked API key" }</code><br><span style="font-size:10px;color:var(--muted)">Admin revoked this key in Settings. Audit log: auth.failed reason=key_not_found</span>' },
+        'wrong-tenant': { cls: 'fail', html: '<strong>403 Forbidden</strong><br><code style="font-size:10px">{ "error": "API key does not belong to this tenant" }</code><br><span style="font-size:10px;color:var(--muted)">Key is valid but belongs to a different tenant than the slug.</span>' },
+        'rate': { cls: 'warn', html: '<strong>429 Too Many Requests</strong><br><code style="font-size:10px">{ "error": "Rate limit exceeded", "retry_after": 12 }</code><br><span style="font-size:10px;color:var(--muted)">120/min exceeded. Much higher limit than no-auth, but still capped.</span>' },
+      };
+      r.className = 'sim-result ' + responses[scenario].cls;
+      r.innerHTML = responses[scenario].html;
+    }
+
+    function simC(el, scenario) {
+      clearBtns(el); el.classList.add('active');
+      const r = document.getElementById('sim-c-result');
+      const responses = {
+        'anon-ok': { cls: 'success', html: '<strong>🟠 Anonymous → 200 OK</strong><br><code style="font-size:10px">{ "success": true, "lead_id": "uuid", "tier": "anonymous" }</code><br><span style="font-size:10px;color:var(--muted)">Works instantly. Rate limit: 20/10min per IP. No audit trail.</span>' },
+        'key-ok': { cls: 'success', html: '<strong>🟢 Authenticated → 201 Created</strong><br><code style="font-size:10px">{ "success": true, "lead_id": "uuid", "tier": "authenticated" }</code><br><span style="font-size:10px;color:var(--muted)">Rate limit: 120/min. Full audit trail. Usage tracked per key.</span>' },
+        'anon-rate': { cls: 'warn', html: '<strong>🟠 Anonymous → 429 Too Many Requests</strong><br><code style="font-size:10px">{ "error": "Rate limit exceeded", "hint": "Add an API key for higher limits" }</code><br><span style="font-size:10px;color:var(--muted)">Nudges developer to upgrade to API key for production use.</span>' },
+        'key-rate': { cls: 'success', html: '<strong>🟢 Authenticated → 200 OK (all 100 requests)</strong><br><span style="font-size:10px;color:var(--muted)">120 req/min allows high-volume integrations. Key user stays under the limit.</span>' },
+        'bad-key': { cls: 'fail', html: '<strong>401 Unauthorized</strong><br><code style="font-size:10px">{ "error": "Invalid API key" }</code><br><span style="font-size:10px;color:var(--muted)">Bad key = rejected. Remove the header to fall back to anonymous tier.</span>' },
+      };
+      r.className = 'sim-result ' + responses[scenario].cls;
+      r.innerHTML = responses[scenario].html;
+    }
+  </script>
+</body>
+</html>

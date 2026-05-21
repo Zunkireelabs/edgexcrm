@@ -37,7 +37,7 @@ export async function GET() {
     const supabase = await createServiceClient();
     const { data: keys, error } = await supabase
       .from("integration_keys")
-      .select("id, name, permissions, created_at, last_used_at, revoked_at")
+      .select("id, name, permissions, permissions_detail, created_at, last_used_at, revoked_at")
       .eq("tenant_id", auth.tenantId)
       .order("created_at", { ascending: false });
 
@@ -50,6 +50,7 @@ export async function GET() {
       id: k.id,
       name: k.name,
       permissions: k.permissions,
+      permissions_detail: k.permissions_detail,
       created_at: k.created_at,
       last_used_at: k.last_used_at,
       revoked_at: k.revoked_at,
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
     return apiRateLimited(rateResult.retryAfterSeconds);
   }
 
-  let body: { name?: string; scope?: string };
+  let body: { name?: string; scope?: string; category?: string };
   try {
     body = await request.json();
   } catch {
@@ -150,6 +151,8 @@ export async function POST(request: NextRequest) {
     // Generate key
     const { rawKey, hashedKey } = generateApiKey();
 
+    const keyCategory = body.category === "form" ? "form" : "integration";
+
     const { data: created, error: insertError } = await supabase
       .from("integration_keys")
       .insert({
@@ -157,6 +160,7 @@ export async function POST(request: NextRequest) {
         name,
         hashed_key: hashedKey,
         permissions: [scope],
+        permissions_detail: { category: keyCategory },
       })
       .select("id, name, permissions, created_at")
       .single();

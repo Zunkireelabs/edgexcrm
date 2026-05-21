@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts } from "@/types/database";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -141,21 +141,89 @@ export async function getFormConfigsForTenant(
   return (data as FormConfig[]) || [];
 }
 
-export async function getPipelineStages(tenantId: string): Promise<PipelineStage[]> {
+export async function getPipelineStages(
+  tenantId: string,
+  pipelineId?: string
+): Promise<PipelineStage[]> {
   const supabase = await createClient();
-  const { data, error } = await supabase
+  let query = supabase
     .from("pipeline_stages")
     .select("*")
-    .eq("tenant_id", tenantId)
-    .order("position", { ascending: true });
+    .eq("tenant_id", tenantId);
+
+  if (pipelineId) {
+    query = query.eq("pipeline_id", pipelineId);
+  }
+
+  const { data, error } = await query.order("position", { ascending: true });
 
   if (error) throw error;
   return (data as PipelineStage[]) || [];
 }
 
+export async function getPipelines(tenantId: string): Promise<PipelineWithCounts[]> {
+  const supabase = await createClient();
+
+  const { data: pipelines, error } = await supabase
+    .from("pipelines")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("is_active", true)
+    .order("position", { ascending: true });
+
+  if (error) throw error;
+
+  // Get stage counts per pipeline
+  const { data: stageCounts } = await supabase
+    .from("pipeline_stages")
+    .select("pipeline_id")
+    .eq("tenant_id", tenantId);
+
+  // Get lead counts per pipeline
+  const { data: leadCounts } = await supabase
+    .from("leads")
+    .select("pipeline_id")
+    .eq("tenant_id", tenantId)
+    .is("deleted_at", null);
+
+  // Aggregate counts
+  const stageCountMap = new Map<string, number>();
+  const leadCountMap = new Map<string, number>();
+
+  for (const s of stageCounts || []) {
+    stageCountMap.set(s.pipeline_id, (stageCountMap.get(s.pipeline_id) || 0) + 1);
+  }
+
+  for (const l of leadCounts || []) {
+    if (l.pipeline_id) {
+      leadCountMap.set(l.pipeline_id, (leadCountMap.get(l.pipeline_id) || 0) + 1);
+    }
+  }
+
+  return (pipelines || []).map((p) => ({
+    ...p,
+    stage_count: stageCountMap.get(p.id) || 0,
+    lead_count: leadCountMap.get(p.id) || 0,
+  })) as PipelineWithCounts[];
+}
+
+export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("pipelines")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("is_default", true)
+    .single();
+
+  if (error) return null;
+  return data as Pipeline;
+}
+
 export async function getLeadsForPipeline(
   tenantId: string,
-  options?: { role?: string; userId?: string }
+  options?: { role?: string; userId?: string; pipelineId?: string }
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
@@ -167,6 +235,10 @@ export async function getLeadsForPipeline(
     .is("deleted_at", null)
     .not("stage_id", "is", null)
     .limit(500);
+
+  if (options?.pipelineId) {
+    query = query.eq("pipeline_id", options.pipelineId);
+  }
 
   if (options?.role === "counselor" && options.userId) {
     query = query.eq("assigned_to", options.userId);

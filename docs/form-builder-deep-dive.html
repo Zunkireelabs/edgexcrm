@@ -1,0 +1,1316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form Builder — Deep Dive</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0a0f1e;
+      --surface: #111827;
+      --surface2: #1f2937;
+      --border: #2d3748;
+      --primary: #6366f1;
+      --primary-glow: rgba(99,102,241,0.3);
+      --green: #10b981;
+      --green-glow: rgba(16,185,129,0.3);
+      --orange: #f59e0b;
+      --red: #ef4444;
+      --text: #f1f5f9;
+      --muted: #64748b;
+      --subtle: #94a3b8;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ═══ TOP BAR ═══ */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 28px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      gap: 16px;
+    }
+    .topbar-left { display: flex; align-items: center; gap: 12px; }
+    .logo { font-size: 14px; font-weight: 800; color: var(--primary); }
+    .scene-title-bar { font-size: 14px; font-weight: 700; color: var(--text); }
+    .scene-subtitle-bar { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+    .progress-track {
+      flex: 1; max-width: 400px;
+      height: 4px; background: var(--border);
+      border-radius: 2px; overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%; background: var(--primary);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    .scene-counter { font-size: 12px; color: var(--muted); white-space: nowrap; }
+
+    /* ═══ STAGE ═══ */
+    .stage {
+      flex: 1; position: relative; overflow: hidden;
+    }
+    .scene {
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px 32px;
+      opacity: 0; transform: translateY(20px);
+      transition: opacity 0.45s ease, transform 0.45s ease;
+      pointer-events: none;
+      gap: 16px;
+    }
+    .scene.active { opacity: 1; transform: translateY(0); pointer-events: all; }
+    .scene.exit { opacity: 0; transform: translateY(-20px); }
+
+    .sh { font-size: 20px; font-weight: 800; text-align: center; }
+    .ss { font-size: 12px; color: var(--muted); text-align: center; max-width: 560px; }
+
+    /* ═══ BOTTOM BAR ═══ */
+    .bottombar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 28px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .btn {
+      padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none; transition: all 0.2s;
+    }
+    .btn-ghost { background: var(--surface2); color: var(--subtle); }
+    .btn-ghost:hover { background: var(--border); color: var(--text); }
+    .btn-primary { background: var(--primary); color: white; }
+    .btn-primary:hover { filter: brightness(1.15); }
+    .btn:disabled { opacity: 0.25; cursor: not-allowed; }
+    .dots { display: flex; gap: 6px; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border); cursor: pointer; transition: all 0.3s;
+    }
+    .dot.active { background: var(--primary); transform: scale(1.4); }
+    .dot.done { background: var(--green); }
+
+    /* ══════════════════════════════════════
+       SCENE 1 — FORM ANATOMY
+    ══════════════════════════════════════ */
+    .anatomy {
+      display: flex; gap: 24px; align-items: flex-start;
+      width: 100%; max-width: 820px;
+    }
+    .anat-left { flex: 1; }
+    .anat-right { width: 260px; flex-shrink: 0; }
+
+    .form-tree { position: relative; }
+    .tree-node {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.25s;
+      border: 1px solid transparent;
+    }
+    .tree-node:hover { border-color: var(--primary); background: rgba(99,102,241,0.08); }
+    .tree-node.active-node { border-color: var(--primary); background: rgba(99,102,241,0.12); box-shadow: 0 0 12px var(--primary-glow); }
+    .tree-icon { font-size: 18px; width: 28px; text-align: center; }
+    .tree-label { font-size: 13px; font-weight: 700; }
+    .tree-desc { font-size: 11px; color: var(--muted); }
+    .tree-indent { padding-left: 36px; }
+    .tree-line {
+      width: 2px; height: 20px; background: var(--border);
+      margin-left: 23px; margin-bottom: 6px;
+    }
+
+    .detail-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      min-height: 280px;
+      transition: all 0.3s;
+    }
+    .detail-panel.glow { border-color: var(--primary); box-shadow: 0 0 20px var(--primary-glow); }
+    .dp-title { font-size: 12px; font-weight: 800; color: var(--primary); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .dp-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 7px 0; border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .dp-row:last-child { border-bottom: none; }
+    .dp-key { color: var(--muted); }
+    .dp-val { color: var(--text); font-weight: 500; font-family: 'SF Mono', monospace; font-size: 10px; }
+    .dp-badge {
+      font-size: 9px; font-weight: 700; padding: 2px 7px; border-radius: 10px;
+    }
+    .dp-badge.req { background: #450a0a; color: #fca5a5; }
+    .dp-badge.opt { background: var(--surface2); color: var(--muted); }
+    .dp-badge.type { background: #1e3a5f; color: #93c5fd; }
+
+    /* ══════════════════════════════════════
+       SCENE 2 — FIELD TYPES
+    ══════════════════════════════════════ */
+    .field-types-grid {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+      width: 100%; max-width: 780px;
+    }
+    .ft-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px;
+      cursor: pointer; transition: all 0.25s;
+      text-align: center;
+    }
+    .ft-card:hover, .ft-card.selected {
+      border-color: var(--primary); background: rgba(99,102,241,0.08);
+      transform: translateY(-2px); box-shadow: 0 4px 16px var(--primary-glow);
+    }
+    .ft-icon { font-size: 22px; margin-bottom: 6px; }
+    .ft-name { font-size: 11px; font-weight: 700; margin-bottom: 3px; }
+    .ft-desc { font-size: 10px; color: var(--muted); }
+
+    .ft-preview {
+      width: 100%; max-width: 780px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px;
+      display: flex; align-items: center; gap: 16px;
+      min-height: 56px;
+      transition: all 0.3s;
+    }
+    .ft-preview-label { font-size: 12px; font-weight: 600; width: 120px; flex-shrink: 0; color: var(--subtle); }
+    .ft-preview-widget { flex: 1; }
+
+    .mock-input {
+      width: 100%; height: 32px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      display: flex; align-items: center; padding: 0 10px;
+      font-size: 11px; color: var(--muted);
+    }
+    .mock-textarea {
+      width: 100%; height: 60px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      display: flex; align-items: flex-start; padding: 8px 10px;
+      font-size: 11px; color: var(--muted);
+    }
+    .mock-select {
+      width: 100%; height: 32px; background: var(--surface2);
+      border: 1px solid var(--border); border-radius: 6px;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 10px; font-size: 11px; color: var(--muted);
+    }
+    .mock-radio { display: flex; gap: 14px; flex-wrap: wrap; }
+    .mock-radio-item { display: flex; align-items: center; gap-5px; font-size: 11px; color: var(--muted); gap: 5px; }
+    .mock-radio-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); flex-shrink: 0; }
+    .mock-check { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+    .mock-check-box { width: 16px; height: 16px; border-radius: 3px; border: 2px solid var(--border); flex-shrink: 0; }
+    .mock-file {
+      height: 32px; background: var(--surface2); border: 1px dashed var(--border);
+      border-radius: 6px; display: flex; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--muted); width: 100%;
+    }
+    .mock-phone { display: flex; gap: 6px; }
+    .mock-phone-code { width: 70px; height: 32px; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; color: var(--muted); flex-shrink: 0; }
+    .mock-entity { display: flex; gap: 6px; flex-wrap: wrap; }
+    .mock-entity-chip { font-size: 10px; background: rgba(99,102,241,0.15); border: 1px solid rgba(99,102,241,0.3); color: #a5b4fc; padding: 3px 8px; border-radius: 12px; }
+
+    /* ══════════════════════════════════════
+       SCENE 3 — MULTI-STEP FORM
+    ══════════════════════════════════════ */
+    .steps-demo {
+      width: 100%; max-width: 780px;
+      display: flex; gap: 16px;
+    }
+    .steps-sidebar {
+      width: 200px; flex-shrink: 0;
+      display: flex; flex-direction: column; gap: 8px;
+    }
+    .step-nav-item {
+      background: var(--surface);
+      border: 2px solid var(--border);
+      border-radius: 10px; padding: 12px;
+      cursor: pointer; transition: all 0.3s;
+    }
+    .step-nav-item.active-step {
+      border-color: var(--primary);
+      background: rgba(99,102,241,0.1);
+      box-shadow: 0 0 14px var(--primary-glow);
+    }
+    .step-nav-item.done-step { border-color: var(--green); background: rgba(16,185,129,0.06); }
+    .step-num { font-size: 10px; color: var(--muted); margin-bottom: 2px; }
+    .step-name-nav { font-size: 12px; font-weight: 700; }
+    .step-fields-count { font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+    .steps-content { flex: 1; }
+    .step-panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+      display: none;
+    }
+    .step-panel.show { display: block; }
+    .sp-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .sp-title { font-size: 13px; font-weight: 800; }
+    .sp-badge { font-size: 10px; background: rgba(99,102,241,0.15); color: #a5b4fc; padding: 3px 8px; border-radius: 10px; }
+    .sp-fields { display: flex; flex-direction: column; gap: 6px; }
+    .sp-field {
+      display: flex; align-items: center; gap: 10px;
+      background: var(--surface2);
+      border-radius: 7px; padding: 8px 10px;
+      font-size: 11px;
+      animation: slideField 0.3s ease forwards;
+      opacity: 0;
+    }
+    @keyframes slideField {
+      from { opacity: 0; transform: translateX(-8px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    .sp-field-name { flex: 1; font-weight: 600; }
+    .sp-field-type { font-size: 9px; background: var(--border); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+    .sp-field-req { color: var(--red); font-size: 12px; }
+    .sp-field-width { font-size: 9px; color: var(--muted); }
+
+    .step-progress-bar {
+      display: flex; gap: 4px; width: 100%; margin-bottom: 14px;
+    }
+    .spb-item { flex: 1; height: 4px; border-radius: 2px; background: var(--border); transition: background 0.4s; }
+    .spb-item.done-bar { background: var(--green); }
+    .spb-item.active-bar { background: var(--primary); }
+
+    /* ══════════════════════════════════════
+       SCENE 4 — BRANDING
+    ══════════════════════════════════════ */
+    .branding-demo {
+      display: flex; gap: 20px; width: 100%; max-width: 780px;
+    }
+    .branding-controls {
+      width: 240px; flex-shrink: 0;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+    }
+    .bc-title { font-size: 12px; font-weight: 800; color: var(--primary); margin-bottom: 12px; }
+    .bc-row { margin-bottom: 12px; }
+    .bc-label { font-size: 10px; color: var(--muted); margin-bottom: 5px; }
+    .color-row { display: flex; gap: 6px; }
+    .color-swatch {
+      width: 26px; height: 26px; border-radius: 6px; cursor: pointer;
+      border: 2px solid transparent; transition: all 0.2s;
+    }
+    .color-swatch.selected { border-color: white; transform: scale(1.15); }
+    .bc-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 8px; font-size: 11px; color: var(--text);
+    }
+
+    .branding-preview-wrap { flex: 1; }
+    .brand-form-preview {
+      border-radius: 14px; overflow: hidden;
+      border: 1px solid var(--border);
+      transition: all 0.4s;
+    }
+    .bfp-header {
+      padding: 16px 20px;
+      transition: background 0.4s;
+    }
+    .bfp-h-title { font-size: 15px; font-weight: 800; color: white; }
+    .bfp-h-sub { font-size: 11px; color: rgba(255,255,255,0.7); margin-top: 3px; }
+    .bfp-body { background: white; padding: 16px 20px; }
+    .bfp-field { margin-bottom: 10px; }
+    .bfp-label { font-size: 10px; color: #64748b; margin-bottom: 3px; }
+    .bfp-input-mock {
+      width: 100%; height: 28px; background: #f8fafc;
+      border: 1px solid #e2e8f0; border-radius: 5px;
+    }
+    .bfp-btn {
+      width: 100%; padding: 9px;
+      border-radius: 7px; color: white;
+      font-size: 12px; font-weight: 700;
+      text-align: center; cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.4s;
+    }
+
+    /* ══════════════════════════════════════
+       SCENE 5 — FIELD EDITOR SHEET
+    ══════════════════════════════════════ */
+    .editor-demo {
+      display: flex; gap: 16px; width: 100%; max-width: 780px;
+    }
+    .field-list-panel {
+      flex: 1; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 14px;
+    }
+    .flp-title { font-size: 12px; font-weight: 800; color: var(--subtle); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .flp-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 10px;
+      background: var(--surface2); border-radius: 8px; margin-bottom: 6px;
+      cursor: pointer; border: 1px solid transparent;
+      transition: all 0.2s; font-size: 12px;
+    }
+    .flp-item:hover, .flp-item.editing {
+      border-color: var(--primary); background: rgba(99,102,241,0.08);
+    }
+    .flp-name { flex: 1; font-weight: 600; }
+    .flp-type { font-size: 9px; background: var(--border); color: var(--muted); padding: 2px 6px; border-radius: 4px; }
+    .flp-req { color: var(--red); font-size: 12px; }
+    .flp-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.2s; }
+    .flp-item:hover .flp-actions { opacity: 1; }
+    .flp-btn { font-size: 11px; background: var(--border); color: var(--subtle); border: none; padding: 3px 7px; border-radius: 4px; cursor: pointer; }
+
+    .editor-sheet {
+      width: 260px; flex-shrink: 0;
+      background: var(--surface); border: 1px solid var(--primary);
+      box-shadow: 0 0 24px var(--primary-glow);
+      border-radius: 12px; padding: 16px;
+      transition: all 0.4s;
+    }
+    .es-title { font-size: 13px; font-weight: 800; margin-bottom: 14px; color: var(--primary); }
+    .es-field { margin-bottom: 10px; }
+    .es-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+    .es-input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 9px; font-size: 11px; color: var(--text);
+    }
+    .es-select {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 7px 9px; font-size: 11px; color: var(--text);
+    }
+    .es-toggle { display: flex; align-items: center; gap: 8px; }
+    .toggle-track {
+      width: 32px; height: 18px; border-radius: 9px;
+      background: var(--border); position: relative;
+      cursor: pointer; transition: background 0.3s;
+      flex-shrink: 0;
+    }
+    .toggle-track.on { background: var(--primary); }
+    .toggle-thumb {
+      position: absolute; width: 12px; height: 12px;
+      background: white; border-radius: 50%;
+      top: 3px; left: 3px;
+      transition: left 0.3s;
+    }
+    .toggle-track.on .toggle-thumb { left: 17px; }
+    .es-save-btn {
+      width: 100%; padding: 9px; border-radius: 7px;
+      background: var(--primary); color: white;
+      font-size: 12px; font-weight: 700; text-align: center;
+      cursor: pointer; margin-top: 4px;
+      transition: filter 0.2s;
+    }
+    .es-save-btn:hover { filter: brightness(1.15); }
+
+    /* ══════════════════════════════════════
+       SCENE 6 — API CHAIN
+    ══════════════════════════════════════ */
+    .api-chain {
+      width: 100%; max-width: 720px;
+    }
+    .api-req {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 14px 18px; margin-bottom: 8px;
+      transition: all 0.4s; position: relative; overflow: hidden;
+    }
+    .api-req::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+      background: var(--border); transition: background 0.4s;
+    }
+    .api-req.active-req::before { background: var(--primary); }
+    .api-req.done-req::before { background: var(--green); }
+    .api-req.active-req { border-color: var(--primary); box-shadow: 0 0 14px var(--primary-glow); }
+    .api-req.done-req { border-color: var(--green); }
+    .ar-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+    .ar-method {
+      font-size: 10px; font-weight: 800; padding: 2px 8px; border-radius: 4px;
+      font-family: monospace;
+    }
+    .m-patch { background: #451a03; color: #fdba74; }
+    .m-post { background: #1e3a5f; color: #93c5fd; }
+    .m-get { background: #14532d; color: #86efac; }
+    .ar-path { font-size: 12px; font-weight: 700; font-family: monospace; }
+    .ar-status {
+      margin-left: auto; font-size: 11px; font-weight: 700;
+      opacity: 0; transition: opacity 0.3s;
+    }
+    .ar-status.show { opacity: 1; }
+    .ar-body { font-size: 10px; color: var(--muted); font-family: monospace; line-height: 1.6; }
+    .ar-body span { color: #86efac; }
+    .ar-body em { color: #93c5fd; font-style: normal; }
+
+    /* ══════════════════════════════════════
+       SCENE 7 — FORM CONFIG JSON
+    ══════════════════════════════════════ */
+    .json-viewer {
+      width: 100%; max-width: 780px;
+      display: flex; gap: 16px;
+    }
+    .json-tree {
+      width: 220px; flex-shrink: 0;
+    }
+    .jt-item {
+      padding: 6px 10px; font-size: 11px;
+      border-radius: 6px; cursor: pointer;
+      transition: all 0.2s; color: var(--muted);
+    }
+    .jt-item:hover, .jt-item.active-json { background: rgba(99,102,241,0.1); color: var(--text); }
+    .jt-item.active-json { color: var(--primary); font-weight: 700; }
+    .jt-indent { padding-left: 24px; }
+    .jt-key { color: #93c5fd; }
+    .jt-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--border); display: inline-block; margin-right: 6px; }
+    .jt-item.active-json .jt-dot { background: var(--primary); }
+
+    .json-code {
+      flex: 1; background: var(--surface);
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 16px; font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 11px; line-height: 1.8; overflow-y: auto; max-height: 320px;
+    }
+    .jc-key { color: #93c5fd; }
+    .jc-str { color: #86efac; }
+    .jc-num { color: #fdba74; }
+    .jc-bool { color: #f472b6; }
+    .jc-comment { color: var(--muted); font-style: italic; }
+    .jc-highlight {
+      background: rgba(99,102,241,0.15);
+      border-left: 2px solid var(--primary);
+      padding-left: 6px; margin-left: -6px;
+      display: block;
+    }
+
+    /* ══════════════════════════════════════
+       SCENE 8 — SUBMISSION FLOW
+    ══════════════════════════════════════ */
+    .submit-demo {
+      display: flex; gap: 20px; width: 100%; max-width: 800px; align-items: flex-start;
+    }
+    .submit-form-mock {
+      width: 220px; flex-shrink: 0;
+      background: white; border-radius: 14px; overflow: hidden;
+      border: 1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+    }
+    .sfm-header { padding: 14px 16px; background: #4f46e5; }
+    .sfm-h-title { font-size: 13px; font-weight: 800; color: white; }
+    .sfm-progress { display: flex; gap: 3px; margin-top: 8px; }
+    .sfm-prog { flex: 1; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.3); transition: background 0.4s; }
+    .sfm-prog.active-sfm { background: white; }
+    .sfm-body { padding: 14px 16px; }
+    .sfm-field { margin-bottom: 8px; }
+    .sfm-label { font-size: 9px; color: #64748b; margin-bottom: 2px; }
+    .sfm-val {
+      font-size: 11px; font-weight: 600; color: #1e293b;
+      background: #f8fafc; border: 1px solid #e2e8f0;
+      border-radius: 4px; padding: 4px 8px;
+      animation: typeIn 0.3s ease forwards;
+      opacity: 0;
+    }
+    @keyframes typeIn {
+      from { opacity: 0; transform: scale(0.97); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .sfm-btn {
+      width: 100%; padding: 9px; border-radius: 6px;
+      background: #4f46e5; color: white; font-size: 11px;
+      font-weight: 700; text-align: center; cursor: pointer;
+      margin-top: 10px; border: none;
+    }
+
+    .submit-pipeline {
+      flex: 1; display: flex; flex-direction: column; gap: 8px;
+    }
+    .pipeline-step {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; padding: 12px 16px;
+      display: flex; align-items: center; gap: 12px;
+      transition: all 0.4s; opacity: 0.4;
+    }
+    .pipeline-step.active-ps { border-color: var(--primary); box-shadow: 0 0 14px var(--primary-glow); opacity: 1; }
+    .pipeline-step.done-ps { border-color: var(--green); opacity: 1; }
+    .ps-icon { font-size: 20px; }
+    .ps-info { flex: 1; }
+    .ps-title { font-size: 12px; font-weight: 700; }
+    .ps-sub { font-size: 10px; color: var(--muted); }
+    .ps-check {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: var(--green); display: flex; align-items: center;
+      justify-content: center; font-size: 10px;
+      opacity: 0; transform: scale(0); transition: all 0.3s;
+    }
+    .pipeline-step.done-ps .ps-check { opacity: 1; transform: scale(1); }
+    .pulse-ring {
+      display: none; width: 10px; height: 10px; border-radius: 50%;
+      border: 2px solid var(--primary); animation: ring 1s infinite;
+    }
+    @keyframes ring {
+      0% { transform: scale(1); opacity: 1; }
+      100% { transform: scale(2); opacity: 0; }
+    }
+    .pipeline-step.active-ps .pulse-ring { display: block; }
+
+  </style>
+</head>
+<body>
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">EdgeX CRM</div>
+      <div>
+        <div class="scene-title-bar" id="tb-title">Form Anatomy</div>
+        <div class="scene-subtitle-bar" id="tb-sub">Understanding the structure</div>
+      </div>
+    </div>
+    <div class="progress-track">
+      <div class="progress-fill" id="prog-fill" style="width:12.5%"></div>
+    </div>
+    <div class="scene-counter" id="scene-counter">1 / 8</div>
+  </div>
+
+  <!-- STAGE -->
+  <div class="stage" id="stage">
+
+    <!-- ═══ SCENE 1 — FORM ANATOMY ═══ -->
+    <div class="scene active" id="scene-0">
+      <div class="sh">Form Anatomy</div>
+      <div class="ss">A form config is a tree: FormConfig → Steps → Fields. Click any node to inspect its properties.</div>
+      <div class="anatomy">
+        <div class="anat-left">
+          <div class="form-tree">
+            <div class="tree-node" onclick="inspect('config')" id="tn-config">
+              <div class="tree-icon">📄</div>
+              <div><div class="tree-label">FormConfig</div><div class="tree-desc">id, name, slug, is_active, tenant_id</div></div>
+            </div>
+            <div class="tree-line"></div>
+            <div class="tree-indent">
+              <div class="tree-node" onclick="inspect('step')" id="tn-step">
+                <div class="tree-icon">🗂</div>
+                <div><div class="tree-label">FormStep [ ]</div><div class="tree-desc">id, title, fields[]</div></div>
+              </div>
+              <div class="tree-line"></div>
+              <div class="tree-indent">
+                <div class="tree-node" onclick="inspect('field')" id="tn-field">
+                  <div class="tree-icon">✏️</div>
+                  <div><div class="tree-label">FormField [ ]</div><div class="tree-desc">id, name, label, type, required, width, options</div></div>
+                </div>
+              </div>
+            </div>
+            <div class="tree-line"></div>
+            <div class="tree-indent">
+              <div class="tree-node" onclick="inspect('branding')" id="tn-branding">
+                <div class="tree-icon">🎨</div>
+                <div><div class="tree-label">FormBranding { }</div><div class="tree-desc">primary_color, logo_url, submit_text…</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="anat-right">
+          <div class="detail-panel" id="detail-panel">
+            <div class="dp-title" id="dp-title">← Click a node</div>
+            <div id="dp-content"><div style="color:var(--muted);font-size:12px;padding-top:20px;text-align:center">Select a node to see its schema</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 2 — FIELD TYPES ═══ -->
+    <div class="scene" id="scene-1">
+      <div class="sh">11 Field Types</div>
+      <div class="ss">Click any field type to see what it looks like in the form.</div>
+      <div class="field-types-grid">
+        <div class="ft-card selected" onclick="showFieldType(this,'text','Text Input','Enter your answer...')">
+          <div class="ft-icon">📝</div><div class="ft-name">Text</div><div class="ft-desc">Short answer</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'email','Email Address','name@example.com')">
+          <div class="ft-icon">📧</div><div class="ft-name">Email</div><div class="ft-desc">Validated email</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'tel','Phone','With country code')">
+          <div class="ft-icon">📞</div><div class="ft-name">Phone</div><div class="ft-desc">With country code</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'number','Number','e.g. 3.8')">
+          <div class="ft-icon">🔢</div><div class="ft-name">Number</div><div class="ft-desc">Numeric only</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'date','Date Picker','Pick a date')">
+          <div class="ft-icon">📅</div><div class="ft-name">Date</div><div class="ft-desc">Calendar picker</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'textarea','Textarea','Write your message...')">
+          <div class="ft-icon">📋</div><div class="ft-name">Textarea</div><div class="ft-desc">Long answer</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'select','Dropdown','Choose option')">
+          <div class="ft-icon">▾</div><div class="ft-name">Select</div><div class="ft-desc">Dropdown list</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'radio','Radio','Pick one')">
+          <div class="ft-icon">🔘</div><div class="ft-name">Radio</div><div class="ft-desc">Single choice</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'checkbox','Checkbox','Agree to terms')">
+          <div class="ft-icon">☑️</div><div class="ft-name">Checkbox</div><div class="ft-desc">True / false</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'file','File Upload','Drop file here')">
+          <div class="ft-icon">📎</div><div class="ft-name">File Upload</div><div class="ft-desc">PDF, DOC, images</div>
+        </div>
+        <div class="ft-card" onclick="showFieldType(this,'entity_select','Entity Select','Course picker')">
+          <div class="ft-icon">🏷</div><div class="ft-name">Entity Select</div><div class="ft-desc">Link to CRM records</div>
+        </div>
+      </div>
+      <div class="ft-preview" id="ft-preview">
+        <div class="ft-preview-label" id="ftp-label">Text</div>
+        <div class="ft-preview-widget" id="ftp-widget">
+          <div class="mock-input">Enter your answer...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 3 — MULTI-STEP ═══ -->
+    <div class="scene" id="scene-2">
+      <div class="sh">Multi-Step Form — Scholarship Application</div>
+      <div class="ss">Forms can have multiple steps. Each step has its own set of fields. Click a step to explore it.</div>
+      <div class="steps-demo">
+        <div class="steps-sidebar">
+          <div class="step-nav-item done-step" onclick="showStep(0)">
+            <div class="step-num">Step 1</div>
+            <div class="step-name-nav">Personal Info</div>
+            <div class="step-fields-count">6 fields</div>
+          </div>
+          <div class="step-nav-item active-step" onclick="showStep(1)">
+            <div class="step-num">Step 2</div>
+            <div class="step-name-nav">Academic Details</div>
+            <div class="step-fields-count">4 fields</div>
+          </div>
+          <div class="step-nav-item" onclick="showStep(2)">
+            <div class="step-num">Step 3</div>
+            <div class="step-name-nav">Documents</div>
+            <div class="step-fields-count">4 fields</div>
+          </div>
+        </div>
+        <div class="steps-content">
+          <div class="step-progress-bar">
+            <div class="spb-item done-bar"></div>
+            <div class="spb-item active-bar" id="spb1"></div>
+            <div class="spb-item" id="spb2"></div>
+          </div>
+
+          <div class="step-panel" id="sp-0">
+            <div class="sp-header"><div class="sp-title">Personal Info</div><div class="sp-badge">Step 1 of 3</div></div>
+            <div class="sp-fields">
+              <div class="sp-field" style="animation-delay:0ms"><div class="sp-field-name">first_name</div><div class="sp-field-type">text</div><div class="sp-field-req">*</div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:60ms"><div class="sp-field-name">last_name</div><div class="sp-field-type">text</div><div class="sp-field-req">*</div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:120ms"><div class="sp-field-name">email</div><div class="sp-field-type">email</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+              <div class="sp-field" style="animation-delay:180ms"><div class="sp-field-name">phone</div><div class="sp-field-type">tel</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+              <div class="sp-field" style="animation-delay:240ms"><div class="sp-field-name">date_of_birth</div><div class="sp-field-type">date</div><div class="sp-field-req"></div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:300ms"><div class="sp-field-name">country</div><div class="sp-field-type">select</div><div class="sp-field-req">*</div><div class="sp-field-width">half</div></div>
+            </div>
+          </div>
+
+          <div class="step-panel show" id="sp-1">
+            <div class="sp-header"><div class="sp-title">Academic Details</div><div class="sp-badge">Step 2 of 3</div></div>
+            <div class="sp-fields">
+              <div class="sp-field" style="animation-delay:0ms"><div class="sp-field-name">highest_qualification</div><div class="sp-field-type">select</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+              <div class="sp-field" style="animation-delay:60ms"><div class="sp-field-name">gpa</div><div class="sp-field-type">number</div><div class="sp-field-req"></div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:120ms"><div class="sp-field-name">preferred_course</div><div class="sp-field-type">entity_select</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+              <div class="sp-field" style="animation-delay:180ms"><div class="sp-field-name">preferred_intake</div><div class="sp-field-type">select</div><div class="sp-field-req"></div><div class="sp-field-width">half</div></div>
+            </div>
+          </div>
+
+          <div class="step-panel" id="sp-2">
+            <div class="sp-header"><div class="sp-title">Documents</div><div class="sp-badge">Step 3 of 3</div></div>
+            <div class="sp-fields">
+              <div class="sp-field" style="animation-delay:0ms"><div class="sp-field-name">statement_of_purpose</div><div class="sp-field-type">textarea</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+              <div class="sp-field" style="animation-delay:60ms"><div class="sp-field-name">resume</div><div class="sp-field-type">file</div><div class="sp-field-req">*</div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:120ms"><div class="sp-field-name">academic_transcript</div><div class="sp-field-type">file</div><div class="sp-field-req"></div><div class="sp-field-width">half</div></div>
+              <div class="sp-field" style="animation-delay:180ms"><div class="sp-field-name">terms</div><div class="sp-field-type">checkbox</div><div class="sp-field-req">*</div><div class="sp-field-width">full</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 4 — BRANDING ═══ -->
+    <div class="scene" id="scene-3">
+      <div class="sh">Branding Editor</div>
+      <div class="ss">Admins can fully brand the form — colors, logo, button text, thank-you message. Changes appear live.</div>
+      <div class="branding-demo">
+        <div class="branding-controls">
+          <div class="bc-title">Form Branding</div>
+          <div class="bc-row">
+            <div class="bc-label">Primary Color</div>
+            <div class="color-row">
+              <div class="color-swatch selected" style="background:#4f46e5" onclick="setBrandColor('#4f46e5','#4338ca',this)"></div>
+              <div class="color-swatch" style="background:#0ea5e9" onclick="setBrandColor('#0ea5e9','#0284c7',this)"></div>
+              <div class="color-swatch" style="background:#10b981" onclick="setBrandColor('#10b981','#059669',this)"></div>
+              <div class="color-swatch" style="background:#f59e0b" onclick="setBrandColor('#f59e0b','#d97706',this)"></div>
+              <div class="color-swatch" style="background:#ef4444" onclick="setBrandColor('#ef4444','#dc2626',this)"></div>
+              <div class="color-swatch" style="background:#8b5cf6" onclick="setBrandColor('#8b5cf6','#7c3aed',this)"></div>
+            </div>
+          </div>
+          <div class="bc-row">
+            <div class="bc-label">Form Title</div>
+            <input class="bc-input" id="brand-title-in" value="Scholarship Application" oninput="document.getElementById('bfp-h-title').textContent=this.value" />
+          </div>
+          <div class="bc-row">
+            <div class="bc-label">Subtitle</div>
+            <input class="bc-input" id="brand-sub-in" value="Apply for 2026 intake" oninput="document.getElementById('bfp-h-sub').textContent=this.value" />
+          </div>
+          <div class="bc-row">
+            <div class="bc-label">Submit Button Text</div>
+            <input class="bc-input" id="brand-btn-in" value="Submit Application" oninput="document.getElementById('bfp-btn').textContent=this.value" />
+          </div>
+        </div>
+        <div class="branding-preview-wrap">
+          <div class="brand-form-preview" id="brand-preview">
+            <div class="bfp-header" id="bfp-header" style="background:#4f46e5">
+              <div class="bfp-h-title" id="bfp-h-title">Scholarship Application</div>
+              <div class="bfp-h-sub" id="bfp-h-sub">Apply for 2026 intake</div>
+            </div>
+            <div class="bfp-body">
+              <div class="bfp-field"><div class="bfp-label">First Name *</div><div class="bfp-input-mock"></div></div>
+              <div class="bfp-field"><div class="bfp-label">Email *</div><div class="bfp-input-mock"></div></div>
+              <div class="bfp-field"><div class="bfp-label">Country *</div><div class="bfp-input-mock"></div></div>
+              <div class="bfp-btn" id="bfp-btn" style="background:#4f46e5">Submit Application</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 5 — FIELD EDITOR ═══ -->
+    <div class="scene" id="scene-4">
+      <div class="sh">Field Editor Sheet</div>
+      <div class="ss">Click any field to open the editor. Change label, type, required, width, options — all in a side panel.</div>
+      <div class="editor-demo">
+        <div class="field-list-panel">
+          <div class="flp-title">Fields — Step 1</div>
+          <div class="flp-item editing" onclick="editField(this,'First Name','text',true,'half')" id="fe-0">
+            <div class="flp-name">First Name</div>
+            <div class="flp-type">text</div>
+            <div class="flp-req">*</div>
+            <div class="flp-actions"><button class="flp-btn">↑</button><button class="flp-btn">↓</button><button class="flp-btn">✏️</button></div>
+          </div>
+          <div class="flp-item" onclick="editField(this,'Email','email',true,'full')" id="fe-1">
+            <div class="flp-name">Email</div>
+            <div class="flp-type">email</div>
+            <div class="flp-req">*</div>
+            <div class="flp-actions"><button class="flp-btn">↑</button><button class="flp-btn">↓</button><button class="flp-btn">✏️</button></div>
+          </div>
+          <div class="flp-item" onclick="editField(this,'Phone','tel',true,'full')" id="fe-2">
+            <div class="flp-name">Phone</div>
+            <div class="flp-type">tel</div>
+            <div class="flp-req">*</div>
+            <div class="flp-actions"><button class="flp-btn">↑</button><button class="flp-btn">↓</button><button class="flp-btn">✏️</button></div>
+          </div>
+          <div class="flp-item" onclick="editField(this,'Country','select',false,'half')" id="fe-3">
+            <div class="flp-name">Country</div>
+            <div class="flp-type">select</div>
+            <div class="flp-req"></div>
+            <div class="flp-actions"><button class="flp-btn">↑</button><button class="flp-btn">↓</button><button class="flp-btn">✏️</button></div>
+          </div>
+        </div>
+        <div class="editor-sheet">
+          <div class="es-title">✏️ Edit Field</div>
+          <div class="es-field"><div class="es-label">Label</div><input class="es-input" id="es-label" value="First Name" /></div>
+          <div class="es-field"><div class="es-label">Field Name (key)</div><input class="es-input" id="es-name" value="first_name" /></div>
+          <div class="es-field">
+            <div class="es-label">Type</div>
+            <select class="es-select" id="es-type">
+              <option value="text" selected>Text</option>
+              <option value="email">Email</option>
+              <option value="tel">Phone</option>
+              <option value="number">Number</option>
+              <option value="date">Date</option>
+              <option value="textarea">Textarea</option>
+              <option value="select">Select</option>
+              <option value="radio">Radio</option>
+              <option value="checkbox">Checkbox</option>
+              <option value="file">File Upload</option>
+            </select>
+          </div>
+          <div class="es-field">
+            <div class="es-label">Width</div>
+            <select class="es-select"><option>Half width</option><option>Full width</option><option>One third</option></select>
+          </div>
+          <div class="es-field">
+            <div class="es-toggle">
+              <div class="toggle-track on" id="req-toggle" onclick="toggleReq()"><div class="toggle-thumb"></div></div>
+              <div class="es-label" style="margin:0">Required field</div>
+            </div>
+          </div>
+          <div class="es-save-btn">Save Field</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 6 — API CHAIN ═══ -->
+    <div class="scene" id="scene-5">
+      <div class="sh">API Layer — What Happens on Save</div>
+      <div class="ss">Every save triggers a PATCH request through auth, validation, and finally writes to Supabase.</div>
+      <div class="api-chain" id="api-chain">
+        <div class="api-req" id="ar-0">
+          <div class="ar-top">
+            <span class="ar-method m-patch">PATCH</span>
+            <span class="ar-path">/api/v1/form-configs/[id]</span>
+            <span class="ar-status" id="as-0" style="color:var(--primary)">● Sending…</span>
+          </div>
+          <div class="ar-body">Body: { <span>"name"</span>: <em>"Scholarship Application"</em>, <span>"steps"</span>: <em>[…]</em>, <span>"is_active"</span>: <em>true</em> }</div>
+        </div>
+        <div class="api-req" id="ar-1">
+          <div class="ar-top">
+            <span class="ar-method m-get">AUTH</span>
+            <span class="ar-path">authenticateRequest() → requireAdmin()</span>
+            <span class="ar-status" id="as-1" style="color:var(--green)">✓ owner role confirmed</span>
+          </div>
+          <div class="ar-body">Reads session cookie → verifies JWT → checks tenant_users role ∈ {owner, admin}</div>
+        </div>
+        <div class="api-req" id="ar-2">
+          <div class="ar-top">
+            <span class="ar-method m-patch">VALIDATE</span>
+            <span class="ar-path">validateFormConfig() + slug uniqueness</span>
+            <span class="ar-status" id="as-2" style="color:var(--green)">✓ slug is unique</span>
+          </div>
+          <div class="ar-body">Checks: name not empty · slug format (a-z, 0-9, -) · slug unique per tenant · steps not empty</div>
+        </div>
+        <div class="api-req" id="ar-3">
+          <div class="ar-top">
+            <span class="ar-method m-patch">WRITE</span>
+            <span class="ar-path">createServiceClient() → form_configs UPDATE</span>
+            <span class="ar-status" id="as-3" style="color:var(--green)">✓ 200 OK</span>
+          </div>
+          <div class="ar-body">UPDATE form_configs SET steps = $1, branding = $2 WHERE id = $3 AND <span>tenant_id</span> = <em>auth.tenantId</em></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 7 — JSON STRUCTURE ═══ -->
+    <div class="scene" id="scene-6">
+      <div class="sh">What's Stored in Supabase</div>
+      <div class="ss">The entire form lives as a JSONB column in form_configs. Click a section to highlight it.</div>
+      <div class="json-viewer">
+        <div class="json-tree">
+          <div class="jt-item active-json" onclick="showJson('root')"><span class="jt-dot"></span><span class="jt-key">form_config</span></div>
+          <div class="jt-item jt-indent" onclick="showJson('meta')"><span class="jt-dot"></span>name, slug, is_active</div>
+          <div class="jt-item jt-indent" onclick="showJson('steps')"><span class="jt-dot"></span><span class="jt-key">steps</span> [ ]</div>
+          <div class="jt-item jt-indent" style="padding-left:36px" onclick="showJson('step1')"><span class="jt-dot"></span>step 1 — Personal Info</div>
+          <div class="jt-item jt-indent" style="padding-left:48px" onclick="showJson('fields')"><span class="jt-dot"></span><span class="jt-key">fields</span> [ ]</div>
+          <div class="jt-item jt-indent" style="padding-left:60px" onclick="showJson('field1')"><span class="jt-dot"></span>first_name</div>
+          <div class="jt-item jt-indent" onclick="showJson('branding')"><span class="jt-dot"></span><span class="jt-key">branding</span> { }</div>
+        </div>
+        <div class="json-code" id="json-code">
+<pre id="json-pre"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ SCENE 8 — SUBMISSION ═══ -->
+    <div class="scene" id="scene-7">
+      <div class="sh">Visitor Submits → Lead in CRM</div>
+      <div class="ss">When a visitor submits the public form, each step is validated and the final submission creates a lead.</div>
+      <div class="submit-demo">
+        <div class="submit-form-mock">
+          <div class="sfm-header">
+            <div class="sfm-h-title">Scholarship Application</div>
+            <div class="sfm-progress">
+              <div class="sfm-prog active-sfm" id="sfm0"></div>
+              <div class="sfm-prog" id="sfm1"></div>
+              <div class="sfm-prog" id="sfm2"></div>
+            </div>
+          </div>
+          <div class="sfm-body" id="sfm-body">
+            <div class="sfm-field"><div class="sfm-label">First Name</div><div class="sfm-val" style="animation-delay:0ms">Priya</div></div>
+            <div class="sfm-field"><div class="sfm-label">Email</div><div class="sfm-val" style="animation-delay:100ms">priya@example.com</div></div>
+            <div class="sfm-field"><div class="sfm-label">Country</div><div class="sfm-val" style="animation-delay:200ms">India</div></div>
+            <button class="sfm-btn" id="sfm-btn" onclick="advanceSubmit()">Next Step →</button>
+          </div>
+        </div>
+        <div class="submit-pipeline">
+          <div class="pipeline-step" id="ps-0">
+            <div class="ps-icon">📋</div>
+            <div class="ps-info"><div class="ps-title">Step validation</div><div class="ps-sub">Required fields checked client-side</div></div>
+            <div class="pulse-ring"></div><div class="ps-check">✓</div>
+          </div>
+          <div class="pipeline-step" id="ps-1">
+            <div class="ps-icon">🔄</div>
+            <div class="ps-info"><div class="ps-title">Partial save (step 1)</div><div class="ps-sub">POST /api/v1/leads with partial=true</div></div>
+            <div class="pulse-ring"></div><div class="ps-check">✓</div>
+          </div>
+          <div class="pipeline-step" id="ps-2">
+            <div class="ps-icon">📄</div>
+            <div class="ps-info"><div class="ps-title">Steps 2 & 3 completed</div><div class="ps-sub">Academic details + documents uploaded</div></div>
+            <div class="pulse-ring"></div><div class="ps-check">✓</div>
+          </div>
+          <div class="pipeline-step" id="ps-3">
+            <div class="ps-icon">🎉</div>
+            <div class="ps-info"><div class="ps-title">Lead created in CRM</div><div class="ps-sub">custom_fields JSONB populated · status: new</div></div>
+            <div class="pulse-ring"></div><div class="ps-check">✓</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /stage -->
+
+  <!-- BOTTOM BAR -->
+  <div class="bottombar">
+    <button class="btn btn-ghost" id="btn-prev" onclick="navigate(-1)" disabled>← Back</button>
+    <div class="dots" id="dots"></div>
+    <button class="btn btn-primary" id="btn-next" onclick="navigate(1)">Next →</button>
+  </div>
+
+  <script>
+    // ─────────────────────────────────────────
+    const TITLES = [
+      ['Form Anatomy','Understanding the structure'],
+      ['Field Types','11 input types available'],
+      ['Multi-Step Form','Scholarship Application example'],
+      ['Branding Editor','Customise colors and text'],
+      ['Field Editor','Edit individual field properties'],
+      ['API Layer','Auth → Validate → Save'],
+      ['JSON Structure','What lives in Supabase'],
+      ['Form Submission','Visitor fills → Lead created'],
+    ];
+    const TOTAL = 8;
+    let current = 0;
+    let timers = [];
+
+    // dots
+    const dotsEl = document.getElementById('dots');
+    for (let i = 0; i < TOTAL; i++) {
+      const d = document.createElement('div');
+      d.className = 'dot' + (i===0?' active':'');
+      d.onclick = () => goTo(i);
+      dotsEl.appendChild(d);
+    }
+
+    function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+
+    function goTo(n) {
+      clearTimers();
+      const old = document.getElementById(`scene-${current}`);
+      old.classList.remove('active'); old.classList.add('exit');
+      setTimeout(() => old.classList.remove('exit'), 450);
+      current = ((n % TOTAL) + TOTAL) % TOTAL;
+      document.getElementById(`scene-${current}`).classList.add('active');
+      updateUI();
+      onEnter(current);
+    }
+
+    function navigate(dir) {
+      if (dir===1 && current===TOTAL-1) goTo(0);
+      else goTo(current+dir);
+    }
+
+    function updateUI() {
+      document.querySelectorAll('.dot').forEach((d,i) => {
+        d.className = 'dot'+(i<current?' done':i===current?' active':'');
+      });
+      document.getElementById('btn-prev').disabled = current===0;
+      document.getElementById('btn-next').textContent = current===TOTAL-1?'↺ Restart':'Next →';
+      document.getElementById('prog-fill').style.width = `${((current+1)/TOTAL)*100}%`;
+      document.getElementById('scene-counter').textContent = `${current+1} / ${TOTAL}`;
+      document.getElementById('tb-title').textContent = TITLES[current][0];
+      document.getElementById('tb-sub').textContent = TITLES[current][1];
+    }
+
+    // ─────────────────────────────────────────
+    // SCENE ENTER HOOKS
+    function onEnter(n) {
+      if (n===1) showFieldType(document.querySelector('.ft-card.selected'),'text','Text Input','Enter your answer...');
+      if (n===2) showStep(1);
+      if (n===5) animateApi();
+      if (n===6) showJson('root');
+      if (n===7) animateSubmit();
+    }
+
+    // ─── SCENE 1: ANATOMY ───
+    const DETAILS = {
+      config: {
+        title: 'FormConfig',
+        rows: [
+          ['id','uuid — primary key'],
+          ['tenant_id','uuid → tenants'],
+          ['name','text — display name'],
+          ['slug','text — URL identifier'],
+          ['is_active','boolean — public visibility'],
+          ['redirect_url','text — post-submit redirect'],
+        ]
+      },
+      step: {
+        title: 'FormStep (inside steps JSONB)',
+        rows: [
+          ['id','string — unique step id'],
+          ['title','text — step heading'],
+          ['fields','FormField[] — ordered list'],
+        ]
+      },
+      field: {
+        title: 'FormField (inside step.fields)',
+        rows: [
+          ['id','string — unique field id'],
+          ['name','text — data key (snake_case)'],
+          ['label','text — shown to user'],
+          ['type','text | email | tel | date…'],
+          ['required','boolean'],
+          ['width','full | half | third | two-thirds'],
+          ['placeholder','text (optional)'],
+          ['options','{ label, value }[] for select/radio'],
+        ]
+      },
+      branding: {
+        title: 'FormBranding (JSONB column)',
+        rows: [
+          ['primary_color','hex color string'],
+          ['logo_url','image URL (optional)'],
+          ['header_title','form heading text'],
+          ['header_subtitle','subheading text'],
+          ['submit_button_text','button label'],
+          ['thank_you_title','post-submit heading'],
+          ['privacy_url','link to privacy policy'],
+        ]
+      }
+    };
+
+    function inspect(key) {
+      document.querySelectorAll('.tree-node').forEach(n => n.classList.remove('active-node'));
+      document.getElementById(`tn-${key}`)?.classList.add('active-node');
+      const d = DETAILS[key];
+      const panel = document.getElementById('detail-panel');
+      panel.classList.add('glow');
+      setTimeout(() => panel.classList.remove('glow'), 600);
+      document.getElementById('dp-title').textContent = d.title;
+      document.getElementById('dp-content').innerHTML = d.rows.map(([k,v]) =>
+        `<div class="dp-row"><span class="dp-key">${k}</span><span class="dp-val">${v}</span></div>`
+      ).join('');
+    }
+
+    // ─── SCENE 2: FIELD TYPES ───
+    const FIELD_WIDGETS = {
+      text: () => `<div class="mock-input">Enter your answer...</div>`,
+      email: () => `<div class="mock-input">name@example.com</div>`,
+      tel: () => `<div class="mock-phone"><div class="mock-phone-code">🇮🇳 +91</div><div class="mock-input" style="flex:1">98765 43210</div></div>`,
+      number: () => `<div class="mock-input">3.8</div>`,
+      date: () => `<div class="mock-input">📅 Select date…</div>`,
+      textarea: () => `<div class="mock-textarea">Write your statement of purpose here…</div>`,
+      select: () => `<div class="mock-select"><span>Choose an option</span><span>▾</span></div>`,
+      radio: () => `<div class="mock-radio"><div class="mock-radio-item"><div class="mock-radio-dot" style="border-color:#6366f1;background:#6366f1"></div>Bachelor's</div><div class="mock-radio-item"><div class="mock-radio-dot"></div>Master's</div><div class="mock-radio-item"><div class="mock-radio-dot"></div>PhD</div></div>`,
+      checkbox: () => `<div class="mock-check"><div class="mock-check-box" style="border-color:#6366f1;background:#6366f1;display:flex;align-items:center;justify-content:center"><span style="color:white;font-size:9px">✓</span></div><span>I agree to the Terms & Conditions</span></div>`,
+      file: () => `<div class="mock-file">📎 Drop file here or click to upload (PDF, max 5MB)</div>`,
+      entity_select: () => `<div><div class="mock-entity"><div class="mock-entity-chip">Computer Science</div><div class="mock-entity-chip">MBA</div><div class="mock-entity-chip">+ more</div></div></div>`,
+    };
+
+    function showFieldType(el, type, name, desc) {
+      document.querySelectorAll('.ft-card').forEach(c => c.classList.remove('selected'));
+      if (el) el.classList.add('selected');
+      document.getElementById('ftp-label').textContent = name;
+      document.getElementById('ftp-widget').innerHTML = (FIELD_WIDGETS[type] || FIELD_WIDGETS.text)();
+    }
+
+    // ─── SCENE 3: MULTI-STEP ───
+    function showStep(n) {
+      document.querySelectorAll('.step-nav-item').forEach((el,i) => {
+        el.classList.remove('active-step','done-step');
+        if (i < n) el.classList.add('done-step');
+        else if (i === n) el.classList.add('active-step');
+      });
+      document.querySelectorAll('.step-panel').forEach((el,i) => {
+        el.classList.toggle('show', i===n);
+      });
+      for (let i=0; i<3; i++) {
+        const bar = document.querySelector(`.spb-item:nth-child(${i+1})`);
+        if (bar) { bar.className = 'spb-item' + (i<n?' done-bar':i===n?' active-bar':''); }
+      }
+    }
+
+    // ─── SCENE 4: BRANDING ───
+    function setBrandColor(color, dark, el) {
+      document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+      el.classList.add('selected');
+      document.getElementById('bfp-header').style.background = color;
+      document.getElementById('bfp-btn').style.background = color;
+    }
+
+    // ─── SCENE 5: FIELD EDITOR ───
+    function editField(el, label, type, req, width) {
+      document.querySelectorAll('.flp-item').forEach(i => i.classList.remove('editing'));
+      el.classList.add('editing');
+      document.getElementById('es-label').value = label;
+      document.getElementById('es-name').value = label.toLowerCase().replace(/\s+/g,'_');
+      document.getElementById('es-type').value = type;
+      const tog = document.getElementById('req-toggle');
+      tog.className = 'toggle-track' + (req?' on':'');
+    }
+
+    function toggleReq() {
+      const t = document.getElementById('req-toggle');
+      t.classList.toggle('on');
+    }
+
+    // ─── SCENE 6: API ───
+    function animateApi() {
+      [0,1,2,3].forEach(i => {
+        document.getElementById(`ar-${i}`).className='api-req';
+        document.getElementById(`as-${i}`).classList.remove('show');
+      });
+      let step = 0;
+      function tick() {
+        if (current !== 5) return;
+        if (step < 4) {
+          document.getElementById(`ar-${step}`).className='api-req active-req';
+          if (step > 0) { document.getElementById(`ar-${step-1}`).className='api-req done-req'; document.getElementById(`as-${step-1}`).classList.add('show'); }
+          step++;
+          timers.push(setTimeout(tick, 900));
+        } else {
+          document.getElementById('ar-3').className='api-req done-req';
+          document.getElementById('as-3').classList.add('show');
+          timers.push(setTimeout(() => { step=0; animateApi(); }, 2000));
+        }
+      }
+      tick();
+    }
+
+    // ─── SCENE 7: JSON ───
+    const JSON_SECTIONS = {
+      root: `{
+  <span class="jc-key">"id"</span>: <span class="jc-str">"a1b2c3..."</span>,
+  <span class="jc-key">"tenant_id"</span>: <span class="jc-str">"febeb37c..."</span>,
+  <span class="jc-key">"name"</span>: <span class="jc-str">"Scholarship Application"</span>,
+  <span class="jc-key">"slug"</span>: <span class="jc-str">"scholarship-application"</span>,
+  <span class="jc-key">"is_active"</span>: <span class="jc-bool">true</span>,
+  <span class="jc-key">"steps"</span>: <span class="jc-comment">[ ... ]</span>,
+  <span class="jc-key">"branding"</span>: <span class="jc-comment">{ ... }</span>
+}`,
+      meta: `<span class="jc-comment">// Top-level metadata</span>
+<span class="jc-key">"name"</span>: <span class="jc-str">"Scholarship Application"</span>,
+<span class="jc-key">"slug"</span>: <span class="jc-str">"scholarship-application"</span>,
+<span class="jc-comment">// Slug = public URL → /form/admizz/scholarship-application</span>
+<span class="jc-key">"is_active"</span>: <span class="jc-bool">true</span>,
+<span class="jc-comment">// false → public form returns 404</span>
+<span class="jc-key">"redirect_url"</span>: <span class="jc-bool">null</span>`,
+      steps: `<span class="jc-comment">// steps is a JSONB array</span>
+<span class="jc-key">"steps"</span>: [
+  {
+    <span class="jc-key">"id"</span>: <span class="jc-str">"step_1"</span>,
+    <span class="jc-key">"title"</span>: <span class="jc-str">"Personal Info"</span>,
+    <span class="jc-key">"fields"</span>: [ <span class="jc-comment">...</span> ]
+  },
+  {
+    <span class="jc-key">"id"</span>: <span class="jc-str">"step_2"</span>,
+    <span class="jc-key">"title"</span>: <span class="jc-str">"Academic Details"</span>,
+    <span class="jc-key">"fields"</span>: [ <span class="jc-comment">...</span> ]
+  },
+  {
+    <span class="jc-key">"id"</span>: <span class="jc-str">"step_3"</span>,
+    <span class="jc-key">"title"</span>: <span class="jc-str">"Documents"</span>,
+    <span class="jc-key">"fields"</span>: [ <span class="jc-comment">...</span> ]
+  }
+]`,
+      step1: `{
+  <span class="jc-key">"id"</span>: <span class="jc-str">"step_1"</span>,
+  <span class="jc-key">"title"</span>: <span class="jc-str">"Personal Info"</span>,
+  <span class="jc-key">"fields"</span>: [
+    <span class="jc-comment">// first_name, last_name, email, phone,</span>
+    <span class="jc-comment">// date_of_birth, country</span>
+    { <span class="jc-key">"name"</span>: <span class="jc-str">"first_name"</span>, <span class="jc-comment">...</span> },
+    { <span class="jc-key">"name"</span>: <span class="jc-str">"last_name"</span>, <span class="jc-comment">...</span> },
+    { <span class="jc-key">"name"</span>: <span class="jc-str">"email"</span>, <span class="jc-comment">...</span> },
+    { <span class="jc-key">"name"</span>: <span class="jc-str">"phone"</span>, <span class="jc-comment">...</span> }
+  ]
+}`,
+      fields: `{
+  <span class="jc-key">"id"</span>: <span class="jc-str">"field_abc"</span>,
+  <span class="jc-key">"name"</span>: <span class="jc-str">"email"</span>,
+  <span class="jc-key">"label"</span>: <span class="jc-str">"Email Address"</span>,
+  <span class="jc-key">"type"</span>: <span class="jc-str">"email"</span>,
+  <span class="jc-key">"required"</span>: <span class="jc-bool">true</span>,
+  <span class="jc-key">"width"</span>: <span class="jc-str">"full"</span>,
+  <span class="jc-key">"placeholder"</span>: <span class="jc-str">"name@example.com"</span>,
+  <span class="jc-key">"options"</span>: <span class="jc-bool">null</span>
+}`,
+      field1: `<span class="jc-comment">// first_name field definition</span>
+{
+  <span class="jc-key">"id"</span>: <span class="jc-str">"field_001"</span>,
+  <span class="jc-key">"name"</span>: <span class="jc-str">"first_name"</span>,
+  <span class="jc-comment">// "name" becomes the key in custom_fields</span>
+  <span class="jc-key">"label"</span>: <span class="jc-str">"First Name"</span>,
+  <span class="jc-key">"type"</span>: <span class="jc-str">"text"</span>,
+  <span class="jc-key">"required"</span>: <span class="jc-bool">true</span>,
+  <span class="jc-key">"width"</span>: <span class="jc-str">"half"</span>,
+  <span class="jc-key">"placeholder"</span>: <span class="jc-str">"Enter your first name"</span>
+}`,
+      branding: `<span class="jc-comment">// branding JSONB column</span>
+{
+  <span class="jc-key">"primary_color"</span>: <span class="jc-str">"#4f46e5"</span>,
+  <span class="jc-key">"logo_url"</span>: <span class="jc-bool">null</span>,
+  <span class="jc-key">"header_title"</span>: <span class="jc-str">"Scholarship Application"</span>,
+  <span class="jc-key">"header_subtitle"</span>: <span class="jc-str">"Apply for 2026 intake"</span>,
+  <span class="jc-key">"submit_button_text"</span>: <span class="jc-str">"Submit Application"</span>,
+  <span class="jc-key">"thank_you_title"</span>: <span class="jc-str">"Thank you! We'll be in touch."</span>,
+  <span class="jc-key">"privacy_url"</span>: <span class="jc-bool">null</span>
+}`
+    };
+
+    function showJson(key) {
+      document.querySelectorAll('.jt-item').forEach(i => i.classList.remove('active-json'));
+      event?.target?.closest('.jt-item')?.classList.add('active-json');
+      document.getElementById('json-pre').innerHTML = JSON_SECTIONS[key] || '';
+    }
+
+    // ─── SCENE 8: SUBMISSION ───
+    let submitStep = 0;
+    const SUBMIT_STEPS = [
+      { fields: [{l:'First Name',v:'Priya'},{l:'Email',v:'priya@example.com'},{l:'Country',v:'India'}], btn:'Next Step →', prog:[1,0,0] },
+      { fields: [{l:'Qualification',v:"Bachelor's"},{l:'GPA',v:'3.9'},{l:'Course',v:'MBA'}], btn:'Next Step →', prog:[1,1,0] },
+      { fields: [{l:'Statement',v:'Uploaded ✓'},{l:'Resume',v:'resume.pdf ✓'},{l:'Terms',v:'Agreed ✓'}], btn:'Submit Application', prog:[1,1,1] },
+    ];
+
+    function animateSubmit() {
+      submitStep = 0;
+      [0,1,2,3].forEach(i => {
+        const ps = document.getElementById(`ps-${i}`);
+        if (ps) ps.className='pipeline-step';
+      });
+      renderSubmitStep(0);
+    }
+
+    function renderSubmitStep(n) {
+      const s = SUBMIT_STEPS[Math.min(n, SUBMIT_STEPS.length-1)];
+      const body = document.getElementById('sfm-body');
+      body.innerHTML = s.fields.map((f,i) =>
+        `<div class="sfm-field"><div class="sfm-label">${f.l}</div><div class="sfm-val" style="animation-delay:${i*80}ms">${f.v}</div></div>`
+      ).join('') + `<button class="sfm-btn" id="sfm-btn" onclick="advanceSubmit()">${s.btn}</button>`;
+      s.prog.forEach((on, i) => {
+        const el = document.getElementById(`sfm${i}`);
+        if (el) el.className = 'sfm-prog' + (on?' active-sfm':'');
+      });
+    }
+
+    function advanceSubmit() {
+      if (current !== 7) return;
+      const ps = document.getElementById(`ps-${submitStep}`);
+      if (ps) { ps.className='pipeline-step active-ps'; }
+      setTimeout(() => {
+        if (ps) ps.className='pipeline-step done-ps';
+        submitStep++;
+        if (submitStep < SUBMIT_STEPS.length) {
+          renderSubmitStep(submitStep);
+        } else {
+          renderSubmitStep(2);
+          document.getElementById('sfm-btn').textContent='🎉 Submitted!';
+          document.getElementById('sfm-btn').style.background='#10b981';
+          const last = document.getElementById('ps-3');
+          if (last) { last.className='pipeline-step active-ps'; setTimeout(()=>{ last.className='pipeline-step done-ps'; },600); }
+        }
+      }, 700);
+    }
+
+    updateUI();
+  </script>
+</body>
+</html>

@@ -46,9 +46,16 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
+import { TruncatedText } from "@/components/ui/truncated-text";
 
 type SortField = "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
+
+// Column width constants for consistent sizing
+const NAME_COLUMN_WIDTH = 180;
+const EMAIL_COLUMN_WIDTH = 200;
+const EMAIL_MOBILE_WIDTH = 140;
+// Note: Preview button padding (72px) is defined in Tailwind class `group-hover/name:pr-[72px]`
 
 interface TeamMember {
   user_id: string;
@@ -359,20 +366,23 @@ export function LeadsTable({
       "Country",
       "Status",
       "Assigned To",
-      ...(hasMultipleForms ? ["Form"] : []),
+      "Source",
     ];
-    const rows = filtered.map((l) => [
-      new Date(l.created_at).toLocaleDateString(),
-      l.first_name || "",
-      l.last_name || "",
-      l.email || "",
-      l.phone || "",
-      l.city || "",
-      l.country || "",
-      l.status,
-      l.assigned_to ? memberMap[l.assigned_to] || "" : "",
-      ...(hasMultipleForms ? [l.form_config_id ? formMap[l.form_config_id] || "" : ""] : []),
-    ]);
+    const rows = filtered.map((l) => {
+      const source = l.form_config_id ? formMap[l.form_config_id] || "" : l.intake_source?.replace(/_/g, " ") || "";
+      return [
+        new Date(l.created_at).toLocaleDateString(),
+        l.first_name || "",
+        l.last_name || "",
+        l.email || "",
+        l.phone || "",
+        l.city || "",
+        l.country || "",
+        l.status,
+        l.assigned_to ? memberMap[l.assigned_to] || "" : "",
+        source,
+      ];
+    });
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -389,35 +399,6 @@ export function LeadsTable({
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
       <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
-        {/* Bulk Action Bar */}
-      {selectedCount > 0 && (
-        <div className="shrink-0 flex items-center justify-between bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
-          <span className="text-sm font-medium text-blue-700">
-            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
-          </span>
-          <div className="flex items-center gap-2">
-            {isAdmin && teamMembers.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setAssignDialogOpen(true)}
-                className="bg-white"
-              >
-                <UserPlus className="h-4 w-4 mr-2" />
-                Assign to
-              </Button>
-            )}
-            <Button
-              variant="destructive"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Delete
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Enhanced Toolbar - matching pipeline style */}
       <div className="shrink-0 bg-card rounded-lg border">
@@ -638,6 +619,45 @@ export function LeadsTable({
         </div>
       </div>
 
+      {/* Bulk Action Bar - animated container between filters and table */}
+      <div
+        className={`shrink-0 overflow-hidden transition-all duration-300 ease-out ${
+          selectedCount > 0 ? 'max-h-[52px] opacity-100' : 'max-h-0 opacity-0'
+        }`}
+      >
+        <div className="flex items-center justify-between px-4 py-2 bg-white rounded-lg border border-gray-200">
+          <span className="text-sm font-medium text-gray-700">
+            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
+          </span>
+          <div className="flex items-center gap-1">
+            {isAdmin && teamMembers.length > 0 && (
+              <button
+                onClick={() => setAssignDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <UserPlus className="h-4 w-4" />
+                Assign
+              </button>
+            )}
+            <button
+              onClick={() => setDeleteDialogOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+            <div className="w-px h-4 bg-gray-200 mx-1" />
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+              aria-label="Deselect all"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
       {/* Table - Compact style with sticky header and horizontal scroll */}
       <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
@@ -652,14 +672,12 @@ export function LeadsTable({
                 />
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[180px]">Email</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
-              {hasMultipleForms && (
-                <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Form</th>
-              )}
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Source</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Date</th>
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
             </tr>
@@ -704,41 +722,47 @@ export function LeadsTable({
                       </div>
                     </td>
                     <td className="px-3 py-1.5">
-                      <div className="group flex items-center gap-2">
+                      {/* Fixed width container for consistent Preview button alignment */}
+                      <div className="group/name relative" style={{ width: NAME_COLUMN_WIDTH }}>
+                        {/* Name link - padding increases on hover to make room for Preview button */}
                         <Link
                           href={`/leads/${lead.id}`}
-                          className="text-sm font-medium text-[#2272B4] hover:underline truncate"
+                          className="text-sm font-medium text-[#2272B4] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
                         >
-                          {lead.first_name} {lead.last_name}
+                          <TruncatedText
+                            text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
+                          />
                         </Link>
-                        {/* Preview button - visible on hover (desktop) or always (mobile icon) */}
+                        {/* Preview button - absolute positioned at right edge */}
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
                           }}
-                          className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
+                          className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
                         >
                           <Eye size={12} />
                           Preview
                         </button>
-                        {/* Mobile: always show icon */}
+                      </div>
+                      {/* Mobile: email + preview icon */}
+                      <div className="flex items-center gap-2 md:hidden">
+                        <div className="text-xs text-gray-500">
+                          <TruncatedText text={lead.email || ""} maxWidth={EMAIL_MOBILE_WIDTH} />
+                        </div>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
                           }}
-                          className="shrink-0 md:hidden p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                          className="shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
                         >
                           <Eye size={14} />
                         </button>
                       </div>
-                      <div className="text-xs text-gray-500 md:hidden">
-                        {lead.email}
-                      </div>
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
-                      {lead.email}
+                      <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
                     <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
                       {lead.city || <span className="text-gray-400">—</span>}
@@ -777,17 +801,18 @@ export function LeadsTable({
                         );
                       })()}
                     </td>
-                    {hasMultipleForms && (
-                      <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-                        {formName ? (
+                    <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+                      {(() => {
+                        const source = formName || lead.intake_source;
+                        if (!source) return <span className="text-gray-400">—</span>;
+                        const label = formName || source.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                        return (
                           <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-                            {formName}
+                            {label}
                           </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
-                    )}
+                        );
+                      })()}
+                    </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </td>

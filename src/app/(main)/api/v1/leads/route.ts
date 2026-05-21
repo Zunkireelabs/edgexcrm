@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import {
@@ -15,6 +15,24 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+function withCors(response: NextResponse): NextResponse {
+  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+    response.headers.set(key, value);
+  }
+  return response;
+}
+
+// CORS preflight
+export function OPTIONS() {
+  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+}
 
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -61,9 +79,13 @@ export async function GET(request: NextRequest) {
   }
 
   if (search) {
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
-    );
+    // Sanitize search input to prevent PostgREST filter injection
+    const sanitized = search.replace(/[,().]/g, "");
+    if (sanitized) {
+      query = query.or(
+        `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
+      );
+    }
   }
 
   const from = (page - 1) * pageSize;
@@ -90,6 +112,11 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const response = await handlePost(request);
+  return withCors(response);
+}
+
+async function handlePost(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const ip = getClientIp(request);
   const userAgent = request.headers.get("user-agent") || null;
@@ -161,11 +188,27 @@ export async function POST(request: NextRequest) {
   // Resolve status
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
-  // Resolve stage_id from status slug, fall back to tenant's default stage
+  // Get the default pipeline for this tenant
+  const { data: defaultPipeline } = await supabase
+    .from("pipelines")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("is_default", true)
+    .single();
+
+  if (!defaultPipeline) {
+    return apiValidationError({
+      tenant_id: ["Tenant has no default pipeline configured"],
+    });
+  }
+
+  const pipelineId = (body.pipeline_id as string) || defaultPipeline.id;
+
+  // Resolve stage_id from status slug, fall back to pipeline's default stage
   let { data: stage } = await supabase
     .from("pipeline_stages")
     .select("id, slug")
-    .eq("tenant_id", tenantId)
+    .eq("pipeline_id", pipelineId)
     .eq("slug", resolvedStatus)
     .single();
 
@@ -173,7 +216,7 @@ export async function POST(request: NextRequest) {
     const { data: defaultStage } = await supabase
       .from("pipeline_stages")
       .select("id, slug")
-      .eq("tenant_id", tenantId)
+      .eq("pipeline_id", pipelineId)
       .eq("is_default", true)
       .single();
     stage = defaultStage;
@@ -188,6 +231,7 @@ export async function POST(request: NextRequest) {
   // Build payload from body
   const leadPayload: Record<string, unknown> = {
     tenant_id: tenantId,
+    pipeline_id: pipelineId,
     session_id: sessionId || body.session_id || null,
     step: body.step ?? 1,
     is_final: body.is_final ?? false,
@@ -196,7 +240,31 @@ export async function POST(request: NextRequest) {
     first_name: body.first_name || null,
     last_name: body.last_name || null,
     email: body.email || null,
-    phone: body.phone || null,
+    phone: await (async () => {
+      const rawPhone = String(body.phone || "").trim();
+      if (!rawPhone || rawPhone.startsWith("+")) return rawPhone || null;
+      // Look up dial code from form config's country field options
+      if (body.form_config_id && body.country) {
+        try {
+          const { data: fc } = await supabase
+            .from("form_configs")
+            .select("steps")
+            .eq("id", body.form_config_id)
+            .single();
+          if (fc?.steps) {
+            for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
+              const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
+              if (phoneField?.country_field) {
+                const countryField = step.fields.find((f) => f.name === phoneField.country_field);
+                const opt = countryField?.options?.find((o) => o.value === body.country);
+                if (opt?.dial_code) return `${opt.dial_code}-${rawPhone}`;
+              }
+            }
+          }
+        } catch { /* fall through to raw phone */ }
+      }
+      return rawPhone || null;
+    })(),
     city: body.city || null,
     country: body.country || null,
     custom_fields: body.custom_fields || {},

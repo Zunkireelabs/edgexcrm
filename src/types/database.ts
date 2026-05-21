@@ -65,6 +65,33 @@ export interface TenantConfig {
   accepted_file_types?: string[];
 }
 
+export interface ConnectedEmailAccount {
+  id: string;
+  tenant_id: string;
+  provider: string;
+  email: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmailForwardRule {
+  id: string;
+  tenant_id: string;
+  name: string;
+  is_active: boolean;
+  from_name: string | null;
+  pipeline_id: string;
+  stage_id: string;
+  subject: string;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  // Joined fields (from API responses)
+  pipeline_name?: string;
+  stage_name?: string;
+  stage_color?: string;
+}
+
 export interface TenantUser {
   id: string;
   tenant_id: string;
@@ -76,6 +103,7 @@ export interface TenantUser {
 export interface Lead {
   id: string;
   tenant_id: string;
+  pipeline_id: string;
   session_id: string | null;
   step: number;
   is_final: boolean;
@@ -258,17 +286,49 @@ export interface Event {
   created_at: string;
 }
 
+// Pipeline Types
+export type TerminalType = "won" | "lost";
+
+export interface Pipeline {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_default: boolean;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineWithStages extends Pipeline {
+  stages: PipelineStage[];
+  lead_count: number;
+}
+
+export interface PipelineWithCounts extends Pipeline {
+  stage_count: number;
+  lead_count: number;
+}
+
 export interface PipelineStage {
   id: string;
   tenant_id: string;
+  pipeline_id: string;
   name: string;
   slug: string;
   position: number;
   color: string;
   is_default: boolean;
   is_terminal: boolean;
+  terminal_type: TerminalType | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PipelineStageWithCount extends PipelineStage {
+  lead_count: number;
 }
 
 export interface InviteToken {

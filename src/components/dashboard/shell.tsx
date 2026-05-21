@@ -20,6 +20,7 @@ import {
   FileText,
   Kanban,
   UsersRound,
+  UserCheck,
   ChevronDown,
   ExternalLink,
   User as UserIcon,
@@ -30,10 +31,21 @@ import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 
-const navItems = [
+const BASE_NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
+  { href: "/check-in", label: "Check-In", icon: UserCheck },
+  { href: "/team", label: "Team", icon: UsersRound },
+  { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const EDUCATION_NAV_ITEMS = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/pipeline", label: "Pipeline", icon: Kanban },
+  { href: "/leads", label: "All Leads", icon: Users },
+  { href: "/check-in", label: "Check-In", icon: UserCheck },
+  { href: "/forms", label: "Forms", icon: FileText },
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -79,6 +91,7 @@ export function DashboardShell({
     router.refresh();
   }
 
+  const navItems = tenant.industry_id === "education_consultancy" ? EDUCATION_NAV_ITEMS : BASE_NAV_ITEMS;
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
@@ -86,7 +99,7 @@ export function DashboardShell({
       {/* Logo and Tenant Info - Zunkireelabs style */}
       <div className="px-5 py-3 h-[52px] flex items-center gap-3">
         <div
-          className="w-8 h-8 rounded-md flex items-center justify-center text-white font-semibold text-base"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-base"
           style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
         >
           {tenant.name.charAt(0)}
@@ -165,17 +178,6 @@ export function DashboardShell({
           </a>
         )}
       </nav>
-
-      {/* User Section - Zunkireelabs style */}
-      <div className="p-3">
-        <button
-          onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors"
-        >
-          <LogOut className="w-[18px] h-[18px]" />
-          Sign Out
-        </button>
-      </div>
     </div>
   );
 
@@ -262,6 +264,7 @@ export function DashboardShell({
                   {tenant.name.charAt(0)}
                 </div>
                 <span className="text-sm font-medium text-gray-900 hidden sm:inline">{tenant.name}</span>
+                <ChevronDown className={`w-4 h-4 text-gray-500 hidden sm:inline transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
               </button>
 
               {/* Account Dropdown */}

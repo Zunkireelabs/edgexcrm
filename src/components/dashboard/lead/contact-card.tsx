@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CopyButton } from "@/components/ui/copy-button";
+import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 
@@ -64,14 +65,13 @@ export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: Co
 
   const handleCallClick = () => {
     if (lead.phone) {
-      window.location.href = `tel:${lead.phone}`;
+      window.location.href = `tel:${formatPhoneForTel(lead.phone)}`;
     }
   };
 
   const handleWhatsAppClick = () => {
     if (lead.phone) {
-      const cleanPhone = lead.phone.replace(/[^0-9]/g, "");
-      window.open(`https://wa.me/${cleanPhone}`, "_blank");
+      window.open(`https://wa.me/${formatPhoneForWhatsApp(lead.phone)}`, "_blank");
     }
   };
 
@@ -128,7 +128,7 @@ export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: Co
           {lead.phone && (
             <div className="flex items-center justify-between group">
               <a
-                href={`tel:${lead.phone}`}
+                href={`tel:${formatPhoneForTel(lead.phone)}`}
                 className="text-sm text-muted-foreground hover:text-primary"
               >
                 {lead.phone}
