@@ -16,7 +16,7 @@ type FieldType = FormField["type"];
 const FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
   { type: "text", label: "Text", description: "Short single-line text" },
   { type: "email", label: "Email", description: "Email address with validation" },
-  { type: "tel", label: "Phone", description: "Phone number input" },
+  { type: "tel", label: "Phone Number", description: "Phone number with country code" },
   { type: "number", label: "Number", description: "Numeric input" },
   { type: "date", label: "Date", description: "Date picker" },
   { type: "textarea", label: "Textarea", description: "Multi-line text" },

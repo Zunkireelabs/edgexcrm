@@ -36,7 +36,7 @@ interface FieldRowProps {
 const FIELD_META: Record<string, { icon: React.ElementType; color: string; bg: string; label: string }> = {
   text:          { icon: Type,        color: "text-blue-600",   bg: "bg-blue-50",    label: "Text" },
   email:         { icon: Mail,        color: "text-purple-600", bg: "bg-purple-50",  label: "Email" },
-  tel:           { icon: Phone,       color: "text-green-600",  bg: "bg-green-50",   label: "Phone" },
+  tel:           { icon: Phone,       color: "text-green-600",  bg: "bg-green-50",   label: "Phone Number" },
   number:        { icon: Hash,        color: "text-cyan-600",   bg: "bg-cyan-50",    label: "Number" },
   date:          { icon: Calendar,    color: "text-teal-600",   bg: "bg-teal-50",    label: "Date" },
   textarea:      { icon: AlignLeft,   color: "text-indigo-600", bg: "bg-indigo-50",  label: "Text Area" },
