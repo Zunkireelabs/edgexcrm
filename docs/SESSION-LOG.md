@@ -11,14 +11,82 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Phase 2A complete + verified, 39 tests passing (see Phase 2A entry below for full detail).
-- **Branch**: `stage` — at last audit was 7 commits behind `origin/stage`. **Pull first** before any new work.
-- **Untracked**: `PRICING.md` at repo root — live product doc, needs committing (or `.gitignore` if intentionally scratch).
-- **Next up**: TBD — Sadin to decide between Phase 2B (UI for Phase 2A backend), `email-automation` (planned feature dir existed empty), or other priorities.
+- **Current state**: Phase 2A backend (Feb 21) was followed by a long run of unlogged shipped work through May — Phase 2B UI, multi-pipeline, move-to-pipeline, email auto-forward + Gmail OAuth, student check-in, and phone country-code support. See the **Post-Phase 2A backfill** entry below for the *why* on each cluster; `git log` has the *what*.
+- **Branch**: `stage` — diverged from `origin/stage` (~3 ahead, 7 behind at last audit). The 7 behind are summarized in the backfill entry; the 3 ahead appear to be minor ci + style fixes. Sort branch state before any new feature work.
+- **Untracked**: `PRICING.md` at repo root — duplicate of `docs/reference/PRICING.md`. Delete the root copy or move it; don't commit a duplicate.
+- **Next up**: PR #9 ("form builder for education consultancy", merged May 21) needs verification + its own SESSION-LOG entry. After that, Sadin to direct.
 - **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Post-Phase 2A — Shipped Work Backfill (March–May 2026)
+
+> **Discipline gap acknowledged**: between Phase 2A (Feb 21) and the doc reorg (May 24), shipped work landed without SESSION-LOG entries. This is a lightweight backfill written 2026-05-24 by reading PRs and commits — git log has the *what*, this entry captures the *why* before it decays. Detail is deliberately shallower than dedicated entries.
+
+Shipped via PRs #4–#8 and direct-to-`stage` commits `f728ca8` → `b890c35`. Migrations `009`–`018` all landed in this window.
+
+### Cluster 1 — Phase 2B-equivalent UI work (PRs #4–#7, April 9–10)
+
+- **PR #4** (`3d08808`): User assignment UI on top of the Phase 2A backend. Four phases in one PR — invite flow with registration + token validation, bulk assign API + assign button + horizontal-scroll fix on the leads table, in-app notification dropdown with real-time polling, and Resend email notifications for invites and assignments (single + bulk).
+- **PR #5** (`cf908aa`): Dashboard UI brought in line with the Zunkireelabs design system (the "agentic-commerce" reference). Table corners, pagination placement, per-page dropdown, sidebar/header polish.
+- **PR #6** (`336dddc`): Truncated table cells with conditional tooltip (tooltip only fires when content is actually truncated, not always).
+- **PR #7** (`7280831`): Bulk-action bar redesign with motion.
+
+**Why**: The "Phase 2B" backlog from the Phase 2A entry (assignment UI, counselor-scoped view, invites UI) is now satisfied via these PRs. Treat that backlog as done unless you find a missing item in the lead-detail UI — `lead-detail.tsx` is the canonical place to check.
+
+**Migrations from this window**: `015_notifications.sql` (in-app notification storage), plus design-system-driven schema tweaks `010`–`012`.
+
+### Cluster 2 — Multi-pipeline + pipeline management (PR #8, April 12)
+
+- **PR #8** (`a3e0ed2`, migration `016_multi_pipeline.sql`): Replaces the single-pipeline-per-tenant assumption from Phase 2A. New `pipelines` table; `pipeline_id` added to both `pipeline_stages` and `leads`; `terminal_type` (`won`/`lost`) on stages to distinguish conversion outcomes. New UI: `PipelineSelector` (pill dropdown), `PipelineSettingsModal`, `CreatePipelineModal` (default / copy / empty templates), `StageEditor` with drag-drop reorder. Selected pipeline persisted to `localStorage`.
+
+**Why**: Phase 2A modeled pipeline as a flat list of stages per tenant. Multiple lead types (e.g., undergrad vs. post-grad consultancy flows) needed distinct stage sets — hence a `pipelines` layer above stages. **Anyone touching `pipeline_stages`, `stage_id` on leads, or the Kanban board must include `pipeline_id` in the model now.** Read migration 016 and `PipelineSelector.tsx` before editing.
+
+Other migrations in adjacent commits: `009_multi_form_support` (multiple forms per tenant), `013_lead_insights` (AI insight scaffolding from the research dir — partial), `014_lead_activities` (timeline data model).
+
+### Cluster 3 — Move-to-pipeline + email auto-forward + Gmail (`f728ca8`, May 4)
+
+- `MoveToPipelineModal.tsx` (447 LOC) — drag-or-modal-driven moves between pipelines.
+- Gmail OAuth per-tenant via `/api/v1/settings/email-accounts/gmail/auth` + `callback`; connected accounts stored in migration `018_connected_email_accounts.sql`.
+- Email auto-forward rules (migration `017_email_forward_rules.sql`): tenant-defined rules that turn inbound emails into leads or routed messages. Manager UI: `email-rules-manager.tsx` (537 LOC). Send via `smtp-sender.ts`, forwarding logic in `email-forward.ts`.
+- AI chat route stub `/api/v1/ai/chat` — entry point for the AI orchestration work the `archive/research/ai-insight-*` docs sketched.
+- **Route group restructure**: API routes moved under `src/app/(main)/api/...` to share a `(main)` layout with dashboard pages. **If a route 404s after this commit, check whether it should live under `(main)/`.**
+
+**Why**: Email is the second inbound channel for leads after public forms — particularly for education consultancies that already field inquiries via Gmail. The Gmail connection is per-tenant (OAuth), not app-level. The AI chat route was scaffolded here but its real implementation is downstream.
+
+### Cluster 4 — Student check-in system (`974d1b0`, May 5)
+
+- New top-level dashboard route `/check-in` with search, history list, and per-student detail page.
+- API: `/api/v1/check-ins` (list), `/api/v1/leads/[id]/check-in[s]` (record + list per lead).
+- Components: `check-in-page.tsx` (696 LOC), `check-in-detail-page.tsx`, sidebar link in `shell.tsx`.
+
+**Why**: First vertical-specific feature — education consultancies running physical events / counselling sessions need to mark that a lead showed up, with timestamp + history. **Not gated by tenant type**, so it shows for every tenant. If onboarding a non-education vertical, consider a feature flag.
+
+### Cluster 5 — Phone country-code work (`38aa1b9`, `816153e`, `3d7386f`, `b890c35`, May 13–18)
+
+- New `phone-input.tsx` (country-code selector + number input) used on public form, add-lead sheet, lead detail, and check-in flows.
+- New libs: `country-codes.ts` (dial code table), `phone-utils.ts` (parse/format helpers — `formatPhoneWithCountryCode()` is the canonical formatter).
+- Two follow-up fixes (`3d7386f`, `b890c35`): country code kept getting dropped on partial form submissions and on API-created leads — fixed in form component and in the leads POST handler.
+- Side feature (`816153e`): lead source column now visible in leads table + CSV export.
+
+**Why**: International applicants — Indian consultancies handling leads from multiple countries needed country code as part of identity, not cosmetics. The two fixes show how easy it is to lose the country code along submission paths: **always route phone fields through `formatPhoneWithCountryCode()` in `phone-utils.ts` rather than concatenating raw strings.**
+
+### What this entry deliberately does NOT cover
+
+- Per-migration deep-dives for `009`–`018` — read the SQL directly if working on schema. The clusters above name the migrations relevant to each.
+- **PR #9** ("form builder for education consultancy", merged 2026-05-21, commit `7afa0e7`) — landed *after* the window above and is not yet on `stage`'s 7-commit lag. Needs its own entry once current state is verified.
+- The 3 unmerged local-only commits — minor ci + style fixes; will resolve on next push/rebase.
+
+### Files Changed (summary)
+
+PRs #4–#8 + direct commits `f728ca8` → `b890c35`. Highlights:
+- **New components**: `MoveToPipelineModal`, `email-rules-manager`, `check-in-page`, `check-in-detail-page`, `phone-input`, `PipelineSelector`, `PipelineSettingsModal`, `CreatePipelineModal`, `StageEditor`, bulk action bar
+- **New libs**: `email-forward`, `smtp-sender`, `country-codes`, `phone-utils`
+- **New API routes**: `pipelines/*`, `pipelines/[id]/stages/*`, `ai/chat`, `settings/email-accounts/*`, `settings/email-rules/*`, `check-ins/*`, `leads/[id]/check-in[s]`, bulk-assign, invites accept/registration
+- **Migrations**: `009_multi_form_support` → `018_connected_email_accounts` (10 migrations)
 
 ---
 

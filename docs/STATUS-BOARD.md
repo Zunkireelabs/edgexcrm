@@ -2,25 +2,25 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-24 (initial seed during doc reorg)
+Last updated: 2026-05-24 (post-backfill)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
-- [ ] **Phase 2B scope**: Phase 2A built the operational backend (lead assignment, counselor role, dual-mode pipeline, invites, checklists, intake fields) with no UI. What's the UI scope for Phase 2B? Drives next brief.
-- [ ] **`PRICING.md` at repo root**: untracked. Commit as-is (live product doc), move into `docs/reference/PRICING.md`, or add to `.gitignore`?
-- [ ] **`docs/feature/email-automation/`** was empty (no PLAN.md). Was this a planned feature that never got specced? Drop or write the brief?
-- [ ] **Stage branch is 7 commits behind `origin/stage`** (as of audit). Pull before any new work to avoid divergence.
+- [ ] **Branch sync**: local `stage` diverged from `origin/stage` (~3 ahead, 7 behind). Pull/rebase before starting new feature work. The 7 behind are now logged in the backfill entry; the 3 ahead look minor (ci + style).
+- [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended) or replace the `reference/` one — don't keep both.
+- [ ] **PR #9 verification**: "form builder for education consultancy" merged 2026-05-21 but landed after the backfill window. Needs current-state verification and its own SESSION-LOG entry.
 
 ## 🟡 Open questions
 
-- [ ] Status of branches `feature/upgrade-pipeline` and `feature/ai-orchestrate-orca` — merged/open PR/abandoned? Their PLAN.md docs were marked COMPLETE and have been archived to `docs/archive/features/`.
-- [ ] Older planning docs (`docs/archive/plans/enhanced-dashboard.md`, `lead-detail-redesign.md`, dated 2026-03-27) — shipped, dormant, or superseded by Phase 2A? Confirms whether they belong in `archive/plans/` or `archive/stale/`.
-- [ ] `docs/archive/research/ai-insight-*` (2026-03-28) — research that never linked to a PR. Still on the roadmap, or abandoned?
+- [ ] `docs/archive/research/ai-insight-*` (2026-03-28) — `013_lead_insights` migration + `/api/v1/ai/chat` stub suggest partial implementation. Is the AI insight feature still on the roadmap, or are the stubs dormant?
+- [ ] `docs/feature/email-automation/` was empty when the docs were reorganized — the actual email-forward + Gmail OAuth feature shipped via `f728ca8` (May 4). Was the empty dir a stale placeholder? Safe to confirm-and-delete.
+- [ ] Older planning docs `docs/archive/plans/enhanced-dashboard.md` and `lead-detail-redesign.md` (2026-03-27) — were these the briefs for PRs #4–#5? Worth retitling/dating if so, or moving to `archive/stale/` if superseded.
 
 ## ✅ Recently resolved
 
+- 2026-05-24 — **SESSION-LOG backfill** written for the March–May shipped-work gap (PRs #4–#8 + commits `f728ca8` → `b890c35`). The "Phase 2B scope" question is answered (it shipped via PRs #4–#7). The "branches `feature/upgrade-pipeline` and `feature/ai-orchestrate-orca`" question is answered for upgrade-pipeline (= PR #8, merged); ai-orchestrate-orca status still ambiguous but lower priority.
 - 2026-05-24 — Doc layout reorganized to match Stella+Zunkiree brain-folder pattern: SESSION-LOG.md as single source of truth, `reference/` for stable docs, `archive/<series>/` for shipped work. Top-level `docs/` is now scannable.
 
 ---
