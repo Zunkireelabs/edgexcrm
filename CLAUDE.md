@@ -24,6 +24,17 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 ---
 
+## Read first, every session
+
+1. `docs/SESSION-LOG.md` — current state of the project. The "🟢 NEXT SESSION — RESUME HERE" block at the top tells you exactly where to pick up.
+2. `docs/STATUS-BOARD.md` — live status of open user-side actions and questions.
+3. `docs/reference/` — stable docs (product vision at `00-PRODUCT-VISION.md`, API contracts under `api-contracts/`). Read for context; don't edit per-task.
+4. `docs/archive/` — shipped or superseded work grouped by series (`features/`, `plans/`, `research/`, `ci-cd/`, `stale/`).
+
+**Single source of truth**: `docs/SESSION-LOG.md`. When a piece of work ships, log it there and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain SESSION-LOG.md, STATUS-BOARD.md, and any in-flight `<CONTEXT>-BRIEF.md`.
+
+---
+
 ## Automatic Skill Routing
 
 **IMPORTANT: This project uses orchestrated development.**

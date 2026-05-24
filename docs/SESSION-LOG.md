@@ -1,8 +1,24 @@
 # Lead Gen CRM — Session Log
 
+> Single source of truth for cross-session continuity. Most recent milestone first.
+
 **Project**: Multi-tenant Lead Gen CRM SaaS for Zunkiree Labs
 **Status**: Phase 2A complete — verified and passing all 39 tests
 **Live**: https://lead-crm.zunkireelabs.com
+**Repo**: `Zunkireelabs/edgexcrm` (GitHub)
+
+---
+
+## 🟢 NEXT SESSION — RESUME HERE
+
+- **Current state**: Phase 2A complete + verified, 39 tests passing (see Phase 2A entry below for full detail).
+- **Branch**: `stage` — at last audit was 7 commits behind `origin/stage`. **Pull first** before any new work.
+- **Untracked**: `PRICING.md` at repo root — live product doc, needs committing (or `.gitignore` if intentionally scratch).
+- **Next up**: TBD — Sadin to decide between Phase 2B (UI for Phase 2A backend), `email-automation` (planned feature dir existed empty), or other priorities.
+- **Blockers**: none known.
+- **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
+
+When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
 
 ---
 
