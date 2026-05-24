@@ -168,6 +168,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
   const [stageId, setStageId] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
+  const [leadTag, setLeadTag] = useState<string>("student");
   const [submitting, setSubmitting] = useState(false);
 
   // Check-in history state
@@ -318,6 +319,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
           intake_source: "walk_in",
           intake_medium: "check_in",
           custom_fields: notes.trim() ? { initial_notes: notes.trim() } : {},
+          tags: [leadTag],
           is_final: true,
           step: 1,
         }),
@@ -604,6 +606,28 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
                           ))}
                         </SelectContent>
                       </Select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label className="text-xs">Tag</Label>
+                      <div className="flex gap-2">
+                        {["student", "parent"].map((tag) => (
+                          <button
+                            key={tag}
+                            type="button"
+                            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                              leadTag === tag
+                                ? tag === "parent"
+                                  ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                                  : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            }`}
+                            onClick={() => setLeadTag(tag)}
+                          >
+                            {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div className="space-y-1">
