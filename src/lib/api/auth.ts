@@ -8,6 +8,7 @@ export interface AuthContext {
   email: string;
   tenantId: string;
   role: UserRole;
+  industryId: string | null;
 }
 
 export async function authenticateRequest(): Promise<AuthContext | null> {
@@ -39,9 +40,13 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role")
+      .select("tenant_id, role, tenants(industry_id)")
       .eq("user_id", user.id)
-      .single();
+      .single<{
+        tenant_id: string;
+        role: string;
+        tenants: { industry_id: string | null } | null;
+      }>();
 
     if (!membership) return null;
 
@@ -50,6 +55,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       email: user.email || "",
       tenantId: membership.tenant_id,
       role: membership.role as UserRole,
+      industryId: membership.tenants?.industry_id ?? null,
     };
   } catch {
     return null;

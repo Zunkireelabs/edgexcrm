@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -28,12 +28,12 @@ export async function GET(request: NextRequest) {
   const offset = parseInt(searchParams.get("offset") || "0");
   const unreadOnly = searchParams.get("unread") === "true";
 
-  const supabase = await createServiceClient();
+  // Migrated to scopedClient — tenant_id filter auto-injected.
+  const db = await scopedClient(auth);
 
-  let query = supabase
+  let query = db
     .from("notifications")
     .select("*")
-    .eq("tenant_id", auth.tenantId)
     .eq("user_id", auth.userId)
     .order("created_at", { ascending: false })
     .range(offset, offset + limit - 1);
@@ -49,8 +49,10 @@ export async function GET(request: NextRequest) {
     return apiServiceUnavailable("Failed to fetch notifications");
   }
 
-  // Also get total unread count
-  const { count: unreadCount } = await supabase
+  // Also get total unread count — uses raw() because the count: "exact"
+  // form of select() isn't covered by the scopedClient wrapper today.
+  const { count: unreadCount } = await db
+    .raw()
     .from("notifications")
     .select("*", { count: "exact", head: true })
     .eq("tenant_id", auth.tenantId)

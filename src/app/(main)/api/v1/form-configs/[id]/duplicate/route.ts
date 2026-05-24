@@ -3,6 +3,8 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -13,6 +15,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
   if (!requireAdmin(auth)) return apiForbidden();
 
   const supabase = await createServiceClient();

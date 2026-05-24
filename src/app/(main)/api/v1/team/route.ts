@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -19,12 +20,13 @@ export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
 
-  const supabase = await createServiceClient();
+  // Migrated to scopedClient — auto-injects `.eq("tenant_id", auth.tenantId)`.
+  // See CLAUDE.md § Hardening discipline.
+  const db = await scopedClient(auth);
 
-  const { data: members, error } = await supabase
+  const { data: members, error } = await db
     .from("tenant_users")
     .select("id, user_id, role, created_at")
-    .eq("tenant_id", auth.tenantId)
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -32,8 +34,9 @@ export async function GET() {
     return apiServiceUnavailable("Failed to fetch team members");
   }
 
-  // Fetch user emails from auth.users
-  const { data: authData } = await supabase.auth.admin.listUsers();
+  // Fetch user emails from auth.users — uses raw() escape hatch since
+  // auth.admin is a service-only API not covered by the tenant scope.
+  const { data: authData } = await db.raw().auth.admin.listUsers();
   const userMap = new Map<string, string>();
   for (const u of authData?.users || []) {
     userMap.set(u.id, u.email || "");

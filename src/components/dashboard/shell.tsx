@@ -20,7 +20,6 @@ import {
   FileText,
   Kanban,
   UsersRound,
-  UserCheck,
   ChevronDown,
   ExternalLink,
   User as UserIcon,
@@ -30,22 +29,19 @@ import {
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
+import type { SidebarItem } from "@/industries/_types";
 
-const BASE_NAV_ITEMS = [
+// Universal nav items — every tenant sees these regardless of industry.
+// Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
+// industry manifest via `industrySidebarItems` prop and are inserted
+// between the "top" and "bottom" universal sections.
+const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
-  { href: "/check-in", label: "Check-In", icon: UserCheck },
-  { href: "/team", label: "Team", icon: UsersRound },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-const EDUCATION_NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pipeline", label: "Pipeline", icon: Kanban },
-  { href: "/leads", label: "All Leads", icon: Users },
-  { href: "/check-in", label: "Check-In", icon: UserCheck },
-  { href: "/forms", label: "Forms", icon: FileText },
+const UNIVERSAL_NAV_BOTTOM = [
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
@@ -60,6 +56,7 @@ interface DashboardShellProps {
   tenant: Tenant;
   role: string;
   formConfigs?: FormSummary[];
+  industrySidebarItems?: readonly SidebarItem[];
   children: React.ReactNode;
 }
 
@@ -68,6 +65,7 @@ export function DashboardShell({
   tenant,
   role,
   formConfigs = [],
+  industrySidebarItems = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -91,7 +89,15 @@ export function DashboardShell({
     router.refresh();
   }
 
-  const navItems = tenant.industry_id === "education_consultancy" ? EDUCATION_NAV_ITEMS : BASE_NAV_ITEMS;
+  const navItems = [
+    ...UNIVERSAL_NAV_TOP,
+    ...industrySidebarItems.map((item) => ({
+      href: item.href,
+      label: item.label,
+      icon: item.icon,
+    })),
+    ...UNIVERSAL_NAV_BOTTOM,
+  ];
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (

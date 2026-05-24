@@ -1,7 +1,9 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { FormBuilderPage } from "@/features/form-builder/components/form-builder-page";
+import { FormBuilderPage } from "@/industries/education-consultancy/features/form-builder/components/form-builder-page";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { FormConfig } from "@/types/database";
 
 export default async function EditFormPage({
@@ -13,14 +15,7 @@ export default async function EditFormPage({
 
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
-
-  if (tenantData.tenant.industry_id !== "education_consultancy") {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        Form builder is only available for Education Consultancy tenants.
-      </div>
-    );
-  }
+  if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
 
   if (tenantData.role !== "owner" && tenantData.role !== "admin") {
     return (
