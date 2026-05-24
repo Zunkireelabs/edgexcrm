@@ -20,11 +20,13 @@ import {
   FileText,
   Kanban,
   UsersRound,
+  UserCheck,
   ChevronDown,
   ExternalLink,
   User as UserIcon,
   Search,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
@@ -45,6 +47,20 @@ const UNIVERSAL_NAV_BOTTOM = [
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
+
+// Icon registry for industry-contributed nav items. Manifests reference
+// icons by string name (so they stay serializable across the Server →
+// Client Component boundary); this map resolves the name to a Lucide
+// component. Add a new entry here when a manifest references a new icon.
+const INDUSTRY_ICONS: Record<string, LucideIcon> = {
+  UserCheck,
+  FileText,
+  LayoutDashboard,
+  Kanban,
+  Users,
+  UsersRound,
+  Settings,
+};
 
 interface FormSummary {
   name: string;
@@ -94,7 +110,7 @@ export function DashboardShell({
     ...industrySidebarItems.map((item) => ({
       href: item.href,
       label: item.label,
-      icon: item.icon,
+      icon: INDUSTRY_ICONS[item.icon] ?? FileText,
     })),
     ...UNIVERSAL_NAV_BOTTOM,
   ];

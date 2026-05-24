@@ -5,7 +5,6 @@
  * for the architecture overview.
  */
 
-import type { LucideIcon } from "lucide-react";
 import type { IndustryId } from "./_registry";
 
 /**
@@ -26,12 +25,18 @@ export interface FeatureMeta<TConfig = unknown> {
 /**
  * Sidebar entry contributed by an industry. Rendered alongside the
  * universal nav items in the dashboard shell.
+ *
+ * `icon` is a string name (e.g. "UserCheck") so the manifest stays
+ * serializable across the Server Component → Client Component
+ * boundary. The dashboard shell resolves the name to a Lucide
+ * component via its INDUSTRY_ICONS registry — add a new icon there
+ * when you reference it from a manifest.
  */
 export interface SidebarItem {
   featureId: string;
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: string;
 }
 
 /**

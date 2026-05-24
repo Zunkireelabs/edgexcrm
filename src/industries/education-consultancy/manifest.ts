@@ -1,4 +1,3 @@
-import { FileText, UserCheck } from "lucide-react";
 import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
 import { checkInMeta } from "./features/check-in/meta";
@@ -16,13 +15,13 @@ export const manifest: IndustryManifest = {
       featureId: FEATURES.CHECK_IN,
       href: "/check-in",
       label: "Check-In",
-      icon: UserCheck,
+      icon: "UserCheck",
     },
     {
       featureId: FEATURES.FORM_BUILDER,
       href: "/forms",
       label: "Forms",
-      icon: FileText,
+      icon: "FileText",
     },
   ],
   ai: aiConfig,
