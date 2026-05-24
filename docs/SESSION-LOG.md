@@ -11,14 +11,105 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Phase 2A backend (Feb 21) was followed by a long run of unlogged shipped work through May — Phase 2B UI, multi-pipeline, move-to-pipeline, email auto-forward + Gmail OAuth, student check-in, and phone country-code support. See the **Post-Phase 2A backfill** entry below for the *why* on each cluster; `git log` has the *what*.
-- **Branch**: `stage` — diverged from `origin/stage` (~3 ahead, 7 behind at last audit). The 7 behind are summarized in the backfill entry; the 3 ahead appear to be minor ci + style fixes. Sort branch state before any new feature work.
-- **Untracked**: `PRICING.md` at repo root — duplicate of `docs/reference/PRICING.md`. Delete the root copy or move it; don't commit a duplicate.
-- **Next up**: PR #9 ("form builder for education consultancy", merged May 21) needs verification + its own SESSION-LOG entry. After that, Sadin to direct.
+- **Current state**: Industry module foundation (`src/industries/`) is live. Student check-in and form-builder are migrated into `industries/education-consultancy/features/`, gated via the new manifest+loader pattern. CLAUDE.md restructured around the two-homes rule, three feature categories, tenant isolation rules, and the `scopedClient(auth)` hardening wrapper. See the **Industry Modules** entry below.
+- **Branch**: `stage` — local is ahead of `origin/stage` by the implementation commit + 4 prior docs commits. Push when ready; no merge conflicts expected.
+- **Next up**: Sadin's call. Suggested directions: (a) start a real industry-scoped feature in `src/industries/it-agency/features/` to validate the parallel-work claim, (b) wire actual AI agent prompts into `industries/<id>/ai/agent.ts` slots, (c) continue `scopedClient` migration of the remaining ~35 legacy authenticated routes, (d) wire events → webhook dispatcher.
 - **Blockers**: none known.
-- **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
+- **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md). Several previously-open items are now resolved.
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Industry Modules — Path C Foundation + Hardening Rails (2026-05-24)
+
+### What Was Built
+
+The first-class industry module system. `industry_id` graduated from "decorative column that relabels things" to "architectural concept that gates features, drives sidebar, and reserves AI hook points." Anish's form-builder and the previously-universal student check-in were both migrated into the new `src/industries/education-consultancy/features/` home.
+
+### Architecture (Path C)
+
+```
+src/
+├── app/(main)/(dashboard)/          ← Universal features stay here (leads, pipeline, team, settings, dashboard)
+├── components/dashboard/             ← Universal components
+└── industries/                       ← NEW first-class concept
+    ├── _registry.ts                    type-safe FEATURES + INDUSTRIES ID constants
+    ├── _types.ts                       IndustryManifest, FeatureMeta, SidebarItem types
+    ├── _loader.ts                      manifest reader + getFeatureAccess (the gate truth)
+    ├── _shared/                        cross-industry shared features (empty stub today)
+    ├── education-consultancy/
+    │   ├── manifest.ts                  features + sidebar + AI config
+    │   ├── features/
+    │   │   ├── check-in/                MOVED from src/components/dashboard/check-in-page.tsx
+    │   │   └── form-builder/            MOVED from src/features/form-builder/ (was Anish's flat-pattern home)
+    │   └── ai/agent.ts                  AI config stub
+    ├── it-agency/manifest.ts            empty stub (Sadin's territory)
+    └── {construction,real-estate,healthcare,recruitment,general}/manifest.ts  empty stubs
+```
+
+### Decisions locked in during planning
+
+- **Tenant model = A**: one tenant = one industry. Hybrid orgs run multiple tenants. Not multi-industry-per-tenant.
+- **Path C**: industry modules for industry-scoped code; universal stays in `src/app/` and `src/components/dashboard/`. Two homes.
+- **Gate strength = hide entirely**: sidebar item hidden, route 404, API 403. No upsell messaging for mismatched industry.
+- **Refactor Anish's form-builder**: yes, brought into new structure as second inhabitant of `education-consultancy/features/`. Lead architect's call.
+- **Promote, don't copy**: shared features move to `_shared/`; never copy-paste between industry folders.
+- **Hardening = ongoing**: introduce `scopedClient(auth)` wrapper + migrate 2 routes as proof; ~35 legacy routes tracked for future migration on STATUS-BOARD.
+
+### Files: new (15)
+
+- `src/industries/_types.ts`
+- `src/industries/_registry.ts`
+- `src/industries/_loader.ts`
+- `src/industries/_shared/README.md`
+- `src/industries/education-consultancy/manifest.ts`
+- `src/industries/education-consultancy/ai/agent.ts`
+- `src/industries/education-consultancy/features/check-in/meta.ts`
+- `src/industries/education-consultancy/features/form-builder/meta.ts`
+- `src/industries/{it-agency,construction,real-estate,healthcare,recruitment,general}/manifest.ts` (6 stubs)
+- `src/lib/industries/gate.ts` — `requireIndustry()` helper
+- `src/lib/supabase/scoped.ts` — `scopedClient(auth)` wrapper
+- `docs/INDUSTRY-MODULES-BRIEF.md` (in-flight; archived after this ships)
+- `docs/FEATURE-CATALOG.md` — human-readable feature/industry catalogue
+
+### Files: moved (with `git mv`, history preserved)
+
+- 17 files from `src/features/form-builder/**` → `src/industries/education-consultancy/features/form-builder/**`
+- `src/components/dashboard/check-in-page.tsx` → `src/industries/education-consultancy/features/check-in/ui.tsx`
+- `src/components/dashboard/check-in-detail-page.tsx` → `src/industries/education-consultancy/features/check-in/detail-ui.tsx`
+
+### Files: modified
+
+- `CLAUDE.md` — major restructure. Replaced "Industry Feature Development" section with comprehensive Industry Scoping Rules. Added Tenant Isolation Rules + new feature checklist. Added scopedClient to Supabase Client Usage. Updated form-builder path. Updated Known Issues.
+- `src/lib/api/auth.ts` — added `industryId: string | null` to `AuthContext`; `authenticateRequest()` now joins `tenants.industry_id`.
+- `src/components/dashboard/shell.tsx` — dropped `BASE_NAV_ITEMS`/`EDUCATION_NAV_ITEMS` ternary; sidebar now reads `industrySidebarItems` prop merged with universal top/bottom items.
+- `src/app/(main)/(dashboard)/layout.tsx` — threads `industrySidebarItems` from `getIndustrySidebarItems(industry_id)` into the shell.
+- `src/app/(main)/(dashboard)/check-in/page.tsx` + `[id]/page.tsx` — thin shells: `getFeatureAccess()` → `notFound()`, delegate to UI in industry folder.
+- `src/app/(main)/(dashboard)/forms/page.tsx`, `new/page.tsx`, `[id]/page.tsx` — same pattern; inline industry guards replaced with loader gate.
+- 4 check-in API routes (`/api/v1/check-ins`, `/leads/check-in`, `/leads/[id]/check-in`, `/leads/[id]/check-ins`) — added `getFeatureAccess()` guard. Previously had **no industry gate at all** — IT-agency tenants could hit them.
+- 3 form-config API routes (`/api/v1/form-configs`, `[id]`, `[id]/duplicate`) — added `getFeatureAccess()` guard. Page-level guard was already present; API-level was not.
+- `src/app/(main)/api/v1/team/route.ts` (GET handler), `src/app/(main)/api/v1/notifications/route.ts` — migrated to `scopedClient(auth)` as proof of the hardening pattern.
+
+### Why it matters
+
+1. **Parallel multi-developer multi-industry work**: Sadin on `industries/it-agency/`, Anish on `industries/education-consultancy/` — zero shared-file conflicts. The old ternary in `shell.tsx` was the merge-conflict point of the previous pattern.
+2. **Cross-industry feature sharing without duplication**: when a 2nd industry wants a feature, promote via `_shared/`, opt-in per manifest with per-industry config. The decision tree lives in CLAUDE.md.
+3. **Single enforcement point**: `getFeatureAccess()` in `_loader.ts` is the truth. Change it once, sidebar/route/API all respect it.
+4. **AI per-industry has a home now**: `industries/<id>/ai/agent.ts` slots are reserved. Future per-industry prompts/tools land there.
+5. **Hardening: cross-tenant leaks one less risk**: `scopedClient(auth)` makes the tenant filter automatic. Two routes migrated, ~35 legacy routes documented for migration. Future routes default to the safe pattern.
+
+### Verification
+
+- `npm run build` — clean compile, all 43 routes generated, no errors.
+- `npm run lint` — 8 warnings (all pre-existing or in unused-import line that was already present); 0 errors.
+
+### Open items (now on STATUS-BOARD)
+
+- Migrate remaining ~35 authenticated routes to `scopedClient(auth)`.
+- Build actual per-industry AI prompts/tools (currently `agent.ts` stubs are empty).
+- Wire `events` → webhook dispatcher (separate concern, not part of this work).
+- First real industry-scoped feature for `it-agency` to validate the parallel-work claim end-to-end.
 
 ---
 
