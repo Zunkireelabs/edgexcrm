@@ -24,6 +24,13 @@ import {
   Calendar,
   Clock,
   Download,
+  ChevronRight,
+  X,
+  Mail,
+  Phone,
+  MapPin,
+  Globe,
+  FileText,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
@@ -101,6 +108,44 @@ function getDateRange(filter: DateFilter, customFrom?: string, customTo?: string
   return { from, to };
 }
 
+function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
+  const city = details.city ? String(details.city) : null;
+  const country = details.country ? String(details.country) : null;
+  const customFields = (details.custom_fields && typeof details.custom_fields === "object")
+    ? details.custom_fields as Record<string, unknown>
+    : null;
+
+  return (
+    <div className="space-y-3 mb-6">
+      {city && (
+        <div className="flex items-center gap-3 text-sm">
+          <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span>{city}{country ? `, ${country}` : ""}</span>
+        </div>
+      )}
+      {country && !city && (
+        <div className="flex items-center gap-3 text-sm">
+          <Globe className="h-4 w-4 text-muted-foreground shrink-0" />
+          <span>{country}</span>
+        </div>
+      )}
+      {customFields && Object.keys(customFields).length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Additional Info</p>
+          <div className="space-y-1.5">
+            {Object.entries(customFields).map(([key, value]) => (
+              <div key={key} className="flex justify-between text-sm">
+                <span className="text-muted-foreground capitalize">{key.replace(/_/g, " ")}</span>
+                <span className="font-medium text-right max-w-45 truncate">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckInPageProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -109,6 +154,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
   const [searching, setSearching] = useState(false);
   const [searched, setSearched] = useState(false);
   const [checkingIn, setCheckingIn] = useState<string | null>(null);
+  const [selectedLead, setSelectedLead] = useState<LeadResult | null>(null);
+  const [leadDetails, setLeadDetails] = useState<Record<string, unknown> | null>(null);
+  const [loadingDetails, setLoadingDetails] = useState(false);
 
   // Add lead form state
   const [showAddForm, setShowAddForm] = useState(false);
@@ -206,6 +254,28 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
     setQuery(value);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => doSearch(value), 300);
+  };
+
+  const handleViewDetails = async (lead: LeadResult) => {
+    setSelectedLead(lead);
+    setLoadingDetails(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`);
+      const json = await res.json();
+      if (json.data) {
+        setLeadDetails(json.data);
+      }
+    } catch {
+      // Fall back to search result data
+      setLeadDetails(null);
+    } finally {
+      setLoadingDetails(false);
+    }
+  };
+
+  const handleCloseDetails = () => {
+    setSelectedLead(null);
+    setLeadDetails(null);
   };
 
   const handleCheckIn = async (leadId: string) => {
@@ -346,7 +416,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
   };
 
   return (
-    <div className="flex flex-col h-full p-6">
+    <div className="flex h-full">
+      {/* Main content */}
+      <div className={`flex-1 flex flex-col h-full p-6 overflow-y-auto transition-all ${selectedLead ? "mr-0" : ""}`}>
       {/* Search Section — compact, does not grow */}
       <div className="shrink-0 max-w-2xl mx-auto w-full mb-6">
         <div className="mb-4">
@@ -378,8 +450,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
               {results.map((lead) => (
                 <div
                   key={lead.id}
-                  className="flex items-center gap-3 p-2.5 rounded-md cursor-pointer hover:bg-muted/60 transition-colors"
-                  onClick={() => handleCheckIn(lead.id)}
+                  className={`flex items-center gap-3 p-2.5 rounded-md cursor-pointer transition-colors ${
+                    selectedLead?.id === lead.id ? "bg-primary/10 border border-primary/20" : "hover:bg-muted/60"
+                  }`}
+                  onClick={() => handleViewDetails(lead)}
                 >
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-medium text-primary shrink-0">
                     {(lead.first_name?.[0] || lead.email?.[0] || "?").toUpperCase()}
@@ -407,12 +481,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
                       {lead.phone && <span>{lead.phone}</span>}
                     </div>
                   </div>
-                  <div className="shrink-0">
-                    {checkingIn === lead.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    ) : (
-                      <UserCheck className="h-4 w-4 text-green-600" />
-                    )}
+                  <div className="shrink-0 flex items-center gap-2">
+                    <span className="text-xs text-primary font-medium">View Details</span>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
                 </div>
               ))}
@@ -690,6 +761,111 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
           </CardContent>
         </Card>
       </div>
+    </div>
+
+      {/* Detail Panel — right side */}
+      {selectedLead && (
+        <div className="w-[380px] shrink-0 border-l bg-background h-full overflow-y-auto">
+          <div className="p-5">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Lead Details</h3>
+              <button
+                onClick={handleCloseDetails}
+                className="p-1 rounded hover:bg-muted text-muted-foreground"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Lead info */}
+            <div className="text-center mb-5">
+              <div className="h-14 w-14 rounded-full bg-primary/10 flex items-center justify-center text-lg font-bold text-primary mx-auto mb-3">
+                {(selectedLead.first_name?.[0] || selectedLead.email?.[0] || "?").toUpperCase()}
+              </div>
+              <h2 className="font-semibold text-lg">
+                {[selectedLead.first_name, selectedLead.last_name].filter(Boolean).join(" ") || "No Name"}
+              </h2>
+              {selectedLead.stage_name && (
+                <Badge
+                  variant="secondary"
+                  className="mt-1.5 text-xs"
+                  style={{
+                    backgroundColor: `${selectedLead.stage_color}20`,
+                    color: selectedLead.stage_color || undefined,
+                  }}
+                >
+                  {selectedLead.stage_name}
+                </Badge>
+              )}
+            </div>
+
+            {/* Contact info */}
+            <div className="space-y-3 mb-6">
+              {selectedLead.email && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span className="truncate">{selectedLead.email}</span>
+                </div>
+              )}
+              {selectedLead.phone && (
+                <div className="flex items-center gap-3 text-sm">
+                  <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span>{selectedLead.phone}</span>
+                </div>
+              )}
+              {selectedLead.pipeline_name && (
+                <div className="flex items-center gap-3 text-sm">
+                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span>{selectedLead.pipeline_name}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-sm">
+                <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
+                <span className="text-muted-foreground">
+                  Created {new Date(selectedLead.created_at).toLocaleDateString("en-US", {
+                    month: "short", day: "numeric", year: "numeric"
+                  })}
+                </span>
+              </div>
+            </div>
+
+            {/* Additional details from API */}
+            {loadingDetails && (
+              <div className="flex items-center justify-center py-4">
+                <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+              </div>
+            )}
+
+            {leadDetails && !loadingDetails && (
+              <LeadExtraDetails details={leadDetails} />
+            )}
+
+            {/* Check-in button */}
+            <Button
+              className="w-full"
+              size="lg"
+              onClick={() => {
+                handleCheckIn(selectedLead.id);
+                handleCloseDetails();
+              }}
+              disabled={checkingIn === selectedLead.id}
+            >
+              {checkingIn === selectedLead.id ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Checking in...
+                </>
+              ) : (
+                <>
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Check In
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
