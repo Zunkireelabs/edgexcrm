@@ -275,6 +275,7 @@ async function handlePost(request: NextRequest) {
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
+    tags: Array.isArray(body.tags) ? body.tags : ["student"],
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 

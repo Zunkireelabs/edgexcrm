@@ -41,6 +41,7 @@ import {
   ChevronRight,
   Plus,
   UserPlus,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
@@ -100,6 +101,7 @@ export function LeadsTable({
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("created");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -154,6 +156,9 @@ export function LeadsTable({
       const matchesSource =
         sourceFilter === "all" || lead.intake_source === sourceFilter;
 
+      const matchesTag =
+        tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
+
       // Created date filter
       let matchesCreated = true;
       if (createdFilter !== "all") {
@@ -182,7 +187,7 @@ export function LeadsTable({
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesCreated;
+      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesTag && matchesCreated;
     });
 
     // Apply sorting
@@ -212,7 +217,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [leads, search, statusFilter, formFilter, counselorFilter, sourceFilter, createdFilter, sortField, sortDirection, memberMap]);
+  }, [leads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -220,6 +225,7 @@ export function LeadsTable({
     setFormFilter("all");
     setCounselorFilter("all");
     setSourceFilter("all");
+    setTagFilter("all");
     setCreatedFilter("all");
     setCurrentPage(1);
   };
@@ -230,6 +236,7 @@ export function LeadsTable({
     formFilter !== "all",
     counselorFilter !== "all",
     sourceFilter !== "all",
+    tagFilter !== "all",
     createdFilter !== "all"
   ].filter(Boolean).length;
 
@@ -367,6 +374,7 @@ export function LeadsTable({
       "Status",
       "Assigned To",
       "Source",
+      "Tag",
     ];
     const rows = filtered.map((l) => {
       const source = l.form_config_id ? formMap[l.form_config_id] || "" : l.intake_source?.replace(/_/g, " ") || "";
@@ -381,6 +389,7 @@ export function LeadsTable({
         l.status,
         l.assigned_to ? memberMap[l.assigned_to] || "" : "",
         source,
+        (l.tags || []).join(", "),
       ];
     });
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
@@ -540,6 +549,22 @@ export function LeadsTable({
             />
           )}
 
+          {/* Tag Filter */}
+          <FilterDropdown
+            label="All Tags"
+            value={tagFilter}
+            onChange={(val) => {
+              setTagFilter(val);
+              setCurrentPage(1);
+            }}
+            icon={<Tag className="h-3 w-3" />}
+            options={[
+              { value: "all", label: "All Tags", description: "Show all leads" },
+              { value: "student", label: "Student", description: "Student leads only" },
+              { value: "parent", label: "Parent", description: "Parent leads only" },
+            ]}
+          />
+
           {/* Created Date Filter */}
           <FilterDropdown
             label="Any time"
@@ -673,6 +698,7 @@ export function LeadsTable({
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
@@ -686,7 +712,7 @@ export function LeadsTable({
             {paginatedLeads.length === 0 ? (
               <tr>
                 <td
-                  colSpan={hasMultipleForms ? 10 : 9}
+                  colSpan={hasMultipleForms ? 11 : 10}
                   className="text-center py-12 text-gray-500"
                 >
                   <p>No leads found</p>
@@ -760,6 +786,19 @@ export function LeadsTable({
                           <Eye size={14} />
                         </button>
                       </div>
+                    </td>
+                    <td className="px-3 py-1.5 hidden md:table-cell">
+                      {(lead.tags && lead.tags.length > 0) ? (
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
+                          lead.tags.includes("parent")
+                            ? "bg-green-100 text-green-700"
+                            : "bg-blue-100 text-blue-700"
+                        }`}>
+                          {lead.tags.includes("parent") ? "Parent" : "Student"}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />

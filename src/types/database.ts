@@ -123,6 +123,7 @@ export interface Lead {
   intake_medium: string | null;
   intake_campaign: string | null;
   preferred_contact_method: string | null;
+  tags: string[];
   form_config_id: string | null;
   deleted_at: string | null;
   idempotency_key: string | null;

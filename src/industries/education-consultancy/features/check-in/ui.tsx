@@ -841,6 +841,47 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
               <LeadExtraDetails details={leadDetails} />
             )}
 
+            {/* Tag selector */}
+            {leadDetails && (
+              <div className="mb-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Tag</p>
+                <div className="flex gap-2">
+                  {["student", "parent"].map((tag) => {
+                    const currentTags = (leadDetails as Record<string, unknown>).tags as string[] || [];
+                    const isActive = currentTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                          isActive
+                            ? tag === "parent"
+                              ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                              : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        }`}
+                        onClick={async () => {
+                          const newTags = [tag];
+                          try {
+                            await fetch(`/api/v1/leads/${selectedLead.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ tags: newTags }),
+                            });
+                            setLeadDetails((prev) => prev ? { ...prev, tags: newTags } : prev);
+                            toast.success(`Tagged as ${tag}`);
+                          } catch {
+                            toast.error("Failed to update tag");
+                          }
+                        }}
+                      >
+                        {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Check-in button */}
             <Button
               className="w-full"
