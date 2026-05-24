@@ -45,17 +45,28 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       .single<{
         tenant_id: string;
         role: string;
-        tenants: { industry_id: string | null } | null;
+        // PostgREST returns embedded FK relations as an object for
+        // many-to-one (the case here: tenant_users.tenant_id ->
+        // tenants.id), but may return an array if the schema cache is
+        // stale or a second FK gets introduced. Accept both shapes.
+        tenants:
+          | { industry_id: string | null }
+          | { industry_id: string | null }[]
+          | null;
       }>();
 
     if (!membership) return null;
+
+    const tenantsEmbed = Array.isArray(membership.tenants)
+      ? membership.tenants[0] ?? null
+      : membership.tenants;
 
     return {
       userId: user.id,
       email: user.email || "",
       tenantId: membership.tenant_id,
       role: membership.role as UserRole,
-      industryId: membership.tenants?.industry_id ?? null,
+      industryId: tenantsEmbed?.industry_id ?? null,
     };
   } catch {
     return null;

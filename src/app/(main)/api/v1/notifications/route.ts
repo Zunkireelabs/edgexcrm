@@ -49,13 +49,11 @@ export async function GET(request: NextRequest) {
     return apiServiceUnavailable("Failed to fetch notifications");
   }
 
-  // Also get total unread count — uses raw() because the count: "exact"
-  // form of select() isn't covered by the scopedClient wrapper today.
+  // Unread count via scopedClient's select(columns, options) overload —
+  // tenant_id filter is still auto-applied.
   const { count: unreadCount } = await db
-    .raw()
     .from("notifications")
     .select("*", { count: "exact", head: true })
-    .eq("tenant_id", auth.tenantId)
     .eq("user_id", auth.userId)
     .is("read_at", null);
 

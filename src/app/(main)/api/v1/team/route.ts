@@ -1,4 +1,3 @@
-import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
@@ -24,7 +23,7 @@ export async function GET() {
   // See CLAUDE.md § Hardening discipline.
   const db = await scopedClient(auth);
 
-  const { data: members, error } = await db
+  const { data: membersRaw, error } = await db
     .from("tenant_users")
     .select("id, user_id, role, created_at")
     .order("created_at", { ascending: true });
@@ -34,6 +33,14 @@ export async function GET() {
     return apiServiceUnavailable("Failed to fetch team members");
   }
 
+  // Row-type inference is dropped by scopedClient.select; cast here.
+  const members = (membersRaw ?? []) as unknown as Array<{
+    id: string;
+    user_id: string;
+    role: string;
+    created_at: string;
+  }>;
+
   // Fetch user emails from auth.users — uses raw() escape hatch since
   // auth.admin is a service-only API not covered by the tenant scope.
   const { data: authData } = await db.raw().auth.admin.listUsers();
@@ -42,7 +49,7 @@ export async function GET() {
     userMap.set(u.id, u.email || "");
   }
 
-  const enriched = (members || []).map((m) => ({
+  const enriched = members.map((m) => ({
     id: m.id,
     user_id: m.user_id,
     role: m.role,
@@ -81,12 +88,14 @@ export async function DELETE(request: Request) {
     return apiForbidden();
   }
 
-  const supabase = await createServiceClient();
+  // Migrated to scopedClient. The `.eq("user_id", body.user_id)`
+  // below is the required additional filter — without it the wrapper
+  // would delete every tenant_users row for the tenant.
+  const db = await scopedClient(auth);
 
-  const { error } = await supabase
+  const { error } = await db
     .from("tenant_users")
     .delete()
-    .eq("tenant_id", auth.tenantId)
     .eq("user_id", body.user_id);
 
   if (error) {
