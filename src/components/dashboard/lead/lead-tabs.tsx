@@ -82,6 +82,27 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
+              {lead.tags && lead.tags.length > 0 && (
+                <InfoGridRow
+                  label="Tag"
+                  value={
+                    <div className="flex gap-1.5">
+                      {lead.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            tag === "parent"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-blue-100 text-blue-700"
+                          }`}
+                        >
+                          {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                        </span>
+                      ))}
+                    </div>
+                  }
+                />
+              )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
               {location && <InfoGridRow label="Location" value={location} />}
@@ -163,7 +184,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
 // Helper components
 interface InfoGridRowProps {
   label: string;
-  value: string | null | undefined;
+  value: React.ReactNode | string | null | undefined;
   isLink?: boolean;
   linkType?: "email" | "phone";
 }
@@ -171,7 +192,7 @@ interface InfoGridRowProps {
 function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
   if (!value) return null;
 
-  const displayValue = isLink ? (
+  const displayValue = isLink && typeof value === "string" ? (
     <a
       href={linkType === "email" ? `mailto:${value}` : `tel:${value}`}
       className="text-primary hover:underline"
