@@ -15,6 +15,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ApprovalStatusBadge } from "./status-badge";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { formatMinutes } from "../hooks/use-time-entries";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
@@ -108,8 +114,23 @@ export function TimeEntryRow({ entry, canEdit, onUpdate, onDelete }: TimeEntryRo
           )}
         </div>
 
-        {/* Status badge */}
-        <ApprovalStatusBadge status={entry.approval_status} />
+        {/* Status badge — rejected entries show reason on hover */}
+        {entry.approval_status === "rejected" && entry.rejection_reason ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <ApprovalStatusBadge status={entry.approval_status} />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs text-xs">
+                {entry.rejection_reason}
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : (
+          <ApprovalStatusBadge status={entry.approval_status} />
+        )}
 
         {/* Actions (only when editable) */}
         {canEdit && (
