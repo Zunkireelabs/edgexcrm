@@ -186,15 +186,23 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 1. `docs/SESSION-LOG.md` — current state of the project. The "🟢 NEXT SESSION — RESUME HERE" block at the top tells you exactly where to pick up.
 2. `docs/STATUS-BOARD.md` — live status of open user-side actions and questions.
-3. `docs/reference/` — stable docs:
+3. `docs/FEATURE-ROADMAP.md` — forward-looking pipeline of features by state (ideas → approved → planned → in-progress). Where new feature ideas are logged and where we pick the next thing to build.
+4. `docs/FEATURE-CATALOG.md` — features that currently exist in code (current state, not future plans).
+5. `docs/reference/` — stable docs:
    - `00-PRODUCT-VISION.md` — what we're building and why.
    - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.
-4. `docs/archive/` — shipped or superseded work grouped by series (`features/`, `plans/`, `research/`, `ci-cd/`, `stale/`).
+6. `docs/archive/` — shipped or superseded work grouped by series (`features/`, `plans/`, `research/`, `ci-cd/`, `stale/`).
 
-**Single source of truth**: `docs/SESSION-LOG.md`. When a piece of work ships, log it there and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain SESSION-LOG.md, STATUS-BOARD.md, and any in-flight `<CONTEXT>-BRIEF.md`.
+**Each living doc has one job — don't conflate them:**
+- `SESSION-LOG.md` = historical record of what shipped, dated entries.
+- `STATUS-BOARD.md` = open decisions / blockers needing Sadin's input.
+- `FEATURE-ROADMAP.md` = forward pipeline of features (ideas → planned → WIP).
+- `FEATURE-CATALOG.md` = features that exist in code today.
+
+When a piece of work ships, append to SESSION-LOG, update FEATURE-CATALOG, move ROADMAP entry to "shipped" then prune, and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain the four living docs above plus any in-flight `<CONTEXT>-BRIEF.md`.
 
 ---
 
