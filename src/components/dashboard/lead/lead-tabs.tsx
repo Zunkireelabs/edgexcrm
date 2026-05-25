@@ -97,6 +97,14 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
+              {industryId === "education_consultancy" && (
+                <InfoGridRow
+                  label="Lead Type"
+                  value={
+                    <LeadTypeSelector leadId={lead.id} currentType={lead.lead_type || "lead"} />
+                  }
+                />
+              )}
               {location && <InfoGridRow label="Location" value={location} />}
               {lead.preferred_contact_method && (
                 <InfoGridRow
@@ -199,6 +207,51 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
     <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{displayValue}</span>
+    </div>
+  );
+}
+
+function LeadTypeSelector({ leadId, currentType }: { leadId: string; currentType: string }) {
+  const [type, setType] = useState(currentType);
+  const [updating, setUpdating] = useState(false);
+
+  async function handleToggle(newType: string) {
+    setUpdating(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_type: newType }),
+      });
+      if (res.ok) {
+        setType(newType);
+        toast.success(`Changed to ${newType}`);
+      }
+    } catch {
+      toast.error("Failed to update lead type");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      {["lead", "prospect"].map((t) => (
+        <button
+          key={t}
+          disabled={updating}
+          onClick={() => handleToggle(t)}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+            type === t
+              ? t === "prospect"
+                ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
+                : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
+              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+          }`}
+        >
+          {t.charAt(0).toUpperCase() + t.slice(1)}
+        </button>
+      ))}
     </div>
   );
 }
