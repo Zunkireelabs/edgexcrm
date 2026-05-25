@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { CheckSquare, Loader2, Clock, ThumbsUp, ThumbsDown } from "lucide-react";
+import { useApproveReject } from "../hooks/use-approve-reject";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -188,13 +189,9 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
   // Selection state
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
-  // Per-entry processing (approve/reject in-flight)
-  const [processingIds, setProcessingIds] = useState<Set<string>>(new Set());
-
   // Reject modal
   const [rejectTarget, setRejectTarget] = useState<string | null>(null); // single id or "bulk"
   const [rejectReason, setRejectReason] = useState("");
-  const [rejecting, setRejecting] = useState(false);
 
   // Bulk reject modal
   const [bulkRejectOpen, setBulkRejectOpen] = useState(false);
@@ -257,27 +254,22 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
     });
   }
 
+  // ── Shared approve/reject hook ─────────────────────────────────
+
+  const { approve: approveEntry, reject: rejectEntry, processingIds } = useApproveReject({
+    onSuccess: (id, action) => {
+      removeEntries([id]);
+      if (action === "reject") {
+        setRejectTarget(null);
+        setRejectReason("");
+      }
+    },
+  });
+
   // ── Single approve ─────────────────────────────────────────────
 
   async function handleApprove(id: string) {
-    setProcessingIds((prev) => new Set(prev).add(id));
-    try {
-      const res = await fetch(`/api/v1/time-entries/${id}/approve`, { method: "POST" });
-      if (!res.ok) {
-        const { error: apiErr } = await res.json().catch(() => ({}));
-        throw new Error(apiErr?.message ?? "Failed to approve");
-      }
-      toast.success("Entry approved");
-      removeEntries([id]);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to approve");
-    } finally {
-      setProcessingIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
-    }
+    await approveEntry(id);
   }
 
   // ── Single reject ──────────────────────────────────────────────
@@ -290,26 +282,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
   async function handleRejectSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!rejectTarget || rejectTarget === "bulk") return;
-    const id = rejectTarget;
-    setRejecting(true);
-    try {
-      const res = await fetch(`/api/v1/time-entries/${id}/reject`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason: rejectReason.trim() }),
-      });
-      if (!res.ok) {
-        const { error: apiErr } = await res.json().catch(() => ({}));
-        throw new Error(apiErr?.message ?? "Failed to reject");
-      }
-      toast.success("Entry rejected");
-      removeEntries([id]);
-      setRejectTarget(null);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to reject");
-    } finally {
-      setRejecting(false);
-    }
+    await rejectEntry(rejectTarget, rejectReason.trim());
   }
 
   // ── Bulk approve ───────────────────────────────────────────────
@@ -588,16 +561,18 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
                 type="button"
                 variant="outline"
                 onClick={() => setRejectTarget(null)}
-                disabled={rejecting}
+                disabled={processingIds.has(rejectTarget ?? "")}
               >
                 Cancel
               </Button>
               <Button
                 type="submit"
                 variant="destructive"
-                disabled={rejecting || !rejectReason.trim()}
+                disabled={processingIds.has(rejectTarget ?? "") || !rejectReason.trim()}
               >
-                {rejecting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {processingIds.has(rejectTarget ?? "") && (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                )}
                 Reject
               </Button>
             </DialogFooter>

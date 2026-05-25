@@ -42,7 +42,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: entry, error } = await db
     .from("time_entries")
-    .select("*, projects(id, name, account_id), tasks(id, title)")
+    .select("*, projects(id, name, account_id, accounts(id, name)), tasks(id, title)")
     .eq("id", id)
     .maybeSingle();
 
@@ -142,7 +142,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     .from("time_entries")
     .update(patch)
     .eq("id", id)
-    .select("*, projects(id, name, account_id), tasks(id, title)")
+    .select("*, projects(id, name, account_id, accounts(id, name)), tasks(id, title)")
     .single();
 
   if (error) {

@@ -5,7 +5,12 @@ import type { TimeEntry } from "@/types/database";
 import { toLocalDateString } from "@/lib/date";
 
 export interface TimeEntryWithJoins extends TimeEntry {
-  projects: { id: string; name: string; account_id: string } | null;
+  projects: {
+    id: string;
+    name: string;
+    account_id: string | null;
+    accounts: { id: string; name: string } | null;
+  } | null;
   tasks: { id: string; title: string } | null;
 }
 

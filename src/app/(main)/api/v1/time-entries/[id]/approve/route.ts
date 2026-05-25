@@ -55,7 +55,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
     })
     .eq("id", id)
     .eq("approval_status", "pending")
-    .select("*, projects(id, name, account_id), tasks(id, title)")
+    .select("*, projects(id, name, account_id, accounts(id, name)), tasks(id, title)")
     .maybeSingle();
 
   if (updateError) {
