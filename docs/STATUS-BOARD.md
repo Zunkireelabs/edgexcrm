@@ -10,8 +10,7 @@ Last updated: 2026-05-25 (post-anish-adaptation)
 
 - [ ] **Promote `stage` → `main` for production**. All of today's work (architecture hardening, onboarding docs, Anish's view-details + tags) is on staging only. Standard flow: `git checkout main && git merge stage && git push origin main`.
 - [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended) or replace the `reference/` one — don't keep both.
-- [ ] **Decide first IT-agency-scoped feature**: the industry module foundation is in place but `industries/it-agency/manifest.ts` is empty. Pick one feature to validate the parallel-work claim end-to-end.
-- [ ] **Send Anish the onboarding prompt** (drafted in the 2026-05-25 session) so he pulls `stage`, reads the new docs, and starts his next feature against the industry-module pattern. His Claude session needs the prompt as its first turn for context.
+- [ ] **Hand the Time Tracking brief to the Sonnet session**. Brief at `docs/TIME-TRACKING-BRIEF.md`. Opus reviews each phase before push to stage.
 
 ## 🟡 Open questions
 
@@ -29,6 +28,8 @@ Last updated: 2026-05-25 (post-anish-adaptation)
 
 ## ✅ Recently resolved
 
+- 2026-05-25 — **First IT-agency feature decided: Time Tracking.** Brief written at `docs/TIME-TRACKING-BRIEF.md`. Account/project/task/time-entry hierarchy + per-member rates with project override + tenant-admin approvals. 5-phase build plan. Workflow split: Opus plans + reviews, Sonnet executes.
+- 2026-05-25 — **Anish onboarded.** Prompt sent; he'll pull stage, read CLAUDE.md + `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md` + the migration playbook before starting his next feature.
 - 2026-05-25 — **Anish's `view-details` branch adapted and merged into `stage`**. 3 commits (View Details panel, Student/Parent tags, tag selector in add form) cherry-picked onto the new industry-module structure. Git rename detection ported the check-in changes to the new file location automatically — zero manual conflict resolution. Migration 019_lead_tags.sql backfilled to close the schema-drift gap (Anish had applied the ALTER TABLE directly via MCP). Adapter branch and Anish's original branch both deleted.
 - 2026-05-25 — **Architecture explainer + migration playbook added**. `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md` (visual old-vs-new comparison) linked from CLAUDE.md in two places. New CLAUDE.md subsection "Migrating an existing flat-pattern feature" gives a 10-step checklist for adapting old-pattern code. Together they make the onboarding path explicit so the next developer (or Claude session) doesn't have to derive the pattern from code archaeology.
 - 2026-05-25 — **Code-review hardening pass**. RSC boundary bug (icon as function) fixed before any user hit it on prod; scopedClient cross-tenant escape closed (strips tenant_id from update/insert); auth.ts defensively handles tenants embed array vs object; getManifest(null) falls back to general; FeatureId typed in loader signatures. 11 of 15 review findings addressed; 4 low-severity items remain on the ongoing list.

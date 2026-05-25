@@ -25,12 +25,7 @@ Sadin signed off on building this. Has at least a paragraph of intent. Ready for
 
 ### IT-agency industry (`it_agency`)
 
-These are the four first-round candidates for the IT-agency manifest. All are industry-scoped (live under `src/industries/it-agency/features/<feature>/`). Approved 2026-05-25.
-
-- **Time tracking / hours log** *(recommended as the first build — smallest end-to-end that still exercises every part of the pattern)*
-  - Daily/weekly time entries logged per client + project.
-  - New `time_entries` table (tenant-scoped, RLS), CRUD API, sidebar entry, page with date-grouped list + add form.
-  - Clean validation of the parallel-work claim: lands entirely under `src/industries/it-agency/`, touches zero files Anish owns.
+Four first-round candidates for the IT-agency manifest. All are industry-scoped (live under `src/industries/it-agency/features/<feature>/`). Approved 2026-05-25.
 
 - **Project board (client deliverables)**
   - Kanban-style board for active client projects, separate from the leads pipeline.
@@ -56,7 +51,12 @@ _(no approved features yet)_
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
 
-_(empty — populated once we pick which IT-agency feature to start with)_
+- **Time Tracking** (`time-tracking`, industry-scoped to `it_agency`)
+  - **Brief**: `docs/TIME-TRACKING-BRIEF.md` (full data model, API surface, UI surface, 5-phase plan, verification per phase)
+  - **Scope**: account/project/task/time-entry hierarchy + per-member-rate-with-project-override + tenant-admin approvals + billable totals
+  - **Phasing**: 5 commits across ~4–5 dev-days (schema → CRUD → time entries → approvals → rates)
+  - **Workflow**: Opus planned + reviews; **Sonnet executes** (separate session). Opus gates each phase before push to stage.
+  - **Status**: planned. Awaiting Sonnet session pickup.
 
 ---
 
