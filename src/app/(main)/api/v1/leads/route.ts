@@ -169,12 +169,17 @@ async function handlePost(request: NextRequest) {
   let displayId: string | null = null;
   if (tenant.industry_id === "education_consultancy") {
     const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
-    const { count } = await supabase
+    // Use MAX display_id to avoid race conditions
+    const { data: maxRow } = await supabase
       .from("leads")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId);
-    const nextNum = ((count ?? 0) + 1).toString().padStart(3, "0");
-    displayId = `${prefix}-${nextNum}`;
+      .select("display_id")
+      .eq("tenant_id", tenantId)
+      .not("display_id", "is", null)
+      .order("display_id", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
+    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
   }
 
   const idempotencyKey = body.idempotency_key as string | undefined;
@@ -289,7 +294,7 @@ async function handlePost(request: NextRequest) {
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
-    tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };

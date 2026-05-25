@@ -174,12 +174,16 @@ export async function POST(
   let displayId: string | null = null;
   if (tenant.industry_id === "education_consultancy") {
     const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
-    const { count } = await supabase
+    const { data: maxRow } = await supabase
       .from("leads")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenant.id);
-    const nextNum = ((count ?? 0) + 1).toString().padStart(3, "0");
-    displayId = `${prefix}-${nextNum}`;
+      .select("display_id")
+      .eq("tenant_id", tenant.id)
+      .not("display_id", "is", null)
+      .order("display_id", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
+    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
   }
 
   // ── 11. Insert lead ──

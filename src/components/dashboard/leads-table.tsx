@@ -91,11 +91,12 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
   async function toggle() {
     onUpdate(nextType);
     try {
-      await fetch(`/api/v1/leads/${lead.id}`, {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ lead_type: nextType }),
       });
+      if (!res.ok) throw new Error();
     } catch {
       onUpdate(currentType);
     }
@@ -124,11 +125,12 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
     const newTags = [nextTag];
     onUpdate(newTags);
     try {
-      await fetch(`/api/v1/leads/${lead.id}`, {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags }),
       });
+      if (!res.ok) throw new Error();
     } catch {
       onUpdate(lead.tags || ["student"]);
     }
