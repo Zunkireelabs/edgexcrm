@@ -379,7 +379,7 @@ These bypass RLS internally since `tenant_users` policies can't reference `tenan
 
 ### Migrations
 
-Migrations are in `supabase/migrations/` numbered sequentially (001-018). Applied via Supabase MCP or directly.
+Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applied via Supabase MCP or directly. Migration 019 adds `tags TEXT[]` column to leads.
 
 ### Current Data
 

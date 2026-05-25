@@ -83,6 +83,39 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   return first + last || "?";
 }
 
+function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
+  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
+  const nextTag = currentTag === "student" ? "parent" : "student";
+
+  async function toggle() {
+    const newTags = [nextTag];
+    onUpdate(newTags);
+    try {
+      await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+    } catch {
+      onUpdate(lead.tags || ["student"]);
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+        currentTag === "parent"
+          ? "bg-green-100 text-green-700 hover:bg-green-200"
+          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+      }`}
+      title={`Click to change to ${nextTag}`}
+    >
+      {currentTag === "parent" ? "Parent" : "Student"}
+    </button>
+  );
+}
+
 export function LeadsTable({
   leads,
   memberMap = {},
@@ -96,6 +129,7 @@ export function LeadsTable({
   currentUserId = "",
 }: LeadsTableProps) {
   const router = useRouter();
+  const [localLeads, setLocalLeads] = useState(leads);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
@@ -145,7 +179,7 @@ export function LeadsTable({
   const filtered = useMemo(() => {
     const now = Date.now();
 
-    let result = leads.filter((lead) => {
+    let result = localLeads.filter((lead) => {
       const matchesStatus =
         statusFilter === "all" || lead.status === statusFilter;
       const matchesForm =
@@ -217,7 +251,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [leads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -402,7 +436,7 @@ export function LeadsTable({
     URL.revokeObjectURL(url);
   }
 
-  const previewLead = leads.find((l) => l.id === previewLeadId) || null;
+  const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -787,18 +821,10 @@ export function LeadsTable({
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell">
-                      {(lead.tags && lead.tags.length > 0) ? (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                          lead.tags.includes("parent")
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}>
-                          {lead.tags.includes("parent") ? "Parent" : "Student"}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
+                    <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+                      <LeadTagToggle lead={lead} onUpdate={(newTags) => {
+                        setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
+                      }} />
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />

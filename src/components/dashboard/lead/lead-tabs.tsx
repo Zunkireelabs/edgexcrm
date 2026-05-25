@@ -1,6 +1,7 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -82,27 +83,15 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
-              {lead.tags && lead.tags.length > 0 && (
-                <InfoGridRow
-                  label="Tag"
-                  value={
-                    <div className="flex gap-1.5">
-                      {lead.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
-                            tag === "parent"
-                              ? "bg-green-100 text-green-700"
-                              : "bg-blue-100 text-blue-700"
-                          }`}
-                        >
-                          {tag.charAt(0).toUpperCase() + tag.slice(1)}
-                        </span>
-                      ))}
-                    </div>
-                  }
-                />
-              )}
+              <InfoGridRow
+                label="Tag"
+                value={
+                  <TagSelector
+                    leadId={lead.id}
+                    currentTags={lead.tags || []}
+                  />
+                }
+              />
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
               {location && <InfoGridRow label="Location" value={location} />}
@@ -207,6 +196,52 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
     <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{displayValue}</span>
+    </div>
+  );
+}
+
+function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
+  const [tags, setTags] = useState(currentTags);
+  const [updating, setUpdating] = useState(false);
+
+  async function handleToggle(tag: string) {
+    setUpdating(true);
+    const newTags = [tag];
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+      if (res.ok) {
+        setTags(newTags);
+        toast.success(`Tagged as ${tag}`);
+      }
+    } catch {
+      toast.error("Failed to update tag");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      {["student", "parent"].map((tag) => (
+        <button
+          key={tag}
+          disabled={updating}
+          onClick={() => handleToggle(tag)}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+            tags.includes(tag)
+              ? tag === "parent"
+                ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+          }`}
+        >
+          {tag.charAt(0).toUpperCase() + tag.slice(1)}
+        </button>
+      ))}
     </div>
   );
 }
