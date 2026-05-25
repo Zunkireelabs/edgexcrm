@@ -39,8 +39,8 @@ import type { SidebarItem } from "@/industries/_types";
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
+  { href: "/pipeline", label: "Pipeline", icon: Kanban },
 ];
 
 const UNIVERSAL_NAV_BOTTOM = [
