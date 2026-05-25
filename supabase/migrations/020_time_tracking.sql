@@ -175,3 +175,22 @@ ALTER TABLE leads
 
 CREATE INDEX IF NOT EXISTS idx_leads_account_id
   ON leads (account_id) WHERE account_id IS NOT NULL;
+
+-- ============================================================
+-- 6. updated_at triggers
+-- ============================================================
+CREATE TRIGGER trigger_accounts_updated_at
+  BEFORE UPDATE ON accounts
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trigger_projects_updated_at
+  BEFORE UPDATE ON projects
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trigger_tasks_updated_at
+  BEFORE UPDATE ON tasks
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
+
+CREATE TRIGGER trigger_time_entries_updated_at
+  BEFORE UPDATE ON time_entries
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
