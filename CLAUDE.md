@@ -12,6 +12,8 @@ A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-
 
 ## Industry Scoping Rules
 
+**IMPORTANT: Current development focus is `education_consultancy` ONLY.** ALL new features default to education_consultancy unless the user explicitly says otherwise. If unsure whether a feature is universal or industry-specific, ASK — don't assume. Every new feature MUST have its own folder at `src/industries/education-consultancy/features/<feature-name>/`. When modifying universal components, gate education-only UI with `industryId === "education_consultancy"`.
+
 The product is an **AI-native operating system per industry tenant**. Each tenant belongs to **exactly one industry** (`tenants.industry_id` — see `supabase/migrations/012_industry_customization.sql` for the 7 seeded industries). The codebase is structured so industry-specific features live in their own modules, universal features stay shared, and multiple developers can work on different industries in parallel without merge conflicts on shared files.
 
 > **New to the codebase?** Start with [`docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md`](./docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md) — it explains *why* this pattern exists, with diagrams comparing the old flat structure to the current industry-module structure. This section below has the *rules* (do-this checklist); that doc has the *reasoning*.
