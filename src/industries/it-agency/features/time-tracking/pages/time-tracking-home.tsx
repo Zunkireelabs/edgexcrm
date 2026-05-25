@@ -96,7 +96,6 @@ export function TimeTrackingHomePage({ role }: TimeTrackingHomePageProps) {
   // returned (non-admin can only see their own entries so any entry
   // they see is theirs and pending edits are API-enforced).
   function entryCanEdit(entry: TimeEntryWithJoins) {
-    if (isAdmin) return true;
     return entry.approval_status === "pending";
   }
 

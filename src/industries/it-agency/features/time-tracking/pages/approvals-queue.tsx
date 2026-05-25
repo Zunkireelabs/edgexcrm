@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { toLocalDateString } from "@/lib/date";
 import { formatMinutes } from "../hooks/use-time-entries";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
@@ -29,15 +30,14 @@ interface ApprovalsQueuePageProps {
 function fourWeeksAgo(): string {
   const d = new Date();
   d.setDate(d.getDate() - 28);
-  return d.toISOString().split("T")[0];
+  return toLocalDateString(d);
 }
 
 function startOfWeek(): string {
   const d = new Date();
   const day = d.getDay();
-  const offset = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().split("T")[0];
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
+  return toLocalDateString(d);
 }
 
 // ── Grouping helpers ─────────────────────────────────────────────

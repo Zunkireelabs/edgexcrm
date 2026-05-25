@@ -69,12 +69,16 @@ export async function POST(request: NextRequest, { params }: Props) {
       rejection_reason: reason,
     })
     .eq("id", id)
+    .eq("approval_status", "pending")
     .select("*, projects(id, name, account_id), tasks(id, title)")
-    .single();
+    .maybeSingle();
 
   if (updateError) {
     log.error({ error: updateError }, "Failed to reject time entry");
     return apiError("DB_ERROR", "Failed to reject time entry", 500);
+  }
+  if (!updated) {
+    return apiError("INVALID_STATE", "Only pending entries can be rejected", 409);
   }
 
   await Promise.all([
