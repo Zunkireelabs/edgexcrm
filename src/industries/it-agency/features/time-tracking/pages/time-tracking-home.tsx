@@ -15,6 +15,7 @@ import {
 import { TimeEntryAddForm } from "../components/time-entry-add-form";
 import { TimeEntryRow } from "../components/time-entry-row";
 import { useTimeEntries } from "../hooks/use-time-entries";
+import { toLocalDateString } from "@/lib/date";
 import { formatMinutes } from "../hooks/use-time-entries";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 import type { Project } from "@/types/database";
@@ -23,10 +24,10 @@ import type { Project } from "@/types/database";
 function fourWeeksAgo(): string {
   const d = new Date();
   d.setDate(d.getDate() - 28);
-  return d.toISOString().split("T")[0];
+  return toLocalDateString(d);
 }
 function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
+  return toLocalDateString(new Date());
 }
 
 interface TeamMember {

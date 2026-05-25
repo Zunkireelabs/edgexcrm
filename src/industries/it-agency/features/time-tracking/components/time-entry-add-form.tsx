@@ -15,11 +15,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMinutes } from "../hooks/use-time-entries";
+import { toLocalDateString } from "@/lib/date";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 import type { Project, Task } from "@/types/database";
 
 function todayISO(): string {
-  return new Date().toISOString().split("T")[0];
+  return toLocalDateString(new Date());
 }
 
 interface TimeEntryAddFormProps {

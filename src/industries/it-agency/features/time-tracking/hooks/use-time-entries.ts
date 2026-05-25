@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { TimeEntry } from "@/types/database";
+import { toLocalDateString } from "@/lib/date";
 
 export interface TimeEntryWithJoins extends TimeEntry {
   projects: { id: string; name: string; account_id: string } | null;
@@ -36,7 +37,7 @@ function isoWeekMonday(dateStr: string): string {
   const day = d.getDay();
   const offset = day === 0 ? -6 : 1 - day; // shift to Monday
   d.setDate(d.getDate() + offset);
-  return d.toISOString().split("T")[0];
+  return toLocalDateString(d);
 }
 
 function shortDate(dateStr: string): string {
@@ -48,7 +49,7 @@ function weekLabel(mondayStr: string): string {
   const monday = new Date(mondayStr + "T00:00:00");
   const sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
-  return `Week of ${shortDate(mondayStr)} – ${shortDate(sunday.toISOString().split("T")[0])}`;
+  return `Week of ${shortDate(mondayStr)} – ${shortDate(toLocalDateString(sunday))}`;
 }
 
 export function formatDateLabel(dateStr: string): string {
@@ -166,7 +167,7 @@ export function useTimeEntries(filters: TimeEntriesFilters = {}) {
 
   const weekGroups = groupByWeek(entries);
   const now = new Date();
-  const thisWeekMonday = isoWeekMonday(now.toISOString().split("T")[0]);
+  const thisWeekMonday = isoWeekMonday(toLocalDateString(now));
   const totalMinutesThisWeek = entries
     .filter((e) => isoWeekMonday(e.entry_date) === thisWeekMonday)
     .reduce((sum, e) => sum + e.minutes, 0);
