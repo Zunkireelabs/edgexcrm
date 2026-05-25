@@ -2,6 +2,7 @@ import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
 import { checkInMeta } from "./features/check-in/meta";
 import { formBuilderMeta } from "./features/form-builder/meta";
+import { contactsMeta } from "./features/contacts/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -9,8 +10,15 @@ export const manifest: IndustryManifest = {
   features: [
     { meta: checkInMeta },
     { meta: formBuilderMeta },
+    { meta: contactsMeta },
   ],
   sidebar: [
+    {
+      featureId: FEATURES.CONTACTS,
+      href: "/contacts",
+      label: "Contacts",
+      icon: "Users",
+    },
     {
       featureId: FEATURES.CHECK_IN,
       href: "/check-in",

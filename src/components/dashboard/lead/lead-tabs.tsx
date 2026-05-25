@@ -1,6 +1,7 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef } from "react";
+import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,7 @@ interface LeadTabsProps {
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
   currentUserId: string;
+  industryId?: string | null;
 }
 
 export interface LeadTabsRef {
@@ -32,7 +34,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -82,6 +84,18 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
+              {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
+              {industryId === "education_consultancy" && (
+                <InfoGridRow
+                  label="Tag"
+                  value={
+                    <TagSelector
+                      leadId={lead.id}
+                      currentTags={lead.tags || []}
+                    />
+                  }
+                />
+              )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
               {location && <InfoGridRow label="Location" value={location} />}
@@ -163,7 +177,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
 // Helper components
 interface InfoGridRowProps {
   label: string;
-  value: string | null | undefined;
+  value: React.ReactNode | string | null | undefined;
   isLink?: boolean;
   linkType?: "email" | "phone";
 }
@@ -171,7 +185,7 @@ interface InfoGridRowProps {
 function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
   if (!value) return null;
 
-  const displayValue = isLink ? (
+  const displayValue = isLink && typeof value === "string" ? (
     <a
       href={linkType === "email" ? `mailto:${value}` : `tel:${value}`}
       className="text-primary hover:underline"
@@ -186,6 +200,97 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
     <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{displayValue}</span>
+    </div>
+  );
+}
+
+function LeadTypeSelector({ leadId, currentType }: { leadId: string; currentType: string }) {
+  const [type, setType] = useState(currentType);
+  const [updating, setUpdating] = useState(false);
+
+  async function handleToggle(newType: string) {
+    setUpdating(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_type: newType }),
+      });
+      if (res.ok) {
+        setType(newType);
+        toast.success(`Changed to ${newType}`);
+      }
+    } catch {
+      toast.error("Failed to update lead type");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      {["lead", "prospect"].map((t) => (
+        <button
+          key={t}
+          disabled={updating}
+          onClick={() => handleToggle(t)}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+            type === t
+              ? t === "prospect"
+                ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
+                : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
+              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+          }`}
+        >
+          {t.charAt(0).toUpperCase() + t.slice(1)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
+  const [tags, setTags] = useState(currentTags);
+  const [updating, setUpdating] = useState(false);
+
+  async function handleToggle(tag: string) {
+    setUpdating(true);
+    const newTags = [tag];
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+      if (res.ok) {
+        setTags(newTags);
+        toast.success(`Tagged as ${tag}`);
+      }
+    } catch {
+      toast.error("Failed to update tag");
+    } finally {
+      setUpdating(false);
+    }
+  }
+
+  return (
+    <div className="flex gap-1.5">
+      {["student", "parent"].map((tag) => (
+        <button
+          key={tag}
+          disabled={updating}
+          onClick={() => handleToggle(tag)}
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+            tags.includes(tag)
+              ? tag === "parent"
+                ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+          }`}
+        >
+          {tag.charAt(0).toUpperCase() + tag.slice(1)}
+        </button>
+      ))}
     </div>
   );
 }

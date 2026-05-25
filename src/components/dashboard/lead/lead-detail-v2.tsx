@@ -40,8 +40,7 @@ export function LeadDetailV2({
   checklists: initialChecklists,
   activities,
   stages,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tenant: _tenant,
+  tenant,
   role,
   userId,
   entity,
@@ -233,6 +232,19 @@ export function LeadDetailV2({
             onAssignmentChange={handleAssignmentChange}
             entity={entity}
             industry={industry}
+            industryId={tenant.industry_id}
+            onLeadTypeChange={async (newType) => {
+              try {
+                await fetch(`/api/v1/leads/${lead.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lead_type: newType }),
+                });
+                toast.success(`Changed to ${newType}`);
+              } catch {
+                toast.error("Failed to update lead type");
+              }
+            }}
           />
         </div>
 
@@ -251,6 +263,7 @@ export function LeadDetailV2({
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
+            industryId={tenant.industry_id}
           />
         </div>
 

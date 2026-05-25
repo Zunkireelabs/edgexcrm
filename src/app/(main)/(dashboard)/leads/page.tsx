@@ -60,6 +60,7 @@ export default async function LeadsPage() {
         entities={entities}
         entityLabel={industry?.entity_type_label}
         currentUserId={tenantData.userId}
+        industryId={tenantData.tenant.industry_id}
       />
     </div>
   );

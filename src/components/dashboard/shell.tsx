@@ -40,8 +40,11 @@ import type { SidebarItem } from "@/industries/_types";
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/pipeline", label: "Pipeline", icon: Kanban },
   { href: "/leads", label: "All Leads", icon: Users },
+];
+
+const UNIVERSAL_NAV_MIDDLE = [
+  { href: "/pipeline", label: "Pipeline", icon: Kanban },
 ];
 
 const UNIVERSAL_NAV_BOTTOM = [
@@ -114,6 +117,7 @@ export function DashboardShell({
       label: item.label,
       icon: INDUSTRY_ICONS[item.icon] ?? FileText,
     })),
+    ...UNIVERSAL_NAV_MIDDLE,
     ...UNIVERSAL_NAV_BOTTOM,
   ];
   const hasManyForms = formConfigs.length > 1;

@@ -75,12 +75,80 @@ interface LeadsTableProps {
   entities?: TenantEntity[];
   entityLabel?: string;
   currentUserId?: string;
+  industryId?: string | null;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";
   const last = lastName?.charAt(0)?.toUpperCase() || "";
   return first + last || "?";
+}
+
+function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: string) => void }) {
+  const currentType = lead.lead_type || "lead";
+  const nextType = currentType === "lead" ? "prospect" : "lead";
+
+  async function toggle() {
+    onUpdate(nextType);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_type: nextType }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      onUpdate(currentType);
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+        currentType === "prospect"
+          ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
+          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+      }`}
+      title={`Click to change to ${nextType}`}
+    >
+      {currentType === "prospect" ? "Prospect" : "Lead"}
+    </button>
+  );
+}
+
+function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
+  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
+  const nextTag = currentTag === "student" ? "parent" : "student";
+
+  async function toggle() {
+    const newTags = [nextTag];
+    onUpdate(newTags);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: newTags }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
+      onUpdate(lead.tags || ["student"]);
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+        currentTag === "parent"
+          ? "bg-green-100 text-green-700 hover:bg-green-200"
+          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+      }`}
+      title={`Click to change to ${nextTag}`}
+    >
+      {currentTag === "parent" ? "Parent" : "Student"}
+    </button>
+  );
 }
 
 export function LeadsTable({
@@ -94,8 +162,11 @@ export function LeadsTable({
   entities = [],
   entityLabel,
   currentUserId = "",
+  industryId,
 }: LeadsTableProps) {
   const router = useRouter();
+  const showTags = industryId === "education_consultancy";
+  const [localLeads, setLocalLeads] = useState(leads);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
@@ -145,7 +216,7 @@ export function LeadsTable({
   const filtered = useMemo(() => {
     const now = Date.now();
 
-    let result = leads.filter((lead) => {
+    let result = localLeads.filter((lead) => {
       const matchesStatus =
         statusFilter === "all" || lead.status === statusFilter;
       const matchesForm =
@@ -217,7 +288,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [leads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -402,7 +473,7 @@ export function LeadsTable({
     URL.revokeObjectURL(url);
   }
 
-  const previewLead = leads.find((l) => l.id === previewLeadId) || null;
+  const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -549,21 +620,23 @@ export function LeadsTable({
             />
           )}
 
-          {/* Tag Filter */}
-          <FilterDropdown
-            label="All Tags"
-            value={tagFilter}
-            onChange={(val) => {
-              setTagFilter(val);
-              setCurrentPage(1);
-            }}
-            icon={<Tag className="h-3 w-3" />}
-            options={[
-              { value: "all", label: "All Tags", description: "Show all leads" },
-              { value: "student", label: "Student", description: "Student leads only" },
-              { value: "parent", label: "Parent", description: "Parent leads only" },
-            ]}
-          />
+          {/* Tag Filter — education_consultancy only */}
+          {showTags && (
+            <FilterDropdown
+              label="All Tags"
+              value={tagFilter}
+              onChange={(val) => {
+                setTagFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Tag className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Tags", description: "Show all leads" },
+                { value: "student", label: "Student", description: "Student leads only" },
+                { value: "parent", label: "Parent", description: "Parent leads only" },
+              ]}
+            />
+          )}
 
           {/* Created Date Filter */}
           <FilterDropdown
@@ -698,7 +771,8 @@ export function LeadsTable({
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>
+              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>}
+              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[80px]">Type</th>}
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
@@ -787,19 +861,20 @@ export function LeadsTable({
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell">
-                      {(lead.tags && lead.tags.length > 0) ? (
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold ${
-                          lead.tags.includes("parent")
-                            ? "bg-green-100 text-green-700"
-                            : "bg-blue-100 text-blue-700"
-                        }`}>
-                          {lead.tags.includes("parent") ? "Parent" : "Student"}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400 text-xs">—</span>
-                      )}
-                    </td>
+                    {showTags && (
+                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+                        <LeadTagToggle lead={lead} onUpdate={(newTags) => {
+                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
+                        }} />
+                      </td>
+                    )}
+                    {showTags && (
+                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+                        <LeadTypeToggle lead={lead} onUpdate={(newType) => {
+                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, lead_type: newType } : l));
+                        }} />
+                      </td>
+                    )}
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
@@ -1043,6 +1118,7 @@ export function LeadsTable({
           entityLabel={entityLabel}
           role={role}
           currentUserId={currentUserId}
+          industryId={industryId}
         />
       )}
     </div>
