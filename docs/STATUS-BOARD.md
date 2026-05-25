@@ -2,15 +2,15 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-25 (post-anish-adaptation)
+Last updated: 2026-05-25 (post-phase-3, mid-time-tracking-build)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
-- [ ] **Promote `stage` → `main` for production**. All of today's work (architecture hardening, onboarding docs, Anish's view-details + tags) is on staging only. Standard flow: `git checkout main && git merge stage && git push origin main`.
-- [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended) or replace the `reference/` one — don't keep both.
-- [ ] **Hand the Time Tracking brief to the Sonnet session**. Brief at `docs/TIME-TRACKING-BRIEF.md`. Opus reviews each phase before push to stage.
+- [ ] **Phase 4 of Time Tracking in flight via Sonnet**. When Sonnet reports back (branch `feature/time-tracking-phase-4` + commit SHA), hand the report to Opus for review. Opus pulls → builds → lints → starts dev server for local verify → merges to stage + pushes if green.
+- [ ] **Promote `stage` → `main` for production**. Everything on staging today is unshipped to prod: industry module foundation, hardening, Anish's view-details, time-tracking phases 1–3. Recommend doing this **after time-tracking v1 completes** (Phase 5), but Sadin's call.
+- [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended).
 
 ## 🟡 Open questions
 
@@ -28,7 +28,9 @@ Last updated: 2026-05-25 (post-anish-adaptation)
 
 ## ✅ Recently resolved
 
-- 2026-05-25 — **First IT-agency feature decided: Time Tracking.** Brief written at `docs/TIME-TRACKING-BRIEF.md`. Account/project/task/time-entry hierarchy + per-member rates with project override + tenant-admin approvals. 5-phase build plan. Workflow split: Opus plans + reviews, Sonnet executes.
+- 2026-05-25 — **Time Tracking Phases 1–3 shipped to stage** via the Opus-plans / Sonnet-executes workflow. Phase 1 (schema + manifest + 5 placeholder shells), Phase 2 (Accounts/Projects/Tasks CRUD), Phase 3 (time entries log + list + edit, with a timezone bug caught + fixed mid-review). Migration 020 applied live. 3 staging deploys succeeded. Phase 4 (Approvals) is currently in Sonnet's hands.
+- 2026-05-25 — **Workflow split formalized**: Opus plans/reviews/pushes-to-stage; Sonnet executes feature code on per-phase branches; Sonnet never pushes to stage. Local-verify-before-push is the new flow (added mid-Phase-1, caught the timezone bug before it shipped).
+- 2026-05-25 — **First IT-agency feature decided: Time Tracking.** Brief written at `docs/TIME-TRACKING-BRIEF.md`.
 - 2026-05-25 — **Anish onboarded.** Prompt sent; he'll pull stage, read CLAUDE.md + `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md` + the migration playbook before starting his next feature.
 - 2026-05-25 — **Anish's `view-details` branch adapted and merged into `stage`**. 3 commits (View Details panel, Student/Parent tags, tag selector in add form) cherry-picked onto the new industry-module structure. Git rename detection ported the check-in changes to the new file location automatically — zero manual conflict resolution. Migration 019_lead_tags.sql backfilled to close the schema-drift gap (Anish had applied the ALTER TABLE directly via MCP). Adapter branch and Anish's original branch both deleted.
 - 2026-05-25 — **Architecture explainer + migration playbook added**. `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md` (visual old-vs-new comparison) linked from CLAUDE.md in two places. New CLAUDE.md subsection "Migrating an existing flat-pattern feature" gives a 10-step checklist for adapting old-pattern code. Together they make the onboarding path explicit so the next developer (or Claude session) doesn't have to derive the pattern from code archaeology.
