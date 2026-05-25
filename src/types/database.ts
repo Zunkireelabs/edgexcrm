@@ -124,6 +124,7 @@ export interface Lead {
   intake_campaign: string | null;
   preferred_contact_method: string | null;
   tags: string[];
+  lead_type: string;
   form_config_id: string | null;
   deleted_at: string | null;
   idempotency_key: string | null;

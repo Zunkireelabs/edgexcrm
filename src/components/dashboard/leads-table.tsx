@@ -84,6 +84,38 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   return first + last || "?";
 }
 
+function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: string) => void }) {
+  const currentType = lead.lead_type || "lead";
+  const nextType = currentType === "lead" ? "prospect" : "lead";
+
+  async function toggle() {
+    onUpdate(nextType);
+    try {
+      await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_type: nextType }),
+      });
+    } catch {
+      onUpdate(currentType);
+    }
+  }
+
+  return (
+    <button
+      onClick={toggle}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+        currentType === "prospect"
+          ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
+          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+      }`}
+      title={`Click to change to ${nextType}`}
+    >
+      {currentType === "prospect" ? "Prospect" : "Lead"}
+    </button>
+  );
+}
+
 function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
   const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
   const nextTag = currentTag === "student" ? "parent" : "student";
@@ -738,6 +770,7 @@ export function LeadsTable({
               <th className="px-2 py-2 text-left w-8"></th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
               {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>}
+              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[80px]">Type</th>}
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
@@ -830,6 +863,13 @@ export function LeadsTable({
                       <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
                         <LeadTagToggle lead={lead} onUpdate={(newTags) => {
                           setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
+                        }} />
+                      </td>
+                    )}
+                    {showTags && (
+                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+                        <LeadTypeToggle lead={lead} onUpdate={(newType) => {
+                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, lead_type: newType } : l));
                         }} />
                       </td>
                     )}

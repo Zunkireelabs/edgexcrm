@@ -31,6 +31,7 @@ export const FEATURES = {
   // Industry-scoped (education_consultancy)
   CHECK_IN: "check-in",
   FORM_BUILDER: "form-builder",
+  CONTACTS: "contacts",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];
