@@ -40,6 +40,9 @@ import type { SidebarItem } from "@/industries/_types";
 const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/leads", label: "All Leads", icon: Users },
+];
+
+const UNIVERSAL_NAV_MIDDLE = [
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
 ];
 
@@ -112,6 +115,7 @@ export function DashboardShell({
       label: item.label,
       icon: INDUSTRY_ICONS[item.icon] ?? FileText,
     })),
+    ...UNIVERSAL_NAV_MIDDLE,
     ...UNIVERSAL_NAV_BOTTOM,
   ];
   const hasManyForms = formConfigs.length > 1;
