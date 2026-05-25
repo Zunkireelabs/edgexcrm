@@ -11,13 +11,77 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Industry module foundation (`src/industries/`) is live. Student check-in and form-builder are migrated into `industries/education-consultancy/features/`, gated via the new manifest+loader pattern. CLAUDE.md restructured around the two-homes rule, three feature categories, tenant isolation rules, and the `scopedClient(auth)` hardening wrapper. See the **Industry Modules** entry below.
-- **Branch**: `stage` — local is ahead of `origin/stage` by the implementation commit + 4 prior docs commits. Push when ready; no merge conflicts expected.
-- **Next up**: Sadin's call. Suggested directions: (a) start a real industry-scoped feature in `src/industries/it-agency/features/` to validate the parallel-work claim, (b) wire actual AI agent prompts into `industries/<id>/ai/agent.ts` slots, (c) continue `scopedClient` migration of the remaining ~35 legacy authenticated routes, (d) wire events → webhook dispatcher.
+- **Current state**: Industry module foundation is mature and battle-tested. The architecture shipped (2026-05-24), was hardened via code review (same day), gained a migration playbook + visual architecture doc (2026-05-25), and absorbed Anish's `view-details` branch (View Details panel + Student/Parent tags) without friction (2026-05-25 — git's rename detection ported his check-in changes onto the new file location automatically). Three rounds of staging deploy all succeeded; production (`main`) has not been promoted yet.
+- **Branch**: `stage` at `dccdb18`. Local matches origin. **Production (`main`) is still on the pre-this-work version** — promote when ready.
+- **Next up**: Sadin's call. Suggested directions:
+  1. Promote `stage` → `main` to ship the new architecture + Anish's view-details/tags to production.
+  2. Tell Anish — pull stage, read the docs (the onboarding prompt is in this session's history).
+  3. First IT-agency-scoped feature to validate parallel-work end-to-end.
+  4. Wire actual AI prompts into `industries/<id>/ai/agent.ts` slots.
+  5. Continue `scopedClient` migration of remaining ~33 legacy routes.
 - **Blockers**: none known.
-- **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md). Several previously-open items are now resolved.
+- **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Industry Modules — Hardening, Onboarding, First External Adaptation (2026-05-25)
+
+### What Was Built
+
+Continuation of the previous day's industry-module foundation work. Three distinct slices, all shipped to `origin/stage` and verified on staging.
+
+#### 1. Code-review-driven hardening (commits `a4bfc81`, `8d9d438`)
+
+Internal code review surfaced 15 findings on yesterday's foundation work. The most severe got fixed in this round; the rest documented for ongoing follow-up.
+
+- **`a4bfc81` (RSC boundary fix)**: `SidebarItem.icon` was typed as `LucideIcon` (a React component). Server Components cannot pass non-serializable values to Client Components → dashboard crashed for education tenants. Changed to `icon: string` (name), with `INDUSTRY_ICONS` registry in `shell.tsx` resolving names to components on the client side.
+- **`8d9d438` (security + correctness)**:
+  - `scopedClient.update()` / `.insert()` now strip caller-supplied `tenant_id` via `stripTenantId()` helper — closes a cross-tenant-escape hole where a malicious or buggy caller could `update({ tenant_id: 'OTHER' })` to move rows between tenants.
+  - `scopedClient.select()` accepts the `(columns, options)` overload so `count: "exact"` / `head: true` queries don't have to drop to `db.raw()` and lose tenant scoping.
+  - New `db.fromGlobal(table)` escape for tables without `tenant_id` (auth.users, system tables).
+  - `authenticateRequest()` now defensively handles both array and object shapes for the `tenants(industry_id)` embed — prevents a silent site-wide `industryId: null` if PostgREST's schema cache flips or the FK relationship is renamed.
+  - `getManifest(null)` now falls back to `general` instead of returning null — legacy NULL-industry tenants are no longer locked out of every feature.
+  - `getFeatureAccess()` / `getFeatureConfig()` `featureId` param tightened from `string` to `FeatureId` union — typos caught at compile time. Defense in depth: gate now also verifies `meta.industries.includes(industryId)` so a feature accidentally registered in the wrong manifest is rejected.
+  - `getIndustrySidebarItems()` filters out items whose featureId isn't in the manifest's `features` array — catches sidebar/features drift inside a manifest.
+  - Re-migrated notifications unread-count back through scopedClient (via the new options overload). Migrated team `DELETE` handler to scopedClient.
+  - Documented `scopedClient.update()/.delete()` discipline rule loudly: caller MUST chain at least one additional filter, or the operation targets every row in the tenant.
+
+Remaining ~33 legacy routes still on raw `createServiceClient()` + manual `.eq("tenant_id", ...)` — tracked on STATUS-BOARD as ongoing hardening.
+
+#### 2. Onboarding & developer-facing docs (commits `38be5fe`, `4368244`)
+
+- **`38be5fe` (migration playbook)**: new subsection in CLAUDE.md § Industry Scoping Rules — "Migrating an existing flat-pattern feature into the new structure." 10-step checklist covering branch sync, file moves, meta creation, manifest registration, replacing inline guards with the loader pattern, `scopedClient` adoption, and verification. Plus two "common pitfalls" callouts (icon-as-string for RSC boundary, scopedClient delete/update filter requirement).
+- **`4368244` (architecture explainer)**: new `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md` — visual ASCII diagrams comparing the old flat `src/features/<f>/` pattern vs the new `src/industries/<id>/features/<f>/` pattern. Covers directory layout, the 3-places gating problem the old pattern had, parallel-work merge conflicts on `shell.tsx`, the three feature categories (universal / industry-scoped / shared), the decision tree, and the scaling story at 2 / 5 / 20 industries. Linked from CLAUDE.md in two places (the top of Industry Scoping Rules + the "Read first, every session" list) so any new dev (human or Claude) lands on it before touching `src/industries/`.
+
+The combined effect: a fresh Claude session on a clone gets `CLAUDE.md` auto-loaded → points to the architecture doc → which explains the *why* → and the rules section has the *what to do*. No tribal knowledge required.
+
+#### 3. First external adaptation: Anish's `view-details` branch (commits `c64936e`, `b865cf0`, `41bddae`, `dccdb18`)
+
+Anish pushed `origin/view-details` with 3 commits built against the OLD flat pattern (branched from `a627103`, before the industry-module work). Test of the migration playbook in practice.
+
+- **Strategy**: created `adapt/view-details` off latest `origin/stage`, cherry-picked Anish's 3 commits, let git's rename detection port `src/components/dashboard/check-in-page.tsx` → `src/industries/education-consultancy/features/check-in/ui.tsx` automatically.
+- **All 3 cherry-picks landed clean** — git auto-detected the rename and applied each diff to the new file location with zero manual conflict resolution. The migration playbook's claim (rename detection usually handles the move) was validated.
+- **Features adapted**: View Details panel on check-in page (right-side panel with lead details + Check In button), Student/Parent tag system on leads (table column + filter + CSV export + API + check-in flow tag selector).
+- **Schema drift caught and closed (commit `dccdb18`)**: Anish's "tags" feature added a `tags TEXT[]` column to `leads` directly via Supabase MCP without committing the migration file. Backfilled as `supabase/migrations/019_lead_tags.sql` with `IF NOT EXISTS` guards (no-op against the live DB but ensures fresh installs get the same schema).
+- **Scope decision recorded**: Student/Parent labels are hardcoded education-specific for v1. Tag column on leads is universal infrastructure; if/when a 2nd industry wants tags, the tag UI promotes to `_shared/` with per-industry config (labels, colors). Not blocking — STATUS-BOARD follow-up.
+- **Workflow**: adapter branch fast-forwarded into `stage`, branches cleaned up locally + remote (`adapt/view-details` and Anish's `view-details` both deleted).
+- **Onboarding prompt for Anish** drafted in session — when he pulls `stage`, he reads `CLAUDE.md` + the architecture doc + the migration playbook before starting his next feature. His Claude gets the same context if he pastes the prompt as his first turn.
+
+### Verification
+
+All three slices landed via the same flow: build clean → push to stage → GitHub Actions auto-deploy → `https://dev-lead-crm.zunkireelabs.com/login` returned HTTP 200 each time. Three successful staging deploys today.
+
+### Files Changed (high level)
+
+- **Modified**: `CLAUDE.md` (migration playbook + architecture doc links), `src/lib/api/auth.ts` (defensive embed), `src/lib/supabase/scoped.ts` (security hardening + options overload + fromGlobal), `src/industries/_loader.ts` (general fallback + type tightening + sidebar filter), `src/components/dashboard/shell.tsx` (icon registry), `src/industries/_types.ts` (icon: string), `src/industries/education-consultancy/manifest.ts` (icon: string), `src/components/dashboard/leads-table.tsx` (tag column + filter + CSV), `src/types/database.ts` (Lead.tags), three leads API routes (accept tags), public submit route (default tag).
+- **New (Anish's work, adapted)**: View Details panel + Student/Parent tag UI in `src/industries/education-consultancy/features/check-in/ui.tsx`.
+- **New (infra/docs)**: `docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md`, `supabase/migrations/019_lead_tags.sql`.
+
+### Carried Over to Production (`main`) — NOT yet
+
+All of today's work is on `stage` only. Production deploy requires the standard `git checkout main && git merge stage && git push origin main` flow once staging verification is complete.
 
 ---
 
