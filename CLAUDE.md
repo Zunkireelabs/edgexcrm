@@ -14,6 +14,8 @@ A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-
 
 The product is an **AI-native operating system per industry tenant**. Each tenant belongs to **exactly one industry** (`tenants.industry_id` — see `supabase/migrations/012_industry_customization.sql` for the 7 seeded industries). The codebase is structured so industry-specific features live in their own modules, universal features stay shared, and multiple developers can work on different industries in parallel without merge conflicts on shared files.
 
+> **New to the codebase?** Start with [`docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md`](./docs/reference/01-ARCHITECTURE-INDUSTRY-MODULES.md) — it explains *why* this pattern exists, with diagrams comparing the old flat structure to the current industry-module structure. This section below has the *rules* (do-this checklist); that doc has the *reasoning*.
+
 ### The two-homes rule
 
 | Where it lives | What goes there |
@@ -182,7 +184,12 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 1. `docs/SESSION-LOG.md` — current state of the project. The "🟢 NEXT SESSION — RESUME HERE" block at the top tells you exactly where to pick up.
 2. `docs/STATUS-BOARD.md` — live status of open user-side actions and questions.
-3. `docs/reference/` — stable docs (product vision at `00-PRODUCT-VISION.md`, API contracts under `api-contracts/`). Read for context; don't edit per-task.
+3. `docs/reference/` — stable docs:
+   - `00-PRODUCT-VISION.md` — what we're building and why.
+   - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
+   - `api-contracts/` — integration API specs.
+   - `PRICING.md` — live product pricing reference.
+   Read for context; don't edit per-task.
 4. `docs/archive/` — shipped or superseded work grouped by series (`features/`, `plans/`, `research/`, `ci-cd/`, `stale/`).
 
 **Single source of truth**: `docs/SESSION-LOG.md`. When a piece of work ships, log it there and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain SESSION-LOG.md, STATUS-BOARD.md, and any in-flight `<CONTEXT>-BRIEF.md`.
