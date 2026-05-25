@@ -21,6 +21,7 @@ import {
   Kanban,
   UsersRound,
   UserCheck,
+  Clock,
   ChevronDown,
   ExternalLink,
   User as UserIcon,
@@ -55,6 +56,7 @@ const UNIVERSAL_NAV_BOTTOM = [
 const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   UserCheck,
   FileText,
+  Clock,
   LayoutDashboard,
   Kanban,
   Users,
