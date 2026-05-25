@@ -152,6 +152,8 @@ export async function POST(
 
   // ── 9. Build phone with country code ──
   let phone = String(body.phone || "").trim() || null;
+  // Normalize: replace spaces between country code and number with hyphen
+  if (phone?.startsWith("+")) phone = phone.replace(/^(\+\d+)\s+/, "$1-");
   if (phone && !phone.startsWith("+") && body.country && formConfig.steps) {
     try {
       for (const step of formConfig.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {

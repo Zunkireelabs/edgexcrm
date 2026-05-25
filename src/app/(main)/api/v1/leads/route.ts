@@ -242,7 +242,9 @@ async function handlePost(request: NextRequest) {
     email: body.email || null,
     phone: await (async () => {
       const rawPhone = String(body.phone || "").trim();
-      if (!rawPhone || rawPhone.startsWith("+")) return rawPhone || null;
+      if (!rawPhone) return null;
+      // Normalize: replace spaces between country code and number with hyphen
+      if (rawPhone.startsWith("+")) return rawPhone.replace(/^(\+\d+)\s+/, "$1-");
       // Look up dial code from form config's country field options
       if (body.form_config_id && body.country) {
         try {
