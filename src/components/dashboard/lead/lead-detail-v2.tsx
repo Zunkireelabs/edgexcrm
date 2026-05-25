@@ -40,8 +40,7 @@ export function LeadDetailV2({
   checklists: initialChecklists,
   activities,
   stages,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tenant: _tenant,
+  tenant,
   role,
   userId,
   entity,
@@ -251,6 +250,7 @@ export function LeadDetailV2({
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
+            industryId={tenant.industry_id}
           />
         </div>
 

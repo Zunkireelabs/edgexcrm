@@ -25,6 +25,7 @@ interface LeadTabsProps {
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
   currentUserId: string;
+  industryId?: string | null;
 }
 
 export interface LeadTabsRef {
@@ -33,7 +34,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -83,15 +84,17 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
-              <InfoGridRow
-                label="Tag"
-                value={
-                  <TagSelector
-                    leadId={lead.id}
-                    currentTags={lead.tags || []}
-                  />
-                }
-              />
+              {industryId === "education_consultancy" && (
+                <InfoGridRow
+                  label="Tag"
+                  value={
+                    <TagSelector
+                      leadId={lead.id}
+                      currentTags={lead.tags || []}
+                    />
+                  }
+                />
+              )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
               {location && <InfoGridRow label="Location" value={location} />}

@@ -100,6 +100,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         teamMembersData={teamMembers}
         entities={entities}
         entityLabel={industry?.entity_type_label}
+        industryId={tenantData.tenant.industry_id}
       />
     </div>
   );

@@ -80,6 +80,7 @@ export default async function DashboardPage() {
         entities={entities}
         entityLabel={industry?.entity_type_label}
         currentUserId={tenantData.userId}
+        industryId={tenantData.tenant.industry_id}
       />
     </div>
   );

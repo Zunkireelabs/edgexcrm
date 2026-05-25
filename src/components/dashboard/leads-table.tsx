@@ -75,6 +75,7 @@ interface LeadsTableProps {
   entities?: TenantEntity[];
   entityLabel?: string;
   currentUserId?: string;
+  industryId?: string | null;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -127,8 +128,10 @@ export function LeadsTable({
   entities = [],
   entityLabel,
   currentUserId = "",
+  industryId,
 }: LeadsTableProps) {
   const router = useRouter();
+  const showTags = industryId === "education_consultancy";
   const [localLeads, setLocalLeads] = useState(leads);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -583,21 +586,23 @@ export function LeadsTable({
             />
           )}
 
-          {/* Tag Filter */}
-          <FilterDropdown
-            label="All Tags"
-            value={tagFilter}
-            onChange={(val) => {
-              setTagFilter(val);
-              setCurrentPage(1);
-            }}
-            icon={<Tag className="h-3 w-3" />}
-            options={[
-              { value: "all", label: "All Tags", description: "Show all leads" },
-              { value: "student", label: "Student", description: "Student leads only" },
-              { value: "parent", label: "Parent", description: "Parent leads only" },
-            ]}
-          />
+          {/* Tag Filter — education_consultancy only */}
+          {showTags && (
+            <FilterDropdown
+              label="All Tags"
+              value={tagFilter}
+              onChange={(val) => {
+                setTagFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Tag className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Tags", description: "Show all leads" },
+                { value: "student", label: "Student", description: "Student leads only" },
+                { value: "parent", label: "Parent", description: "Parent leads only" },
+              ]}
+            />
+          )}
 
           {/* Created Date Filter */}
           <FilterDropdown
@@ -732,7 +737,7 @@ export function LeadsTable({
               </th>
               <th className="px-2 py-2 text-left w-8"></th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>
+              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>}
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
@@ -821,11 +826,13 @@ export function LeadsTable({
                         </button>
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-                      <LeadTagToggle lead={lead} onUpdate={(newTags) => {
-                        setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
-                      }} />
-                    </td>
+                    {showTags && (
+                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+                        <LeadTagToggle lead={lead} onUpdate={(newTags) => {
+                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
+                        }} />
+                      </td>
+                    )}
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
@@ -1069,6 +1076,7 @@ export function LeadsTable({
           entityLabel={entityLabel}
           role={role}
           currentUserId={currentUserId}
+          industryId={industryId}
         />
       )}
     </div>
