@@ -116,6 +116,56 @@ Q: Does the feature need to behave differently per industry?
 └─ Yes, labels/limits/UI variants                 → Shared with per-industry `config` on the manifest entry
 ```
 
+### Migrating an existing flat-pattern feature into the new structure
+
+Use this when adapting code that was built against the old flat pattern (`src/features/<feature>/` with inline `if (industry_id !== ...) return <NotAvailable />` guards). The check-in and form-builder migrations are the working precedent — grep their commit history if you need a concrete reference.
+
+1. **Sync the branch first.** `git stash` any uncommitted work, then `git pull --rebase origin stage`, then `git stash pop`. Resolve conflicts — `src/components/dashboard/shell.tsx` is the most likely conflict point if the feature touched the sidebar.
+2. **Classify the scope** using the decision tree above. For an industry-specific feature, it lives in `src/industries/<industry-id>/features/<feature>/`.
+3. **Move with `git mv`** to preserve history:
+   - `src/features/<feature>/` → `src/industries/<industry-id>/features/<feature>/`
+   - Or `src/components/dashboard/<feature>.tsx` → `src/industries/<industry-id>/features/<feature>/ui.tsx`
+4. **Update consumer imports.** `grep -rn '@/features/<feature>\|@/components/dashboard/<feature>' src/` and update every match to the new path.
+5. **Create `meta.ts`** in the feature folder:
+   ```ts
+   import { FEATURES, INDUSTRIES } from "../../../_registry";
+   import type { FeatureMeta } from "../../../_types";
+   export const <feature>Meta: FeatureMeta = {
+     id: FEATURES.<FEATURE_ID>,
+     industries: [INDUSTRIES.<INDUSTRY_ID>],
+   };
+   ```
+6. **Register in `_registry.ts` and the industry manifest:**
+   - Add the feature ID constant to `FEATURES` in `src/industries/_registry.ts`.
+   - Import `<feature>Meta` in `src/industries/<industry-id>/manifest.ts` and push `{ meta: <feature>Meta }` onto `features[]`.
+   - If the feature has a top-level page, add a `SidebarItem` to `sidebar[]` with the icon name as a **string** (e.g. `"FileText"`).
+7. **Replace inline industry guards with the loader pattern:**
+   - **Page route shells** (`src/app/(main)/(dashboard)/<feature>/page.tsx`): drop the inline `if (tenant.industry_id !== "...") return <NotAvailable />`. Use:
+     ```ts
+     import { notFound } from "next/navigation";
+     import { getFeatureAccess } from "@/industries/_loader";
+     import { FEATURES } from "@/industries/_registry";
+     // inside the page:
+     if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.<FEATURE_ID>)) notFound();
+     ```
+   - **API routes**: after `authenticateRequest()`, add:
+     ```ts
+     if (!getFeatureAccess(auth.industryId, FEATURES.<FEATURE_ID>)) return apiForbidden();
+     ```
+   - Apply to every API route the feature owns. Form-builder and check-in show the working shape.
+8. **Use `scopedClient(auth)` for new tenant-touching queries.** Old `createServiceClient()` queries in untouched routes can stay (they're tracked on STATUS-BOARD for ongoing migration), but anything new defaults to the safe wrapper. See Tenant Isolation Rules below.
+9. **Update `docs/FEATURE-CATALOG.md`** with the feature row: id, location, industries, owner.
+10. **Verify before committing:**
+    - `npm run build` clean.
+    - Manual UI as a tenant **in** the registered industry → feature visible, sidebar item present, pages render, APIs return 200.
+    - Manual UI as a tenant **NOT** in the industry → sidebar item hidden, direct URL 404s, APIs return 403.
+    - Universal features (leads, pipeline, team, settings) unchanged on both tenants.
+
+**Two pitfalls that keep biting:**
+
+- **Sidebar icons must be string names, not `LucideIcon` component imports.** The manifest crosses the Server Component → Client Component boundary; non-serializable props crash the dashboard. Register the icon name in the `INDUSTRY_ICONS` registry in `src/components/dashboard/shell.tsx` if it isn't already there.
+- **`scopedClient.update()` and `.delete()` always require a caller-supplied filter** (e.g. `.eq("id", leadId)`) beyond the auto-injected `tenant_id`. Without one, the operation targets every row in the tenant. The wrapper can't enforce this at compile time — review catches it.
+
 ### Tenant model
 
 **One tenant = one industry.** Hybrid organizations run multiple tenants under separate logins (matches how Salesforce/HubSpot/Notion handle business units). No multi-industry-per-tenant complexity — it's a deliberate design choice; revisit only if a real customer requests it.
