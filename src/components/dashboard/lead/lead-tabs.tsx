@@ -84,6 +84,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
+              {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
               {industryId === "education_consultancy" && (
                 <InfoGridRow
                   label="Tag"

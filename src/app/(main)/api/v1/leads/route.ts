@@ -159,11 +159,23 @@ async function handlePost(request: NextRequest) {
   // Verify tenant exists
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, slug, industry_id")
     .eq("id", tenantId)
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // Generate display_id for education_consultancy tenants
+  let displayId: string | null = null;
+  if (tenant.industry_id === "education_consultancy") {
+    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
+    const { count } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId);
+    const nextNum = ((count ?? 0) + 1).toString().padStart(3, "0");
+    displayId = `${prefix}-${nextNum}`;
+  }
 
   const idempotencyKey = body.idempotency_key as string | undefined;
   const leadId = body.lead_id as string | undefined;
@@ -278,6 +290,7 @@ async function handlePost(request: NextRequest) {
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 

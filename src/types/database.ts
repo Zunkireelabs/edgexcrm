@@ -125,6 +125,7 @@ export interface Lead {
   preferred_contact_method: string | null;
   tags: string[];
   lead_type: string;
+  display_id: string | null;
   form_config_id: string | null;
   deleted_at: string | null;
   idempotency_key: string | null;

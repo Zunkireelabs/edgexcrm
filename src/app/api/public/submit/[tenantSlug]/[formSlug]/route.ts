@@ -76,7 +76,7 @@ export async function POST(
   // ── 4. Lookup tenant by slug ──
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, name, slug")
+    .select("id, name, slug, industry_id")
     .eq("slug", tenantSlug)
     .single();
 
@@ -170,7 +170,19 @@ export async function POST(
     } catch { /* fall through to raw phone */ }
   }
 
-  // ── 10. Insert lead ──
+  // ── 10. Generate display_id for education_consultancy ──
+  let displayId: string | null = null;
+  if (tenant.industry_id === "education_consultancy") {
+    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
+    const { count } = await supabase
+      .from("leads")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenant.id);
+    const nextNum = ((count ?? 0) + 1).toString().padStart(3, "0");
+    displayId = `${prefix}-${nextNum}`;
+  }
+
+  // ── 11. Insert lead ──
   const leadPayload = {
     tenant_id: tenant.id,
     pipeline_id: defaultPipeline.id,
@@ -193,6 +205,7 @@ export async function POST(
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
