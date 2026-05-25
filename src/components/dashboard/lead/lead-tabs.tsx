@@ -97,14 +97,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
-              {industryId === "education_consultancy" && (
-                <InfoGridRow
-                  label="Lead Type"
-                  value={
-                    <LeadTypeSelector leadId={lead.id} currentType={lead.lead_type || "lead"} />
-                  }
-                />
-              )}
               {location && <InfoGridRow label="Location" value={location} />}
               {lead.preferred_contact_method && (
                 <InfoGridRow

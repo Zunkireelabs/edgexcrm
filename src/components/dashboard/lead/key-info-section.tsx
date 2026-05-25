@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -32,6 +32,8 @@ interface KeyInfoSectionProps {
   onAssignmentChange: (userId: string) => void;
   entity?: TenantEntity | null;
   industry?: Industry | null;
+  industryId?: string | null;
+  onLeadTypeChange?: (newType: string) => void;
 }
 
 export function KeyInfoSection({
@@ -46,8 +48,14 @@ export function KeyInfoSection({
   onAssignmentChange,
   entity,
   industry,
+  industryId,
+  onLeadTypeChange,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
+  const [leadType, setLeadType] = useState(lead.lead_type || "lead");
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
 
   const location = [lead.city, lead.country].filter(Boolean).join(", ");
   const assignedMember = teamMembers.find((m) => m.user_id === assignedTo);
@@ -79,6 +87,30 @@ export function KeyInfoSection({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
+          {/* Lead Type — education_consultancy only */}
+          {industryId === "education_consultancy" && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Lead Type</p>
+              <div className="flex gap-1.5">
+                {["lead", "prospect"].map((t) => (
+                  <button
+                    key={t}
+                    onClick={() => { setLeadType(t); onLeadTypeChange?.(t); }}
+                    className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                      leadType === t
+                        ? t === "prospect"
+                          ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
+                          : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
+                        : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                    }`}
+                  >
+                    {t.charAt(0).toUpperCase() + t.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Stage */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Stage</p>

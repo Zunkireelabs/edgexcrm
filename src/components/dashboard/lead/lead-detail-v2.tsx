@@ -232,6 +232,19 @@ export function LeadDetailV2({
             onAssignmentChange={handleAssignmentChange}
             entity={entity}
             industry={industry}
+            industryId={tenant.industry_id}
+            onLeadTypeChange={async (newType) => {
+              try {
+                await fetch(`/api/v1/leads/${lead.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lead_type: newType }),
+                });
+                toast.success(`Changed to ${newType}`);
+              } catch {
+                toast.error("Failed to update lead type");
+              }
+            }}
           />
         </div>
 
