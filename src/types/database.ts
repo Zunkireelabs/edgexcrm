@@ -130,6 +130,8 @@ export interface Lead {
   account_id: string | null;
   form_config_id: string | null;
   deleted_at: string | null;
+  converted_at: string | null;
+  converted_contact_id: string | null;
   idempotency_key: string | null;
   // AI Insights fields
   ai_score: number | null;
@@ -465,6 +467,7 @@ export interface Account {
   tenant_id: string;
   name: string;
   primary_contact_email: string | null;
+  primary_contact_id: string | null;
   notes: string | null;
   is_active: boolean;
   created_at: string;
@@ -521,4 +524,35 @@ export interface TimeEntry {
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================
+// CRM Contacts (IT-agency industry-scoped)
+// ============================================================
+
+export type ContactStatus = "active" | "inactive";
+export type ProjectContactRole = "primary" | "technical" | "billing" | "other";
+
+export interface Contact {
+  id: string;
+  tenant_id: string;
+  account_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  status: ContactStatus;
+  assigned_to: string | null;
+  notes: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectContact {
+  project_id: string;
+  contact_id: string;
+  role: ProjectContactRole | null;
+  created_at: string;
 }

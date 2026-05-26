@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/sheet";
 import {
   Building2,
+  Contact,
   LayoutDashboard,
   Users,
   Settings,
@@ -61,6 +62,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   UserCheck,
   FileText,
   Clock,
+  Contact,
   LayoutDashboard,
   Kanban,
   Users,
