@@ -2,15 +2,17 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-26 (post-accounts-promotion, pre-phase-5)
+Last updated: 2026-05-26 (post-crm-contacts-phase-a)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
-- [ ] **Phase 5 (rates + billable totals)** — the final remaining phase in `docs/TIME-TRACKING-BRIEF.md`. Needs: UI to set per-member `default_hourly_rate` on team/settings (DB column already exists from migration 020), new per-project `default_rate` column + UI override, `resolveEffectiveRate()` helper, snapshot rate into `time_entries.rate_snapshot` on approval (column exists), billable totals column + "This week billable" stats card in the timesheet. Opus to write Sonnet handoff next session.
-- [ ] **Promote `stage` → `main` for production**. Everything on staging is unshipped to prod: industry module foundation, hardening, Anish's view-details + tags + contacts + lead types, time-tracking phases 1–4.5, Accounts promotion. Recommend doing this **after Phase 5** completes, so prod gets a coherent Time Tracking v1. Sadin's call.
-- [ ] **Phase 4 + 4.5 smoke gaps** (carryover): shipped on visual-confirmation but didn't run the full checklist. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk (code patterns reviewed) but worth a sweep before main promotion.
+- [ ] **CRM Contacts Phase B** (next thing to ship). Real CRUD: 5 API routes + ContactsListPage + ContactDetailPage + ContactForm + account-detail integration. **Phase B handoff must include migration `022_project_contacts_rls_hardening.sql` as task #1** to close the RLS gap from Phase A (see below). Spec at `docs/CRM-CONTACTS-BRIEF.md` § Phase B.
+- [ ] **Phase 5 of Time Tracking** (queued after Contacts Phases B–E). Per-member rate UI, per-project override, snapshot on approval, billable totals + stats card. DB columns already exist from migration 020 — pure UI + business logic. Spec at `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
+- [ ] **`project_contacts` RLS gap** (carryover from Phase A). Policies only check the contact-side tenant; a malicious admin could insert a junction row pointing at another tenant's project_id (data pollution, not data theft — contact data stays protected). Fix: migration 022 to drop + recreate the 3 policies with both contact-side AND project-side tenant checks. Bundled into Phase B's first task. Zero production exposure today (no code inserts into project_contacts until Phase C).
+- [ ] **Promote `stage` → `main` for production**. Recommend after Contacts v1 + Phase 5 ship, so prod gets a coherent release. Everything on staging unshipped: industry module foundation, hardening, Anish's contacts + tags + lead types, time-tracking phases 1–4.5, Accounts promotion, Contacts Phase A.
+- [ ] **Phase 4 + 4.5 smoke gaps** (carryover): shipped on visual-confirmation but didn't run the full checklist. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk but worth a sweep before main promotion.
 - [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended).
 
 ## 🟡 Open questions
@@ -29,6 +31,7 @@ Last updated: 2026-05-26 (post-accounts-promotion, pre-phase-5)
 
 ## ✅ Recently resolved
 
+- 2026-05-26 — **CRM Contacts Phase A shipped to stage** (`b622e5a`). Foundation layer: migration 021 (contacts + project_contacts tables, leads conversion columns, accounts.primary_contact_id), types extended, FEATURES.CRM_CONTACTS registered, sidebar entry above Accounts, `/contacts` shell now industry-dispatched (it_agency placeholder + education ProspectsView preserved). RLS gap on project_contacts caught at review — fix bundled into Phase B. See SESSION-LOG.
 - 2026-05-26 — **Accounts promotion shipped to stage** (`13c528e`). Accounts is now a top-level CRM entity for it_agency with `/accounts/*` URLs, `FEATURES.ACCOUNTS` gate, Building2 sidebar entry above Time Tracking. 6 files moved with history preserved, 7 API routes re-gated, 2 intentional cross-feature imports introduced and documented. Tabs branch (`96fcaae`) deleted. Smoke verified as both Zunkireelabs (sees Accounts, /time-tracking/accounts 404s, /time-tracking-projects/[id] back-link goes to /accounts) and Admizz (no Accounts in sidebar, /accounts 404, API 403). Workflow incident — Sonnet's initial commit was missing 4 page-file edits that lived as uncommitted working-tree edits; fixed with additive commit on the same branch ("fix-back" pattern). See SESSION-LOG for lesson learned about checking `git status` before reviewing diffs.
 - 2026-05-25 — **Time Tracking Phase 4 + 4.5 shipped to stage** (`d252568`). Phase 4: approvals queue + approve/reject API (atomic status precondition + audit + events). Phase 4.5: role-aware team timesheet table replacing the single-user home — admin sees all members with filters/stats/CSV export, member sees own entries scoped. Shared `useApproveReject` hook so both surfaces share the same 409 handling. Three commits (Phase 4, fixback for TOCTOU + timezone + edit-lock, Phase 4.5) rebased onto stage post-Anish-PR-#10 and merged as one. See SESSION-LOG.
 - 2026-05-25 — **Accounts IA decision recorded** — promoting accounts to a top-level CRM entity (out of `/time-tracking/accounts/*` into `/accounts/*`) with a separate `FEATURES.ACCOUNTS` constant. Plan locked, Sonnet brief pending. The `feature/time-tracking-nav-tabs` branch (`96fcaae`) that proposed tabs-under-Time-Tracking will be discarded in the same refactor — Sadin pushed back that accounts isn't a Time Tracking sub-feature.

@@ -11,15 +11,62 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Accounts promotion shipped to `stage` (`13c528e`). Accounts is now a top-level CRM entity for it_agency (`/accounts/*` URLs, `FEATURES.ACCOUNTS` gate, `Building2` sidebar entry above Time Tracking). Time Tracking continues to own time entries + approvals only. Tabs branch was deleted (the framing pushback ruled). Phase 5 (rates + billable totals) is the next thing to ship.
-- **Branch**: `stage` at `13c528e`. `main` (production) still on pre-industry-module version — recommend promoting after Phase 5 lands so prod gets a coherent Time Tracking v1 in one go.
+- **Current state**: CRM Contacts **Phase A** shipped to `stage` (`b622e5a`). Schema + manifest scaffolding done — `contacts` + `project_contacts` tables live on staging DB with RLS, `FEATURES.CRM_CONTACTS` registered, sidebar entry above Accounts, `/contacts` shell now industry-dispatched (it_agency placeholder + education ProspectsView unchanged). Brief at `docs/CRM-CONTACTS-BRIEF.md` covers all 5 phases.
+- **Branch**: `stage` at `b622e5a`. `main` (production) still on pre-industry-module version — recommend promoting after Contacts + Phase 5 (rates) ship, so prod gets a coherent Time Tracking + Contacts v1 in one go.
 - **Workflow split** (formalized 2026-05-25): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet never pushes to stage. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
-- **Phase 5 plan** (next thing to ship): per-member `default_hourly_rate` (already on `tenant_users` from migration 020 — UI to manage it is what's missing), per-project `default_rate` override (new column on `projects`), `resolveEffectiveRate(entry, user, project)` helper, snapshot rate into `time_entries.rate_snapshot` on approval (column already exists from migration 020), billable totals column in the timesheet + a "This week billable" stats card. Brief details in `docs/TIME-TRACKING-BRIEF.md` § Phase 5. Estimated ~1 day.
-- **What Opus does next**: write Sonnet handoff prompt for Phase 5, hand to Sadin, review when Sonnet reports back, smoke, merge.
+- **Known gap from Phase A**: `project_contacts` RLS policies only check the contact-side tenant, not the project-side. Low-severity (data-pollution-only, no contact data leak). **Phase B's handoff includes migration `022_project_contacts_rls_hardening.sql` as task #1** to close the gap before any code inserts into `project_contacts` (Phase C is when that surface ships).
+- **Phase B plan** (next thing to ship — Contacts CRUD): 5 API routes (list/create, get/patch/delete, by-account, link helpers), real `ContactsListPage` + `ContactDetailPage`, `ContactForm` dialog, status badge, extend `account-detail.tsx` with inline Contacts section + Primary Contact pill picker. Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase B. Estimated ~1.5 days.
+- **After Phase B**: Phase C (project↔contact junction wiring) → Phase D (Lead → Contact conversion with TOCTOU-safe atomic UPDATE) → Phase E (polish/docs). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
+- **What Opus does next**: write Sonnet handoff prompt for Phase B (with migration 022 as first task), hand to Sadin, review when Sonnet reports back, smoke, merge.
 - **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## CRM Contacts Phase A shipped — schema + manifest scaffolding for it_agency (2026-05-26)
+
+### What was built
+
+Foundation layer for the it_agency Contacts feature (the people-side counterpart to Accounts). The 5-phase brief lives at `docs/CRM-CONTACTS-BRIEF.md`. Phase A is just the scaffolding — no API or UI yet.
+
+- **Migration 021_contacts.sql** — created 2 tenant-owned tables + 2 ALTERs:
+  - `contacts` (id, tenant_id, account_id NOT NULL, first/last/email/phone/title, status CHECK 'active|inactive', assigned_to for counselor inheritance, notes, deleted_at). `updated_at` trigger via the existing `update_updated_at()` function.
+  - `project_contacts` junction (project_id, contact_id, role CHECK 'primary|technical|billing|other', PK on the pair). **Partial unique index `project_contacts_one_primary ON project_contacts(project_id) WHERE role='primary'`** enforces "at most one primary contact per project" at DB level.
+  - `leads` ALTER: `converted_at TIMESTAMPTZ NULL` + `converted_contact_id UUID NULL` (REFERENCES contacts ON DELETE SET NULL) + partial index for the not-null case.
+  - `accounts` ALTER: `primary_contact_id UUID NULL` (REFERENCES contacts ON DELETE SET NULL). `primary_contact_email` text column left in place for backfill compatibility.
+  - RLS: 4 policies on contacts (select/insert/update/delete) + 3 on project_contacts (select/insert/delete; no UPDATE — junction rows don't mutate). Sonnet caught that `= ANY(...)` syntax failed on the staging DB and switched to `IN (SELECT get_user_tenant_ids())` to match migration 020's pattern — correct judgment call.
+- **Type system** extended in `src/types/database.ts`: new `Contact`, `ProjectContact` interfaces, `ContactStatus = 'active'|'inactive'`, `ProjectContactRole = 'primary'|'technical'|'billing'|'other'`. `Lead` extended with `converted_at`/`converted_contact_id`. `Account` extended with `primary_contact_id`.
+- **Industry wiring**: `FEATURES.CRM_CONTACTS = "crm-contacts"` added to `_registry.ts` in the it_agency section. New `meta.ts`. `it-agency/manifest.ts` registers the feature + sidebar entry **above Accounts** (final order: Contacts → Accounts → Time Tracking, matching Salesforce/HubSpot). `shell.tsx` registers the `Contact` lucide icon in `INDUSTRY_ICONS`.
+- **Route shell refactor**: `src/app/(main)/(dashboard)/contacts/page.tsx` is now industry-aware. It_agency users hit the new `ContactsListPage` placeholder ("Coming soon — Phase B"); education_consultancy users continue to see the existing ProspectsView with all data-fetching preserved verbatim. Highest-risk change in Phase A (touches shipped education code).
+- **Placeholder components**: `pages/contacts-list.tsx` + `pages/contact-detail.tsx` — minimal "Coming soon" cards. Real implementations land in Phase B (list/detail) and Phase B/C (detail wiring).
+- **FEATURE-CATALOG** updated with the new CRM_CONTACTS row.
+
+### Workflow incident: RLS gap caught at review
+
+`project_contacts` policies only check the **contact-side** tenant, not the project-side. A malicious admin could insert a junction row linking one of their tenant's contacts to another tenant's project_id — the row would exist in the other tenant's project's contact list as a "ghost link," though the contact's data stays protected by contacts RLS. Data pollution, not data theft.
+
+**Decision**: merge Phase A, fix in Phase B's first task (migration `022_project_contacts_rls_hardening.sql` adding the project-side check to all 3 policies). Vulnerability window in practice is zero — no production code inserts into project_contacts until Phase C ships the link API.
+
+### Verification
+
+- Build clean (50 pages, `/contacts` route present).
+- Lint 0 errors, 11 pre-existing warnings (baseline unchanged).
+- DB sanity (via psql against staging DB): both tables present, RLS enabled, 5 indexes (incl. partial unique for primary role), `trigger_contacts_updated_at`, all 3 new columns, 7 RLS policies.
+- Manual smoke as Zunkireelabs admin: sidebar shows Contacts above Accounts; `/contacts` shows placeholder; `/accounts` + `/time-tracking` unchanged. ✓
+- Manual smoke as Admizz: `/contacts` ProspectsView renders identically to before the refactor. ✓
+- Stage deploy triggered on push of `b622e5a`.
+
+### Files Changed
+
+- **New** (4): migration 021, `meta.ts`, 2 placeholder pages.
+- **Modified** (6): `_registry.ts`, `it-agency/manifest.ts`, `shell.tsx` (icon registration), `types/database.ts`, `/contacts/page.tsx` (industry dispatch), `FEATURE-CATALOG.md`.
+- **DB**: migration 021 applied live (verified via psql).
+
+### Not yet promoted to `main`
+
+Same as prior: hold prod promotion until Time Tracking v1 (after Phase 5) + Contacts v1 (after Phase E) so prod gets a coherent release.
 
 ---
 
