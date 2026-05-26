@@ -2,17 +2,24 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-26 (post-crm-contacts-phase-a)
+Last updated: 2026-05-26 (post-crm-contacts-phase-b)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
-- [ ] **CRM Contacts Phase B** (next thing to ship). Real CRUD: 5 API routes + ContactsListPage + ContactDetailPage + ContactForm + account-detail integration. **Phase B handoff must include migration `022_project_contacts_rls_hardening.sql` as task #1** to close the RLS gap from Phase A (see below). Spec at `docs/CRM-CONTACTS-BRIEF.md` § Phase B.
-- [ ] **Phase 5 of Time Tracking** (queued after Contacts Phases B–E). Per-member rate UI, per-project override, snapshot on approval, billable totals + stats card. DB columns already exist from migration 020 — pure UI + business logic. Spec at `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
-- [ ] **`project_contacts` RLS gap** (carryover from Phase A). Policies only check the contact-side tenant; a malicious admin could insert a junction row pointing at another tenant's project_id (data pollution, not data theft — contact data stays protected). Fix: migration 022 to drop + recreate the 3 policies with both contact-side AND project-side tenant checks. Bundled into Phase B's first task. Zero production exposure today (no code inserts into project_contacts until Phase C).
-- [ ] **Promote `stage` → `main` for production**. Recommend after Contacts v1 + Phase 5 ship, so prod gets a coherent release. Everything on staging unshipped: industry module foundation, hardening, Anish's contacts + tags + lead types, time-tracking phases 1–4.5, Accounts promotion, Contacts Phase A.
-- [ ] **Phase 4 + 4.5 smoke gaps** (carryover): shipped on visual-confirmation but didn't run the full checklist. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk but worth a sweep before main promotion.
+- [ ] **CRM Contacts Phase C** (next thing to ship — project↔contact junction wiring). 2 symmetric API routes (`/api/v1/contacts/[id]/projects` + `/api/v1/projects/[id]/contacts` for POST link with role, PATCH change-role, DELETE unlink), wire the Phase C placeholder section on `contact-detail.tsx`, add Contacts section to `project-detail.tsx` (lives in time-tracking — cross-feature touch), new shared `ProjectContactPicker` component. Spec at `docs/CRM-CONTACTS-BRIEF.md` § Phase C. **The brief MUST include the PostgREST FK-disambiguation lesson from Phase B** (any contacts↔accounts embed needs the explicit `accounts!contacts_account_id_fkey` syntax).
+- [ ] **Phase D** (queued — Lead → Contact conversion with TOCTOU-safe atomic UPDATE) and **Phase E** (polish/docs). Then Time Tracking Phase 5.
+- [ ] **Time Tracking Phase 5** (queued after Contacts E). Per-member rate UI, per-project override, snapshot on approval, billable totals + stats card. DB columns already exist from migration 020 — pure UI + business logic. Spec at `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
+- [ ] **Promote `stage` → `main` for production**. Recommend after Contacts v1 (Phases C–E) + Phase 5 ship, so prod gets a coherent release. Unshipped to prod: industry modules, hardening, Anish's tags/contacts/lead-types, time-tracking Phases 1–4.5, Accounts promotion, Contacts Phases A + B.
+- [ ] **Phase 4 + 4.5 smoke gaps** (carryover): shipped on visual-confirmation. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk but worth a sweep before main promotion.
+
+## 🟢 Code-review checklist additions (from Phase B postmortem)
+
+- [ ] **PostgREST embed FK disambiguation**: any time a migration adds a reverse FK between two tables that already have a forward FK, every `.select("*, OtherTable(...)")` between those tables MUST use the explicit FK name (e.g. `accounts!contacts_account_id_fkey(id, name)`). Latent bug hidden until the first embed query runs. Grep for `select.*${otherTable}\\(` whenever adding a reverse FK.
+- [ ] **PATCH preserves POST invariants**: any field-level invariant enforced on POST (e.g. "at least one of email or phone required") MUST also be enforced on PATCH. Fetch the existing row, compute the resulting state with the patch applied, validate.
+- [ ] **New page components need a route shell**: when scaffolding a new UI component (e.g. ContactDetailPage), the corresponding Next.js page shell at `src/app/.../[id]/page.tsx` MUST be created in the same phase, even if the component is just a placeholder. "Exported but not wired yet" is not a valid phase-A state.
+- [ ] **`.select()` after insert/update**: the return shape must match what the UI consumes for optimistic adds. If the read endpoint joins on `accounts(id, name)`, the insert endpoint must too — else freshly-created rows show with empty join columns until refresh.
 - [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended).
 
 ## 🟡 Open questions
@@ -31,6 +38,7 @@ Last updated: 2026-05-26 (post-crm-contacts-phase-a)
 
 ## ✅ Recently resolved
 
+- 2026-05-26 — **CRM Contacts Phase B shipped to stage** (`1909203`). Full Contacts CRUD + list + detail + ContactForm + ContactStatusBadge + account-detail integration with Primary Contact pill picker. Migration 022 closes the Phase A RLS gap. Three fixback commits caught: (1) PATCH email/phone invariant + q-param sanitization, (2) missing `/contacts/[id]` route shell + POST without join, (3) PostgREST embed ambiguity from the contacts↔accounts reverse FK. Four new code-review checklist items added (see above). Workflow violation noted: Opus did all 3 fixbacks directly instead of routing to Sonnet; memory updated to prevent recurrence.
 - 2026-05-26 — **CRM Contacts Phase A shipped to stage** (`b622e5a`). Foundation layer: migration 021 (contacts + project_contacts tables, leads conversion columns, accounts.primary_contact_id), types extended, FEATURES.CRM_CONTACTS registered, sidebar entry above Accounts, `/contacts` shell now industry-dispatched (it_agency placeholder + education ProspectsView preserved). RLS gap on project_contacts caught at review — fix bundled into Phase B. See SESSION-LOG.
 - 2026-05-26 — **Accounts promotion shipped to stage** (`13c528e`). Accounts is now a top-level CRM entity for it_agency with `/accounts/*` URLs, `FEATURES.ACCOUNTS` gate, Building2 sidebar entry above Time Tracking. 6 files moved with history preserved, 7 API routes re-gated, 2 intentional cross-feature imports introduced and documented. Tabs branch (`96fcaae`) deleted. Smoke verified as both Zunkireelabs (sees Accounts, /time-tracking/accounts 404s, /time-tracking-projects/[id] back-link goes to /accounts) and Admizz (no Accounts in sidebar, /accounts 404, API 403). Workflow incident — Sonnet's initial commit was missing 4 page-file edits that lived as uncommitted working-tree edits; fixed with additive commit on the same branch ("fix-back" pattern). See SESSION-LOG for lesson learned about checking `git status` before reviewing diffs.
 - 2026-05-25 — **Time Tracking Phase 4 + 4.5 shipped to stage** (`d252568`). Phase 4: approvals queue + approve/reject API (atomic status precondition + audit + events). Phase 4.5: role-aware team timesheet table replacing the single-user home — admin sees all members with filters/stats/CSV export, member sees own entries scoped. Shared `useApproveReject` hook so both surfaces share the same 409 handling. Three commits (Phase 4, fixback for TOCTOU + timezone + edit-lock, Phase 4.5) rebased onto stage post-Anish-PR-#10 and merged as one. See SESSION-LOG.

@@ -11,17 +11,82 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: CRM Contacts **Phase A** shipped to `stage` (`b622e5a`). Schema + manifest scaffolding done — `contacts` + `project_contacts` tables live on staging DB with RLS, `FEATURES.CRM_CONTACTS` registered, sidebar entry above Accounts, `/contacts` shell now industry-dispatched (it_agency placeholder + education ProspectsView unchanged). Brief at `docs/CRM-CONTACTS-BRIEF.md` covers all 5 phases.
-- **Branch**: `stage` at `b622e5a`. `main` (production) still on pre-industry-module version — recommend promoting after Contacts + Phase 5 (rates) ship, so prod gets a coherent Time Tracking + Contacts v1 in one go.
-- **Workflow split** (formalized 2026-05-25): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet never pushes to stage. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
-- **Known gap from Phase A**: `project_contacts` RLS policies only check the contact-side tenant, not the project-side. Low-severity (data-pollution-only, no contact data leak). **Phase B's handoff includes migration `022_project_contacts_rls_hardening.sql` as task #1** to close the gap before any code inserts into `project_contacts` (Phase C is when that surface ships).
-- **Phase B plan** (next thing to ship — Contacts CRUD): 5 API routes (list/create, get/patch/delete, by-account, link helpers), real `ContactsListPage` + `ContactDetailPage`, `ContactForm` dialog, status badge, extend `account-detail.tsx` with inline Contacts section + Primary Contact pill picker. Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase B. Estimated ~1.5 days.
-- **After Phase B**: Phase C (project↔contact junction wiring) → Phase D (Lead → Contact conversion with TOCTOU-safe atomic UPDATE) → Phase E (polish/docs). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
-- **What Opus does next**: write Sonnet handoff prompt for Phase B (with migration 022 as first task), hand to Sadin, review when Sonnet reports back, smoke, merge.
+- **Current state**: CRM Contacts **Phase B** shipped to `stage` (`1909203`) — full Contacts CRUD + list + detail + ContactForm + account-detail integration with Primary Contact pill picker, plus migration `022_project_contacts_rls_hardening` closing the Phase A RLS gap. Three fixback commits along the way (email/phone PATCH invariant + q-param sanitization; missing `/contacts/[id]` route shell + POST-without-join; PostgREST embed FK ambiguity).
+- **Branch**: `stage` at `1909203`. `main` (production) still on pre-industry-module version — recommend promoting after Contacts (Phases C–E) + Phase 5 (rates) all ship, so prod gets a coherent Time Tracking + Contacts v1 in one go.
+- **Workflow split** (re-affirmed 2026-05-26 after Opus violated it 3x): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet writes ALL code — including small fixbacks Opus catches in review. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory (updated with the "small fixback trap" note).
+- **Phase C plan** (next thing to ship — project↔contact junction wiring): 2 API routes (`/api/v1/contacts/[id]/projects` + `/api/v1/projects/[id]/contacts` for symmetric POST/PATCH/DELETE), wire the Phase C placeholder section on `contact-detail.tsx` (Projects-involved list with role pills + add/remove/change-role for admin), add a Contacts section to `project-detail.tsx` (which lives in time-tracking — cross-feature touch). New shared `ProjectContactPicker` component (search + role assignment). Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase C. **Critical lesson from Phase B**: any new contacts↔accounts embed MUST use the explicit FK name (`accounts!contacts_account_id_fkey`) — PostgREST can't disambiguate because of the reverse `accounts.primary_contact_id` FK. The Phase C brief must call this out so it doesn't regress.
+- **After Phase C**: Phase D (Lead → Contact conversion with TOCTOU-safe atomic UPDATE) → Phase E (polish/docs). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
+- **What Opus does next**: write Sonnet handoff prompt for Phase C, hand to Sadin, review + smoke + merge.
 - **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## CRM Contacts Phase B shipped — full CRUD + account-detail integration (2026-05-26)
+
+### What was built
+
+Phase B turned the Phase A scaffolding into a working feature. After this, an it_agency admin can create contacts at any account, browse + filter + search them at `/contacts`, view detail + edit + soft-delete, and set/clear a primary contact pill on each account.
+
+- **Migration `022_project_contacts_rls_hardening.sql`** — closes the Phase A RLS gap on `project_contacts`. Drops + recreates the 3 policies (SELECT/INSERT/DELETE) with both contact-side AND project-side tenant checks (`EXISTS (... contacts c WHERE ... AND ...) AND EXISTS (... projects p WHERE ... AND ...)`). Verified via `pg_policies`.
+- **6 API routes** under `/api/v1/`:
+  - `contacts/route.ts` GET (list with `account_id` / `status` / `q` / `include_inactive` filters, joined accounts with explicit FK after fixback) + POST (validates first/last/account_id, requires at least email OR phone, scopedClient verifies account belongs to tenant before insert).
+  - `contacts/[id]/route.ts` GET (single + joins on accounts + project_contacts→projects) + PATCH (blocks account_id changes, enforces email-or-phone invariant after fixback) + DELETE (soft-delete + clears `accounts.primary_contact_id` references in the same tenant).
+  - `accounts/[id]/contacts/route.ts` GET (contacts at an account, optional include_inactive).
+  - `accounts/[id]/route.ts` extended: PATCH now accepts `primary_contact_id` with contact-belongs-to-this-account-and-tenant validation.
+- **UI components** under `src/industries/it-agency/features/crm-contacts/`:
+  - `pages/contacts-list.tsx` — table layout with account/status filters + debounced 250ms search, "Add Contact" dialog, ContactStatusBadge.
+  - `pages/contact-detail.tsx` — header with name + title + status, info card (email + phone + linked account), Projects section (Phase C placeholder).
+  - `components/contact-form.tsx` — dialog form with account picker, validation (email-or-phone), edit + create modes.
+  - `components/contact-status-badge.tsx` — Active/Inactive variant.
+- **`account-detail.tsx` integration**:
+  - Inline Contacts section above Projects with "Add Contact" inline + count badge.
+  - Primary Contact pill in the header (admin only, popover picker showing all account contacts incl. inactive, ✓ marker on current, Clear option).
+- **New page shell `src/app/(main)/(dashboard)/contacts/[id]/page.tsx`** (added in fixback #2) — industry-dispatched, only renders for it_agency + `FEATURES.CRM_CONTACTS`.
+
+### Three review-time fixbacks (lessons each)
+
+Phase B had Sonnet's initial commit clean per spec, then 3 fixback rounds:
+
+**Fixback 1 — `324c03e` (caught at Opus diff review)**:
+- PATCH allowed clearing both `email` AND `phone`, leaving a contact with no contact info. POST enforced this; PATCH didn't.
+- Search `q` parameter was interpolated raw into PostgREST `.or()` — values with commas could break the query parse.
+- **Lesson**: spec-side miss — the brief required POST validation but didn't say "preserve invariant on PATCH too." Add this rule for any field-level invariant: if POST enforces it, PATCH must too.
+
+**Fixback 2 — `f03b021` (caught when Sadin smoked the UI)**:
+- Clicking a contact 404'd because there is **no Next.js page shell at `/contacts/[id]`** — only the list shell. The detail component existed in the industry module but wasn't wired to a route.
+- Same POST endpoint returned the new contact without the `accounts(id, name)` join, so the optimistic add showed `Account: —` on the freshly created row.
+- **Lesson**: in Phase A I described `contact-detail.tsx` as "exported but not wired yet" — and then never wired it in Phase B either. New page components MUST get a route-shell line item in their brief. Same review-checklist item: any `select()` after insert/update that's surfaced to the UI needs to match the read-side joins.
+
+**Fixback 3 — `1909203` (caught when Sadin's contact disappeared from /contacts but stayed on the account detail page)**:
+- Root cause: PostgREST embed ambiguity. Migration 021 added `accounts.primary_contact_id` (reverse FK), so contacts↔accounts now has TWO FKs. `.select("*, accounts(id, name)")` on contacts can't disambiguate → returns no data. The account-detail-contacts endpoint never hit it because it filters by `account_id` directly with no embed.
+- **This was latent the moment migration 021 added the reverse FK** — guaranteed to surface whenever anything joined contacts↔accounts. Fix: explicit FK hint `accounts!contacts_account_id_fkey(id, name)` in all 4 select sites.
+- **Lesson**: any time a migration adds a reverse FK between two tables that already have a forward FK, every embed between those tables MUST use the explicit FK name. Add to STATUS-BOARD code-review checklist for future features.
+
+### Workflow violation — and self-correction
+
+All 3 fixbacks were Opus-direct Edit commits, not Sonnet-routed. Sadin pushed back: brain work is Opus, leg work (any code) is Sonnet. The earlier "Accounts promotion commit-missing-edits" recovery was an emergency-recovery context, not a routine review precedent. Memory entry `feedback_opus_plans_sonnet_executes` updated 2026-05-26 with explicit "small fixback trap" guidance: even one-line bug fixes go to Sonnet via a follow-up prompt; only doc edits stay Opus's.
+
+### Verification
+
+- Build clean (50+ pages, `/contacts`, `/contacts/[id]`, 3 API routes including new ones present).
+- Lint 0 errors, 11 pre-existing warnings (baseline unchanged) across all fixbacks.
+- Migration 022 verified live in staging DB (`pg_policies` shows all 3 `project_contacts` policies reference both contacts AND projects).
+- Manual smoke as Zunkireelabs admin: create contact at CarbonSpark → list shows with correct Account column → click into detail → info card shows email + phone + linked account → "Projects — Phase C placeholder" → back to list works → account-detail page shows the contact in its Contacts section with primary-pill picker functioning.
+- Admizz zero-regression smoke: `/contacts` still renders the existing ProspectsView (industry dispatch on the shell preserves the education path).
+- Stage deploy triggered on push of `1909203`.
+
+### Files Changed (Phase B + 3 fixbacks)
+
+- **New** (7): migration 022, new `/contacts/[id]/page.tsx` shell, 4 API route files (contacts list/create, contacts get/patch/delete, accounts-by-id contacts, account PATCH primary_contact_id extension wasn't new — modification), 2 components (contact-form, contact-status-badge).
+- **Modified** (5): `accounts/[id]/route.ts` (primary_contact_id PATCH support), `accounts/pages/account-detail.tsx` (Contacts section + primary pill — 213 lines), `crm-contacts/pages/contacts-list.tsx` (real impl — 212 lines vs Phase A placeholder), `crm-contacts/pages/contact-detail.tsx` (real impl — 259 lines), `FEATURE-CATALOG.md`.
+- **DB**: migration 022 applied live.
+
+### Not yet promoted to `main`
+
+Hold for Phases C–E + Time Tracking Phase 5, then promote as one coherent release.
 
 ---
 
