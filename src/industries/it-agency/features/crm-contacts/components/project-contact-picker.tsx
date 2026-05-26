@@ -71,8 +71,10 @@ interface PickContactProps {
 
 type ProjectContactPickerProps = PickProjectProps | PickContactProps;
 
+const NO_ROLE = "__none__";
+
 const ROLE_OPTIONS = [
-  { value: "", label: "No role" },
+  { value: NO_ROLE, label: "No role" },
   { value: "primary", label: "Primary" },
   { value: "technical", label: "Technical" },
   { value: "billing", label: "Billing" },
@@ -84,7 +86,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
 
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
-  const [role, setRole] = useState<ProjectContactRole>("");
+  const [role, setRole] = useState<string>(NO_ROLE);
   const [saving, setSaving] = useState(false);
 
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -97,7 +99,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
   function resetState() {
     setSearch("");
     setShowAll(false);
-    setRole("");
+    setRole(NO_ROLE);
     setSelectedProjectId("");
     setSelectedContactId("");
     setProjects([]);
@@ -170,7 +172,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             project_id: selectedProjectId,
-            role: role || undefined,
+            role: role === NO_ROLE ? undefined : role,
           }),
         });
         const json = await res.json();
@@ -189,7 +191,7 @@ export function ProjectContactPicker(props: ProjectContactPickerProps) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             contact_id: selectedContactId,
-            role: role || undefined,
+            role: role === NO_ROLE ? undefined : role,
           }),
         });
         const json = await res.json();
