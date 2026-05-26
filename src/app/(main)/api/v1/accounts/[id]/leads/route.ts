@@ -15,11 +15,13 @@ interface Props {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_request: NextRequest, { params }: Props) {
+export async function GET(request: NextRequest, { params }: Props) {
   const { id } = await params;
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
+
+  const includeConverted = request.nextUrl.searchParams.get("include_converted") === "1";
 
   const db = await scopedClient(auth);
 
@@ -31,12 +33,17 @@ export async function GET(_request: NextRequest, { params }: Props) {
     .maybeSingle();
   if (!account) return apiNotFound("Account");
 
-  const { data: leads, error } = await db
+  let query = db
     .from("leads")
-    .select("id, first_name, last_name, email, phone, status, created_at")
+    .select("id, first_name, last_name, email, phone, status, created_at, converted_at")
     .eq("account_id", id)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .is("deleted_at", null);
+
+  if (!includeConverted) {
+    query = query.is("converted_at", null);
+  }
+
+  const { data: leads, error } = await query.order("created_at", { ascending: false });
 
   if (error) return apiError("DB_ERROR", "Failed to fetch leads", 500);
   return apiSuccess(leads ?? []);

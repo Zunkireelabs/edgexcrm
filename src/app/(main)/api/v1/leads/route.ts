@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   let assignedTo = searchParams.get("assigned_to");
+  const includeConverted = searchParams.get("include_converted") === "1";
 
   const supabase = await createServiceClient();
 
@@ -64,6 +65,10 @@ export async function GET(request: NextRequest) {
     .select("*", { count: "exact" })
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null);
+
+  if (!includeConverted) {
+    query = query.is("converted_at", null);
+  }
 
   // Counselor scoping: force assigned_to filter
   if (auth.role === "counselor") {

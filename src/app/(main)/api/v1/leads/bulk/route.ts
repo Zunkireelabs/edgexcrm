@@ -78,12 +78,13 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
-  // Verify all leads exist and belong to tenant
+  // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
     .select("id, assigned_to")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
+    .is("converted_at", null)
     .in("id", body.ids);
 
   if (fetchError) {
@@ -257,12 +258,13 @@ export async function DELETE(request: NextRequest) {
 
   const supabase = await createServiceClient();
 
-  // Verify all leads exist and belong to tenant
+  // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
     .select("id")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
+    .is("converted_at", null)
     .in("id", body.ids);
 
   if (fetchError) {
