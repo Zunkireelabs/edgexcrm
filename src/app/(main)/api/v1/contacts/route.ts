@@ -43,9 +43,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (q) {
-    query = query.or(
-      `first_name.ilike.%${q}%,last_name.ilike.%${q}%,email.ilike.%${q}%,title.ilike.%${q}%`
-    );
+    // Strip characters that have special meaning in PostgREST .or() parsing
+    // (commas separate OR conditions; parens group; backslash escapes). Replace
+    // with spaces so the rest of the search string remains usable.
+    const safeQ = q.replace(/[,()\\]/g, " ").trim();
+    if (safeQ) {
+      query = query.or(
+        `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%,title.ilike.%${safeQ}%`
+      );
+    }
   }
 
   const { data: contacts, error } = await query.order("last_name").order("first_name");

@@ -81,7 +81,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const { data: existing } = await db
     .from("contacts")
-    .select("id")
+    .select("id, email, phone")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -96,6 +96,16 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.status !== undefined) patch.status = body.status;
   if (body.assigned_to !== undefined) patch.assigned_to = body.assigned_to ?? null;
   if (body.notes !== undefined) patch.notes = body.notes ? String(body.notes).trim() : null;
+
+  // Enforce the same "at least one of email or phone" invariant as POST.
+  // Without this a PATCH could clear both fields, leaving a contact with no
+  // way to reach them.
+  const existingRow = existing as unknown as { id: string; email: string | null; phone: string | null };
+  const resultingEmail = (patch.email !== undefined ? patch.email : existingRow.email) as string | null;
+  const resultingPhone = (patch.phone !== undefined ? patch.phone : existingRow.phone) as string | null;
+  if (!resultingEmail && !resultingPhone) {
+    return apiError("VALIDATION_ERROR", "At least one of email or phone is required", 400);
+  }
 
   const { data: updated, error } = await db
     .from("contacts")
