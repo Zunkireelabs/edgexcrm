@@ -2,12 +2,13 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-26 (post-crm-contacts-phase-c)
+Last updated: 2026-05-26 (post-crm-contacts-phase-c, deploy lag flagged)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
+- [ ] **⚠️ Verify Phase C deploy fired after GH Actions recovers.** githubstatus.com reported "Partially Degraded Service" when Phase C landed. 3 stage pushes (`6dcbe6a`, `cc6554a`, `938b19a` — last is an empty trigger commit) did not auto-trigger workflow runs. dev-lead-crm.zunkireelabs.com is therefore still on Phase B (`a340230`). Local dev server smoke-passed Phase C correctly. On resume: `gh run list --branch stage --limit 3`. If `938b19a` still has no deploy, push another empty commit or re-run latest from the Actions UI.
 - [ ] **CRM Contacts Phase D** (next thing to ship — Lead → Contact conversion). New `POST /api/v1/leads/[id]/convert` with TOCTOU-safe atomic precondition (Phase 4 fixback pattern). `ConvertLeadDialog` on `lead-detail-v2.tsx` (any stage, pre-selects existing account if `leads.account_id` set). Audit all leads-fetching surfaces (`/api/v1/leads` GET, `useLeads`, `leads-table.tsx`, `leads-board.tsx`, dashboard widgets) and add `WHERE converted_at IS NULL` to defaults. Spec at `docs/CRM-CONTACTS-BRIEF.md` § Phase D. Estimated ~1 day.
 - [ ] **Phase E** (after Phase D — polish/docs/full smoke matrix as both tenants).
 - [ ] **Time Tracking Phase 5** (queued after Contacts E). Per-member rate UI, per-project override, snapshot on approval, billable totals + stats card. DB columns already exist from migration 020 — pure UI + business logic. Spec at `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
