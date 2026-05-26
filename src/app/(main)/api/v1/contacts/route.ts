@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from("contacts")
-    .select("*, accounts(id, name)")
+    .select("*, accounts!contacts_account_id_fkey(id, name)")
     .is("deleted_at", null);
 
   if (accountId) {
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       status: "active",
       assigned_to: null,
     })
-    .select("*, accounts(id, name)")
+    .select("*, accounts!contacts_account_id_fkey(id, name)")
     .single();
 
   if (error) {
