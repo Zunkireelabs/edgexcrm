@@ -11,27 +11,98 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Time Tracking (first `it_agency`-scoped feature) is **mid-build via the Opus-plans / Sonnet-executes workflow**. Phases 1–3 have shipped to `stage` and are healthy on `dev-lead-crm.zunkireelabs.com`. **Phase 4 (Approvals)** is currently being executed by a Sonnet session — Sadin will report back with the branch/SHA when Sonnet finishes.
-- **Branch**: `stage` at `5dc4410`. Local matches origin. `main` (production) is still on the pre-industry-module version — promote when ready.
-- **Workflow split** (locked in 2026-05-25): Opus plans + reviews + pushes to stage. Sonnet executes feature code on `feature/time-tracking-phase-N` branches. **Sonnet never pushes to stage directly.** After each phase: pull Sonnet's branch → `npm run build` clean → review code (security gates, scopedClient, audit logs) → start dev server locally → Sadin verifies in browser → merge to stage ff-only → push → kill dev server. See `feedback_opus_plans_sonnet_executes` in memory.
-- **The brief**: `docs/TIME-TRACKING-BRIEF.md` — full data model, API surface, UI surface, 5-phase plan, verification per phase. Phases 1–3 shipped per spec with one timezone-bug fix-back round.
-- **Phase 4 expectations**:
-  1. Sonnet will land 2 new API endpoints (`/time-entries/[id]/approve` POST, `/time-entries/[id]/reject` POST) — admin-only, with `apiError("INVALID_STATE", 409)` if entry isn't pending.
-  2. New `ApprovalsQueuePage` (replaces placeholder at `/time-tracking/approvals`) — admin/owner role gate inside the page.
-  3. Status badges on `TimeEntryRow` (Pending yellow / Approved green / Rejected red+tooltip).
-  4. Hide edit/delete icons when `approval_status !== 'pending'`.
-  5. Bulk-approve action via `Promise.allSettled`.
-- **What Opus does on Phase 4 review**:
-  1. `git fetch origin && git checkout feature/time-tracking-phase-4 && git log origin/stage..HEAD --oneline`
-  2. Read the 2 new route files + the new page + status-badge variant + time-entry-row diff.
-  3. Verify: industry gate present, `requireAdmin` on approve/reject, scopedClient with `.eq("id", id)`, audit + events, pending-state precondition + 409 if not.
-  4. `npm run build` clean, `npm run lint` 0 errors.
-  5. `npm run dev` — Sadin smoke tests as admin (approve/reject/bulk), as non-admin (no permission), as Admizz (404/403).
-  6. Green light → merge ff-only into `stage`, push, delete feature branch, watch deploy.
-- **Blockers**: none known. The bash classifier (`claude-opus-4-7[1m]`) was intermittently failing during Phase 3 review — if it recurs, retries usually clear it within a minute.
+- **Current state**: Time Tracking Phases 1–4.5 are all shipped to `stage` and deployed. Phase 5 (rates + billable totals) is the final phase remaining in the brief, but **a smaller pre-Phase-5 refactor is queued first**: promote **Accounts** from a Time Tracking sub-page to a top-level CRM entity (top-level sidebar, dedicated `/accounts/*` URLs, new `FEATURES.ACCOUNTS` feature ID). The plan was discussed and locked in this session — Sonnet has not yet been briefed.
+- **Branch**: `stage` at `d252568` (Phase 4 + 4.5 combined). `main` (production) is **still on the pre-industry-module version** — has not been promoted yet. The `feature/time-tracking-nav-tabs` branch (`96fcaae`) exists on origin but is **scheduled for deletion** as part of the Accounts promotion (the tabs work is being thrown away — Sadin pushed back that Accounts shouldn't be a Time Tracking sub-tab).
+- **Workflow split** (formalized 2026-05-25): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet never pushes to stage. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
+- **The Accounts promotion plan** (next thing to ship):
+  1. Delete `feature/time-tracking-nav-tabs` branch (local + origin)
+  2. New branch `feature/promote-accounts` off current stage
+  3. `git mv` 6 files: account list/detail page shells + the industry-module pages + account-form + project-form → new `/accounts/*` URL + `src/industries/it-agency/features/accounts/` folder
+  4. Add `FEATURES.ACCOUNTS = "accounts"` to `_registry.ts`, register in it-agency manifest with `icon: "Building2"` sidebar entry
+  5. Re-gate all account/project/task API routes from `FEATURES.TIME_TRACKING` → `FEATURES.ACCOUNTS`
+  6. Project detail page stays at `/time-tracking/projects/[id]` for now (deferred — would need account_id propagation to nest cleanly)
+  7. Time Tracking becomes a single page (no tabs). Approvals reached via the Pending stat tile already wired
+  8. Verification: sidebar shows Accounts (it-agency only), Admizz still 404s on /accounts, old /time-tracking/accounts URLs 404
+- **Phase 5** (after Accounts promotion): per-member `default_hourly_rate`, per-project `default_rate` override, `resolveEffectiveRate()` helper, snapshot rate into `time_entries.rate_snapshot` on approval, billable totals column in timesheet + stats card. Brief details in `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
+- **What Opus does next**: hand Sadin the Sonnet handoff prompt for the Accounts promotion, review when Sonnet reports back, smoke locally, merge to stage.
+- **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Time Tracking — Phases 4 + 4.5 shipped, Accounts-as-top-level decision (2026-05-25, evening)
+
+### What was built
+
+Two phases shipped in a single combined stage merge (`d252568`):
+
+#### Phase 4 — Approvals queue + approve/reject API (commits `95bb3d1`, `9da8fe2`)
+
+- Two new POST endpoints: `/api/v1/time-entries/[id]/approve` and `/api/v1/time-entries/[id]/reject`. Both run the full gate chain (auth → industry → `requireAdmin`) and return `INVALID_STATE` (409) if the entry isn't pending. Reject requires `{ reason: string, max 500 chars }`. Both emit audit logs + events.
+- New `ApprovalsQueuePage` at `/time-tracking/approvals` with role gate, member/date grouping tabs, single-row approve/reject, bulk approve/bulk reject via `Promise.allSettled`, char-counted reject reason dialog.
+- `TimeEntryRow` updated with `ApprovalStatusBadge` + tooltip on rejected entries' badges (shows reason on hover) + edit/delete hidden when `approval_status !== "pending"`.
+
+#### Phase 4 fixback (commit `9da8fe2`) — Opus review found 3 issues
+
+- **TOCTOU race**: approve/reject endpoints fetched status then updated only by `id`, so two admins could race. Fix: added `.eq("approval_status", "pending")` to the UPDATE chain + switched to `.maybeSingle()` — atomic precondition, 409 if 0 rows match.
+- **Timezone bug regression**: approvals-queue.tsx used `.toISOString().split("T")[0]` in `fourWeeksAgo()` and `startOfWeek()` — same pattern that caused the Phase 3 bug. Fix: use `toLocalDateString()` from `@/lib/date`. The "This week: N pending" badge was off by a day in UTC+5:45.
+- **Edit-lock UX**: home page's `entryCanEdit` was `if (isAdmin) return true`, meaning admins saw pencil/trash on approved/rejected entries. Sadin's call: "hide for everyone when locked" — `entryCanEdit = entry.approval_status === "pending"`.
+
+#### Phase 4.5 — Role-aware team timesheet table (commit `d252568`)
+
+- Replaced single-user card-list `/time-tracking` home with a role-aware **team timesheet**. Admin sees all members in one date-grouped table with Member column, filters (date range presets Today/This Week/This Month/Last 4w, Member admin-only, Account, Project, Status), per-row Approve/Reject inline buttons, and CSV export. Member sees own entries with no Member column and the existing inline `+ Log time` form pattern.
+- Extended `/api/v1/time-entries` GET + POST select + the `[id]` GET/PATCH + approve + reject to nest `accounts(id, name)` under `projects(...)` — one round-trip resolves account names. `TimeEntryWithJoins` type updated.
+- 7 new files: `pages/timesheet.tsx`, 5 components (`timesheet-filters`, `timesheet-stats-cards`, `timesheet-table`, `timesheet-row`, `log-time-dialog`), 1 shared hook (`use-approve-reject` extracted from approvals-queue so both surfaces share the same approve/reject + 409 handling).
+- `approvals-queue.tsx` refactored to consume the shared hook for single approve/reject. Bulk operations kept as raw `Promise.allSettled` loops (Sonnet's judgment call — no benefit to routing them through the hook).
+- Filter state synced to URL search params for shareable links + refresh survival.
+- Route shell wrapped in `<Suspense>` (Next.js 16 requirement for `useSearchParams`).
+- Member display: `email.split("@")[0]` (Phase 4 had `userId.slice(0, 8)` — resolved here).
+- CSV export adapted from `leads-table.tsx` `exportCSV()` pattern. Headers + Member column conditional on role.
+
+### Merge mechanics
+
+- Branch `feature/time-tracking-phase-4` accumulated 3 commits (Phase 4, fixback, Phase 4.5).
+- Stage moved forward to `f7430c2` while we were working (Anish's PR #10 — contacts page + lead types + tags-restricted-to-education). Required a rebase before ff-merge.
+- Rebase was clean — stage and phase-4 touched no overlapping files in practice. Force-pushed with `--force-with-lease`.
+- One coordination hiccup mid-session: Opus did a hard reset on local feature/time-tracking-phase-4 (back to origin) WITHOUT knowing Sonnet had a local-only commit. That orphaned Sonnet's `24efdda`. Recovered via `git reset --hard <orphaned-sha>` — commit object was still in the object DB so nothing was lost. Lesson: always verify origin has the latest before hard-reset.
+
+### Accounts IA pivot (decision recorded — code not yet written)
+
+After 4.5 shipped, Sadin flagged that **Accounts** (the entity, not just the page) was unreachable from the sidebar. Opus initially proposed Option A: add tabs under Time Tracking (Timesheet | Accounts | Approvals). Sonnet built it (`feature/time-tracking-nav-tabs` @ `96fcaae`) — clean implementation, faithful to spec.
+
+**Sadin pushed back before merge**: "Accounts is a CRM-level entity, not a Time Tracking sub-feature. In every CRM (Salesforce, HubSpot, Pipedrive, Zoho) it's top-level. Why am I burying it?" Opus agreed — the original framing was wrong. The URL `/time-tracking/accounts` was already a tell.
+
+**Decision locked**:
+- Discard the tabs branch (not merging)
+- Promote Accounts to top-level sidebar (it-agency only, since other industries don't model B2B accounts today)
+- Move pages from `/time-tracking/accounts/*` to `/accounts/*`
+- Introduce `FEATURES.ACCOUNTS = "accounts"` — separate from `FEATURES.TIME_TRACKING`
+- Re-gate all accounts/projects/tasks API routes via `FEATURES.ACCOUNTS`
+- Reorganize industry module: `src/industries/it-agency/features/accounts/` (separate from `time-tracking/`)
+- `/time-tracking` becomes a single page (no tabs); Approvals stays at `/time-tracking/approvals` reached via the Pending stat tile (already linked)
+- Project detail page stays at `/time-tracking/projects/[id]` for now (a future refactor could nest it under accounts but that needs account_id URL propagation — defer)
+
+This is the next thing to ship before Phase 5.
+
+### Verification done in-session
+
+- Phase 4 fixback: build clean, lint unchanged, admin smoke verified single approve + single reject + char counter + tooltip + edit-lock + timezone-fix "This week" count. **Not** verified: bulk approve/reject, non-admin permission gate, Admizz 404/403, TOCTOU race two-window.
+- Phase 4.5: build clean, lint unchanged, admin smoke verified the team table renders with all expected columns (Time/Member/Account/Project/Task/Notes/Status/Actions), account name resolves via nested join, member shows as email-prefix, status badges + edit-lock both render correctly. **Not** verified: non-admin member view, Admizz 404 on /time-tracking, CSV export contents.
+- Tabs branch: build clean, lint unchanged. Not smoke-tested visually (decided to discard before merge).
+
+### Files Changed (Phases 4 + 4.5)
+
+- **New (Phase 4)**: 2 API route files (`time-entries/[id]/approve`, `/reject`), full real implementation of `approvals-queue.tsx`.
+- **New (Phase 4.5)**: `pages/timesheet.tsx` + 5 components (`timesheet-{filters,stats-cards,table,row}`, `log-time-dialog`) + 1 hook (`use-approve-reject`).
+- **Modified**: 4 time-entries API routes (extended select for accounts join), `use-time-entries.ts` type, `app/(main)/(dashboard)/time-tracking/page.tsx` (Suspense wrapper + new component import), `approvals-queue.tsx` (consume shared hook).
+- **Deleted**: `pages/time-tracking-home.tsx` (replaced by `timesheet.tsx`).
+- **DB**: no changes (schema from Phase 1 covers everything).
+
+### Not yet promoted to `main`
+
+`main` (production) is still on the pre-everything version. The right time to promote is after the Accounts refactor lands + Phase 5 (rates + billable) ships, giving production a coherent Time Tracking v1. Until then everything sits on staging.
 
 ---
 
