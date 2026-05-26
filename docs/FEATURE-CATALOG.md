@@ -2,7 +2,7 @@
 
 > Human-readable view of every feature in the codebase, where it lives, and which industries use it. Auto-generation script is a future improvement; for now this is maintained by hand alongside `src/industries/_registry.ts`.
 
-Last updated: 2026-05-24
+Last updated: 2026-05-26
 
 ---
 
@@ -46,7 +46,8 @@ When adding or moving features, update this table and the constants in `src/indu
 |---|---|---|---|
 | `FEATURES.CHECK_IN` (`check-in`) | `src/industries/education-consultancy/features/check-in/` | `education_consultancy` | Student check-in with search + history + per-student detail. Gated at sidebar, page (`/check-in`, `/check-in/[id]`), and 4 API routes. |
 | `FEATURES.FORM_BUILDER` (`form-builder`) | `src/industries/education-consultancy/features/form-builder/` | `education_consultancy` | Visual form builder + templates + public submit API. Gated at sidebar, 3 page routes (`/forms`, `/forms/new`, `/forms/[id]`), and 3 API routes. |
-| `FEATURES.TIME_TRACKING` (`time-tracking`) | `src/industries/it-agency/features/time-tracking/` | `it_agency` | Account/project/task hierarchy + time entries + approvals + billable totals. Gated at sidebar, 5 page routes (`/time-tracking`, `/time-tracking/accounts`, `/time-tracking/accounts/[id]`, `/time-tracking/projects/[id]`, `/time-tracking/approvals`), and 12 API routes. |
+| `FEATURES.ACCOUNTS` (`accounts`) | `src/industries/it-agency/features/accounts/` | `it_agency` | B2B accounts (agencies/employers) with linked projects and leads. Gated at sidebar, 2 page routes (`/accounts`, `/accounts/[id]`), and 7 API routes (accounts, projects, tasks). |
+| `FEATURES.TIME_TRACKING` (`time-tracking`) | `src/industries/it-agency/features/time-tracking/` | `it_agency` | Time entries + approvals + billable totals. Gated at sidebar, 3 page routes (`/time-tracking`, `/time-tracking/projects/[id]`, `/time-tracking/approvals`), and 5 API routes (time-entries + approve/reject). |
 
 ## Shared
 
@@ -59,7 +60,7 @@ _(Empty today — no cross-industry shared features exist yet. The first one arr
 | ID | Name | Tenant today | Manifest |
 |---|---|---|---|
 | `education_consultancy` | Education Consultancy | Admizz Education (slug: `admizz`) | `src/industries/education-consultancy/manifest.ts` |
-| `it_agency` | IT Agency | Zunkiree Labs (slug: `zunkireelabs-crm`) | `src/industries/it-agency/manifest.ts` — Time Tracking |
+| `it_agency` | IT Agency | Zunkiree Labs (slug: `zunkireelabs-crm`) | `src/industries/it-agency/manifest.ts` — Accounts, Time Tracking |
 | `construction` | Construction | — | `src/industries/construction/manifest.ts` (empty stub) |
 | `real_estate` | Real Estate | — | `src/industries/real-estate/manifest.ts` (empty stub) |
 | `healthcare` | Healthcare | — | `src/industries/healthcare/manifest.ts` (empty stub) |

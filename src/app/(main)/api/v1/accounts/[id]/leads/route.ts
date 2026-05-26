@@ -19,7 +19,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const { id } = await params;
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!getFeatureAccess(auth.industryId, FEATURES.TIME_TRACKING)) return apiForbidden();
+  if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
 
   const db = await scopedClient(auth);
 

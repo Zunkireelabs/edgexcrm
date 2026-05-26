@@ -23,7 +23,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const { id: projectId } = await params;
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!getFeatureAccess(auth.industryId, FEATURES.TIME_TRACKING)) return apiForbidden();
+  if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
 
   const db = await scopedClient(auth);
 
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest, { params }: Props) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!getFeatureAccess(auth.industryId, FEATURES.TIME_TRACKING)) return apiForbidden();
+  if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
   if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;

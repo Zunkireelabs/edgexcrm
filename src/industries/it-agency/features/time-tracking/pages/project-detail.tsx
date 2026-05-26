@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { ProjectStatusBadge } from "../components/status-badge";
-import { ProjectForm } from "../components/project-form";
+import { ProjectForm } from "../../accounts/components/project-form";
 import { TaskRow } from "../components/task-row";
 import type { Project, Task } from "@/types/database";
 
@@ -42,7 +42,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
       .then(([projRes, tasksRes]) => {
         if (projRes.error) {
           toast.error("Project not found");
-          router.push("/time-tracking/accounts");
+          router.push("/accounts");
           return;
         }
         setProject(projRes.data);
@@ -100,7 +100,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
     <div className="p-6 space-y-6 max-w-3xl">
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/time-tracking/accounts">
+        <Link href="/accounts">
           <ArrowLeft className="h-4 w-4 mr-1.5" />
           Accounts
         </Link>

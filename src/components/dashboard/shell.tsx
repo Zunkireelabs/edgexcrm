@@ -12,6 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
+  Building2,
   LayoutDashboard,
   Users,
   Settings,
@@ -65,6 +66,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Users,
   UsersRound,
   Settings,
+  Building2,
 };
 
 interface FormSummary {
