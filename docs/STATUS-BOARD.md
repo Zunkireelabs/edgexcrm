@@ -2,15 +2,15 @@
 
 > Live checklist of open user-side actions, decisions, and questions. Companion to [SESSION-LOG.md](./SESSION-LOG.md). Update as items resolve.
 
-Last updated: 2026-05-25 (post-phase-4.5, pre-accounts-promotion)
+Last updated: 2026-05-26 (post-accounts-promotion, pre-phase-5)
 
 ---
 
 ## 🔴 Needs Sadin decision / action
 
-- [ ] **Accounts promotion + tabs branch cleanup queued for next session**. Plan locked in this session: discard `feature/time-tracking-nav-tabs` (`96fcaae`), branch `feature/promote-accounts` off stage, move account pages from `/time-tracking/accounts/*` to `/accounts/*`, introduce `FEATURES.ACCOUNTS`, re-gate APIs. Full plan in SESSION-LOG's RESUME HERE block. Sonnet handoff prompt not yet written.
-- [ ] **Promote `stage` → `main` for production**. Everything on staging is unshipped to prod: industry module foundation, hardening, Anish's view-details + tags + contacts + lead types, time-tracking phases 1–4.5. Recommend doing this **after Accounts promotion + Phase 5 (rates + billable)** complete, so prod gets a coherent Time Tracking v1. Sadin's call.
-- [ ] **Phase 4 + 4.5 smoke gaps**: shipped on visual-confirmation but didn't run the full checklist. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk (code patterns reviewed) but worth a sweep before main promotion.
+- [ ] **Phase 5 (rates + billable totals)** — the final remaining phase in `docs/TIME-TRACKING-BRIEF.md`. Needs: UI to set per-member `default_hourly_rate` on team/settings (DB column already exists from migration 020), new per-project `default_rate` column + UI override, `resolveEffectiveRate()` helper, snapshot rate into `time_entries.rate_snapshot` on approval (column exists), billable totals column + "This week billable" stats card in the timesheet. Opus to write Sonnet handoff next session.
+- [ ] **Promote `stage` → `main` for production**. Everything on staging is unshipped to prod: industry module foundation, hardening, Anish's view-details + tags + contacts + lead types, time-tracking phases 1–4.5, Accounts promotion. Recommend doing this **after Phase 5** completes, so prod gets a coherent Time Tracking v1. Sadin's call.
+- [ ] **Phase 4 + 4.5 smoke gaps** (carryover): shipped on visual-confirmation but didn't run the full checklist. Not-yet-verified: bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test. Low risk (code patterns reviewed) but worth a sweep before main promotion.
 - [ ] **`PRICING.md` at repo root**: duplicate of `docs/reference/PRICING.md`. Delete the root copy (recommended).
 
 ## 🟡 Open questions
@@ -29,6 +29,7 @@ Last updated: 2026-05-25 (post-phase-4.5, pre-accounts-promotion)
 
 ## ✅ Recently resolved
 
+- 2026-05-26 — **Accounts promotion shipped to stage** (`13c528e`). Accounts is now a top-level CRM entity for it_agency with `/accounts/*` URLs, `FEATURES.ACCOUNTS` gate, Building2 sidebar entry above Time Tracking. 6 files moved with history preserved, 7 API routes re-gated, 2 intentional cross-feature imports introduced and documented. Tabs branch (`96fcaae`) deleted. Smoke verified as both Zunkireelabs (sees Accounts, /time-tracking/accounts 404s, /time-tracking-projects/[id] back-link goes to /accounts) and Admizz (no Accounts in sidebar, /accounts 404, API 403). Workflow incident — Sonnet's initial commit was missing 4 page-file edits that lived as uncommitted working-tree edits; fixed with additive commit on the same branch ("fix-back" pattern). See SESSION-LOG for lesson learned about checking `git status` before reviewing diffs.
 - 2026-05-25 — **Time Tracking Phase 4 + 4.5 shipped to stage** (`d252568`). Phase 4: approvals queue + approve/reject API (atomic status precondition + audit + events). Phase 4.5: role-aware team timesheet table replacing the single-user home — admin sees all members with filters/stats/CSV export, member sees own entries scoped. Shared `useApproveReject` hook so both surfaces share the same 409 handling. Three commits (Phase 4, fixback for TOCTOU + timezone + edit-lock, Phase 4.5) rebased onto stage post-Anish-PR-#10 and merged as one. See SESSION-LOG.
 - 2026-05-25 — **Accounts IA decision recorded** — promoting accounts to a top-level CRM entity (out of `/time-tracking/accounts/*` into `/accounts/*`) with a separate `FEATURES.ACCOUNTS` constant. Plan locked, Sonnet brief pending. The `feature/time-tracking-nav-tabs` branch (`96fcaae`) that proposed tabs-under-Time-Tracking will be discarded in the same refactor — Sadin pushed back that accounts isn't a Time Tracking sub-feature.
 - 2026-05-25 — **Time Tracking Phases 1–3 shipped to stage** via the Opus-plans / Sonnet-executes workflow. Phase 1 (schema + manifest + 5 placeholder shells), Phase 2 (Accounts/Projects/Tasks CRUD), Phase 3 (time entries log + list + edit, with a timezone bug caught + fixed mid-review). Migration 020 applied live.

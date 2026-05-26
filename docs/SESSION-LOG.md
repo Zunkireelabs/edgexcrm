@@ -11,24 +11,66 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: Time Tracking Phases 1–4.5 are all shipped to `stage` and deployed. Phase 5 (rates + billable totals) is the final phase remaining in the brief, but **a smaller pre-Phase-5 refactor is queued first**: promote **Accounts** from a Time Tracking sub-page to a top-level CRM entity (top-level sidebar, dedicated `/accounts/*` URLs, new `FEATURES.ACCOUNTS` feature ID). The plan was discussed and locked in this session — Sonnet has not yet been briefed.
-- **Branch**: `stage` at `d252568` (Phase 4 + 4.5 combined). `main` (production) is **still on the pre-industry-module version** — has not been promoted yet. The `feature/time-tracking-nav-tabs` branch (`96fcaae`) exists on origin but is **scheduled for deletion** as part of the Accounts promotion (the tabs work is being thrown away — Sadin pushed back that Accounts shouldn't be a Time Tracking sub-tab).
+- **Current state**: Accounts promotion shipped to `stage` (`13c528e`). Accounts is now a top-level CRM entity for it_agency (`/accounts/*` URLs, `FEATURES.ACCOUNTS` gate, `Building2` sidebar entry above Time Tracking). Time Tracking continues to own time entries + approvals only. Tabs branch was deleted (the framing pushback ruled). Phase 5 (rates + billable totals) is the next thing to ship.
+- **Branch**: `stage` at `13c528e`. `main` (production) still on pre-industry-module version — recommend promoting after Phase 5 lands so prod gets a coherent Time Tracking v1 in one go.
 - **Workflow split** (formalized 2026-05-25): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet never pushes to stage. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
-- **The Accounts promotion plan** (next thing to ship):
-  1. Delete `feature/time-tracking-nav-tabs` branch (local + origin)
-  2. New branch `feature/promote-accounts` off current stage
-  3. `git mv` 6 files: account list/detail page shells + the industry-module pages + account-form + project-form → new `/accounts/*` URL + `src/industries/it-agency/features/accounts/` folder
-  4. Add `FEATURES.ACCOUNTS = "accounts"` to `_registry.ts`, register in it-agency manifest with `icon: "Building2"` sidebar entry
-  5. Re-gate all account/project/task API routes from `FEATURES.TIME_TRACKING` → `FEATURES.ACCOUNTS`
-  6. Project detail page stays at `/time-tracking/projects/[id]` for now (deferred — would need account_id propagation to nest cleanly)
-  7. Time Tracking becomes a single page (no tabs). Approvals reached via the Pending stat tile already wired
-  8. Verification: sidebar shows Accounts (it-agency only), Admizz still 404s on /accounts, old /time-tracking/accounts URLs 404
-- **Phase 5** (after Accounts promotion): per-member `default_hourly_rate`, per-project `default_rate` override, `resolveEffectiveRate()` helper, snapshot rate into `time_entries.rate_snapshot` on approval, billable totals column in timesheet + stats card. Brief details in `docs/TIME-TRACKING-BRIEF.md` § Phase 5.
-- **What Opus does next**: hand Sadin the Sonnet handoff prompt for the Accounts promotion, review when Sonnet reports back, smoke locally, merge to stage.
+- **Phase 5 plan** (next thing to ship): per-member `default_hourly_rate` (already on `tenant_users` from migration 020 — UI to manage it is what's missing), per-project `default_rate` override (new column on `projects`), `resolveEffectiveRate(entry, user, project)` helper, snapshot rate into `time_entries.rate_snapshot` on approval (column already exists from migration 020), billable totals column in the timesheet + a "This week billable" stats card. Brief details in `docs/TIME-TRACKING-BRIEF.md` § Phase 5. Estimated ~1 day.
+- **What Opus does next**: write Sonnet handoff prompt for Phase 5, hand to Sadin, review when Sonnet reports back, smoke, merge.
 - **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Accounts promotion shipped — top-level CRM entity for it_agency (2026-05-26)
+
+### What was built
+
+Accounts moved out from under `/time-tracking/accounts/*` to its own top-level sidebar entry + URL space + feature gate. The framing pivot from "Accounts is a Time Tracking sub-feature" → "Accounts is a CRM entity in its own right, parent to Projects" lands here. Time Tracking now owns only time entries + approvals.
+
+- New feature: `FEATURES.ACCOUNTS = "accounts"` in `_registry.ts`. New folder `src/industries/it-agency/features/accounts/` with `meta.ts` + `pages/` + `components/`.
+- Sidebar order on it_agency: Accounts (Building2) → Time Tracking (Clock). Building2 registered in `INDUSTRY_ICONS`.
+- 6 `git mv`s preserved history: 2 page shells (`/accounts/page.tsx`, `/accounts/[id]/page.tsx`) + 2 industry pages (`accounts-list`, `account-detail`) + 2 components (`account-form`, `project-form`).
+- 7 API routes (accounts + projects + tasks) re-gated from `FEATURES.TIME_TRACKING` → `FEATURES.ACCOUNTS`. Time-entry routes (`/api/v1/time-entries/*` including approve/reject) intentionally stay on `FEATURES.TIME_TRACKING` — time entries are a time-tracking concept, not an accounts concept.
+- 2 intentional cross-feature imports introduced (architecturally correct, both documented):
+  - `accounts/pages/account-detail.tsx` → imports `ProjectStatusBadge` from `time-tracking/components/status-badge` (badge has 4 other time-tracking consumers; promoting it to `_shared/` is a future cleanup).
+  - `time-tracking/pages/project-detail.tsx` (stayed put) → imports `ProjectForm` from the new accounts location. Signals that project-detail is a candidate to migrate into accounts when account_id URL propagation gets sorted.
+- 5 hardcoded `/time-tracking/accounts*` links rewritten to `/accounts*` across 3 page files (including project-detail's breadcrumb).
+- `docs/FEATURE-CATALOG.md`: new ACCOUNTS row, TIME_TRACKING row corrected to its slimmer scope (3 routes, 5 API routes).
+- Tabs work from prior session (`feature/time-tracking-nav-tabs` @ `96fcaae`) deleted — local + remote. The tabs implementation was clean but the framing was the issue, not the implementation.
+
+### Workflow incident: Sonnet's commit was incomplete
+
+Sonnet's initial commit `aefbe01` moved the 6 files and applied the obvious edits (API routes, registry, manifest, shell, FEATURE-CATALOG) but **omitted** the 4 page-file edits that lived on top of the moves (page-shell import paths + `FEATURES.TIME_TRACKING → FEATURES.ACCOUNTS` swap + cross-feature badge import + 3 link rewrites). Those existed as uncommitted working-tree edits.
+
+Verifications passed anyway because Opus ran `npm run build`, `npm run lint`, and the grep checks against the working tree (which had the right content) and the manual smoke ran against the working tree's dev server too. The hole only surfaced at merge time when `git checkout stage` flagged the unstaged edits.
+
+Fixed with an additive commit `13c528e` on the same branch (the project's "fix-back" pattern — same shape as Phase 4 fixback). Avoided amending so we didn't need to force-push a SHA origin already had.
+
+**Lesson for next time**: when reviewing Sonnet's diff, `git status` should be the FIRST check, not just `git diff stage..feature`. If the working tree has uncommitted changes, the diff isn't representative of what's actually committed.
+
+### Verification
+
+- Build clean (`/accounts` + `/accounts/[id]` + 3 API routes present in route table).
+- Lint 0 errors, 11 pre-existing warnings (none in touched files).
+- Three grep invariants: no `/time-tracking/accounts` strings remain, `FEATURES.TIME_TRACKING` appears only in 4 time-entry routes, no stale `features/time-tracking/pages/account*` or `features/time-tracking/components/{account,project}-form` imports.
+- Manual smoke as Zunkireelabs admin: sidebar shows Accounts (Building2), `/accounts` + `/accounts/<id>` work, `/time-tracking/accounts*` 404s, `/time-tracking` + `/time-tracking/projects/<id>` + `/time-tracking/approvals` unchanged. Project-detail back-link goes to `/accounts`. ✓
+- Manual smoke as Admizz: no Accounts in sidebar, `/accounts` 404, `/api/v1/accounts` 403. ✓
+- Stage deploy triggered on push of `13c528e`.
+
+### Files Changed
+
+- **New**: `src/industries/it-agency/features/accounts/meta.ts`.
+- **Moved** (git mv, history preserved): 6 files into `/accounts/*` URL space + `features/accounts/` folder.
+- **Modified**: `_registry.ts`, `it-agency/manifest.ts`, `shell.tsx`, 7 API routes, 3 page files (link + import rewrites), 2 page shells, `FEATURE-CATALOG.md`.
+- **Deleted**: `feature/time-tracking-nav-tabs` branch (local + remote — commit `96fcaae` still in object DB if ever needed).
+- **Archived**: `docs/ACCOUNTS-PROMOTION-BRIEF.md` → `docs/archive/features/`.
+- **DB**: no changes.
+
+### Not yet promoted to `main`
+
+Still recommend promoting prod after Phase 5 ships, so Time Tracking lands in prod as a coherent v1.
 
 ---
 
