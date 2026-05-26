@@ -28,7 +28,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: contact, error } = await db
     .from("contacts")
-    .select("*, accounts!contacts_account_id_fkey(id, name), project_contacts(role, projects(id, name, account_id))")
+    .select("*, accounts!contacts_account_id_fkey(id, name), project_contacts(role, projects(id, name, account_id, accounts!projects_account_id_fkey(id, name)))")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();

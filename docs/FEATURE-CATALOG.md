@@ -2,7 +2,7 @@
 
 > Human-readable view of every feature in the codebase, where it lives, and which industries use it. Auto-generation script is a future improvement; for now this is maintained by hand alongside `src/industries/_registry.ts`.
 
-Last updated: 2026-05-26
+Last updated: 2026-05-26 (Phase C)
 
 ---
 
@@ -46,7 +46,7 @@ When adding or moving features, update this table and the constants in `src/indu
 |---|---|---|---|
 | `FEATURES.CHECK_IN` (`check-in`) | `src/industries/education-consultancy/features/check-in/` | `education_consultancy` | Student check-in with search + history + per-student detail. Gated at sidebar, page (`/check-in`, `/check-in/[id]`), and 4 API routes. |
 | `FEATURES.FORM_BUILDER` (`form-builder`) | `src/industries/education-consultancy/features/form-builder/` | `education_consultancy` | Visual form builder + templates + public submit API. Gated at sidebar, 3 page routes (`/forms`, `/forms/new`, `/forms/[id]`), and 3 API routes. |
-| `FEATURES.CRM_CONTACTS` (`crm-contacts`) | `src/industries/it-agency/features/crm-contacts/` | `it_agency` | CRM Contacts — people at B2B accounts. Full CRUD (Phase B): contacts list + detail + ContactForm dialog + ContactStatusBadge. 6 API routes (list, create, get, patch, soft-delete, by-account). Soft-delete clears `accounts.primary_contact_id`. Primary contact pill on AccountDetailPage. Project linkage (Phase C), lead conversion (Phase D) pending. |
+| `FEATURES.CRM_CONTACTS` (`crm-contacts`) | `src/industries/it-agency/features/crm-contacts/` | `it_agency` | CRM Contacts — people at B2B accounts. Full CRUD (Phase B): contacts list + detail + ContactForm dialog + ContactStatusBadge. 6 API routes (list, create, get, patch, soft-delete, by-account). Soft-delete clears `accounts.primary_contact_id`. Primary contact pill on AccountDetailPage. Project↔contact junction wiring (Phase C): 2 symmetric API routes (`contacts/[id]/projects` POST/PATCH/DELETE + `projects/[id]/contacts` GET/POST/PATCH/DELETE), Projects section on contact-detail, Contacts section on project-detail, `ProjectContactPicker` dialog. Primary-contact-per-project enforced at DB (partial unique index) + 409 PRIMARY_TAKEN in API. Lead conversion (Phase D) pending. |
 | `FEATURES.ACCOUNTS` (`accounts`) | `src/industries/it-agency/features/accounts/` | `it_agency` | B2B accounts (agencies/employers) with linked projects and leads. Gated at sidebar, 2 page routes (`/accounts`, `/accounts/[id]`), and 7 API routes (accounts, projects, tasks). |
 | `FEATURES.TIME_TRACKING` (`time-tracking`) | `src/industries/it-agency/features/time-tracking/` | `it_agency` | Time entries + approvals + billable totals. Gated at sidebar, 3 page routes (`/time-tracking`, `/time-tracking/projects/[id]`, `/time-tracking/approvals`), and 5 API routes (time-entries + approve/reject). |
 
