@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ProjectStatusBadge } from "../components/status-badge";
+import { ProjectStatusBadge } from "../../time-tracking/components/status-badge";
 import { ProjectForm } from "../components/project-form";
 import type { Account, Project } from "@/types/database";
 
@@ -56,7 +56,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
       .then(([accRes, leadsRes, projRes]) => {
         if (accRes.error) {
           toast.error("Account not found");
-          router.push("/time-tracking/accounts");
+          router.push("/accounts");
           return;
         }
         setAccount(accRes.data);
@@ -108,7 +108,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
     <div className="p-6 space-y-6 max-w-4xl">
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/time-tracking/accounts">
+        <Link href="/accounts">
           <ArrowLeft className="h-4 w-4 mr-1.5" />
           Accounts
         </Link>

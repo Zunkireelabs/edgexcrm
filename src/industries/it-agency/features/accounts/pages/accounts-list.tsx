@@ -129,7 +129,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                   {/* Main info */}
                   <div className="flex-1 min-w-0">
                     <Link
-                      href={`/time-tracking/accounts/${account.id}`}
+                      href={`/accounts/${account.id}`}
                       className="font-medium text-sm hover:underline truncate block"
                     >
                       {account.name}
