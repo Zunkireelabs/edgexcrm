@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
       status: "active",
       assigned_to: null,
     })
-    .select()
+    .select("*, accounts(id, name)")
     .single();
 
   if (error) {
