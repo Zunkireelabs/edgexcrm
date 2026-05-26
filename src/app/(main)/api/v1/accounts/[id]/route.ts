@@ -8,7 +8,7 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, maxLength, optionalMaxLength } from "@/lib/api/validation";
+import { validate, maxLength, optionalMaxLength, isUUID } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -54,11 +54,15 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
-  const { valid, errors } = validate(body, {
+  const validationRules: Record<string, ReturnType<typeof maxLength>[]> = {
     name: [maxLength(255)],
     primary_contact_email: [optionalMaxLength(255)],
     notes: [optionalMaxLength(2000)],
-  });
+  };
+  if (body.primary_contact_id !== undefined && body.primary_contact_id !== null) {
+    (validationRules as Record<string, unknown[]>).primary_contact_id = [isUUID()];
+  }
+  const { valid, errors } = validate(body, validationRules);
   if (!valid) return apiValidationError(errors);
 
   const db = await scopedClient(auth);
@@ -79,6 +83,20 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       : null;
   if (body.notes !== undefined) patch.notes = body.notes ? String(body.notes).trim() : null;
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+  if (body.primary_contact_id !== undefined) {
+    if (body.primary_contact_id !== null) {
+      // Validate the contact belongs to this account and tenant
+      const { data: contactCheck } = await db
+        .from("contacts")
+        .select("id")
+        .eq("id", String(body.primary_contact_id))
+        .eq("account_id", id)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (!contactCheck) return apiNotFound("Contact");
+    }
+    patch.primary_contact_id = body.primary_contact_id ?? null;
+  }
 
   const { data: updated, error } = await db
     .from("accounts")
