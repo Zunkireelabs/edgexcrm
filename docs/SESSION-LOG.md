@@ -11,16 +11,80 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: CRM Contacts **Phase B** shipped to `stage` (`1909203`) — full Contacts CRUD + list + detail + ContactForm + account-detail integration with Primary Contact pill picker, plus migration `022_project_contacts_rls_hardening` closing the Phase A RLS gap. Three fixback commits along the way (email/phone PATCH invariant + q-param sanitization; missing `/contacts/[id]` route shell + POST-without-join; PostgREST embed FK ambiguity).
-- **Branch**: `stage` at `1909203`. `main` (production) still on pre-industry-module version — recommend promoting after Contacts (Phases C–E) + Phase 5 (rates) all ship, so prod gets a coherent Time Tracking + Contacts v1 in one go.
-- **Workflow split** (re-affirmed 2026-05-26 after Opus violated it 3x): Opus plans + reviews + pushes to stage. Sonnet executes on feature branches. Sonnet writes ALL code — including small fixbacks Opus catches in review. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory (updated with the "small fixback trap" note).
-- **Phase C plan** (next thing to ship — project↔contact junction wiring): 2 API routes (`/api/v1/contacts/[id]/projects` + `/api/v1/projects/[id]/contacts` for symmetric POST/PATCH/DELETE), wire the Phase C placeholder section on `contact-detail.tsx` (Projects-involved list with role pills + add/remove/change-role for admin), add a Contacts section to `project-detail.tsx` (which lives in time-tracking — cross-feature touch). New shared `ProjectContactPicker` component (search + role assignment). Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase C. **Critical lesson from Phase B**: any new contacts↔accounts embed MUST use the explicit FK name (`accounts!contacts_account_id_fkey`) — PostgREST can't disambiguate because of the reverse `accounts.primary_contact_id` FK. The Phase C brief must call this out so it doesn't regress.
-- **After Phase C**: Phase D (Lead → Contact conversion with TOCTOU-safe atomic UPDATE) → Phase E (polish/docs). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
-- **What Opus does next**: write Sonnet handoff prompt for Phase C, hand to Sadin, review + smoke + merge.
+- **Current state**: CRM Contacts **Phase C** shipped to `stage` (`6dcbe6a`) — project↔contact junction wiring complete. Both contact-detail and project-detail surface Project↔Contact links with role pills (Primary/Technical/Billing/Other) + add via shared ProjectContactPicker (in pick-project or pick-contact mode) + change-role + remove. DB-level "one primary per project" enforcement via the partial unique index from migration 021 surfaces as 409 PRIMARY_TAKEN. Cross-account links allowed with server-side warn log (agency contractor reality). One fixback for Radix Select empty-string sentinel.
+- **Branch**: `stage` at `6dcbe6a`. `main` (production) still on pre-industry-module version — recommend promoting after Contacts (Phases D + E) + Time Tracking Phase 5 all ship.
+- **Workflow split** (re-affirmed 2026-05-26): Opus plans + reviews + pushes to stage. Sonnet writes ALL code — including small fixbacks Opus catches in review. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
+- **Phase D plan** (next thing to ship — Lead → Contact conversion): new API route `POST /api/v1/leads/[id]/convert` with TOCTOU-safe atomic precondition (same pattern as Phase 4 approve/reject — atomic UPDATE with `.eq("converted_at", null)`, delete the orphan contact on race-loss). Body shape: `{ account_id?: string, new_account?: { name, ... } }`. Owner-or-admin gate. UI: `ConvertLeadDialog` on `lead-detail-v2.tsx` (visible at any stage when `converted_at IS NULL`), defaults to "Use existing account" pre-selected if `leads.account_id` is set. Filter all default leads queries (`/api/v1/leads` GET, hooks, board, table, dashboard widgets) to add `WHERE converted_at IS NULL`. Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase D. Estimated ~1 day.
+- **Code-review checklist additions from Phase C** (in addition to Phase B's 4): **Radix Select forbids empty-string values** — any `<SelectItem value="">` crashes at render. Use a sentinel like `"__none__"` and map it to null/undefined at submit. Same constraint exists in shadcn's Select wrapper (built on Radix). Applies to any new picker UI in future phases.
+- **After Phase D**: Phase E (polish/docs/full smoke matrix). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
+- **What Opus does next**: write Sonnet handoff prompt for Phase D — focus on the TOCTOU atomic-update pattern (cite the Phase 4 fixback precedent) and the cross-cutting leads-query filter audit.
 - **Blockers**: none known.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## CRM Contacts Phase C shipped — project↔contact junction wiring (2026-05-26)
+
+### What was built
+
+Phase C turned the project_contacts junction (created by migration 021, RLS-hardened by migration 022) into a working UI. The Salesforce/HubSpot pattern is now real: a person at an account can be linked to one or more projects with an optional role (Primary / Technical / Billing / Other), and the project's contact roster reflects this from the project side.
+
+- **2 symmetric API routes** wrapping the same `project_contacts` junction:
+  - `POST/PATCH/DELETE /api/v1/contacts/[id]/projects` — manage a contact's project links.
+  - `GET/POST/PATCH/DELETE /api/v1/projects/[id]/contacts` — manage a project's contact links.
+  - Both: auth + feature gate + admin gate. scopedClient pre-checks BOTH the contact AND the project belong to tenant before any junction operation. Junction itself accessed via `db.raw().from("project_contacts")` because the table has no `tenant_id` column. Defense-in-depth: migration 022's project_contacts RLS still enforces both-side tenant checks, but it's moot here since `db.raw()` uses service role and bypasses RLS — the app-layer pre-check is the actual gate.
+  - **23505 → 409 PRIMARY_TAKEN** mapping: the partial unique index `project_contacts_one_primary` from migration 021 fires on the second `INSERT WHERE role='primary'`. Caught by error code + returned as a clean 409 with message "This project already has a primary contact. Demote them first or pick a different role." Surfaced to UI as a toast.
+  - **PostgREST FK disambiguation** preemptively applied throughout (Phase B's lesson): every embed between two tables uses the explicit FK name (`projects!project_contacts_project_id_fkey`, `accounts!projects_account_id_fkey`, etc.). Sonnet caught this from the brief without prompting.
+  - **Cross-account warn-not-block**: a contractor at one account can be linked to another account's project. Server logs a warn line via pino; not blocked.
+- **UI integration on `contact-detail.tsx`**: real Projects-involved section replacing the Phase B placeholder. Each row: project name (linked) + "at <account>" subtitle + role pill + hover-reveal change-role dropdown + remove button (admin only). Inline "Add to project" button at the top.
+- **UI integration on `project-detail.tsx`** (the page that lives in time-tracking but increasingly feels like an accounts/contacts concept): new Contacts section above Tasks. Same affordances, mirror shape. Order: primary first (JS-side sort with priority map), then by last_name.
+- **Shared `ProjectContactPicker` component** at `crm-contacts/components/project-contact-picker.tsx`. Two modes via prop: `pick-project` (used from contact-detail — picks a project to link) and `pick-contact` (used from project-detail — picks a contact to link). Searchable list, account-scoped by default with a "show all accounts" toggle to widen, role selector. Cross-feature import from time-tracking's project-detail.tsx — same precedent as ProjectForm.
+
+### Workflow incident: Radix Select empty-string crash (fixback)
+
+Sonnet's initial Phase C commit `d8b8c7b` was clean per spec EXCEPT the role-select sentinel: `ROLE_OPTIONS` started with `{ value: "", label: "No role" }`, which Radix UI's `<Select.Item>` forbids — `value=""` is reserved for "clear selection / show placeholder." Clicking "Add to project" crashed at render with the Radix error before the dialog could even be filled out.
+
+**This was a brief-level miss** — I specified "Primary / Technical / Billing / Other / **No role**" without flagging the Radix constraint. Adding to the codebase code-review checklist as the 5th item.
+
+Fix landed at `6dcbe6a` via a focused Sonnet fixback prompt (NOT Opus-direct edits — the updated `feedback_opus_plans_sonnet_executes` memory entry held this time). 5 mechanical edits in `project-contact-picker.tsx`:
+- Add `const NO_ROLE = "__none__"` sentinel.
+- Use it in `ROLE_OPTIONS` for the no-role item.
+- Initial state + reset use `NO_ROLE`.
+- State type widened from `ProjectContactRole` to plain `string` (sentinel is outside the union).
+- Submit handlers map `role === NO_ROLE ? undefined : role` so the API field is omitted when no role is chosen — matches the existing POST validation which treats role as optional.
+
+The DropdownMenu used for change-role on row hover does NOT have this constraint (Radix DropdownMenu allows any value, the empty-string forbiddance is Select-only) — no edits needed there.
+
+### Why this didn't show up in build/lint
+
+Radix enforces this at runtime via a `throw new Error()` in the SelectItem render path. TypeScript can't catch it because the prop type is `string` and an empty string is a valid string. The only way to catch this class of bug pre-runtime is an integration test that mounts the component — which we don't have for these new UIs. Accepted residual risk; the smoke step exists for exactly this kind of class.
+
+### Verification
+
+- Build clean (50+ pages, both new API routes in route table).
+- Lint 0 errors, 11 pre-existing warnings (baseline unchanged through both commits).
+- Manual smoke as Zunkireelabs admin (all passed after the fixback):
+  - Add Test Contact → BathroomFort Website with role=Primary → green pill on both pages.
+  - Second contact + same project + role=Primary → 409 toast.
+  - Second contact + same project + role=Technical → succeeds, primary first in list.
+  - Technical → Primary on the second contact → 409.
+  - Demote first contact (Primary → No role) + promote second to Primary → succeeds.
+  - Remove a link → disappears from both pages.
+  - Symmetric pick-contact flow from project detail → succeeds.
+  - Cross-account link → allowed (no toast error; server-side warn only).
+- Admizz 403 on both new routes (code-reviewed; not browser-verified).
+
+### Files Changed (Phase C + fixback)
+
+- **New** (3): 2 API route files (`/api/v1/contacts/[id]/projects`, `/api/v1/projects/[id]/contacts`), ProjectContactPicker component.
+- **Modified** (4): `contacts/[id]/route.ts` (nested accounts embed inside the projects join for "at <account>" subtitle), `crm-contacts/pages/contact-detail.tsx` (Projects section + change-role + remove), `time-tracking/pages/project-detail.tsx` (Contacts section — cross-feature touch), `FEATURE-CATALOG.md`.
+- **DB**: no changes.
+
+### Not yet promoted to `main`
+
+Hold for Phases D + E + Time Tracking Phase 5.
 
 ---
 
