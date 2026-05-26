@@ -11,18 +11,76 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: CRM Contacts **Phase C** shipped to `stage` (`6dcbe6a` + docs `cc6554a` + empty trigger `938b19a`). HEAD of `origin/stage` is `938b19a`. Project↔contact junction wiring complete: both contact-detail and project-detail surface Project↔Contact links with role pills (Primary/Technical/Billing/Other) + add via shared ProjectContactPicker (pick-project or pick-contact mode) + change-role + remove. DB-level "one primary per project" enforcement (partial unique index from migration 021) surfaces as 409 PRIMARY_TAKEN. Cross-account links allowed with server-side warn log. One Sonnet fixback for the Radix Select empty-string sentinel.
-- **⚠️ Deploy lag**: GitHub Actions was "Partially Degraded Service" (per githubstatus.com) when Phase C landed. The 3 most recent stage pushes (`6dcbe6a`, `cc6554a`, `938b19a` — the last is an empty trigger commit) didn't fire workflow runs. `dev-lead-crm.zunkireelabs.com` is therefore stuck on Phase B (`a340230`) until either (a) the queued runs eventually fire after GH recovers, or (b) we push another empty commit / re-run the latest run from the Actions UI. Local dev server already smoke-passed Phase C. **First thing on resume**: check `gh run list --branch stage --limit 3`. If HEAD (`938b19a`) is still missing a deploy, either push another empty commit or click Re-run on the Actions UI.
-- **Branch state**: `stage` at `938b19a` (code-wise = Phase C complete). `main` (production) still on pre-industry-module version — promote after Contacts (D + E) + Time Tracking Phase 5 all ship.
-- **Workflow split** (re-affirmed 2026-05-26): Opus plans + reviews + pushes to stage. Sonnet writes ALL code — including small fixbacks Opus catches in review. Local-verify-before-push. See `feedback_opus_plans_sonnet_executes` in memory.
-- **Phase D plan** (next thing to ship — Lead → Contact conversion): new API route `POST /api/v1/leads/[id]/convert` with TOCTOU-safe atomic precondition (same pattern as Phase 4 approve/reject — atomic UPDATE with `.eq("converted_at", null)`, delete the orphan contact on race-loss). Body shape: `{ account_id?: string, new_account?: { name, ... } }`. Owner-or-admin gate. UI: `ConvertLeadDialog` on `lead-detail-v2.tsx` (visible at any stage when `converted_at IS NULL`), defaults to "Use existing account" pre-selected if `leads.account_id` is set. **Cross-cutting**: audit ALL leads-fetching surfaces (`/api/v1/leads` GET, `/api/v1/accounts/[id]/leads` GET, `useLeads` hook, `leads-table.tsx`, `leads-board.tsx`, dashboard widgets) and add `WHERE converted_at IS NULL` to defaults; add optional `?include_converted=1` for the eventual "all leads incl. converted" view. Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase D. Estimated ~1 day.
-- **Code-review checklist** (5 items from Phase B + C postmortems, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · **Radix Select forbids `<SelectItem value="">`** (use sentinel like `"__none__"`).
-- **After Phase D**: Phase E (polish/docs/full smoke matrix). Then Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main`.
-- **What Opus does next on resume**: (1) verify Phase C deploy fired, (2) write the Phase D Sonnet handoff prompt — focus on TOCTOU atomic-update pattern citing Phase 4 fixback precedent + the cross-cutting leads-query filter audit + the Radix Select lesson for the ConvertLeadDialog's account picker.
-- **Blockers**: GH Actions deploy lag (operational, not a code issue).
+- **Current state**: CRM Contacts **Phase D** shipped to `stage` (`35a5394`, squash-merged from `feature/crm-contacts-phase-d`). HEAD of `origin/stage` is `35a5394`. Lead → Contact conversion live: `POST /api/v1/leads/[id]/convert` with TOCTOU-safe atomic update (precondition `.is("converted_at", null)` + orphan contact cleanup on race-loss → 409), `ConvertLeadDialog` on `lead-detail-v2.tsx` (it_agency only), pre-selects existing account if `lead.account_id` is set otherwise create-new. Counselor scoping mirrored from lead. Cross-cutting `converted_at IS NULL` filter applied to ALL default leads-fetching surfaces including the pipeline counts (caught at review — Sonnet's initial punt on `/api/v1/pipelines` was wrong; one fixback at `11a3460`). `getLead()` and `/api/v1/leads/[id]` GET intentionally NOT filtered so converted leads remain readable via "Converted to <contact>" pill on the original lead. Local smoke in progress by Sadin at merge time — no failures reported yet but TOCTOU two-window race + 10-step matrix still to confirm.
+- **⚠️ Deploy lag STILL ACTIVE**: GitHub Actions incident from 2026-05-26 ("degraded performance for Actions and Pages" per githubstatus.com) is still suppressing webhook delivery. The Phase D push (`35a5394`) did NOT trigger a workflow run, same as the 5 prior Phase C commits (`d8b8c7b`, `6dcbe6a`, `cc6554a`, `938b19a`, `6ba43ee`). `dev-lead-crm.zunkireelabs.com` is now 7 commits behind `origin/stage` (last successful deploy was `a340230` for Phase B docs at 10:00 UTC). The staging workflow is `on: push` only — no `workflow_dispatch` — so Actions UI re-run is not an option until a run object exists. **On resume**: check githubstatus.com first; if Actions is operational, push an empty commit to drain the queue. Local dev verifies all 4 phases.
+- **Branch state**: `stage` at `35a5394` (Phase D complete). `main` (production) still on pre-industry-module version — promote after Contacts Phase E + Time Tracking Phase 5 ship. `feature/crm-contacts-phase-d` local branch retained until smoke fully passes; delete after.
+- **Workflow split** (re-affirmed): Opus plans + reviews + pushes to stage + writes docs. Sonnet writes ALL code — including small fixbacks Opus catches in review. Local-verify-before-push. Phase D held this perfectly: Opus caught the pipeline-counts gap on review → Sonnet fixed via `11a3460` → Opus reviewed + squash-merged. See `feedback_opus_plans_sonnet_executes` in memory.
+- **Phase E plan** (next thing to ship — polish + full smoke matrix): no new code expected. Verify counselor scoping end-to-end, run the full positive/negative matrix as both Zunkireelabs and Admizz, ensure FEATURE-CATALOG accurately describes the four-phase result, sweep `docs/CRM-CONTACTS-BRIEF.md` for "shipping" annotations. Estimated ~0.5 day. Spec in `docs/CRM-CONTACTS-BRIEF.md` § Phase E.
+- **Code-review checklist** (5 items, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · Radix Select forbids `<SelectItem value="">` (sentinel). **All 5 respected on Phase D the first time** — the only fixback was a different class (Sonnet's incomplete filter audit on the pipeline routes). Consider adding a 6th item from Phase D: "filter audits for cross-cutting predicates MUST grep `from(\"X\")` across the whole repo — don't trust a hand-curated 'targets' list."
+- **After Phase E**: Time Tracking Phase 5 (rates + billable totals). Then promote `stage` → `main` to push Contacts v1 + Time Tracking v1 + industry modules + Anish's tags/contacts to production in one coherent release.
+- **What Opus does next on resume**: (1) collect smoke result from Sadin → if pass, write the Phase E Sonnet handoff prompt (mostly verification + docs, very lightweight); (2) re-check GH Actions status, push empty commit if recovered.
+- **Blockers**: GH Actions deploy lag (operational, not a code issue). Phase D awaiting Sadin's local smoke confirmation before declaring fully shipped.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## CRM Contacts Phase D shipped — Lead → Contact conversion (2026-05-26)
+
+### What was built
+
+Phase D closes the loop on the CRM Contacts feature: leads now have an explicit conversion path to become Contacts at an Account. After this, the funnel/steady-state split is real — converted leads drop out of the prospecting surfaces (kanban, leads list, account leads, dashboard counts) while remaining readable for historical context.
+
+- **`POST /api/v1/leads/[id]/convert`** route. The TOCTOU-safe pattern is identical to time-entries approve/reject (the bug-class precedent from Phase 4):
+  1. `authenticateRequest` + `getFeatureAccess(industry, FEATURES.CRM_CONTACTS)` + counselor-can-only-convert-own-lead check.
+  2. Fetch lead via scopedClient with `deleted_at IS NULL` + early 409 if `converted_at` already set.
+  3. Resolve account: either verify existing-belongs-to-tenant or `INSERT INTO accounts (name)`.
+  4. Insert contact with `assigned_to` mirroring the lead's (counselor scoping continuity) and `accounts!contacts_account_id_fkey(id, name)` embed in the select (Phase B fixback #3's FK-disambiguation lesson).
+  5. **Atomic UPDATE** with `.eq("id", id).is("converted_at", null)` precondition + `.maybeSingle()`. If 0 rows → race lost → `DELETE` the orphan contact + 409. The COALESCE on `account_id` preserves any existing FK without clobbering.
+  6. Audit + emit `lead.converted` event.
+  7. Return `{ contact, account_id, lead_id }`.
+- **`ConvertLeadDialog`** at `src/industries/it-agency/features/crm-contacts/components/convert-lead-dialog.tsx`. Industry-gated to it_agency. Defaults: "Use existing account" pre-selected when `lead.account_id` is set (with that account preselected in the combobox), "Create new account" pre-selected with name-input focus otherwise. Edit-fields toggle exposes contact-field overrides; defaults inherit from lead. NO_ACCOUNT sentinel (`"__no_account__"`) for the Radix Select placeholder option — empty-string crash avoided per Phase C fixback. 409 path auto-refreshes the lead detail with toast "This lead was just converted by someone else."
+- **`lead-detail-v2.tsx` integration**: Convert button in the header (it_agency only, when `converted_contact_id IS NULL`); swaps to "Converted to <name>" link pill that navigates to the new contact when conversion has happened.
+- **Cross-cutting filter audit** — every default leads-fetching surface gets `.is("converted_at", null)`:
+  - `src/lib/supabase/queries.ts` — `getLeads()`, `getLeadsForPipeline()`, pipeline-lead-counts inside `getPipelines()`.
+  - `/api/v1/leads` GET + `/api/v1/accounts/[id]/leads` GET (with optional `?include_converted=1` flag for the future archive view).
+  - `/api/v1/leads/bulk` PATCH + DELETE verification reads (so bulk ops can't accidentally re-target a converted lead).
+  - `/api/v1/pipelines` GET + `/api/v1/pipelines/[id]` GET — per-pipeline and per-stage lead counts (caught at review; the PipelineSelector + MoveToPipelineModal would otherwise have shown inflated counts that disagree with the kanban).
+- **Intentionally NOT filtered** (preserve read-only access to converted leads):
+  - `queries.ts → getLead()` and `/api/v1/leads/[id]` GET — single-lead detail still loads converted leads so the "Converted to <contact>" pill works.
+  - All child routes (notes, checklists, activities, insights, check-ins) — child mutations on a converted lead are an edge case the UI gates.
+  - `/api/public/submit/...` — public form INSERTS leads; no read filter applies.
+  - Pipeline DELETE guard and stage DELETE guard — converted leads still hold FK references; counting them as deletion-blockers is correct.
+  - `integrations/crm/*` — third-party sync semantics is a separate decision.
+
+### Workflow incident: filter-audit punt caught at review (one fixback)
+
+Sonnet's initial Phase D commit (`e52cbad`) was clean on every spec item — TOCTOU pattern verbatim from the time-entries precedent, FK disambiguation, Radix sentinel, counselor scoping all correct first try. The miss: Sonnet self-flagged in the report that `/api/v1/pipelines` and `/api/v1/pipelines/[id]` had inline leads queries "left unfiltered since the kanban/dashboard feeds through queries.ts." That justification was half-right — the kanban does, but the same endpoints are also consumed by `PipelineSelector.tsx`, `MoveToPipelineModal.tsx`, `PipelineSettingsModal.tsx`, and `email-rules-manager.tsx`, and any of those would have shown converted leads in pipeline counts while the kanban hid them. Inconsistent UI numbers.
+
+Fix landed at `11a3460` via a focused Sonnet fixback prompt (NOT Opus-direct edits — `feedback_opus_plans_sonnet_executes` held). 4-line patch across both pipeline route files: add `.is("converted_at", null)` to the leadCounts queries.
+
+**Lesson**: filter audits for cross-cutting predicates MUST grep `from("TableName")` across the whole repo, not trust a hand-curated targets list. The original Phase D handoff prompt did list pipelines routes implicitly (Sadin's spec said "audit ALL leads-fetching surfaces") but my own targets list didn't enumerate them, leaving Sonnet to guess. Adding as item #6 on the code-review checklist.
+
+### Verification
+
+- Build clean (51 pages; `/api/v1/leads/[id]/convert` appears in the route table).
+- Lint 0 errors, 11 pre-existing warnings (baseline unchanged).
+- Manual smoke: Sadin running locally at merge time (10-step matrix including TOCTOU two-window race). Confirmation expected this session.
+
+### Files Changed (Phase D + fixback, squash-merged as `35a5394`)
+
+- **New** (2): `src/app/(main)/api/v1/leads/[id]/convert/route.ts` (180 lines), `src/industries/it-agency/features/crm-contacts/components/convert-lead-dialog.tsx` (283 lines).
+- **Modified** (7): `src/components/dashboard/lead/lead-detail-v2.tsx` (Convert button + "Converted to" pill + dialog wiring), `src/lib/supabase/queries.ts` (3 leads queries filtered), `src/app/(main)/api/v1/leads/route.ts` (GET filter + `?include_converted=1`), `src/app/(main)/api/v1/accounts/[id]/leads/route.ts` (GET filter + `?include_converted=1`), `src/app/(main)/api/v1/leads/bulk/route.ts` (bulk verification reads filtered), `src/app/(main)/api/v1/pipelines/route.ts` (lead-count filter — fixback), `src/app/(main)/api/v1/pipelines/[id]/route.ts` (per-stage lead-count filter — fixback).
+- **DB**: no changes (migration 021 from Phase A already shipped the conversion columns).
+
+### Deploy state
+
+Push `6ba43ee..35a5394` succeeded but did NOT trigger a workflow run — GH Actions degraded-performance incident still suppressing webhook delivery (7 stage commits now backlogged). `dev-lead-crm.zunkireelabs.com` still on `a340230` (Phase B docs).
+
+### Not yet promoted to `main`
+
+Hold for Phase E + Time Tracking Phase 5.
 
 ---
 
