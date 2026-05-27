@@ -36,7 +36,11 @@ export function TagMultiPicker({
       const id = setTimeout(() => searchRef.current?.focus(), 0);
       return () => clearTimeout(id);
     } else {
-      setQuery("");
+      // Why: react-hooks/set-state-in-effect (React 19) rejects synchronous setState
+      // inside an effect body; deferring via setTimeout places the update outside
+      // the synchronous effect execution.
+      const id = setTimeout(() => setQuery(""), 0);
+      return () => clearTimeout(id);
     }
   }, [open]);
 
