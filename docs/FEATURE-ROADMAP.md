@@ -7,7 +7,7 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-05-27 (Time Tracking v1 + CRM Contacts v1 shipped to prod; Project board promoted to Planned/next up)
+Last updated: 2026-05-27 (Project board brief reframed and renamed to "Project Workspace" after scope review with Sadin; 5-phase plan replaces the 3-phase brief)
 
 ---
 
@@ -46,12 +46,13 @@ _(no approved features yet)_
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
 
-- **Project board** (`project-board`, industry-scoped to `it_agency`)
-  - **Brief**: `docs/PROJECT-BOARD-BRIEF.md` (data model, API surface, UI surface, 3-phase plan, verification per phase)
-  - **Scope**: kanban view at `/projects` over the existing `projects` table; extends `projects.status` enum (`in_review` + `delivered`, backfill `done`→`delivered`); drag-and-drop with TOCTOU 409; cards show name + account + contact count + billable hours; account filter + search; "show cancelled" toggle.
-  - **Phasing**: 3 commits (schema + scaffold + static board → drag-drop + TOCTOU → filters + card metrics)
+- **Project Workspace** (`project-board` feature ID, industry-scoped to `it_agency`)
+  - **Brief**: `docs/PROJECT-WORKSPACE-BRIEF.md` (renamed from PROJECT-BOARD-BRIEF — Notion-style unified workspace with 4 views: Board / Table / Tasks / Members; lifted filters; URL-encoded state; ~550 lines)
+  - **Scope**: unified `/projects` workspace with view toggle + lifted filters. Migration 024 adds `tasks.assignee_id + due_date + priority + tags` and `projects.owner_id + accounts.owner_id`. Board view (drag-drop, card metrics), Table view (sortable rows, inline edits), Tasks view (cross-project, log-time-from-row), Members view (group by owner/assignee).
+  - **Phasing**: 5 commits (shell + Board + Table → drag-drop + card metrics → Tasks view + log-time → Members view → polish + URL + a11y)
+  - **Parked work**: `feature/project-board-phase-1` (eeeb7e6) by Sonnet — kanban only. ~70% reusable as `board-view.tsx` in Phase 1; ~30% (board-filters, page shell) reshapes into the workspace shell. Branch held until Phase 1 of this brief lands.
   - **Workflow**: Opus planned + reviews; **Sonnet executes** (separate session). Opus gates each phase before push to stage.
-  - **Status**: planned. Awaiting Sonnet session pickup.
+  - **Status**: design approved. Awaiting Sonnet session pickup for Phase 1.
 
 ---
 
