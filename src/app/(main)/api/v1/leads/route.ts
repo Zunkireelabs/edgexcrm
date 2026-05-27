@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   let assignedTo = searchParams.get("assigned_to");
+  const includeConverted = searchParams.get("include_converted") === "1";
 
   const supabase = await createServiceClient();
 
@@ -64,6 +65,10 @@ export async function GET(request: NextRequest) {
     .select("*", { count: "exact" })
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null);
+
+  if (!includeConverted) {
+    query = query.is("converted_at", null);
+  }
 
   // Counselor scoping: force assigned_to filter
   if (auth.role === "counselor") {
@@ -159,11 +164,28 @@ async function handlePost(request: NextRequest) {
   // Verify tenant exists
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id")
+    .select("id, slug, industry_id")
     .eq("id", tenantId)
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // Generate display_id for education_consultancy tenants
+  let displayId: string | null = null;
+  if (tenant.industry_id === "education_consultancy") {
+    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
+    // Use MAX display_id to avoid race conditions
+    const { data: maxRow } = await supabase
+      .from("leads")
+      .select("display_id")
+      .eq("tenant_id", tenantId)
+      .not("display_id", "is", null)
+      .order("display_id", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
+    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
+  }
 
   const idempotencyKey = body.idempotency_key as string | undefined;
   const leadId = body.lead_id as string | undefined;
@@ -242,7 +264,9 @@ async function handlePost(request: NextRequest) {
     email: body.email || null,
     phone: await (async () => {
       const rawPhone = String(body.phone || "").trim();
-      if (!rawPhone || rawPhone.startsWith("+")) return rawPhone || null;
+      if (!rawPhone) return null;
+      // Normalize: replace spaces between country code and number with hyphen
+      if (rawPhone.startsWith("+")) return rawPhone.replace(/^(\+\d+)\s+/, "$1-");
       // Look up dial code from form config's country field options
       if (body.form_config_id && body.country) {
         try {
@@ -275,6 +299,8 @@ async function handlePost(request: NextRequest) {
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
+    tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
+    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 

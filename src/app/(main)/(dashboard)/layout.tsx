@@ -3,6 +3,7 @@ import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/qu
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
+import { getIndustrySidebarItems } from "@/industries/_loader";
 
 export default async function DashboardLayout({
   children,
@@ -32,6 +33,7 @@ export default async function DashboardLayout({
   }
 
   const formConfigs = await getFormConfigsForTenant(tenantData.tenant.id);
+  const industrySidebarItems = getIndustrySidebarItems(tenantData.tenant.industry_id);
 
   return (
     <AIAssistantProvider>
@@ -40,6 +42,7 @@ export default async function DashboardLayout({
         tenant={tenantData.tenant}
         role={tenantData.role}
         formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
+        industrySidebarItems={industrySidebarItems}
       >
         {children}
       </DashboardShell>

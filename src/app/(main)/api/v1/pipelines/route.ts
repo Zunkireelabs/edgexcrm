@@ -52,7 +52,8 @@ export async function GET() {
     .from("leads")
     .select("pipeline_id")
     .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("converted_at", null);
 
   // Aggregate counts
   const stageCountMap = new Map<string, number>();

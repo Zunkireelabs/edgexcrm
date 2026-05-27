@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Trash2, Clock, Users, Copy } from "lucide-react";
+import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
 
 interface TeamMember {
@@ -26,6 +26,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  default_hourly_rate: number | null;
   created_at: string;
 }
 
@@ -42,6 +43,7 @@ interface TeamManagementProps {
   role: string;
   tenantId: string;
   userId: string;
+  industryId?: string;
 }
 
 const roleColors: Record<string, string> = {
@@ -51,7 +53,7 @@ const roleColors: Record<string, string> = {
   viewer: "bg-gray-100 text-gray-800",
 };
 
-export function TeamManagement({ role, userId }: TeamManagementProps) {
+export function TeamManagement({ role, userId, industryId }: TeamManagementProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,13 @@ export function TeamManagement({ role, userId }: TeamManagementProps) {
   const [inviteRole, setInviteRole] = useState("counselor");
   const [inviting, setInviting] = useState(false);
 
+  // Rate editing state (IT agency only)
+  const [editingRateFor, setEditingRateFor] = useState<string | null>(null);
+  const [rateInput, setRateInput] = useState("");
+  const [savingRate, setSavingRate] = useState(false);
+
   const isAdmin = role === "owner" || role === "admin";
+  const showRates = industryId === "it_agency";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -142,6 +150,35 @@ export function TeamManagement({ role, userId }: TeamManagementProps) {
     }
   }
 
+  function startEditingRate(member: TeamMember) {
+    setEditingRateFor(member.user_id);
+    setRateInput(member.default_hourly_rate != null ? String(member.default_hourly_rate) : "");
+  }
+
+  async function saveRate(memberUserId: string) {
+    setSavingRate(true);
+    try {
+      const rate = rateInput.trim() === "" ? null : parseFloat(rateInput);
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, default_hourly_rate: rate }),
+      });
+      if (!res.ok) throw new Error("Failed to update rate");
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === memberUserId ? { ...m, default_hourly_rate: rate } : m
+        )
+      );
+      toast.success("Rate updated");
+      setEditingRateFor(null);
+    } catch {
+      toast.error("Failed to update rate");
+    } finally {
+      setSavingRate(false);
+    }
+  }
+
   function copyInviteLink(token: string) {
     const link = `${window.location.origin}/register?token=${token}`;
     navigator.clipboard.writeText(link);
@@ -187,7 +224,68 @@ export function TeamManagement({ role, userId }: TeamManagementProps) {
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* Hourly rate — IT agency only */}
+                  {showRates && (
+                    editingRateFor === member.user_id ? (
+                      <div className="flex items-center gap-1">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={rateInput}
+                            onChange={(e) => setRateInput(e.target.value)}
+                            placeholder="0.00"
+                            className="h-7 w-24 rounded border px-2 pl-5 text-xs"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveRate(member.user_id);
+                              if (e.key === "Escape") setEditingRateFor(null);
+                            }}
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => saveRate(member.user_id)}
+                          disabled={savingRate}
+                        >
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setEditingRateFor(null)}
+                          disabled={savingRate}
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          {member.default_hourly_rate != null
+                            ? `$${member.default_hourly_rate}/hr`
+                            : "No rate"}
+                        </span>
+                        {isAdmin && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => startEditingRate(member)}
+                            title="Edit hourly rate"
+                          >
+                            <Pencil className="h-3 w-3 text-muted-foreground" />
+                          </Button>
+                        )}
+                      </div>
+                    )
+                  )}
                   <Badge variant="secondary" className={roleColors[member.role] || ""}>
                     {member.role}
                   </Badge>

@@ -76,7 +76,7 @@ export async function POST(
   // ── 4. Lookup tenant by slug ──
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, name, slug")
+    .select("id, name, slug, industry_id")
     .eq("slug", tenantSlug)
     .single();
 
@@ -152,6 +152,8 @@ export async function POST(
 
   // ── 9. Build phone with country code ──
   let phone = String(body.phone || "").trim() || null;
+  // Normalize: replace spaces between country code and number with hyphen
+  if (phone?.startsWith("+")) phone = phone.replace(/^(\+\d+)\s+/, "$1-");
   if (phone && !phone.startsWith("+") && body.country && formConfig.steps) {
     try {
       for (const step of formConfig.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
@@ -168,7 +170,23 @@ export async function POST(
     } catch { /* fall through to raw phone */ }
   }
 
-  // ── 10. Insert lead ──
+  // ── 10. Generate display_id for education_consultancy ──
+  let displayId: string | null = null;
+  if (tenant.industry_id === "education_consultancy") {
+    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
+    const { data: maxRow } = await supabase
+      .from("leads")
+      .select("display_id")
+      .eq("tenant_id", tenant.id)
+      .not("display_id", "is", null)
+      .order("display_id", { ascending: false })
+      .limit(1)
+      .single();
+    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
+    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
+  }
+
+  // ── 11. Insert lead ──
   const leadPayload = {
     tenant_id: tenant.id,
     pipeline_id: defaultPipeline.id,
@@ -190,6 +208,8 @@ export async function POST(
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
+    tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 

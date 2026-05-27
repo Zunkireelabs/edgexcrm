@@ -11,13 +11,16 @@ import {
 import { validate, required, maxLength } from "@/lib/api/validation";
 import { requireAdmin } from "@/lib/api/auth";
 import { createRequestLogger } from "@/lib/logger";
-import { slugify, validateFormConfig } from "@/features/form-builder/lib/validation";
-import { getTemplateById } from "@/features/form-builder/templates";
+import { slugify, validateFormConfig } from "@/industries/education-consultancy/features/form-builder/lib/validation";
+import { getTemplateById } from "@/industries/education-consultancy/features/form-builder/templates";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { FormBranding } from "@/types/database";
 
 export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
 
   const supabase = await createServiceClient();
   const { data, error } = await supabase
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
   if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;

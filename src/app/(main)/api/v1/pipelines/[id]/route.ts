@@ -65,7 +65,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
     .select("stage_id")
     .eq("pipeline_id", id)
     .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("converted_at", null);
 
   const leadCountMap = new Map<string, number>();
   for (const l of leadCounts || []) {

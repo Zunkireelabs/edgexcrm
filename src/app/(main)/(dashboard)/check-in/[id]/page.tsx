@@ -5,7 +5,9 @@ import {
   getPipelineStages,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CheckInDetailPage } from "@/components/dashboard/check-in-detail-page";
+import { CheckInDetailPage } from "@/industries/education-consultancy/features/check-in/detail-ui";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, LeadNote, PipelineStage } from "@/types/database";
 
 export default async function CheckInDetailRoute({
@@ -16,6 +18,7 @@ export default async function CheckInDetailRoute({
   const { id } = await params;
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
 
   const lead = await getLead(id, tenantData.tenant.id, {
     role: tenantData.role,

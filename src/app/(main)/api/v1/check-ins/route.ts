@@ -4,14 +4,18 @@ import { authenticateRequest } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiUnauthorized,
+  apiForbidden,
   apiServiceUnavailable,
 } from "@/lib/api/response";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 // GET /api/v1/check-ins?from=<ISO>&to=<ISO>
 // Returns check-in notes with lead info, filtered by date range
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.CHECK_IN)) return apiForbidden();
 
   const searchParams = request.nextUrl.searchParams;
   const from = searchParams.get("from");

@@ -13,6 +13,7 @@ export default async function TeamPage() {
         role={tenantData.role}
         tenantId={tenantData.tenant.id}
         userId={tenantData.userId}
+        industryId={tenantData.tenant.industry_id ?? undefined}
       />
     </div>
   );

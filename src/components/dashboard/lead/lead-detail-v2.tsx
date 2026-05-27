@@ -3,11 +3,12 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import { ArrowLeft, Trash2, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
@@ -40,8 +41,7 @@ export function LeadDetailV2({
   checklists: initialChecklists,
   activities,
   stages,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  tenant: _tenant,
+  tenant,
   role,
   userId,
   entity,
@@ -61,6 +61,10 @@ export function LeadDetailV2({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [deleting, setDeleting] = useState(false);
   const [activeTab, setActiveTab] = useState("overview");
+  const [convertDialogOpen, setConvertDialogOpen] = useState(false);
+  const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
+
+  const isItAgency = tenant.industry_id === "it_agency";
 
   const isAdmin = role === "owner" || role === "admin";
   const currentStage = stages.find((s) => s.id === stageId);
@@ -92,6 +96,19 @@ export function LeadDetailV2({
       fetchTeamMembers();
     }
   }, [isAdmin, fetchTeamMembers]);
+
+  useEffect(() => {
+    if (!lead.converted_contact_id || !isItAgency) return;
+    fetch(`/api/v1/contacts/${lead.converted_contact_id}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.data) {
+          const c = json.data as { first_name?: string; last_name?: string };
+          setConvertedContactName(`${c.first_name ?? ""} ${c.last_name ?? ""}`.trim() || "Contact");
+        }
+      })
+      .catch(() => {});
+  }, [lead.converted_contact_id, isItAgency]);
 
   // Handlers
   const handleNoteClick = () => {
@@ -195,17 +212,38 @@ export function LeadDetailV2({
             </p>
           </div>
         </div>
-        {isAdmin && (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleDeleteLead}
-            disabled={deleting}
-          >
-            <Trash2 className="h-4 w-4 mr-2" />
-            {deleting ? "Deleting..." : "Delete"}
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {isItAgency && (
+            lead.converted_contact_id ? (
+              <Link href={`/contacts/${lead.converted_contact_id}`}>
+                <Button variant="outline" size="sm">
+                  <UserCheck className="h-4 w-4 mr-2" />
+                  Converted to {convertedContactName ?? "Contact"}
+                </Button>
+              </Link>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConvertDialogOpen(true)}
+              >
+                <UserCheck className="h-4 w-4 mr-2" />
+                Convert to Contact
+              </Button>
+            )
+          )}
+          {isAdmin && (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteLead}
+              disabled={deleting}
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              {deleting ? "Deleting..." : "Delete"}
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* 3-Column Layout */}
@@ -233,6 +271,19 @@ export function LeadDetailV2({
             onAssignmentChange={handleAssignmentChange}
             entity={entity}
             industry={industry}
+            industryId={tenant.industry_id}
+            onLeadTypeChange={async (newType) => {
+              try {
+                await fetch(`/api/v1/leads/${lead.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ lead_type: newType }),
+                });
+                toast.success(`Changed to ${newType}`);
+              } catch {
+                toast.error("Failed to update lead type");
+              }
+            }}
           />
         </div>
 
@@ -251,6 +302,7 @@ export function LeadDetailV2({
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
+            industryId={tenant.industry_id}
           />
         </div>
 
@@ -265,6 +317,19 @@ export function LeadDetailV2({
           />
         </div>
       </div>
+
+      {isItAgency && !lead.converted_contact_id && (
+        <ConvertLeadDialog
+          leadId={lead.id}
+          leadFirstName={lead.first_name}
+          leadLastName={lead.last_name}
+          leadEmail={lead.email}
+          leadPhone={lead.phone}
+          leadAccountId={lead.account_id}
+          open={convertDialogOpen}
+          onOpenChange={setConvertDialogOpen}
+        />
+      )}
     </div>
   );
 }

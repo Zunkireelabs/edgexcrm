@@ -8,6 +8,7 @@ export interface AuthContext {
   email: string;
   tenantId: string;
   role: UserRole;
+  industryId: string | null;
 }
 
 export async function authenticateRequest(): Promise<AuthContext | null> {
@@ -39,17 +40,33 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role")
+      .select("tenant_id, role, tenants(industry_id)")
       .eq("user_id", user.id)
-      .single();
+      .single<{
+        tenant_id: string;
+        role: string;
+        // PostgREST returns embedded FK relations as an object for
+        // many-to-one (the case here: tenant_users.tenant_id ->
+        // tenants.id), but may return an array if the schema cache is
+        // stale or a second FK gets introduced. Accept both shapes.
+        tenants:
+          | { industry_id: string | null }
+          | { industry_id: string | null }[]
+          | null;
+      }>();
 
     if (!membership) return null;
+
+    const tenantsEmbed = Array.isArray(membership.tenants)
+      ? membership.tenants[0] ?? null
+      : membership.tenants;
 
     return {
       userId: user.id,
       email: user.email || "",
       tenantId: membership.tenant_id,
       role: membership.role as UserRole,
+      industryId: tenantsEmbed?.industry_id ?? null,
     };
   } catch {
     return null;

@@ -4,15 +4,19 @@ import { authenticateRequest } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiUnauthorized,
+  apiForbidden,
   apiValidationError,
   apiServiceUnavailable,
 } from "@/lib/api/response";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 // GET /api/v1/leads/check-in?q=<email_or_phone>
 // Live search for check-in: matches email or phone (partial, case-insensitive)
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.CHECK_IN)) return apiForbidden();
 
   const q = request.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 3) {

@@ -61,6 +61,7 @@ interface PipelineBoardProps {
   teamMembersData?: TeamMemberData[];
   entities?: TenantEntity[];
   entityLabel?: string;
+  industryId?: string | null;
 }
 
 interface TeamMember {
@@ -137,6 +138,7 @@ export function PipelineBoard({
   teamMembersData = [],
   entities = [],
   entityLabel,
+  industryId,
 }: PipelineBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() =>
@@ -766,6 +768,7 @@ export function PipelineBoard({
           entityLabel={entityLabel}
           role={role}
           currentUserId={userId}
+          industryId={industryId}
         />
       )}
     </div>

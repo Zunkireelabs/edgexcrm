@@ -47,6 +47,7 @@ interface AddLeadSheetProps {
   entityLabel?: string;
   role: UserRole;
   currentUserId: string;
+  industryId?: string | null;
 }
 
 interface FormData {
@@ -64,6 +65,7 @@ interface FormData {
   intakeCampaign: string;
   preferredContact: string;
   initialNotes: string;
+  tag: string;
 }
 
 interface FormErrors {
@@ -122,6 +124,7 @@ const initialFormData: FormData = {
   intakeCampaign: "",
   preferredContact: "",
   initialNotes: "",
+  tag: "student",
 };
 
 export function AddLeadSheet({
@@ -135,6 +138,7 @@ export function AddLeadSheet({
   entityLabel = "Entity",
   role,
   currentUserId,
+  industryId,
 }: AddLeadSheetProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -228,6 +232,7 @@ export function AddLeadSheet({
         entity_id: formData.entityId || null,
         intake_source: formData.intakeSource || "manual_entry",
         intake_medium: "dashboard",
+        tags: [formData.tag || "student"],
         intake_campaign: formData.intakeCampaign || null,
         preferred_contact_method: formData.preferredContact || null,
         custom_fields: formData.initialNotes
@@ -342,6 +347,32 @@ export function AddLeadSheet({
                 />
               </div>
             </div>
+
+            {/* Tag Selector — education_consultancy only */}
+            {industryId === "education_consultancy" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-gray-600">Tag</Label>
+                <div className="flex gap-2">
+                  {["student", "parent"].map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      disabled={isSubmitting}
+                      className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                        formData.tag === tag
+                          ? tag === "parent"
+                            ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                            : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                          : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                      onClick={() => updateField("tag", tag)}
+                    >
+                      {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Email & Phone Row */}
             <div className="grid grid-cols-2 gap-4">

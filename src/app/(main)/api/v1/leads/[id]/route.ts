@@ -35,6 +35,8 @@ const UPDATABLE_FIELDS = [
   "intake_medium",
   "intake_campaign",
   "preferred_contact_method",
+  "tags",
+  "lead_type",
 ] as const;
 
 const ADMIN_ONLY_FIELDS = ["assigned_to"];

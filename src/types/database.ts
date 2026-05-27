@@ -97,6 +97,7 @@ export interface TenantUser {
   tenant_id: string;
   user_id: string;
   role: UserRole;
+  default_hourly_rate: number | null;
   created_at: string;
 }
 
@@ -123,8 +124,14 @@ export interface Lead {
   intake_medium: string | null;
   intake_campaign: string | null;
   preferred_contact_method: string | null;
+  tags: string[];
+  lead_type: string;
+  display_id: string | null;
+  account_id: string | null;
   form_config_id: string | null;
   deleted_at: string | null;
+  converted_at: string | null;
+  converted_contact_id: string | null;
   idempotency_key: string | null;
   // AI Insights fields
   ai_score: number | null;
@@ -449,4 +456,103 @@ export interface LeadActivityRecord {
   updated_at: string;
   // Joined fields
   user_email?: string;
+}
+
+// ============================================================
+// Time Tracking (IT-agency industry-scoped)
+// ============================================================
+
+export interface Account {
+  id: string;
+  tenant_id: string;
+  name: string;
+  primary_contact_email: string | null;
+  primary_contact_id: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "cancelled";
+
+export interface Project {
+  id: string;
+  tenant_id: string;
+  account_id: string;
+  name: string;
+  status: ProjectStatus;
+  default_rate: number | null;
+  is_billable: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TaskStatus = "todo" | "in_progress" | "done";
+
+export interface Task {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  estimated_minutes: number | null;
+  is_billable: boolean;
+  position: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ApprovalStatus = "pending" | "approved" | "rejected";
+
+export interface TimeEntry {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  task_id: string | null;
+  project_id: string;
+  entry_date: string;
+  minutes: number;
+  notes: string | null;
+  is_billable: boolean;
+  rate_snapshot: number | null;
+  approval_status: ApprovalStatus;
+  approved_by: string | null;
+  approved_at: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// ============================================================
+// CRM Contacts (IT-agency industry-scoped)
+// ============================================================
+
+export type ContactStatus = "active" | "inactive";
+export type ProjectContactRole = "primary" | "technical" | "billing" | "other";
+
+export interface Contact {
+  id: string;
+  tenant_id: string;
+  account_id: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  phone: string | null;
+  title: string | null;
+  status: ContactStatus;
+  assigned_to: string | null;
+  notes: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectContact {
+  project_id: string;
+  contact_id: string;
+  role: ProjectContactRole | null;
+  created_at: string;
 }

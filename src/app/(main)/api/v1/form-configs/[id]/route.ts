@@ -10,7 +10,9 @@ import {
   apiValidationError,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
-import { validateFormConfig } from "@/features/form-builder/lib/validation";
+import { validateFormConfig } from "@/industries/education-consultancy/features/form-builder/lib/validation";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { FormStep, FormBranding } from "@/types/database";
 
 type RouteParams = { params: Promise<{ id: string }> };
@@ -19,6 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
 
   const supabase = await createServiceClient();
   const { data, error } = await supabase
@@ -40,6 +43,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
   if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;
@@ -138,6 +142,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!getFeatureAccess(auth.industryId, FEATURES.FORM_BUILDER)) return apiForbidden();
   if (!requireAdmin(auth)) return apiForbidden();
 
   const supabase = await createServiceClient();

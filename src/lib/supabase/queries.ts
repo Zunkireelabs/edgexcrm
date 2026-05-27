@@ -41,6 +41,7 @@ export async function getLeads(
     .select("*")
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
+    .is("converted_at", null)
     .limit(options?.limit ?? 1000);
 
   if (options?.role === "counselor" && options.userId) {
@@ -184,7 +185,8 @@ export async function getPipelines(tenantId: string): Promise<PipelineWithCounts
     .from("leads")
     .select("pipeline_id")
     .eq("tenant_id", tenantId)
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .is("converted_at", null);
 
   // Aggregate counts
   const stageCountMap = new Map<string, number>();
@@ -233,6 +235,7 @@ export async function getLeadsForPipeline(
     .select("*")
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
+    .is("converted_at", null)
     .not("stage_id", "is", null)
     .limit(500);
 
