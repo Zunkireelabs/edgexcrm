@@ -13,9 +13,19 @@ interface LogTimeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: (entry: TimeEntryWithJoins) => void;
+  /** Pre-selected project. */
+  defaultProjectId?: string;
+  /** Pre-selected task (requires defaultProjectId). */
+  defaultTaskId?: string;
 }
 
-export function LogTimeDialog({ open, onOpenChange, onSuccess }: LogTimeDialogProps) {
+export function LogTimeDialog({
+  open,
+  onOpenChange,
+  onSuccess,
+  defaultProjectId,
+  defaultTaskId,
+}: LogTimeDialogProps) {
   function handleSuccess(entry: TimeEntryWithJoins) {
     onSuccess(entry);
     onOpenChange(false);
@@ -30,6 +40,8 @@ export function LogTimeDialog({ open, onOpenChange, onSuccess }: LogTimeDialogPr
         <TimeEntryAddForm
           onSuccess={handleSuccess}
           onCancel={() => onOpenChange(false)}
+          defaultProjectId={defaultProjectId}
+          defaultTaskId={defaultTaskId}
         />
       </DialogContent>
     </Dialog>

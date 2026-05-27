@@ -26,14 +26,17 @@ function todayISO(): string {
 interface TimeEntryAddFormProps {
   onSuccess: (entry: TimeEntryWithJoins) => void;
   onCancel: () => void;
-  /** Pre-selected project (e.g. when adding from project detail — Phase 3 uses this from home). */
+  /** Pre-selected project. */
   defaultProjectId?: string;
+  /** Pre-selected task (requires defaultProjectId to be set). */
+  defaultTaskId?: string;
 }
 
 export function TimeEntryAddForm({
   onSuccess,
   onCancel,
   defaultProjectId,
+  defaultTaskId,
 }: TimeEntryAddFormProps) {
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -61,7 +64,7 @@ export function TimeEntryAddForm({
       .finally(() => setLoadingProjects(false));
   }, [defaultProjectId]);
 
-  // Load tasks when project changes
+  // Load tasks when project changes; pre-select defaultTaskId if present
   useEffect(() => {
     setTaskId("");
     setTasks([]);
@@ -69,9 +72,16 @@ export function TimeEntryAddForm({
     setLoadingTasks(true);
     fetch(`/api/v1/projects/${projectId}/tasks`)
       .then((r) => r.json())
-      .then(({ data }) => setTasks((data ?? []) as Task[]))
+      .then(({ data }) => {
+        const loaded = (data ?? []) as Task[];
+        setTasks(loaded);
+        if (defaultTaskId && loaded.some((t) => t.id === defaultTaskId)) {
+          setTaskId(defaultTaskId);
+        }
+      })
       .catch(() => {})
       .finally(() => setLoadingTasks(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
   const parsedMinutes = minutes ? parseInt(minutes, 10) : 0;

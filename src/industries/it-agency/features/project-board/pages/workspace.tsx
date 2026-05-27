@@ -7,6 +7,7 @@ import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
 import { WorkspaceHeader } from "../components/workspace-header";
 import { BoardView } from "../components/views/board-view";
 import { TableView } from "../components/views/table-view";
+import { TasksView } from "../components/views/tasks-view";
 import type { ProjectWithAccount } from "../components/project-card";
 import type { ProjectStatus } from "@/types/database";
 
@@ -72,12 +73,18 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           onProjectUpdated={handleProjectUpdated}
           onRefetch={refetch}
         />
-      ) : (
+      ) : filters.view === "table" ? (
         <TableView
           projects={filtered}
           team={team}
           teamMap={teamMap}
           onProjectUpdated={handleProjectUpdated}
+        />
+      ) : (
+        <TasksView
+          filters={filters}
+          team={team}
+          teamMap={teamMap}
         />
       )}
     </div>
