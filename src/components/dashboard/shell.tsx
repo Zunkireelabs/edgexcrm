@@ -12,6 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
+  Bot,
   Building2,
   Contact,
   LayoutDashboard,
@@ -32,6 +33,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
@@ -99,6 +101,7 @@ export function DashboardShell({
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [navMode, setNavMode] = useState<"ops" | "orca">("ops");
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
@@ -109,11 +112,30 @@ export function DashboardShell({
     setMounted(true);
   }, []);
 
+  useEffect(() => {
+    const stored = typeof window !== "undefined"
+      ? window.localStorage.getItem("dashboard-nav-mode")
+      : null;
+    if (stored === "orca" || stored === "ops") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setNavMode(stored);
+    }
+  }, []);
+
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  function handleNavModeChange(value: string) {
+    if (value === "ops" || value === "orca") {
+      setNavMode(value);
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem("dashboard-nav-mode", value);
+      }
+    }
   }
 
   const navItems = [
@@ -130,86 +152,108 @@ export function DashboardShell({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#fafafa]">
-      {/* Logo and Tenant Info - Zunkireelabs style */}
-      <div className="px-5 py-3 h-[52px] flex items-center gap-3">
-        <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-white font-semibold text-base"
-          style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
-        >
-          {tenant.name.charAt(0)}
-        </div>
-        <span className="text-lg font-semibold text-gray-900">{tenant.name}</span>
+      {/* EdgeX product brand wordmark */}
+      <div className="px-5 py-3 h-[52px] flex items-center">
+        <span className="text-lg font-semibold text-gray-900 tracking-tight">EdgeX</span>
+      </div>
+
+      {/* Mode switcher */}
+      <div className="px-3 pb-2">
+        <Tabs value={navMode} onValueChange={handleNavModeChange}>
+          <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
+            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-white">
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Ops
+            </TabsTrigger>
+            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-white">
+              <Bot className="w-3.5 h-3.5" />
+              Orca
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/dashboard" && pathname.startsWith(item.href));
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMobileOpen(false)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-[#ebebeb] text-gray-900"
-                  : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-              }`}
-            >
-              <item.icon className="w-[18px] h-[18px]" />
-              {item.label}
-            </Link>
-          );
-        })}
+        {navMode === "ops" ? (
+          <>
+            {navItems.map((item) => {
+              const isActive =
+                pathname === item.href ||
+                (item.href !== "/dashboard" && pathname.startsWith(item.href));
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+                    isActive
+                      ? "bg-[#ebebeb] text-gray-900"
+                      : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                  }`}
+                >
+                  <item.icon className="w-[18px] h-[18px]" />
+                  {item.label}
+                </Link>
+              );
+            })}
 
-        {/* Public Forms Section */}
-        {hasManyForms ? (
-          <div>
-            <button
-              onClick={() => setFormsExpanded(!formsExpanded)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-            >
-              <div className="flex items-center gap-3">
-                <FileText className="w-[18px] h-[18px]" />
-                Public Forms
+            {/* Public Forms Section */}
+            {hasManyForms ? (
+              <div>
+                <button
+                  onClick={() => setFormsExpanded(!formsExpanded)}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-[18px] h-[18px]" />
+                    Public Forms
+                  </div>
+                  <ChevronDown
+                    className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+                {formsExpanded && (
+                  <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
+                    {formConfigs.map((form) => (
+                      <a
+                        key={form.slug}
+                        href={`/form/${tenant.slug}/${form.slug}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={() => setMobileOpen(false)}
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
+                      >
+                        <span className="flex-1 truncate">{form.name}</span>
+                        <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                      </a>
+                    ))}
+                  </div>
+                )}
               </div>
-              <ChevronDown
-                className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
-              />
-            </button>
-            {formsExpanded && (
-              <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
-                {formConfigs.map((form) => (
-                  <a
-                    key={form.slug}
-                    href={`/form/${tenant.slug}/${form.slug}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
-                  >
-                    <span className="flex-1 truncate">{form.name}</span>
-                    <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                  </a>
-                ))}
-              </div>
+            ) : (
+              <a
+                href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-[18px] h-[18px]" />
+                  View Public Form
+                </div>
+                <ExternalLink className="h-4 w-4" />
+              </a>
             )}
-          </div>
+          </>
         ) : (
-          <a
-            href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-          >
-            <div className="flex items-center gap-3">
-              <FileText className="w-[18px] h-[18px]" />
-              View Public Form
-            </div>
-            <ExternalLink className="h-4 w-4" />
-          </a>
+          <div className="flex flex-col items-center justify-center text-center px-4 py-12 gap-2">
+            <Bot className="w-6 h-6 text-muted-foreground/40" />
+            <p className="text-xs font-medium text-gray-700">Orca coming soon</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              AI agents and orchestrations will live here.
+            </p>
+          </div>
         )}
       </nav>
     </div>
