@@ -5,11 +5,24 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterDropdown, type FilterOption } from "@/components/ui/filter-dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { Account } from "@/types/database";
+import type { Account, ProjectStatus } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 import type { WorkspaceFilters } from "../hooks/use-workspace-filters";
 
 const ALL_SENTINEL = "__all__";
+
+const STATUS_CHIPS: { value: ProjectStatus; label: string }[] = [
+  { value: "planning",  label: "Discovery" },
+  { value: "active",    label: "In Progress" },
+  { value: "in_review", label: "Review" },
+  { value: "delivered", label: "Delivered" },
+  { value: "on_hold",   label: "On Hold" },
+];
+
+const CANCELLED_CHIP: { value: ProjectStatus; label: string } = {
+  value: "cancelled",
+  label: "Cancelled",
+};
 
 interface WorkspaceHeaderProps {
   filters: WorkspaceFilters;
@@ -33,6 +46,24 @@ export function WorkspaceHeader({
     { value: ALL_SENTINEL, label: "All owners" },
     ...team.map((m) => ({ value: m.user_id, label: m.email })),
   ];
+
+  // The chip set: base statuses + cancelled when show-cancelled toggle is on
+  const availableChips = filters.showCancelled
+    ? [...STATUS_CHIPS, CANCELLED_CHIP]
+    : STATUS_CHIPS;
+
+  function toggleStatus(value: ProjectStatus) {
+    const current = filters.statuses;
+    const next = current.includes(value)
+      ? current.filter((s) => s !== value)
+      : [...current, value];
+    onFilterChange({ statuses: next });
+  }
+
+  function isStatusActive(value: ProjectStatus): boolean {
+    // Empty = all selected (no filter applied)
+    return filters.statuses.length === 0 || filters.statuses.includes(value);
+  }
 
   return (
     <div className="flex flex-col gap-3 pb-3 border-b border-gray-200">
@@ -59,7 +90,7 @@ export function WorkspaceHeader({
         </Tabs>
       </div>
 
-      {/* Row 2: filters */}
+      {/* Row 2: search + dropdowns + show-cancelled */}
       <div className="flex items-center gap-3 flex-wrap">
         {/* Search */}
         <div className="relative">
@@ -90,16 +121,55 @@ export function WorkspaceHeader({
         />
 
         {/* Show cancelled toggle */}
-        <div className="flex items-center gap-1.5 ml-2">
+        <div className="flex items-center gap-1.5 ml-1">
           <Checkbox
             id="show-cancelled"
             checked={filters.showCancelled}
-            onCheckedChange={(checked) => onFilterChange({ showCancelled: Boolean(checked) })}
+            onCheckedChange={(checked) => {
+              const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
+              // Remove cancelled from statuses when hiding cancelled
+              if (!checked && filters.statuses.includes("cancelled")) {
+                next.statuses = filters.statuses.filter((s) => s !== "cancelled");
+              }
+              onFilterChange(next);
+            }}
           />
           <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
             Show cancelled
           </Label>
         </div>
+      </div>
+
+      {/* Row 3: status chips */}
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="text-xs text-muted-foreground mr-1">Status:</span>
+        {availableChips.map((chip) => {
+          const active = isStatusActive(chip.value);
+          return (
+            <button
+              key={chip.value}
+              type="button"
+              onClick={() => toggleStatus(chip.value)}
+              className={[
+                "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
+                active
+                  ? "bg-blue-600 text-white border-blue-600"
+                  : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
+              ].join(" ")}
+            >
+              {chip.label}
+            </button>
+          );
+        })}
+        {filters.statuses.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onFilterChange({ statuses: [] })}
+            className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Clear
+          </button>
+        )}
       </div>
     </div>
   );

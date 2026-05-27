@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
   const accountId = searchParams.get("account_id");
   const statusFilter = searchParams.get("status");
 
-  let query = db.from("projects").select("*");
+  let query = db.from("projects").select("*, project_contacts!project_contacts_project_id_fkey(count)");
   if (accountId) query = query.eq("account_id", accountId);
   if (statusFilter) query = query.eq("status", statusFilter);
   const { data: projects, error } = await query.order("created_at", { ascending: false });

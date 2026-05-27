@@ -59,7 +59,7 @@ export function ProjectRow({ project, team, onProjectUpdated }: ProjectRowProps)
         throw new Error(json.error?.message ?? "Failed to update");
       }
       const { data } = await res.json();
-      onProjectUpdated({ ...data, account_name: project.account_name });
+      onProjectUpdated({ ...data, account_name: project.account_name, contact_count: project.contact_count });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update project");
     } finally {
