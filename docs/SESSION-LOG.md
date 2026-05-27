@@ -11,23 +11,68 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace Phases 1+2+3 live on stage + tag-multi-picker fixback shipped** at `ed7ff15`. Phase 3 (`867a750`) brought the Tasks view; the tag-picker fixback unified the per-task and per-filter tag UX into a single Notion-style multi-select dropdown backed by a tenant-wide tag pool (new `GET /api/v1/tasks/tags` + `<TagMultiPicker>` + `useTaskTags` hook). Stage now exposes Board + Table + Tasks views with admin-only gate, drag-drop TOCTOU, card metrics, status/priority/tags/due filters, log-time-from-row, and the unified tag picker. Production still on `c13e594`.
-- **What's next**: **Phase 4 of Project Workspace** — Members view. One section per team member with ≥1 owned project OR ≥1 assigned open task. Section header: avatar/initials + email + (count of owned projects) + (count of open tasks). Collapsible body with sub-headers "Projects (owner)" + "Tasks (open)". Workspace Owner filter narrows section list. Aggregation must not N+1 — batch with `IN (?, ?, ?, ...)` for member lookups OR accept a single joined query. Awaiting Sonnet session pickup.
+- **Current state**: **Project Workspace Phase 4 shipped to stage** at `29345f3` (squash from feature/project-workspace-phase-4, 4 files, 325/6). All 4 of the 5 phases shipped. Members view live: one section per team member with ≥1 owned project OR ≥1 open task; aggregation is non-N+1 (≤3 requests: team + projects from useProjects, tasks via 1 fetch); collapsible sections; sort by busiest first; client-side filters honor account/search/owner/priority/due. Stage now exposes Board + Table + Tasks + Members. Production still on `c13e594`. **Admizz admin password reset to `admizz123` on 2026-05-27** via service-role (Sadin authorized) — login restored for Admizz tenant smoke. Counselor password (`manjila`) still rotated.
+- **What's next**: **Phase 5 of Project Workspace** — polish + URL hardening + empty-state UX + keyboard shortcuts + accessibility audit. Also bundles **one Phase 4 spec gap to fix**: Members view should expose Assignee + Priority + Due filters in the header (brief Filter specifications table), but Sonnet only added Owner — the other filter conditionals stayed `isTasksView`-only. MembersView code already APPLIES those filters; only the header conditionals need a small fix. Awaiting Sonnet session pickup for Phase 5.
 - **Visual smoke status** (after Sadin's smoke pass on 2026-05-27):
   - ✓ Phase 2 drag-drop, two-tab 409 race, status chips, card metrics, show-cancelled toggle — all confirmed working.
   - ✓ Phase 3 Tasks view, inline edits (status/assignee/priority/due), task filters, log-time-from-row — all confirmed.
-  - ✓ Tag picker fixback **now needs a quick re-smoke**: create a tag on Task A → appears in Task B's picker AND in the workspace filter dropdown immediately. Filter by [tagA, tagB] narrows to tasks with EITHER. Type new tag in picker → "Create '<x>'" option → click → tag added + propagates.
-  - **Pending (creds-blocked)**: counselor scoping on `/api/v1/tasks` — would need password reset before live test. Verified by code inspection.
+  - ✓ Tag picker fixback confirmed by Sadin (smoke pass led directly into Phase 4 build).
+  - **Phase 4 awaiting smoke**: switch to Members tab → sections render with correct counts → expand/collapse holds across filter changes → Owner filter narrows to one member → click project/task name navigates to detail.
 - **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
 - **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `ed7ff15`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
-- **Code-review checklist** (6 items): all clean across Phases 1+2+3. Phase 3 specifics: PostgREST nested embed `projects(id, name, account_id, accounts(id, name))` unambiguous; PATCH back-compat preserved (uses `"key" in body` for nullable assignee_id/due_date so explicit null clears); `.select()` after PATCH returns plain task — TasksView setState merges with existing state preserving the projects/accounts join (correct pattern). **No new items added from Phase 3.**
-- **What Opus does next on resume**: hand off Phase 4 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 4 (Members view). Aggregate via batched queries (NOT N+1): single `/api/v1/team` call for members + single `/api/v1/projects?owner_id_in=…` if backend supports OR small concurrency loop + single `/api/v1/tasks?assignee_id_in=…` call. Build `<MembersView>` with collapsible sections per member, counts in header, sorted by busiest first. Workspace Owner filter narrows section list. Push to `feature/project-workspace-phase-4` and stop. Opus reviews, squashes to stage, kicks off Phase 5."
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `29345f3`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
+- **Code-review checklist** (6 items): all clean across Phases 1+2+3+4 + tag-picker fixback. Phase 4 specifics: no new API routes; no PostgREST embeds added (Members view aggregation is client-side from existing data); no inserts/updates from Members view (read-only by design); no Radix Select empty-string risk. **No new items added from Phase 4.**
+- **What Opus does next on resume**: hand off Phase 5 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 5 (polish + a11y + URL hardening + empty states + keyboard shortcuts). ALSO fix the Phase 4 spec gap: extend workspace-header conditionals so Assignee + Priority + Due filters render on Members view (they're applied in MembersView code but the header hides them). Push to `feature/project-workspace-phase-5` and stop. Opus reviews, squashes to stage. Then we look at stage→main production promotion after observation window."
 - **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 4 shipped — Members view (2026-05-27)
+
+### What was built
+
+Squash-merged at `29345f3` from `feature/project-workspace-phase-4` (Sonnet branch `af4fa73`). 4 files, 325 insertions / 6 deletions.
+
+- **`<MembersView>`** (306 lines) — fourth and final view of the workspace. One section per team member with ≥1 owned project OR ≥1 assigned open task. Aggregation is non-N+1: `team` + `projects` already loaded by `useProjects` (Phase 1+); single `GET /api/v1/tasks?page_size=200` fetch grouped client-side. **Total ≤3 network requests** to render Members view, regardless of member count.
+  - **Grouping**: projects by owner_id (cancelled excluded; account + search filters applied); open tasks by assignee_id (account + search + priority + due filters applied; status === 'done' excluded).
+  - **Sort**: open-tasks desc → owned-projects desc → email asc (busiest member first).
+  - **Section header**: chevron + 8x8 initials avatar (blue) + email + "Projects (N) · Open tasks (M)". Click to expand/collapse.
+  - **Default expand state**: expanded if member has ≥1 open task, collapsed otherwise. Initialized once after first load via `useEffect` guarded by `initialized` flag — user toggles persist across filter changes.
+  - **Projects sub-section**: name links to `/time-tracking/projects/[id]`, account name, read-only `<StatusPill>`.
+  - **Tasks sub-section**: title links to project detail (no per-task URL exists), project name, read-only `<PriorityPill>`, due date with red `font-medium` when overdue. Sorted by `due_date asc nulls-last`.
+  - **Per-member empty hint**: members with owned projects but no open tasks show italic "No open tasks." note in the body.
+  - **Workspace empty state**: 8x8 Users icon + "No members have owned projects or assigned tasks yet." + hint "Admins assign owners in the Table view."
+- **Workspace header extension**: adds "Members" tab (Users icon). Owner filter visible on Board + Table + **Members** (extended to narrow section list to one member). Search placeholder context-aware: "Search projects & tasks…" on Members view.
+- **`useWorkspaceFilters`**: one-line change — `WorkspaceView` union adds `"members"`. URL state carries through.
+- **`workspace.tsx`**: routes `filters.view === "members"` to `<MembersView>` passing raw `projects` + `accountMap`. Renders Tasks/Members via nested ternary (the existing pattern).
+
+### Brief-spec gap rolled to Phase 5
+
+Brief's Filter specifications table said Members view should expose **Assignee + Priority + Due** filters in the workspace header. Sonnet extended only the Owner filter conditional; the others stayed `isTasksView`-only. **MembersView code already applies those filters** (lines 103-105 of members-view.tsx), so the gap is purely the header rendering — about 5 lines of conditional. Result today: if a user sets `priority=high` on Tasks view then switches to Members, the filter silently applies but the chip controls aren't visible. Phase 5 will surface them.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean.
+- ✓ Aggregation requests: ≤3 total (team + projects via Phase-1's `useProjects`, tasks 1 fetch). No N+1 across member count.
+- ✓ Owner filter narrows the section list (members-view.tsx:115).
+- ✓ No inline edits in Members view — `<StatusPill>` is read-only by component design, `<PriorityPill>` uses `readOnly={true}` explicitly.
+- ✓ Collapsed/expanded state initialized once and persists across re-renders (members-view.tsx:141-147).
+- ✓ Empty-state copy matches brief.
+- ✓ All 6 standing code-review checklist items: no new PostgREST embeds, no new POST/PATCH, no new page components, no new `.select()` after mutation, no Radix Select sentinel needed (uses custom buttons + chevrons), no new cross-cutting predicate filter.
+- ✓ Phase 4-specific items per brief: aggregation non-N+1 ✓ · Owner filter behavior ✓ · no inline edits ✓.
+
+### Files Changed (squash commit `29345f3`)
+
+- **New** (1): `views/members-view.tsx` (306 lines).
+- **Modified** (3): `workspace-header.tsx` (+ Members tab, + Users icon import, Owner filter conditional extended to include Members, search placeholder branching), `pages/workspace.tsx` (route members view), `hooks/use-workspace-filters.ts` (WorkspaceView union).
+
+### Not yet promoted to `main`
+
+Stays on `c13e594`. Phase 5 (polish + a11y + Members filter completion) is the last phase before the prod promotion observation window.
 
 ---
 
