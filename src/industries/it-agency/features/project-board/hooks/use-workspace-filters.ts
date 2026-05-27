@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import type { ProjectStatus, TaskStatus, TaskPriority } from "@/types/database";
 
-export type WorkspaceView = "board" | "table" | "tasks";
+export type WorkspaceView = "board" | "table" | "tasks" | "members";
 
 export interface WorkspaceFilters {
   view: WorkspaceView;

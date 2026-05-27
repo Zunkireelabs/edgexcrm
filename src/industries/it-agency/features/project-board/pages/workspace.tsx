@@ -9,6 +9,7 @@ import { WorkspaceHeader } from "../components/workspace-header";
 import { BoardView } from "../components/views/board-view";
 import { TableView } from "../components/views/table-view";
 import { TasksView } from "../components/views/tasks-view";
+import { MembersView } from "../components/views/members-view";
 import type { ProjectWithAccount } from "../components/project-card";
 import type { ProjectStatus } from "@/types/database";
 
@@ -83,13 +84,20 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           teamMap={teamMap}
           onProjectUpdated={handleProjectUpdated}
         />
-      ) : (
+      ) : filters.view === "tasks" ? (
         <TasksView
           filters={filters}
           team={team}
           teamMap={teamMap}
           poolTags={poolTags}
           refetchTags={refetchTags}
+        />
+      ) : (
+        <MembersView
+          filters={filters}
+          team={team}
+          projects={projects}
+          accountMap={accountMap}
         />
       )}
     </div>

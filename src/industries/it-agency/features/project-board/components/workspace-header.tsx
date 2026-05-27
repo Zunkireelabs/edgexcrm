@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, LayoutGrid, TableProperties, ListTodo } from "lucide-react";
+import { Search, LayoutGrid, TableProperties, ListTodo, Users } from "lucide-react";
 import { TagMultiPicker } from "./tag-multi-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterDropdown, type FilterOption } from "@/components/ui/filter-dropdown";
@@ -120,6 +120,7 @@ export function WorkspaceHeader({
 
   const isTasksView = filters.view === "tasks";
   const isBoardOrTable = filters.view === "board" || filters.view === "table";
+  const isMembersView = filters.view === "members";
 
   return (
     <div className="flex flex-col gap-3 pb-3 border-b border-gray-200">
@@ -146,6 +147,10 @@ export function WorkspaceHeader({
               <ListTodo className="h-3.5 w-3.5" />
               Tasks
             </TabsTrigger>
+            <TabsTrigger value="members" className="gap-1.5 text-xs">
+              <Users className="h-3.5 w-3.5" />
+              Members
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -159,7 +164,7 @@ export function WorkspaceHeader({
             type="text"
             value={filters.q}
             onChange={(e) => onFilterChange({ q: e.target.value })}
-            placeholder={isTasksView ? "Search tasks…" : "Search projects…"}
+            placeholder={isTasksView ? "Search tasks…" : isMembersView ? "Search projects & tasks…" : "Search projects…"}
             className="h-7 pl-8 pr-3 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-44"
           />
         </div>
@@ -172,8 +177,8 @@ export function WorkspaceHeader({
           options={accountOptions}
         />
 
-        {/* Owner filter — Board + Table only */}
-        {isBoardOrTable && (
+        {/* Owner filter — Board, Table, Members */}
+        {(isBoardOrTable || isMembersView) && (
           <FilterDropdown
             label="Owner"
             value={filters.owner}
