@@ -129,7 +129,7 @@ export function DashboardShell({
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#ebebeb]">
+    <div className="flex flex-col h-full bg-[#fafafa]">
       {/* Logo and Tenant Info - Zunkireelabs style */}
       <div className="px-5 py-3 h-[52px] flex items-center gap-3">
         <div
@@ -154,8 +154,8 @@ export function DashboardShell({
               onClick={() => setMobileOpen(false)}
               className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-[#fafafa] text-gray-900"
-                  : "text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
+                  ? "bg-[#ebebeb] text-gray-900"
+                  : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
               }`}
             >
               <item.icon className="w-[18px] h-[18px]" />
@@ -169,7 +169,7 @@ export function DashboardShell({
           <div>
             <button
               onClick={() => setFormsExpanded(!formsExpanded)}
-              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
+              className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
             >
               <div className="flex items-center gap-3">
                 <FileText className="w-[18px] h-[18px]" />
@@ -188,7 +188,7 @@ export function DashboardShell({
                     target="_blank"
                     rel="noopener noreferrer"
                     onClick={() => setMobileOpen(false)}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#fafafa] hover:text-gray-900 transition-colors"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
                   >
                     <span className="flex-1 truncate">{form.name}</span>
                     <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
@@ -202,7 +202,7 @@ export function DashboardShell({
             href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#fafafa] hover:text-gray-900"
+            className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
           >
             <div className="flex items-center gap-3">
               <FileText className="w-[18px] h-[18px]" />
@@ -216,16 +216,16 @@ export function DashboardShell({
   );
 
   return (
-    <div className="flex h-screen bg-[#f1f1f1]">
+    <div className="flex h-screen bg-[#fafafa]">
       {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#ebebeb]">
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa]">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
-      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#ebebeb]">
+      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#fafafa]">
         {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-[#ebebeb] px-6 py-3 h-[52px] flex items-center gap-4 w-full">
+        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -360,10 +360,10 @@ export function DashboardShell({
         <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
           <main
-            className="flex-1 min-h-0 overflow-auto p-4 bg-[#f1f1f1] transition-all duration-500 ease-out"
+            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out"
             style={{
-              borderRadius: isAssistantOpen ? '16px' : '16px 0 0 16px',
-              borderLeft: '1px solid #e5e7eb'
+              borderRadius: '8px',
+              border: '1px solid #00001d13'
             }}
           >
             {children}
