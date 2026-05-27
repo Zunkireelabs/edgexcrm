@@ -15,7 +15,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
-const PROJECT_STATUSES = ["planning", "active", "on_hold", "done", "cancelled"];
+const PROJECT_STATUSES = ["planning", "active", "in_review", "delivered", "on_hold", "cancelled"];
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -74,6 +74,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const patch: Record<string, unknown> = {};
   if (body.name !== undefined) patch.name = String(body.name).trim();
   if (body.status !== undefined) patch.status = String(body.status);
+  if (body.owner_id !== undefined) patch.owner_id = body.owner_id ?? null;
   if (body.default_rate !== undefined)
     patch.default_rate = body.default_rate != null ? Number(body.default_rate) : null;
   if (body.is_billable !== undefined) patch.is_billable = Boolean(body.is_billable);

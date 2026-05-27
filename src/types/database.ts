@@ -470,11 +470,12 @@ export interface Account {
   primary_contact_id: string | null;
   notes: string | null;
   is_active: boolean;
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
-export type ProjectStatus = "planning" | "active" | "on_hold" | "done" | "cancelled";
+export type ProjectStatus = "planning" | "active" | "in_review" | "delivered" | "on_hold" | "cancelled";
 
 export interface Project {
   id: string;
@@ -485,11 +486,14 @@ export interface Project {
   default_rate: number | null;
   is_billable: boolean;
   notes: string | null;
+  owner_id: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export type TaskStatus = "todo" | "in_progress" | "done";
+
+export type TaskPriority = "low" | "normal" | "high" | "urgent";
 
 export interface Task {
   id: string;
@@ -501,6 +505,10 @@ export interface Task {
   estimated_minutes: number | null;
   is_billable: boolean;
   position: number;
+  assignee_id: string | null;
+  due_date: string | null;
+  priority: TaskPriority;
+  tags: string[];
   created_at: string;
   updated_at: string;
 }

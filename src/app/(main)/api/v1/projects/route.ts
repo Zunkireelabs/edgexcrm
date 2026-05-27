@@ -15,7 +15,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
-const PROJECT_STATUSES = ["planning", "active", "on_hold", "done", "cancelled"];
+const PROJECT_STATUSES = ["planning", "active", "in_review", "delivered", "on_hold", "cancelled"];
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();

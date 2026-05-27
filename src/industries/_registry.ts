@@ -36,6 +36,7 @@ export const FEATURES = {
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",
   CRM_CONTACTS: "crm-contacts",
+  PROJECT_BOARD: "project-board",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];
