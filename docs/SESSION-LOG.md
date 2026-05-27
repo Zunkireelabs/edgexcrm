@@ -11,18 +11,372 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Time Tracking v1 is fully shipped to `stage`** — all 5 phases done. Phase 5 (rates + billable totals) merged at `f50f3ef`. Combined with CRM Contacts v1 (which closed at `eb1cce6` earlier the same day), the IT-agency feature set is now feature-complete: Accounts → Projects → Tasks → Time entries → Approvals → Billable totals AND Leads → Contacts → Account/Project linkage. `dev-lead-crm.zunkireelabs.com` is current with everything. **The next logical action is to promote `stage` → `main`** for production rollout. Production is on a pre-industry-modules version and will get a big diff: industry modules + hardening + Anish's tags/contacts/lead-types + all of time-tracking + all of accounts + all of CRM contacts in one release.
-- **Workflow split** (held through ~12 phases now across Time Tracking + Accounts + Contacts + TT Phase 5): Opus plans + reviews + pushes to stage + writes docs. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Local-verify-before-push. Phase 5 held the pattern cleanly: Sonnet's initial commit was clean per spec on first pass (no fixbacks needed), 14 files, 26/26 verification matrix passed before reporting back, Opus re-ran 8/8 smoke + full code review before squash-merge.
-- **Phase 5 review summary** (2026-05-27): code review covered all 14 files; build clean; live smoke verified rate_snapshot atomicity, immutability under post-approval rate change, fallback project-rate→member-rate→0, TOCTOU precondition, summary shape/validation/counselor-scope/Admizz-403. One notable Sonnet decision affirmed: `/api/v1/team` PATCH is NOT industry-gated because `tenant_users.default_hourly_rate` is a universal-table column (added in migration 020); the UI gate at `industryId === "it_agency"` is the meaningful gate. One pre-existing nit not in Phase 5 scope: team route uses `apiServiceUnavailable` (503) for validation errors — Sonnet mirrored the existing pattern; cleanup deferred to a future hardening sweep.
-- **Branch state**: `stage` at the doc-sweep commit (this entry's commit). Local matches origin. No in-flight branches. `main` (production) untouched.
-- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · Radix Select forbids `<SelectItem value="">` (sentinel) · cross-cutting predicate audits must grep `from("Table")` across the whole repo. **No new items from Phase 5** — first time Sonnet's initial commit was clean across all 6 items with no fixbacks.
-- **What Opus does next on resume**: confirm Sadin wants to promote `stage` → `main` and run the promotion. Pre-flight: (1) full smoke matrix on staging (or trust the per-feature smokes already done — that's a judgment call), (2) confirm no Anish PRs in flight that should be bundled, (3) `git checkout main && git merge stage && git push origin main` triggers the production deploy via the existing CI workflow. Production domain: `lead-crm.zunkireelabs.com`. Rollback path documented in CLAUDE.md (`gh workflow run rollback.yml -f commit_sha=<SHA>`).
-- **Tenant DB residue from smoke runs**: Phase E + Phase 5 smoke runs left test data in Zunkireelabs tenant — a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts. Harmless in dev/staging; will replicate to prod on promotion. Not worth a cleanup migration — flagged here so future-me sees it.
-- **Counselor + Admizz passwords were rotated by Sonnet during Phase 5 verification** (Sonnet's report flagged this). Sadin's original passwords (manjila/xyz12345, admizzdotcom2020/admizz123) no longer work. Sonnet didn't include the new passwords in the handoff. **Future smoke runs that need those users will need a fresh password reset via service role; ask Sadin before doing this, since it locks out real teammates.**
-- **Blockers**: none. Clean slate; production promotion is the only outstanding item.
+- **Current state**: **Project Workspace v1 fully shipped to stage.** Stage HEAD at `04d7895`: 5 phases done (Phase 1 `44409a8` → Phase 2 `dd20d91` → Phase 3 `867a750` → Phase 4 `29345f3` → Phase 5 `97e490d`), tag-picker fixback `ed7ff15`, eslint hotfix `04d7895`. Dev container current — `dev-lead-crm.zunkireelabs.com/login` 200, `/projects` 307 (auth redirect, expected). Production still on `c13e594`. **Discovery during Phase 5 ship**: stage deploy had been red since the tag fixback (6 consecutive runs) due to a `react-hooks/set-state-in-effect` hard error in `tag-multi-picker.tsx:39`. Local `npm run build` doesn't run ESLint — it's a separate CI step. Container was frozen at Phase 3 the whole time. Hotfix `04d7895` (Sonnet branch `89a50a7`, wrapped `setQuery` in `setTimeout(0)` mirroring the focus-on-open pattern) unblocked the pipeline; container jumped Phase 3 → Phase 5+fix in one 4m4s deploy. **Tag fixback + Phase 4 + Phase 5 ALL need fresh visual smoke** — the earlier "tag picker fixback confirmed by Sadin" entry was on a phantom (local dev server or cached page); the deployed staging container only just received the changes.
+- **What's next**: Sadin runs visual smoke on `dev-lead-crm.zunkireelabs.com/projects` covering tag fixback + Phase 4 + Phase 5 (checklist below). When clean, Opus writes the stage→main production promotion plan — bigger diff than the last prod push (4 phases + 2 fixbacks). Confirm with Sadin before the prod merge.
+- **Visual smoke checklist on the real dev container**:
+  - **Tag fixback** (Tasks view): click a task's Tags column → Notion-style picker opens with search input autofocused; checkable rows from tenant-wide pool; type a new name → "Create" row appears; click creates and selects. Filter chip applies ANY-match.
+  - **Phase 4 (Members)**: switch to Members tab → one section per team-member-with-work; section counts match DB; expand/collapse holds across filter changes; Owner filter narrows section list; click project name → `/time-tracking/projects/[id]`; click task title → same.
+  - **Phase 5**: press `b`/`t`/`k`/`m` outside any input → view switches; `/` focuses search; Esc clears query or blurs empty input. Apply filters that strand a view → empty state with Clear-filters CTA appears. Tab order rotates through interactive controls without trap. Optional: Lighthouse a11y on `/projects` should clear 95.
+- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU two-window test — shipped on visual-confirmation, not exhaustively verified. (2) Counselor (`manjila@zunkireelabs.com`) password still rotated from Time Tracking Phase 5 verification. Admizz admin restored to `admizz123` on 2026-05-27. (3) Branch cleanup: 4 dangling already-merged branches safe to delete (`check-in`, `consultancy-update`, `create-form`, `tags`); 1 stale unmerged `feature/ai-orchestrate-orca` (7 weeks, 3,859 LOC predating industry modules).
+- **Workflow split** (held through Phase 5 + the eslint fixback): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase / per-fix branches. **Production-affecting actions** (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
+- **Branch state**: `main` at `c13e594` (production HEAD, unchanged). `stage` HEAD at `04d7895`. Local matches origin. Stage→main diff now includes all 4 Project Workspace phases + tag fixback + Phase 5 + eslint hotfix on top of `c13e594`.
+- **Code-review checklist** (6 items): all clean across Phases 1–5 + tag-picker fixback + eslint hotfix. No new items added — Phase 5 was UI-only (no DB / API / mutation surface).
+- **Lesson logged from the CI red-streak**: `npm run build` does NOT include ESLint — it's a separate CI step gated at `--max-warnings 50`. A failed Pre-deploy Checks job stops the container deploy entirely; the previous container keeps serving. "Sonnet pushed and reported success" without a `gh run watch` check can hide a multi-commit deploy backlog. The per-phase verification matrix in future briefs should add `npx eslint --max-warnings 50 .` as a pre-push gate, especially under React 19 (new rules like `react-hooks/set-state-in-effect` keep landing).
+- **What Opus does next on resume**: (1) wait for Sadin's smoke report; (2) if regressions surface, route via Sonnet fixback; (3) if clean, write the stage→main production promotion plan covering ≈6 squashed commits' worth of feature code. The prior prod merge (`c13e594`) used a non-FF ort merge — same shape will work here unless `main` has drifted; pre-flight check `git log origin/main..origin/stage` then `git merge --no-ff origin/stage` from main.
+- **Tenant DB residue from smoke runs replicated to prod**: cosmetic, harmless — not worth a cleanup migration. Expect another small round from the upcoming Phase 4 + 5 + tag smoke pass on dev.
+- **Blockers**: none on stage. Production promotion blocked on Sadin's visual smoke + go-ahead.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 5 shipped — polish, keyboard shortcuts, a11y; CI red-streak reconciled (2026-05-27)
+
+### What was built
+
+Squash-merged at `97e490d` from `feature/project-workspace-phase-5` (Sonnet branch `393484f`). 6 files, 263 insertions / 104 deletions. Closes Project Workspace v1.
+
+- **Keyboard shortcuts** (workspace-header.tsx): `b`/`t`/`k`/`m` switch views; `/` focuses search; `Esc` clears query (or blurs an empty search input). Document-level listener with a ref pattern (`onFilterChangeRef`) so the empty-dep-array effect never closes over a stale callback. Modifier-key guard (`ctrlKey || metaKey || altKey`) plus `role="combobox"` detection prevent text-input hijack and Radix Select interference.
+- **Empty states**: all 4 views render icon + helpful copy + Clear-filters CTA when the active filter combo returns zero rows. New `handleClearFilters` in `workspace.tsx` resets all 10 filter fields (`account`, `q`, `owner`, `showCancelled`, `statuses`, `assignee`, `taskStatuses`, `priorities`, `tags`, `due`) — single reset point for every view.
+- **Accessibility**: `aria-label` on search input, due-date input, Log-time button; `aria-pressed` on every chip toggle (project status / task status / priority); `aria-sort` on all 11 sortable column headers across Table + Tasks; `aria-expanded` + `aria-label` on Members section toggle. The combined surface should clear Lighthouse a11y ≥ 95 (needs visual confirmation).
+- **Phase 4 spec-gap fix bundled**: `workspace-header.tsx` conditionals for Assignee + Priority + Due filters extended to `(isTasksView || isMembersView)` — chips finally visible on Members. `members-view.tsx:116` adds `if (filters.assignee !== "__all__" && member.user_id !== filters.assignee) continue;` to the section-narrowing loop (the resume block claimed the body already applied this — true for priority + due, but assignee specifically was missing).
+
+URL hardening was already in place — `use-workspace-filters.ts:131` is the only `router.replace` in the feature and already uses `{ scroll: false }`. New shortcuts route through the same `onFilterChange` callback, so the scroll-jump-free invariant holds across keyboard nav.
+
+### Stage CI red-streak reconciled
+
+**Discovery during Phase 5 ship**: stage deploy had been failing for 6 consecutive pushes since the tag-multi-picker fixback (`ed7ff15`, 2026-05-27 12:16). Pre-deploy Checks (`npx eslint --max-warnings 50`) was hitting a hard error in `tag-multi-picker.tsx:39` — the new React 19 rule `react-hooks/set-state-in-effect` — because `setQuery("")` ran synchronously inside the `[open]` effect's else branch. Local `npm run build` doesn't run ESLint, so this was invisible until the CI step exited 1 and skipped the container deploy. **Container at `dev-lead-crm.zunkireelabs.com` was frozen at Phase 3 (`867a750`) the entire time.** All "shipped to stage" entries since the tag fixback were technically merged to the `stage` branch but never reached the running container.
+
+**Fix**: hotfix branch `fix/tag-multi-picker-eslint` (Sonnet `89a50a7`), squash-merged at `04d7895`. 1 file, 5 / 1. Wrapped `setQuery` in `setTimeout(0)` mirroring the focus pattern in the if-branch (`Why:` comment added). Behavior preserved: query clears on popover close.
+
+**Deploy after unblock**: 4m4s. Container jumped Phase 3 → tag fixback + Phase 4 + Phase 5 + eslint fix + all docs in one go. Smoke: `/login` 200, `/projects` 307 (auth redirect, expected).
+
+### Smoke reset — all three phases need fresh visual confirmation on dev
+
+Because tag fixback + Phase 4 + Phase 5 never actually ran on `dev-lead-crm` until 2026-05-27 13:18, the prior "tag picker fixback confirmed by Sadin" entry is reconciled — whatever was smoked then could not have been the deployed dev container. Likely a local `npm run dev` or a cached browser tab. No regression evidence, but the visual confirmation MUST re-run on the actual staging URL before prod promotion.
+
+Outstanding on the real dev container:
+- **Tag fixback**: Tasks view → tag dropdown shows Notion-style picker (search + autofocus + checkable rows + Create-new fallback). Filter chip works.
+- **Phase 4**: Members tab renders, expand/collapse holds, Owner filter narrows section list, click-through navigates to project detail. Counts match DB.
+- **Phase 5**: keyboard shortcuts work as specified, empty states show Clear-filters CTA, Lighthouse a11y ≥ 95.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean on Phase 5 push.
+- ✓ `npx eslint --max-warnings 50 .` clean post-hotfix (0 errors / 18 warnings vs the 50 cap).
+- ✓ Phase 5 diff added zero new lint errors — only 7 warnings, all stylistic (unused vars, complex dep arrays).
+- ✓ Keyboard handler ref pattern verified — `onFilterChangeRef.current` updates every render via a second `useEffect`, so no stale closure across filter changes.
+- ✓ `router.replace({ scroll: false })` remains the single URL mutation point; new shortcuts route through `onFilterChange` → same hook.
+- ✓ Stage deploy `26513579125` completed in 4m4s; live smoke green.
+- ✓ All 6 standing code-review checklist items N/A — no new DB tables, no new API routes, no PostgREST embeds, no new POST/PATCH, no new page components, no new `<SelectItem>`, no new cross-cutting predicate filters.
+- ✓ Phase 5-specific brief item: all `router.replace` calls use `{ scroll: false }`.
+
+### Known minor UX wart (not a blocker)
+
+Keyboard shortcuts (`b`/`t`/`k`/`m`) fire while a Radix Dialog is open if focus is outside the dialog's input fields — view changes under the modal. Acceptable for admin-only polish; future tightening could detect Radix's `body[style*="pointer-events: none"]` mode and skip the shortcut.
+
+### Files Changed
+
+- **Phase 5 squash `97e490d`** (6 files): `workspace.tsx`, `workspace-header.tsx`, `views/board-view.tsx`, `views/members-view.tsx`, `views/table-view.tsx`, `views/tasks-view.tsx`.
+- **Eslint hotfix squash `04d7895`** (1 file): `components/tag-multi-picker.tsx`.
+
+### Project Workspace v1 — fully shipped to stage
+
+All 5 phases done: Phase 1 unified workspace + Board + Table + URL state (`44409a8`), Phase 2 drag-drop + card metrics + status chips (`dd20d91`), Phase 3 Tasks view + GET /api/v1/tasks + log-time-from-row (`867a750`), Phase 4 Members view (`29345f3`), Phase 5 polish + a11y (`97e490d`), plus tag-picker fixback (`ed7ff15`) + eslint hotfix (`04d7895`). Brief moved to `docs/archive/features/PROJECT-WORKSPACE-BRIEF.md`. **Production promotion blocked on Sadin's visual smoke pass on Phases 4 + 5 + tag fixback.**
+
+---
+
+## Project Workspace Phase 4 shipped — Members view (2026-05-27)
+
+### What was built
+
+Squash-merged at `29345f3` from `feature/project-workspace-phase-4` (Sonnet branch `af4fa73`). 4 files, 325 insertions / 6 deletions.
+
+- **`<MembersView>`** (306 lines) — fourth and final view of the workspace. One section per team member with ≥1 owned project OR ≥1 assigned open task. Aggregation is non-N+1: `team` + `projects` already loaded by `useProjects` (Phase 1+); single `GET /api/v1/tasks?page_size=200` fetch grouped client-side. **Total ≤3 network requests** to render Members view, regardless of member count.
+  - **Grouping**: projects by owner_id (cancelled excluded; account + search filters applied); open tasks by assignee_id (account + search + priority + due filters applied; status === 'done' excluded).
+  - **Sort**: open-tasks desc → owned-projects desc → email asc (busiest member first).
+  - **Section header**: chevron + 8x8 initials avatar (blue) + email + "Projects (N) · Open tasks (M)". Click to expand/collapse.
+  - **Default expand state**: expanded if member has ≥1 open task, collapsed otherwise. Initialized once after first load via `useEffect` guarded by `initialized` flag — user toggles persist across filter changes.
+  - **Projects sub-section**: name links to `/time-tracking/projects/[id]`, account name, read-only `<StatusPill>`.
+  - **Tasks sub-section**: title links to project detail (no per-task URL exists), project name, read-only `<PriorityPill>`, due date with red `font-medium` when overdue. Sorted by `due_date asc nulls-last`.
+  - **Per-member empty hint**: members with owned projects but no open tasks show italic "No open tasks." note in the body.
+  - **Workspace empty state**: 8x8 Users icon + "No members have owned projects or assigned tasks yet." + hint "Admins assign owners in the Table view."
+- **Workspace header extension**: adds "Members" tab (Users icon). Owner filter visible on Board + Table + **Members** (extended to narrow section list to one member). Search placeholder context-aware: "Search projects & tasks…" on Members view.
+- **`useWorkspaceFilters`**: one-line change — `WorkspaceView` union adds `"members"`. URL state carries through.
+- **`workspace.tsx`**: routes `filters.view === "members"` to `<MembersView>` passing raw `projects` + `accountMap`. Renders Tasks/Members via nested ternary (the existing pattern).
+
+### Brief-spec gap rolled to Phase 5
+
+Brief's Filter specifications table said Members view should expose **Assignee + Priority + Due** filters in the workspace header. Sonnet extended only the Owner filter conditional; the others stayed `isTasksView`-only. **MembersView code already applies those filters** (lines 103-105 of members-view.tsx), so the gap is purely the header rendering — about 5 lines of conditional. Result today: if a user sets `priority=high` on Tasks view then switches to Members, the filter silently applies but the chip controls aren't visible. Phase 5 will surface them.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean.
+- ✓ Aggregation requests: ≤3 total (team + projects via Phase-1's `useProjects`, tasks 1 fetch). No N+1 across member count.
+- ✓ Owner filter narrows the section list (members-view.tsx:115).
+- ✓ No inline edits in Members view — `<StatusPill>` is read-only by component design, `<PriorityPill>` uses `readOnly={true}` explicitly.
+- ✓ Collapsed/expanded state initialized once and persists across re-renders (members-view.tsx:141-147).
+- ✓ Empty-state copy matches brief.
+- ✓ All 6 standing code-review checklist items: no new PostgREST embeds, no new POST/PATCH, no new page components, no new `.select()` after mutation, no Radix Select sentinel needed (uses custom buttons + chevrons), no new cross-cutting predicate filter.
+- ✓ Phase 4-specific items per brief: aggregation non-N+1 ✓ · Owner filter behavior ✓ · no inline edits ✓.
+
+### Files Changed (squash commit `29345f3`)
+
+- **New** (1): `views/members-view.tsx` (306 lines).
+- **Modified** (3): `workspace-header.tsx` (+ Members tab, + Users icon import, Owner filter conditional extended to include Members, search placeholder branching), `pages/workspace.tsx` (route members view), `hooks/use-workspace-filters.ts` (WorkspaceView union).
+
+### Not yet promoted to `main`
+
+Stays on `c13e594`. Phase 5 (polish + a11y + Members filter completion) is the last phase before the prod promotion observation window.
+
+---
+
+## Project Workspace tag-picker fixback shipped — Notion-style multi-select + tenant-wide pool (2026-05-27)
+
+### Why this was needed
+
+Sadin's visual smoke on Phase 3 caught the tag UX gap: per-task and per-filter tag inputs were both naive free-text — type a word, press Enter. Two real problems:
+
+1. **No tenant-wide pool.** Tag "QC" added to one task didn't surface as a suggestion when tagging another. Users would have to remember and re-type.
+2. **Filter slot used the same naive shape.** Couldn't pick from existing tags.
+
+Both surfaces wanted the same Notion-style multi-picker behavior.
+
+### What shipped
+
+Squash-merged at `ed7ff15` from `fix/project-workspace-tag-multi-picker` (Sonnet branch `cabb9d7`). 6 files, 315 insertions / 97 deletions.
+
+- **New endpoint `GET /api/v1/tasks/tags`** (42 lines) — `FEATURES.PROJECT_BOARD` gate, `scopedClient(auth)`, fetches all `tasks.tags` arrays then flattens + dedupes + alphabetic-sorts in app code. No new SQL function. Returns `string[]`. No counselor scoping (read-only pool of strings, non-PII).
+- **`<TagMultiPicker>`** (206 lines) — shadcn Popover with autofocus search input, scrollable checkable list, `Create "<query>"` row when query is non-empty AND doesn't case-insensitively match an existing tag AND isn't already selected. Trigger button renders chips when value is non-empty, placeholder + Plus icon when empty. Click-X on a chip removes via `stopPropagation` (doesn't open popover). Two sizes: `sm` (task row) + `md` (filter slot). Case-insensitive duplicate guard against current value when creating.
+- **`useTaskTags()` hook** (25 lines) — fetches pool on mount, toast.warning on failure (picker still usable with empty pool), exposes `refetchTags` for the on-PATCH-success propagation.
+
+Integration:
+- `workspace.tsx`: wires `useTaskTags`; passes `poolTags` to header and `poolTags + refetchTags` to TasksView.
+- `workspace-header.tsx`: filter slot now uses `<TagMultiPicker size="md">`. Removed `<input>` + chip-loop + dead `tagInput` state.
+- `tasks-view.tsx`: previous `handleTagAdd` + `handleTagRemove` collapsed into one `handleTagsChange` that optimistically updates → PATCHes → reverts on error + toast → calls `refetchTags()` on success so newly-created tags appear immediately in other rows + the filter. TaskRow tags cell uses `<TagMultiPicker size="sm">`. No more inline `<input>` in the row.
+
+Filter semantics: ANY-match (OR) preserved — existing `.overlaps()` in `GET /api/v1/tasks` unchanged.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean; `/api/v1/tasks/tags` registered in route table.
+- ✓ All 6 standing code-review checklist items: no PostgREST embeds added (route fetches single column array) · PATCH preserves existing tags invariants · no new page components · `.select()` shape match preserved · no Radix `value=""` (uses checkable buttons inside custom popover content) · no new soft-state filter.
+- ✓ Auto-refetch on PATCH success — new tags propagate to other rows + filter without page reload.
+- ✓ Case-insensitive guards: `Create "qc"` doesn't appear if pool has "QC"; selecting "qc" when "QC" exists treats them as the same tag.
+- ✓ Optimistic update revert on PATCH failure (clean state-rollback to prevTags).
+- **Visual smoke after merge** is the next ask — quick test that creating a tag on one task surfaces it on another row + in the filter.
+
+### Files Changed (squash commit `ed7ff15`)
+
+- **New** (3): `api/v1/tasks/tags/route.ts`, `components/tag-multi-picker.tsx`, `hooks/use-task-tags.ts`.
+- **Modified** (3): `pages/workspace.tsx` (wires hook), `components/workspace-header.tsx` (replaces filter input), `components/views/tasks-view.tsx` (collapses tag handlers + uses picker in TaskRow).
+
+### Not yet promoted to `main`
+
+Stays on `c13e594`. Phase 4 (Members view) + Phase 5 (polish + a11y) still to come.
+
+---
+
+## Project Workspace Phase 3 shipped — Tasks view + log-time-from-row (2026-05-27)
+
+### What was built
+
+Squash-merged at `867a750` from `feature/project-workspace-phase-3` (Sonnet branch `f72d32d`). 11 files, 1213 insertions / 78 deletions.
+
+- **New endpoint `GET /api/v1/tasks`** — cross-project task list. `FEATURES.PROJECT_BOARD` gate (not ACCOUNTS — new route uses the new gate). `scopedClient(auth)` for tenant isolation. Counselor scoping forces `assignee_id = auth.userId` at line 33-35 even if the URL param differs.
+  - Query params: `project_id`, `account_id` (resolved via 2-step query: fetch project IDs in account → `.in("project_id", …)`), `assignee_id`, `status` (csv → `.in()`), `priority` (csv → `.in()`), `tags` (csv → `.overlaps()` ANY-match), `due` (keyword via `dueFilterToDateRange`), `q` (substring with `[,().]` sanitization → `.ilike()`), `page`, `page_size` (max 200).
+  - PostgREST nested embed: `*, projects(id, name, account_id, accounts(id, name))`. No reverse-FK ambiguity.
+  - Order: `due_date asc nullsFirst:false`, `created_at desc`.
+  - Pagination via `.range(from, to)` + `apiPaginated` helper.
+- **`PATCH /api/v1/tasks/[id]` extended** — new fields: `assignee_id` (nullable UUID with regex), `due_date` (nullable ISO date `YYYY-MM-DD`), `priority` (enum), `tags` (string array). Validation inline (UUID regex + ISO date regex + array check). Uses `"key" in body` (not `!== undefined`) for assignee_id + due_date so explicit `null` clears the column. Gate kept on ACCOUNTS for legacy compatibility (per brief).
+- **`lib/due-keywords.ts`** — `dueFilterToDateRange(keyword)` returns `{ from?, to?, isNull? } | null`. overdue → `{ to: yesterday }` + caller adds `.not("due_date", "is", null)`. today → exact day range. this_week → today + 7. none → `{ isNull: true }`. Unknown / empty → null.
+- **`<TasksView>`** (469 lines) — shadcn `<Table>` with 8 columns: Title · Project · Status · Assignee · Priority · Due · Tags · Log time. All sortable except Tags + Log time. Default sort: due_date asc; tiebreakers: priority desc, created_at desc. Inline edits via PATCH per row:
+  - Status: shadcn `<Select>` with TaskStatus enum.
+  - Assignee: `<AssigneePicker>` (violet variant of OwnerPicker).
+  - Priority: `<PriorityPill>` (colored pill doubles as dropdown trigger).
+  - Due date: HTML `<input type="date">`, red text + border when overdue (`due_date != null && status !== 'done' && due_date < today`).
+  - Tags: chip display + inline `<input>` for adding (Enter key submits). PATCH sends full new array.
+  - Log time: `<Timer>` icon button revealed on row hover (opacity transition) → opens `<LogTimeDialog>` with `defaultTaskId` + `defaultProjectId` pre-set.
+- **`<AssigneePicker>`** — initials avatar button → dropdown with team list + Check on selected + Clear option. Violet tint distinguishes from OwnerPicker (blue). Click-outside close. Reusable shape.
+- **`<PriorityPill>`** — `PRIORITY_CONFIG` maps each priority to label + Tailwind classes (low=gray, normal=blue, high=amber, urgent=red). Has `readOnly` mode for pure-display contexts; doubles as dropdown trigger when `onChange` is set.
+- **Workspace header extension** — new "Tasks" tab (ListTodo icon) + task-view-specific filters surfaced when view === "tasks": Assignee dropdown, Task Status chip row, Priority chip row, Tags chip input with current-filter chips + X removers, Due keyword dropdown (overdue/today/this_week/none/all). Owner + Show-cancelled hidden when tasks view active. Project status chips hidden too.
+- **`useWorkspaceFilters` extension** — fields `view: "board" | "table" | "tasks"`; new state `assignee`, `taskStatuses`, `priorities`, `tags`, `due`. URL params: `assignee=`, `task_status=`, `priority=`, `tags=`, `due=`. Empty arrays serialize as "no param".
+- **`<LogTimeDialog>` + `<TimeEntryAddForm>` extension** — both accept optional `defaultTaskId` + `defaultProjectId` props. TimeEntryAddForm pre-selects task only if it's in the loaded list (defensive — avoids stale state). Existing project-detail caller unchanged (verified by diff: only adds optional props, no behavior shift).
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean; `/api/v1/tasks` registered.
+- ✓ All 6 standing checklist items: PostgREST nested embed unambiguous · PATCH preserves invariants ·  no new route shells needed · `.select()` after PATCH returns plain task; TasksView setState merge preserves projects/accounts join via spread order · no Radix `value=""` (custom pickers used) · no new cross-cutting predicate filters.
+- ✓ Phase 3-specific items: `scopedClient(auth)` used · counselor scoping at line 33-35 · `FEATURES.PROJECT_BOARD` gate (not ACCOUNTS) · LogTimeDialog extension is prop-only addition (verified via diff).
+- ✓ Counselor scoping defense in depth: even though workspace is admin-only via page-shell gate, the API enforces `assignee_id = auth.userId` if the role is counselor.
+- ⚠️ **Sonnet's verification was "code inspection" only this phase** (lighter than Phase 1/2 which ran headless smoke matrices). Inline-edits + tag persistence + log-time pre-fill all need a visual dev smoke. Code reads correctly across all paths reviewed.
+
+### Files Changed (squash commit `867a750`)
+
+- **New** (5): `src/app/(main)/api/v1/tasks/route.ts` (117 lines), `lib/due-keywords.ts` (44 lines), `components/assignee-picker.tsx` (105 lines), `components/priority-pill.tsx` (85 lines), `components/views/tasks-view.tsx` (469 lines).
+- **Modified** (6): `api/v1/tasks/[id]/route.ts` (PATCH extension), `time-tracking/components/log-time-dialog.tsx` (+ defaultTaskId/defaultProjectId props), `time-tracking/components/time-entry-add-form.tsx` (pre-select after load), `project-board/hooks/use-workspace-filters.ts` (new fields + URL params), `project-board/components/workspace-header.tsx` (Tasks tab + view-specific filters), `project-board/pages/workspace.tsx` (routes view==="tasks" → TasksView).
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594`. Phases 4 + 5 remaining before the prod promotion observation window.
+
+### Outstanding visual smoke gaps (accumulating across Phases 2+3)
+
+Worth a focused session on `dev-lead-crm.zunkireelabs.com/projects` before more phases stack up. Concretely:
+
+1. **Phase 2**: drag a project card between columns; reload; confirm persistence.
+2. **Phase 2**: open same project in two tabs, drag in tab 1, drag in tab 2 → 409 toast + auto-refetch.
+3. **Phase 2**: click status chips → board narrows correctly; Clear restores.
+4. **Phase 3**: switch to Tasks tab; verify rows render with project + assignee + priority + due.
+5. **Phase 3**: change status / assignee / priority / due / tags inline → all persist across reload.
+6. **Phase 3**: add a tag via chip input (Enter) and remove a tag via X → both persist.
+7. **Phase 3**: click "Log time" on a task row → `<LogTimeDialog>` opens with project + task pre-selected → submit → entry appears on `/time-tracking` timesheet.
+8. **Phase 3** (creds-blocked but worth eventually): counselor account hits `/api/v1/tasks` → only own tasks.
+
+---
+
+## Project Workspace Phase 2 shipped — drag-drop, card metrics, status chips, TOCTOU (2026-05-27)
+
+### What was built
+
+Squash-merged at `dd20d91` from `feature/project-workspace-phase-2` (Sonnet branch `a967cec`). 10 files, 461 insertions / 93 deletions.
+
+- **TOCTOU on `PATCH /api/v1/projects/[id]`**: accepts optional `expected_status` field. When present, applies `.eq("status", expected_status)` to the UPDATE; mismatch returns `409 INVALID_STATE` with a message echoing both expected and actual current status. Uses `maybeSingle()` when expected_status is present (returns null on precondition mismatch), `single()` otherwise (back-compat). Edge case handled: empty patch object → no-op fetch + return current row. Validation accepts `expected_status` as a ProjectStatus enum value via `isIn`.
+- **Drag-and-drop on Board view**: `<DndContext>` wraps columns with `closestCorners` collision detection + `PointerSensor` (activationConstraint distance: 5). `<useDroppable>` on each `<ProjectColumn>` (visual `isOver` ring); `<useDraggable>` on each `<ProjectCard>`. `<DragOverlay>` renders ghost card while dragging.
+- **Optimistic update flow** in `<BoardView>`: uses `originalProjectRef` to preserve original status across async drag-end + `optimisticByStatus` map to override the rendered column map during in-flight PATCH. On 409 → revert optimistic + toast + refetch. On other error → revert + toast. On success → merge updated data into parent state + clear optimistic. Same `contact_count` preservation pattern used in `<ProjectRow>` inline edits.
+- **Card metrics**:
+  - **Contact count**: `GET /api/v1/projects` select extended with `project_contacts!project_contacts_project_id_fkey(count)` (explicit FK disambiguation, checklist item 1). Parsed in `useProjects` from PostgREST embed shape.
+  - **Billable hours**: `useProjects` fetches `/api/v1/time-entries/summary?dimension=project` in parallel; keys by project_id; converts `billable_minutes / 60`. One round-trip for all projects on board load.
+  - **Conditional rendering**: card metrics row hidden when both contact_count and billable_hrs are zero — keeps the card visually quiet for new projects.
+- **Status multi-chip filter** (rolled forward from Phase 1 spec gap): renders 5 base chips (Discovery / In Progress / Review / Delivered / On Hold) + Cancelled chip when show-cancelled toggle is on. "Empty array = all visible" semantic. Show-cancelled handler removes Cancelled from statuses array when hiding cancelled (prevents zombie filter). Explicit "Clear" button when any chip selected. URL serialization: `status=` comma-separated, no param when empty.
+- **`visibleColumns` logic** in `<BoardView>`: combines `showCancelled` toggle (adds Cancelled column) with `statuses` filter (narrows to selected chips). When statuses array is empty, all base columns visible. When non-empty, only chip-selected columns rendered.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean, no TS errors.
+- ✓ Code-review checklist all 6 items: PostgREST FK disambiguation ✓ · PATCH preserves invariants ✓ · route shells N/A · `.select()` shape match: contact_count preserved across PATCH responses ✓ · Radix Select sentinel not needed for custom button chips · cross-cutting predicate N/A.
+- ✓ TOCTOU pattern mirrors time-entries approve `.eq("approval_status", "pending")` shape. 409 response: `{ code: "INVALID_STATE", message: "Expected status 'X' but current status is 'Y'" }`.
+- ✓ Back-compat: PATCH without expected_status keeps unconditional behavior (verified by code path inspection — `single()` vs `maybeSingle()` branching).
+- ✓ Status chip toggle semantics: empty = all visible; clicking first chip narrows to it; Clear restores empty (= all visible).
+- ⚠️ **Drag-and-drop NOT visually verified** in Playwright headless. Known limitation: dnd-kit's PointerSensor activationConstraint doesn't fire reliably under CDP pointer events. Sonnet verified PATCH-level TOCTOU via direct API calls; drag-end code path verified by inspection (DndContext + sensors + dragEnd handler all correctly wired). **Real browser will work** — visual smoke recommended after deploy.
+
+### Files Changed (squash commit `dd20d91`)
+
+- **Modified** (10): `api/v1/projects/[id]/route.ts` (TOCTOU + maybeSingle branching), `api/v1/projects/route.ts` (project_contacts embed), `pages/workspace.tsx` (hoursMap + refetch wiring), `hooks/use-projects.ts` (4th parallel fetch + embed parse), `hooks/use-workspace-filters.ts` (+ statuses field), `components/workspace-header.tsx` (+ status chip row), `components/views/board-view.tsx` (DndContext + optimistic state), `components/project-column.tsx` (useDroppable), `components/project-card.tsx` (useDraggable + DragOverlay support + metrics row), `components/project-row.tsx` (preserve contact_count).
+- **DB**: no migration (Phase 1 already covered all schema needs).
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594` until all 5 phases of Project Workspace ship + observation window.
+
+### Open visual-smoke for Sadin
+
+1. Visit `dev-lead-crm.zunkireelabs.com/projects` as Zunkireelabs admin.
+2. Drag a card between columns (e.g. "BathroomFort Website" from In Progress → Review). Confirm card moves + persists after reload.
+3. Open same project in two tabs. Drag in tab 1 → success. Drag same project in tab 2 (now stale) → expect 409 toast "Project was moved by another user — refreshing" + auto-refetch.
+4. Click status chips (Discovery / Review / etc.) → confirm Board narrows to selected columns. Click "Clear" → restore all.
+5. Verify card metrics: hover/check contact count + billable hrs match what `/time-tracking/projects/<id>` shows.
+
+If anything fails, report back and we send a fixback to Sonnet. Otherwise, on to Phase 3.
+
+---
+
+## Project Workspace Phase 1 shipped — unified /projects with Board + Table views (2026-05-27)
+
+### What was built
+
+Squash-merged at `44409a8` from `feature/project-workspace-phase-1` (Sonnet branch — 2 raw commits squashed into one). 24 files, 947 insertions / 14 deletions.
+
+- **Migration 024 applied**: `tasks.assignee_id + due_date + priority + tags`; `projects.owner_id`; `accounts.owner_id`; 6 supporting indexes (assignee + due + priority + tags GIN + projects.owner + accounts.owner). Migration 023 (stage enum extension) folded in from the parked branch.
+- **Workspace shell** at `src/industries/it-agency/features/project-board/pages/workspace.tsx` — Suspense boundary (Next 16 useSearchParams requirement), fetches projects + accounts + team in parallel via `useProjects`, applies filters client-side, dispatches to active view.
+- **Lifted filters** (`workspace-header.tsx`): search input, account `FilterDropdown`, owner `FilterDropdown`, show-cancelled checkbox. View toggle as shadcn `<Tabs>` (Board / Table). All state URL-encoded via `useWorkspaceFilters` hook (sentinel `"__all__"` for "all" selections; `router.replace` with `{ scroll: false }`).
+- **Board view** (`views/board-view.tsx`): cherry-picked from the parked Phase 1 work. 5 columns visible by default (Discovery / In Progress / Review / Delivered / On Hold), Cancelled added as 6th when checkbox on. Each column sorted by `updated_at` desc. On Hold styled muted (opacity-60).
+- **Table view** (`views/table-view.tsx`): shadcn `<Table>` with 5 sortable columns (Project / Account / Owner / Status / Updated). Default sort updated desc. Inline Status dropdown + inline Owner picker on each row via `<ProjectRow>` + `<OwnerPicker>`. Empty state present.
+- **`<OwnerPicker>`** (`components/owner-picker.tsx`): initials avatar button → dropdown with member list + Clear option. Reusable shape ready for `<AssigneePicker>` in Phase 3.
+- **`<ProjectCard>`** (Board view) now shows owner initials when `owner_id` is set.
+- **API extensions**: `PATCH /api/v1/projects/[id]` accepts `owner_id`; `PATCH /api/v1/accounts/[id]` accepts `owner_id`. `PROJECT_STATUSES` arrays updated in both project routes.
+- **Permission gates**: page shell at `/projects/page.tsx` does `getCurrentUserTenant() → redirect(/login)` then `getFeatureAccess(industry_id, PROJECT_BOARD) → notFound()` then admin-only check (`role === "owner" || role === "admin" → notFound()`). Non-admin members within it_agency still see a 404; cross-cutting member self-view is a follow-up brief.
+- **Type updates**: `TaskPriority` type, `Task.{assignee_id, due_date, priority, tags}`, `Project.owner_id`, `Account.owner_id`, `ProjectStatus` enum reshaped.
+
+### One brief gap rolled forward to Phase 2
+
+The brief's Phase 1 spec called for a **status multi-chip filter** alongside the show-cancelled toggle. Sonnet shipped show-cancelled only; status chip filter was missed. Real but small gap — Board view already shows all statuses as columns (filter is somewhat redundant there), but Table view currently can't be narrowed to a single status without sorting. Decision: bundle into Phase 2's scope since the filter is most useful once drag-drop makes Board dynamic. Logged in STATUS-BOARD for Phase 2 kickoff.
+
+### Workflow note: Sonnet's pre-emptive correctness on the brief divergence
+
+The brief incorrectly told Sonnet to use `authenticateRequest()` in the page shell. Sonnet noticed every existing page shell uses `getCurrentUserTenant()` and used that instead. Surfaced the divergence in the handoff report rather than silently doing what the brief said. **That's the behavior we want from Sonnet** — judgment over slavish adherence. Brief was updated mid-flight to reflect the correct pattern (already incorporated in `PROJECT-WORKSPACE-BRIEF.md` § "What's already built").
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean, 53 routes, `/projects` shows.
+- ✓ Migration 024 applied; column existence confirmed via `information_schema`.
+- ✓ Code-review checklist (all 6 standing items): PostgREST FK N/A · PATCH preserves invariants ✓ · route shell exists in same commit ✓ · `.select()` shape match N/A · Radix Select sentinel ✓ · 'done' grep clean in project-status context ✓.
+- ✓ Admin gate: `if (!isAdmin) notFound()` at page.tsx:13-14.
+- ✓ Industry gate: `FEATURES.PROJECT_BOARD` via `getFeatureAccess` at page.tsx:10.
+- ✓ Filter hook uses `router.replace({ scroll: false })` (Phase 5 checklist already satisfied pre-emptively).
+- ✓ Sentinel `"__all__"` consistent across hooks + header.
+- ✓ Suspense boundary around `useSearchParams` (Next 16 requirement met).
+- **Deferred** (creds rotated, can't verify):
+  - As Admizz admin: `/projects` 404, sidebar absent. Verified by code-reading the industry gate at page.tsx:10 + manifest entry under it-agency only.
+  - As Zunkireelabs counselor: `/projects` 404, sidebar absent. Verified by code-reading the admin gate at page.tsx:13-14 + counselor role check.
+
+### Files Changed (squash commit `44409a8`)
+
+- **New** (15): `src/app/(main)/(dashboard)/projects/page.tsx` (22 lines), `src/industries/it-agency/features/project-board/pages/workspace.tsx` (86 lines), 11 components under `project-board/components/`, 2 hooks under `project-board/hooks/`, `meta.ts`, migrations 023 + 024.
+- **Modified** (9): `src/app/(main)/api/v1/{projects,accounts}/[id]/route.ts` (accept owner_id), `src/app/(main)/api/v1/projects/route.ts` (PROJECT_STATUSES), `src/components/dashboard/shell.tsx` (+ LayoutGrid icon), `src/industries/_registry.ts` (+ PROJECT_BOARD), `src/industries/it-agency/manifest.ts` (+ project-board feature + sidebar entry), `src/industries/it-agency/features/accounts/components/project-form.tsx` (status enum update), `src/industries/it-agency/features/time-tracking/components/status-badge.tsx` (in_review + delivered).
+- **DB**: migration 023 (status enum) + 024 (new fields + indexes).
+
+### Branch hygiene
+
+Both spent feature branches deleted from origin: `feature/project-board-phase-1` (Sonnet's parked kanban-only work, superseded by this phase) and `feature/project-workspace-phase-1` (squashed into this commit). Local copies remain as orphan refs; will get GC'd next reflog expiry.
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594` until all 5 phases of Project Workspace ship + observation window.
+
+---
+
+## Production promotion shipped — stage → main, full IT-agency v1 + industry modules live (2026-05-27)
+
+### What shipped
+
+`stage` (`d20cccc`) merged into `main` via a non-FF merge at `c13e594`. Production (`lead-crm.zunkireelabs.com`) is now current with the full Q2 build:
+
+- **Industry modules architecture** — every feature now lives under `src/industries/<id>/features/<feature>/` or the universal `src/app/...` two-homes. `_loader.ts` + `_registry.ts` + per-industry `manifest.ts` give one truth function (`getFeatureAccess`) for sidebar / route / API gating.
+- **Accounts** — top-level CRM entity for `it_agency`, `FEATURES.ACCOUNTS` gate, `/accounts/*` URLs.
+- **CRM Contacts v1** (Phases A–E) — contacts CRUD, project↔contact junction, lead→contact conversion with TOCTOU safety, cross-cutting `converted_at IS NULL` filters with `?include_converted=1` flag.
+- **Time Tracking v1** (Phases 1–5) — accounts/projects/tasks/time-entries hierarchy, approvals queue with atomic status precondition + audit + events, rates plumbing (`tenant_users.default_hourly_rate` + `projects.default_rate` + `resolveEffectiveRate` precedence), atomic `rate_snapshot` on approval, billable totals on project detail + approvals queue + home stats.
+- **Anish's lead-tags + contacts page + lead-type toggle + ID generation + phone country-code handling + sidebar ordering fixes**.
+- **Doc reorg**: SESSION-LOG / STATUS-BOARD / FEATURE-ROADMAP / FEATURE-CATALOG as 4 living docs; everything else under `docs/archive/<series>/` or `docs/reference/`.
+
+DB migrations 019–022 applied: 019 (lead tags), 020 (time tracking schema + tenant_users.default_hourly_rate + leads.account_id), 021 (contacts + project_contacts + leads conversion columns), 022 (project_contacts RLS hardening).
+
+### Merge mechanics
+
+- Local `main` was 43 commits behind origin/main → fast-forwarded clean to `e10b97d`.
+- Fast-forward of stage onto main was NOT possible: main had 2 commits stage didn't (`02fe74e` empty CI redeploy trigger from 2026-05-12 + `e10b97d` Anish's "Merge stage" from 2026-05-21). Both were operational, no application code to preserve, no rebase needed.
+- Used `git merge --no-ff stage` → ort strategy, no conflicts, 173 files changed (14,313 insertions / 448 deletions). Merge commit `c13e594` preserves both histories. **Force-pushing main was explicitly not on the table** (CLAUDE.md § CI/CD + the resume prompt's "production-affecting actions confirm first" rule).
+- Push to origin/main triggered Deploy-to-Production run `26502204163`. Pre-deploy Checks (lint + tsc + build) + Deploy job both green. 4m22s total (09:13:31Z → 09:17:53Z UTC).
+
+### Live verification
+
+- `lead-crm.zunkireelabs.com` → 307 (redirect to /login, expected unauthenticated).
+- `lead-crm.zunkireelabs.com/login` → 200, ~0.6s TTFB.
+- `lead-crm.zunkireelabs.com/dashboard` → 200 after redirect-follow.
+- Deeper smoke (dashboard render as both Zunkireelabs + Admizz admin, sidebar item visibility per industry) **not** run as part of this entry — visual verification of staging was Sadin's call; staging was current with the same diff. If a regression surfaces, rollback path is `gh workflow run rollback.yml -f commit_sha=e10b97d -f reason="..."`.
+
+### Pre-flight: Anish's work surveyed
+
+Before the merge, surveyed all non-main/stage branches because the resume prompt called out "any Anish PRs in flight that should be bundled." Result: **no in-flight Anish work**. 4 of his branches (`check-in`, `consultancy-update`, `create-form`, `tags`) are zero-commits-ahead of stage — already-merged dangling branches, safe to delete on cleanup. 1 unmerged branch (`feature/ai-orchestrate-orca`) is by Sadin not Anish, 7 weeks old, predates industry modules. No open PRs on GitHub. The "Anish tags/contacts/lead-types" line in STATUS-BOARD referred to work *already on stage*, which this promotion shipped to prod as intended.
+
+### Test residue replicated to prod (known)
+
+Phase E + Phase 5 smoke runs left test data in Zunkireelabs tenant — PhaseE-Smoke-NoRate projects, SmokeConvert leads, smoke contacts. These now live on `lead-crm.zunkireelabs.com`. Cosmetic, harmless, not worth a cleanup migration. Flagged in RESUME block so a future "the prod data looks weird" question has an immediate answer.
+
+### Workflow held
+
+Production-affecting action confirmed with Sadin via AskUserQuestion before the merge. Opus did the merge + push + monitoring + verification + doc updates — all brain/orchestration work. No code written. No Sonnet handoff needed.
 
 ---
 

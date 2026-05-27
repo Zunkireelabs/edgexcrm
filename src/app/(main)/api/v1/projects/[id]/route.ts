@@ -15,7 +15,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
-const PROJECT_STATUSES = ["planning", "active", "on_hold", "done", "cancelled"];
+const PROJECT_STATUSES = ["planning", "active", "in_review", "delivered", "on_hold", "cancelled"];
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -59,6 +59,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const { valid, errors } = validate(body, {
     name: [maxLength(255)],
     status: [isIn(PROJECT_STATUSES)],
+    expected_status: [isIn(PROJECT_STATUSES)],
     notes: [optionalMaxLength(2000)],
   });
   if (!valid) return apiValidationError(errors);
@@ -66,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("projects")
-    .select("id")
+    .select("id, status")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Project");
@@ -74,21 +75,42 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const patch: Record<string, unknown> = {};
   if (body.name !== undefined) patch.name = String(body.name).trim();
   if (body.status !== undefined) patch.status = String(body.status);
+  if (body.owner_id !== undefined) patch.owner_id = body.owner_id ?? null;
   if (body.default_rate !== undefined)
     patch.default_rate = body.default_rate != null ? Number(body.default_rate) : null;
   if (body.is_billable !== undefined) patch.is_billable = Boolean(body.is_billable);
   if (body.notes !== undefined) patch.notes = body.notes ? String(body.notes).trim() : null;
 
-  const { data: updated, error } = await db
-    .from("projects")
-    .update(patch)
-    .eq("id", id)
-    .select()
-    .single();
+  const expectedStatus = body.expected_status !== undefined ? String(body.expected_status) : undefined;
+
+  // No-op: nothing to update — satisfy precondition trivially
+  if (Object.keys(patch).length === 0) {
+    const { data: current } = await db.from("projects").select("*").eq("id", id).maybeSingle();
+    return apiSuccess(current ?? existing);
+  }
+
+  let updateQuery = db.from("projects").update(patch).eq("id", id);
+  if (expectedStatus !== undefined) {
+    updateQuery = updateQuery.eq("status", expectedStatus);
+  }
+
+  const { data: updated, error } = expectedStatus !== undefined
+    ? await updateQuery.select().maybeSingle()
+    : await updateQuery.select().single();
 
   if (error) {
     log.error({ error }, "Failed to update project");
     return apiError("DB_ERROR", "Failed to update project", 500);
+  }
+
+  if (expectedStatus !== undefined && updated === null) {
+    const { data: current } = await db
+      .from("projects")
+      .select("status")
+      .eq("id", id)
+      .maybeSingle() as { data: { status: string } | null; error: unknown };
+    const currentStatus = current?.status ?? "unknown";
+    return apiError("INVALID_STATE", `Expected status '${expectedStatus}' but current status is '${currentStatus}'`, 409);
   }
 
   await createAuditLog({

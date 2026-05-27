@@ -16,6 +16,8 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
+const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -56,12 +58,39 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
+  // Validate new fields inline (nullable UUID + nullable ISO date + array)
+  const validationErrors: Record<string, string[]> = {};
+
   const { valid, errors } = validate(body, {
     title: [maxLength(255)],
     description: [optionalMaxLength(2000)],
     status: [isIn(TASK_STATUSES)],
+    priority: [isIn(TASK_PRIORITIES)],
   });
-  if (!valid) return apiValidationError(errors);
+  Object.assign(validationErrors, errors);
+
+  if (body.assignee_id !== undefined && body.assignee_id !== null) {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof body.assignee_id !== "string" || !uuidRe.test(body.assignee_id)) {
+      validationErrors.assignee_id = ["Must be a valid UUID or null"];
+    }
+  }
+
+  if (body.due_date !== undefined && body.due_date !== null) {
+    if (typeof body.due_date !== "string" || !ISO_DATE_RE.test(body.due_date)) {
+      validationErrors.due_date = ["Must be a valid ISO date YYYY-MM-DD or null"];
+    }
+  }
+
+  if (body.tags !== undefined) {
+    if (!Array.isArray(body.tags) || !(body.tags as unknown[]).every((t) => typeof t === "string")) {
+      validationErrors.tags = ["Must be an array of strings"];
+    }
+  }
+
+  if (!valid || Object.keys(validationErrors).length > 0) {
+    return apiValidationError(validationErrors);
+  }
 
   const db = await scopedClient(auth);
   const { data: existing } = await db
@@ -80,6 +109,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     patch.estimated_minutes = body.estimated_minutes != null ? Number(body.estimated_minutes) : null;
   if (body.is_billable !== undefined) patch.is_billable = Boolean(body.is_billable);
   if (body.position !== undefined) patch.position = Number(body.position);
+  if (body.priority !== undefined) patch.priority = String(body.priority);
+  if (body.tags !== undefined) patch.tags = body.tags as string[];
+  if ("assignee_id" in body) patch.assignee_id = body.assignee_id ? String(body.assignee_id) : null;
+  if ("due_date" in body) patch.due_date = body.due_date ? String(body.due_date) : null;
 
   const { data: updated, error } = await db
     .from("tasks")

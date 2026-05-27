@@ -25,11 +25,12 @@ import {
 import type { Project, ProjectStatus } from "@/types/database";
 
 const STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
-  { value: "planning",  label: "Planning" },
-  { value: "active",    label: "Active" },
-  { value: "on_hold",   label: "On Hold" },
-  { value: "done",      label: "Done" },
-  { value: "cancelled", label: "Cancelled" },
+  { value: "planning",   label: "Planning" },
+  { value: "active",     label: "Active" },
+  { value: "in_review",  label: "In Review" },
+  { value: "delivered",  label: "Delivered" },
+  { value: "on_hold",    label: "On Hold" },
+  { value: "cancelled",  label: "Cancelled" },
 ];
 
 interface ProjectFormProps {

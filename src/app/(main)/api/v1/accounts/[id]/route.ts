@@ -77,6 +77,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const patch: Record<string, unknown> = {};
   if (body.name !== undefined) patch.name = String(body.name).trim();
+  if (body.owner_id !== undefined) patch.owner_id = body.owner_id ?? null;
   if (body.primary_contact_email !== undefined)
     patch.primary_contact_email = body.primary_contact_email
       ? String(body.primary_contact_email).trim()

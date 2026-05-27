@@ -7,7 +7,7 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-05-25
+Last updated: 2026-05-27 (Project board brief reframed and renamed to "Project Workspace" after scope review with Sadin; 5-phase plan replaces the 3-phase brief)
 
 ---
 
@@ -26,11 +26,6 @@ Sadin signed off on building this. Has at least a paragraph of intent. Ready for
 ### IT-agency industry (`it_agency`)
 
 Four first-round candidates for the IT-agency manifest. All are industry-scoped (live under `src/industries/it-agency/features/<feature>/`). Approved 2026-05-25.
-
-- **Project board (client deliverables)**
-  - Kanban-style board for active client projects, separate from the leads pipeline.
-  - Stages like Discovery / In Progress / Review / Delivered.
-  - Reuses dnd-kit patterns from the existing pipeline. Multi-day build. High value once shipped.
 
 - **Service catalog / packages**
   - Define service packages (name, description, hours, price). Listed on `/services` page; potentially used as templates for quotes.
@@ -51,12 +46,13 @@ _(no approved features yet)_
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
 
-- **Time Tracking** (`time-tracking`, industry-scoped to `it_agency`)
-  - **Brief**: `docs/TIME-TRACKING-BRIEF.md` (full data model, API surface, UI surface, 5-phase plan, verification per phase)
-  - **Scope**: account/project/task/time-entry hierarchy + per-member-rate-with-project-override + tenant-admin approvals + billable totals
-  - **Phasing**: 5 commits across ~4–5 dev-days (schema → CRUD → time entries → approvals → rates)
+- **Project Workspace** (`project-board` feature ID, industry-scoped to `it_agency`)
+  - **Brief**: `docs/PROJECT-WORKSPACE-BRIEF.md` (renamed from PROJECT-BOARD-BRIEF — Notion-style unified workspace with 4 views: Board / Table / Tasks / Members; lifted filters; URL-encoded state; ~550 lines)
+  - **Scope**: unified `/projects` workspace with view toggle + lifted filters. Migration 024 adds `tasks.assignee_id + due_date + priority + tags` and `projects.owner_id + accounts.owner_id`. Board view (drag-drop, card metrics), Table view (sortable rows, inline edits), Tasks view (cross-project, log-time-from-row), Members view (group by owner/assignee).
+  - **Phasing**: 5 commits (shell + Board + Table → drag-drop + card metrics → Tasks view + log-time → Members view → polish + URL + a11y)
+  - **Parked work**: `feature/project-board-phase-1` (eeeb7e6) by Sonnet — kanban only. ~70% reusable as `board-view.tsx` in Phase 1; ~30% (board-filters, page shell) reshapes into the workspace shell. Branch held until Phase 1 of this brief lands.
   - **Workflow**: Opus planned + reviews; **Sonnet executes** (separate session). Opus gates each phase before push to stage.
-  - **Status**: planned. Awaiting Sonnet session pickup.
+  - **Status**: design approved. Awaiting Sonnet session pickup for Phase 1.
 
 ---
 
