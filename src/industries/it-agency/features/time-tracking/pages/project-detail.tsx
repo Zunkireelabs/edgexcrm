@@ -11,6 +11,7 @@ import {
   CheckSquare,
   Pencil,
   Users,
+  DollarSign,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,7 +37,9 @@ import { ProjectStatusBadge } from "../components/status-badge";
 import { ProjectForm } from "../../accounts/components/project-form";
 import { TaskRow } from "../components/task-row";
 import { ProjectContactPicker } from "../../crm-contacts/components/project-contact-picker";
-import type { Project, Task } from "@/types/database";
+import { calculateBillableMinutes, calculateBillableAmount } from "../lib/totals";
+import { formatMinutes } from "../hooks/use-time-entries";
+import type { Project, Task, TimeEntry } from "@/types/database";
 
 type ProjectContactRole = "primary" | "technical" | "billing" | "other" | null;
 
@@ -82,6 +85,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [approvedEntries, setApprovedEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
 
@@ -102,8 +106,9 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
       fetch(`/api/v1/projects/${projectId}`).then((r) => r.json()),
       fetch(`/api/v1/projects/${projectId}/tasks`).then((r) => r.json()),
       fetch(`/api/v1/projects/${projectId}/contacts`).then((r) => r.json()),
+      fetch(`/api/v1/time-entries?project_id=${projectId}&approval_status=approved`).then((r) => r.json()),
     ])
-      .then(([projRes, tasksRes, contactsRes]) => {
+      .then(([projRes, tasksRes, contactsRes, entriesRes]) => {
         if (projRes.error) {
           toast.error("Project not found");
           router.push("/accounts");
@@ -112,6 +117,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
         setProject(projRes.data);
         setTasks(tasksRes.data ?? []);
         setContactLinks(contactsRes.data ?? []);
+        setApprovedEntries(entriesRes.data ?? []);
       })
       .catch(() => toast.error("Failed to load project"))
       .finally(() => setLoading(false));
@@ -220,6 +226,9 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
   const todoCount = tasks.filter((t) => t.status === "todo").length;
   const doneCount = tasks.filter((t) => t.status === "done").length;
 
+  const billableMinutes = calculateBillableMinutes(approvedEntries);
+  const billableAmount = calculateBillableAmount(approvedEntries);
+
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       {/* Back nav */}
@@ -258,6 +267,28 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
           </Button>
         )}
       </div>
+
+      {/* Billable totals */}
+      {project.is_billable && (
+        <div className="flex items-center gap-4 p-4 rounded-lg border bg-muted/30">
+          <DollarSign className="h-5 w-5 text-muted-foreground shrink-0" />
+          <div className="flex items-center gap-6 flex-wrap">
+            <div>
+              <p className="text-xs text-muted-foreground">Billable hours</p>
+              <p className="text-lg font-semibold tabular-nums">{formatMinutes(billableMinutes)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Billable amount</p>
+              <p className="text-lg font-semibold tabular-nums">
+                ${billableAmount.toFixed(2)}
+              </p>
+            </div>
+            <p className="text-xs text-muted-foreground self-end mb-0.5">
+              Approved entries only
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Contacts */}
       <div className="space-y-3">

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { RateInput } from "../../time-tracking/components/rate-input";
 import {
   Dialog,
   DialogContent,
@@ -133,21 +134,7 @@ export function ProjectForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="proj-rate">Default hourly rate (overrides member rate)</Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
-                $
-              </span>
-              <Input
-                id="proj-rate"
-                type="number"
-                min="0"
-                step="0.01"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                placeholder="0.00"
-                className="pl-7"
-              />
-            </div>
+            <RateInput id="proj-rate" value={rate} onChange={setRate} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="proj-notes">Notes</Label>

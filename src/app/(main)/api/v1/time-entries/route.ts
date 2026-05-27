@@ -35,7 +35,7 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from("time_entries")
-    .select("*, projects(id, name, account_id, accounts(id, name)), tasks(id, title)");
+    .select("*, projects(id, name, account_id, default_rate, accounts(id, name)), tasks(id, title)");
 
   if (userIdParam) query = query.eq("user_id", userIdParam);
   if (projectId) query = query.eq("project_id", projectId);
@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
       approval_status: "pending",
       rate_snapshot: null,
     })
-    .select("*, projects(id, name, account_id, accounts(id, name)), tasks(id, title)")
+    .select("*, projects(id, name, account_id, default_rate, accounts(id, name)), tasks(id, title)")
     .single();
 
   if (error) {

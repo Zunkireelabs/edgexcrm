@@ -9,6 +9,7 @@ export interface TimeEntryWithJoins extends TimeEntry {
     id: string;
     name: string;
     account_id: string | null;
+    default_rate: number | null;
     accounts: { id: string; name: string } | null;
   } | null;
   tasks: { id: string; title: string } | null;

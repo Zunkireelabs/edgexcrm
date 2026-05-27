@@ -2,9 +2,10 @@
 
 import type React from "react";
 import Link from "next/link";
-import { Clock, ListChecks, Users, AlertCircle } from "lucide-react";
+import { Clock, Users, AlertCircle, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMinutes } from "../hooks/use-time-entries";
+import { calculateBillableAmount } from "../lib/totals";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
 interface TimesheetStatsCardsProps {
@@ -24,11 +25,17 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
   const totalMinutes = entries.reduce((sum, e) => sum + e.minutes, 0);
   const pendingCount = entries.filter((e) => e.approval_status === "pending").length;
   const memberCount = new Set(entries.map((e) => e.user_id)).size;
+  const billableAmount = calculateBillableAmount(entries);
 
   const adminTiles: Tile[] = [
     { label: "Total Hours", value: formatMinutes(totalMinutes), icon: Clock, color: "text-blue-600" },
-    { label: "Entries", value: String(entries.length), icon: ListChecks, color: "text-slate-600" },
     { label: "Members", value: String(memberCount), icon: Users, color: "text-violet-600" },
+    {
+      label: "Billable",
+      value: `$${billableAmount.toFixed(2)}`,
+      icon: DollarSign,
+      color: "text-green-600",
+    },
     {
       label: "Pending",
       value: String(pendingCount),
@@ -40,7 +47,12 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
 
   const memberTiles: Tile[] = [
     { label: "Total Hours", value: formatMinutes(totalMinutes), icon: Clock, color: "text-blue-600" },
-    { label: "Entries", value: String(entries.length), icon: ListChecks, color: "text-slate-600" },
+    {
+      label: "Billable",
+      value: `$${billableAmount.toFixed(2)}`,
+      icon: DollarSign,
+      color: "text-green-600",
+    },
     { label: "Pending", value: String(pendingCount), icon: AlertCircle, color: "text-amber-600" },
   ];
 

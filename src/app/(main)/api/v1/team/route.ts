@@ -5,6 +5,7 @@ import {
   apiUnauthorized,
   apiForbidden,
   apiServiceUnavailable,
+  apiNotFound,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 
@@ -25,7 +26,7 @@ export async function GET() {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, created_at")
+    .select("id, user_id, role, default_hourly_rate, created_at")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -38,6 +39,7 @@ export async function GET() {
     id: string;
     user_id: string;
     role: string;
+    default_hourly_rate: number | null;
     created_at: string;
   }>;
 
@@ -54,6 +56,7 @@ export async function GET() {
     user_id: m.user_id,
     role: m.role,
     email: userMap.get(m.user_id) || "Unknown",
+    default_hourly_rate: m.default_hourly_rate,
     created_at: m.created_at,
   }));
 
@@ -105,4 +108,66 @@ export async function DELETE(request: Request) {
 
   log.info({ userId: body.user_id }, "Team member removed");
   return apiSuccess({ user_id: body.user_id, removed: true });
+}
+
+export async function PATCH(request: Request) {
+  const requestId = crypto.randomUUID();
+  const log = createRequestLogger({
+    requestId,
+    method: "PATCH",
+    path: "/api/v1/team",
+  });
+
+  const auth = await authenticateRequest();
+  if (!auth) return apiUnauthorized();
+  if (!requireAdmin(auth)) return apiForbidden();
+
+  let body: { user_id: string; default_hourly_rate?: number | null };
+  try {
+    body = await request.json();
+  } catch {
+    return apiServiceUnavailable("Invalid JSON body");
+  }
+
+  if (!body.user_id) {
+    return apiServiceUnavailable("user_id is required");
+  }
+
+  if (
+    body.default_hourly_rate !== undefined &&
+    body.default_hourly_rate !== null &&
+    (typeof body.default_hourly_rate !== "number" || body.default_hourly_rate < 0)
+  ) {
+    return apiServiceUnavailable("default_hourly_rate must be a non-negative number or null");
+  }
+
+  const db = await scopedClient(auth);
+
+  const { data: existing } = await db
+    .from("tenant_users")
+    .select("id")
+    .eq("user_id", body.user_id)
+    .maybeSingle();
+
+  if (!existing) return apiNotFound("Team member");
+
+  const patch: Record<string, unknown> = {};
+  if (body.default_hourly_rate !== undefined) {
+    patch.default_hourly_rate = body.default_hourly_rate;
+  }
+
+  const { data: updated, error } = await db
+    .from("tenant_users")
+    .update(patch)
+    .eq("user_id", body.user_id)
+    .select("id, user_id, role, default_hourly_rate, created_at")
+    .single();
+
+  if (error) {
+    log.error({ err: error }, "Failed to update team member");
+    return apiServiceUnavailable("Failed to update team member");
+  }
+
+  log.info({ userId: body.user_id }, "Team member updated");
+  return apiSuccess(updated);
 }

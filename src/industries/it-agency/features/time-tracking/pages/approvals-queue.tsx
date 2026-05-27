@@ -19,6 +19,7 @@ import {
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { toLocalDateString } from "@/lib/date";
 import { formatMinutes } from "../hooks/use-time-entries";
+import { resolveEffectiveRate } from "../lib/rates";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
 interface ApprovalsQueuePageProps {
@@ -98,6 +99,7 @@ interface ApprovalEntryRowProps {
   onApprove: (id: string) => Promise<void>;
   onRejectClick: (id: string) => void;
   processing: boolean;
+  memberRateMap: Map<string, number | null>;
 }
 
 function ApprovalEntryRow({
@@ -107,7 +109,15 @@ function ApprovalEntryRow({
   onApprove,
   onRejectClick,
   processing,
+  memberRateMap,
 }: ApprovalEntryRowProps) {
+  const memberRate = memberRateMap.get(entry.user_id) ?? null;
+  const effectiveRate = resolveEffectiveRate(
+    entry.projects ?? null,
+    { default_hourly_rate: memberRate },
+  );
+  const projectedAmount = (entry.minutes / 60) * effectiveRate;
+
   return (
     <div className="flex items-center gap-3 py-2.5 px-4 hover:bg-muted/40 rounded-lg group">
       <Checkbox
@@ -123,7 +133,7 @@ function ApprovalEntryRow({
         {formatMinutes(entry.minutes)}
       </div>
 
-      {/* Date (shown in member grouping) */}
+      {/* Date */}
       <div className="shrink-0 w-24 text-xs text-muted-foreground">
         {new Date(entry.entry_date + "T00:00:00").toLocaleDateString("en-US", {
           month: "short",
@@ -143,6 +153,18 @@ function ApprovalEntryRow({
           <p className="text-xs text-muted-foreground truncate mt-0.5">{entry.notes}</p>
         )}
       </div>
+
+      {/* Projected billable (pre-approval preview) */}
+      {entry.is_billable && (
+        <div className="shrink-0 w-24 text-right">
+          <p className="text-xs font-medium tabular-nums">
+            ${projectedAmount.toFixed(2)}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            @${effectiveRate}/hr
+          </p>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -183,6 +205,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
   const isAdmin = role === "owner" || role === "admin";
 
   const [entries, setEntries] = useState<TimeEntryWithJoins[]>([]);
+  const [memberRateMap, setMemberRateMap] = useState<Map<string, number | null>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -206,10 +229,21 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
     setError(null);
     try {
       const from = fourWeeksAgo();
-      const res = await fetch(`/api/v1/time-entries?approval_status=pending&from=${from}`);
-      if (!res.ok) throw new Error("Failed to load pending entries");
-      const { data } = await res.json();
+      const [entriesRes, teamRes] = await Promise.all([
+        fetch(`/api/v1/time-entries?approval_status=pending&from=${from}`),
+        fetch("/api/v1/team"),
+      ]);
+      if (!entriesRes.ok) throw new Error("Failed to load pending entries");
+      const { data } = await entriesRes.json();
       setEntries((data ?? []) as TimeEntryWithJoins[]);
+      if (teamRes.ok) {
+        const { data: team } = await teamRes.json();
+        const rateMap = new Map<string, number | null>();
+        for (const m of (team ?? []) as Array<{ user_id: string; default_hourly_rate: number | null }>) {
+          rateMap.set(m.user_id, m.default_hourly_rate);
+        }
+        setMemberRateMap(rateMap);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load");
     } finally {
@@ -492,6 +526,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
                       onApprove={handleApprove}
                       onRejectClick={handleRejectClick}
                       processing={processingIds.has(entry.id)}
+                      memberRateMap={memberRateMap}
                     />
                   ))}
                 </div>
@@ -518,6 +553,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
                       onApprove={handleApprove}
                       onRejectClick={handleRejectClick}
                       processing={processingIds.has(entry.id)}
+                      memberRateMap={memberRateMap}
                     />
                   ))}
                 </div>
