@@ -4,6 +4,7 @@ import { useMemo, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { useProjects, type ProjectWithMetrics } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
+import { useTaskTags } from "../hooks/use-task-tags";
 import { WorkspaceHeader } from "../components/workspace-header";
 import { BoardView } from "../components/views/board-view";
 import { TableView } from "../components/views/table-view";
@@ -20,6 +21,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
   const { projects, accounts, team, accountMap, teamMap, hoursMap, loading, refetch, setProjects } =
     useProjects();
   const { filters, setFilters } = useWorkspaceFilters();
+  const { tags: poolTags, refetchTags } = useTaskTags();
 
   const filtered: ProjectWithAccount[] = useMemo(() => {
     const q = filters.q.toLowerCase();
@@ -62,6 +64,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
         onFilterChange={setFilters}
         accounts={accounts}
         team={team}
+        poolTags={poolTags}
       />
 
       {filters.view === "board" ? (
@@ -85,6 +88,8 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           filters={filters}
           team={team}
           teamMap={teamMap}
+          poolTags={poolTags}
+          refetchTags={refetchTags}
         />
       )}
     </div>

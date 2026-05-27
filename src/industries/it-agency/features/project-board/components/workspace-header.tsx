@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, LayoutGrid, TableProperties, ListTodo, X } from "lucide-react";
+import { Search, LayoutGrid, TableProperties, ListTodo } from "lucide-react";
+import { TagMultiPicker } from "./tag-multi-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterDropdown, type FilterOption } from "@/components/ui/filter-dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -51,6 +51,7 @@ interface WorkspaceHeaderProps {
   onFilterChange: (next: Partial<WorkspaceFilters>) => void;
   accounts: Account[];
   team: TeamMember[];
+  poolTags: string[];
 }
 
 export function WorkspaceHeader({
@@ -58,8 +59,8 @@ export function WorkspaceHeader({
   onFilterChange,
   accounts,
   team,
+  poolTags,
 }: WorkspaceHeaderProps) {
-  const [tagInput, setTagInput] = useState("");
 
   const accountOptions: FilterOption[] = [
     { value: ALL_SENTINEL, label: "All accounts" },
@@ -115,17 +116,6 @@ export function WorkspaceHeader({
 
   function isPriorityActive(value: TaskPriority): boolean {
     return filters.priorities.length === 0 || filters.priorities.includes(value);
-  }
-
-  function addTag(tag: string) {
-    const trimmed = tag.trim();
-    if (!trimmed || filters.tags.includes(trimmed)) return;
-    onFilterChange({ tags: [...filters.tags, trimmed] });
-    setTagInput("");
-  }
-
-  function removeTag(tag: string) {
-    onFilterChange({ tags: filters.tags.filter((t) => t !== tag) });
   }
 
   const isTasksView = filters.view === "tasks";
@@ -338,34 +328,15 @@ export function WorkspaceHeader({
             )}
           </div>
 
-          {/* Tags filter chips */}
+          {/* Tags filter */}
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-            {filters.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-0.5 px-2 py-0.5 bg-gray-100 text-gray-700 text-xs rounded-full border border-gray-200"
-              >
-                {tag}
-                <button
-                  type="button"
-                  onClick={() => removeTag(tag)}
-                  className="hover:text-red-500 transition-colors ml-0.5"
-                  aria-label={`Remove tag filter ${tag}`}
-                >
-                  <X className="h-2.5 w-2.5" />
-                </button>
-              </span>
-            ))}
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") { e.preventDefault(); addTag(tagInput); }
-              }}
-              placeholder="Add tag…"
-              className="h-6 px-2 text-xs border border-dashed border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-24"
+            <TagMultiPicker
+              value={filters.tags}
+              onChange={(next) => onFilterChange({ tags: next })}
+              allTags={poolTags}
+              placeholder="Filter by tag…"
+              size="md"
             />
           </div>
         </>

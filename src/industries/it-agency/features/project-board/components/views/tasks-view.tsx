@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, Timer, X } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Timer } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -21,6 +21,7 @@ import {
 import { LogTimeDialog } from "@/industries/it-agency/features/time-tracking/components/log-time-dialog";
 import { AssigneePicker } from "../assignee-picker";
 import { PriorityPill } from "../priority-pill";
+import { TagMultiPicker } from "../tag-multi-picker";
 import type { Task, TaskStatus, TaskPriority } from "@/types/database";
 import type { TeamMember } from "../../hooks/use-projects";
 import type { WorkspaceFilters } from "../../hooks/use-workspace-filters";
@@ -72,9 +73,11 @@ interface TasksViewProps {
   filters: WorkspaceFilters;
   team: TeamMember[];
   teamMap: Map<string, TeamMember>;
+  poolTags: string[];
+  refetchTags: () => Promise<void>;
 }
 
-export function TasksView({ filters, team, teamMap }: TasksViewProps) {
+export function TasksView({ filters, team, teamMap, poolTags, refetchTags }: TasksViewProps) {
   const [tasks, setTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -207,23 +210,15 @@ export function TasksView({ filters, team, teamMap }: TasksViewProps) {
     }
   }
 
-  async function handleTagRemove(taskId: string, tag: string, currentTags: string[]) {
-    const tags = currentTags.filter((t) => t !== tag);
+  async function handleTagsChange(taskId: string, newTags: string[]) {
+    const prevTags = tasks.find((t) => t.id === taskId)?.tags ?? [];
+    setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: newTags } : t)));
     try {
-      const updated = await patchTask(taskId, { tags });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
+      const updated = await patchTask(taskId, { tags: newTags });
+      setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
+      await refetchTags();
     } catch {
-      toast.error("Failed to update tags");
-    }
-  }
-
-  async function handleTagAdd(taskId: string, tag: string, currentTags: string[]) {
-    if (!tag.trim() || currentTags.includes(tag.trim())) return;
-    const tags = [...currentTags, tag.trim()];
-    try {
-      const updated = await patchTask(taskId, { tags });
-      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
-    } catch {
+      setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: prevTags } : t)));
       toast.error("Failed to update tags");
     }
   }
@@ -285,12 +280,12 @@ export function TasksView({ filters, team, teamMap }: TasksViewProps) {
               key={task.id}
               task={task}
               team={team}
+              poolTags={poolTags}
               onStatusChange={handleStatusChange}
               onAssigneeChange={handleAssigneeChange}
               onPriorityChange={handlePriorityChange}
               onDueDateChange={handleDueDateChange}
-              onTagRemove={handleTagRemove}
-              onTagAdd={handleTagAdd}
+              onTagsChange={handleTagsChange}
               onLogTime={openLogTime}
             />
           ))}
@@ -313,27 +308,26 @@ export function TasksView({ filters, team, teamMap }: TasksViewProps) {
 interface TaskRowProps {
   task: TaskWithProject;
   team: TeamMember[];
+  poolTags: string[];
   onStatusChange: (id: string, s: TaskStatus) => void;
   onAssigneeChange: (id: string, uid: string | null) => void;
   onPriorityChange: (id: string, p: TaskPriority) => void;
   onDueDateChange: (id: string, d: string | null) => void;
-  onTagRemove: (id: string, tag: string, current: string[]) => void;
-  onTagAdd: (id: string, tag: string, current: string[]) => void;
+  onTagsChange: (id: string, tags: string[]) => void;
   onLogTime: (task: TaskWithProject) => void;
 }
 
 function TaskRow({
   task,
   team,
+  poolTags,
   onStatusChange,
   onAssigneeChange,
   onPriorityChange,
   onDueDateChange,
-  onTagRemove,
-  onTagAdd,
+  onTagsChange,
   onLogTime,
 }: TaskRowProps) {
-  const [tagInput, setTagInput] = useState("");
   const isOverdue =
     task.due_date != null &&
     task.status !== "done" &&
@@ -415,39 +409,14 @@ function TaskRow({
       </TableCell>
 
       {/* Tags */}
-      <TableCell className="max-w-[180px]">
-        <div className="flex items-center gap-1 flex-wrap">
-          {task.tags.map((tag) => (
-            <span
-              key={tag}
-              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-gray-100 text-gray-700 text-[11px] rounded-full"
-            >
-              {tag}
-              <button
-                type="button"
-                onClick={() => onTagRemove(task.id, tag, task.tags)}
-                className="hover:text-red-500 transition-colors"
-                aria-label={`Remove tag ${tag}`}
-              >
-                <X className="h-2.5 w-2.5" />
-              </button>
-            </span>
-          ))}
-          <input
-            type="text"
-            value={tagInput}
-            onChange={(e) => setTagInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault();
-                onTagAdd(task.id, tagInput, task.tags);
-                setTagInput("");
-              }
-            }}
-            placeholder="+ tag"
-            className="text-[11px] text-muted-foreground placeholder:text-muted-foreground/50 w-10 bg-transparent outline-none border-none"
-          />
-        </div>
+      <TableCell className="max-w-[200px]">
+        <TagMultiPicker
+          size="sm"
+          value={task.tags}
+          onChange={(next) => onTagsChange(task.id, next)}
+          allTags={poolTags}
+          placeholder="+ tag"
+        />
       </TableCell>
 
       {/* Log time action */}
