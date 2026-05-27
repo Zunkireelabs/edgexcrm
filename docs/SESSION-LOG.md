@@ -11,19 +11,82 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace Phase 2 shipped to stage** at `dd20d91` (squash from feature/project-workspace-phase-2, 10 files, 461/93). Drag-drop on Board with TOCTOU 409 precondition · card metrics (contact count + billable hours) · status multi-chip filter (rolled forward from P1). All 6 standing code-review items clean. Stage at `dev-lead-crm.zunkireelabs.com` now has Phases 1+2 live. Production still on `c13e594`.
-- **What's next**: **Phase 3 of Project Workspace** — Tasks view (cross-project task list) + log-time-from-row. New `GET /api/v1/tasks` endpoint (gated on FEATURES.PROJECT_BOARD, counselor-scoped, filterable by project/assignee/status/priority/tags/due/account/search/pagination). `PATCH /api/v1/tasks/[id]` extended to accept assignee_id + due_date + priority + tags. New components: `<AssigneePicker>` (reuse OwnerPicker shape), `<PriorityPill>`, task-row.tsx. `<LogTimeDialog>` extended with optional `defaultTaskId` + `defaultProjectId` props. Awaiting Sonnet session pickup.
-- **One visual smoke gap from Phase 2**: drag-and-drop on Board couldn't be verified in Playwright headless (known dnd-kit + CDP limitation — PointerSensor activationConstraint doesn't fire reliably). Code wiring is correct by inspection. **Worth a quick manual drag on dev-lead-crm.zunkireelabs.com/projects to confirm visually** — drag a card between columns, reload, confirm it stayed.
+- **Current state**: **Project Workspace Phase 3 shipped to stage** at `867a750` (squash from feature/project-workspace-phase-3, 11 files, 1213/78). Cross-project Tasks view live: shadcn Table with 8 sortable columns + inline edits (status, assignee, priority, due_date, tags) + "Log time" per row → pre-filled `<LogTimeDialog>`. New `GET /api/v1/tasks` endpoint (FEATURES.PROJECT_BOARD gate, counselor-scoped). `<AssigneePicker>` + `<PriorityPill>` reusable components landed. Stage now has Phases 1+2+3 live on `dev-lead-crm.zunkireelabs.com`. Production still on `c13e594`.
+- **What's next**: **Phase 4 of Project Workspace** — Members view. One section per team member with ≥1 owned project OR ≥1 assigned open task. Section header: avatar/initials + email + (count of owned projects) + (count of open tasks). Collapsible body with sub-headers "Projects (owner)" + "Tasks (open)". Workspace Owner filter narrows section list. Aggregation must not N+1 — batch with `IN (?, ?, ?, ...)` for member lookups OR accept a single joined query. Awaiting Sonnet session pickup.
+- **Outstanding visual smoke gaps** (carryover from Phases 2+3, accumulating):
+  - **Phase 2**: drag-and-drop on Board couldn't be verified in Playwright headless (dnd-kit + CDP limitation). Code wiring correct by inspection.
+  - **Phase 2**: two-tab race showing 409 toast + auto-refetch.
+  - **Phase 3**: Tasks view full smoke — inline edits persist after reload (status/assignee/priority/due/tags), tag chip add/remove, "Log time" pre-fills dialog correctly, submitted entry shows in /time-tracking timesheet.
+  - **Phase 3**: counselor scoping on `/api/v1/tasks` — counselor account hits should be filtered to `assignee_id = self`. Sonnet verified the code path, no live test (credential rotation still blocks).
+  - **Worth a focused dev-smoke session** on `dev-lead-crm.zunkireelabs.com/projects` before Phase 4 ships (or wait til all 5 phases land — judgment call).
 - **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
 - **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `dd20d91`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
-- **Code-review checklist** (6 items): all clean across Phases 1+2. Notable Phase 2 specifics: FK disambiguation on `project_contacts(count)` embed ✓; `expected_status` TOCTOU pattern mirrors time-entries `.eq("approval_status", "pending")` shape ✓; 409 INVALID_STATE response shape consistent ✓; status chip filter implemented as custom buttons (no Radix Select sentinel needed). **No new items added from Phase 2.**
-- **What Opus does next on resume**: hand off Phase 3 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 3 (Tasks view + log-time-from-row). Build the new `GET /api/v1/tasks` endpoint with FEATURES.PROJECT_BOARD gate + counselor scoping; extend `PATCH /api/v1/tasks/[id]` with new fields; build `<AssigneePicker>` reusing OwnerPicker shape; extend `<LogTimeDialog>` with `defaultTaskId`/`defaultProjectId` props (NO behavior change to existing callers). Push to `feature/project-workspace-phase-3` and stop. Opus reviews, squashes to stage, kicks off Phase 4."
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `867a750`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
+- **Code-review checklist** (6 items): all clean across Phases 1+2+3. Phase 3 specifics: PostgREST nested embed `projects(id, name, account_id, accounts(id, name))` unambiguous; PATCH back-compat preserved (uses `"key" in body` for nullable assignee_id/due_date so explicit null clears); `.select()` after PATCH returns plain task — TasksView setState merges with existing state preserving the projects/accounts join (correct pattern). **No new items added from Phase 3.**
+- **What Opus does next on resume**: hand off Phase 4 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 4 (Members view). Aggregate via batched queries (NOT N+1): single `/api/v1/team` call for members + single `/api/v1/projects?owner_id_in=…` if backend supports OR small concurrency loop + single `/api/v1/tasks?assignee_id_in=…` call. Build `<MembersView>` with collapsible sections per member, counts in header, sorted by busiest first. Workspace Owner filter narrows section list. Push to `feature/project-workspace-phase-4` and stop. Opus reviews, squashes to stage, kicks off Phase 5."
 - **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 3 shipped — Tasks view + log-time-from-row (2026-05-27)
+
+### What was built
+
+Squash-merged at `867a750` from `feature/project-workspace-phase-3` (Sonnet branch `f72d32d`). 11 files, 1213 insertions / 78 deletions.
+
+- **New endpoint `GET /api/v1/tasks`** — cross-project task list. `FEATURES.PROJECT_BOARD` gate (not ACCOUNTS — new route uses the new gate). `scopedClient(auth)` for tenant isolation. Counselor scoping forces `assignee_id = auth.userId` at line 33-35 even if the URL param differs.
+  - Query params: `project_id`, `account_id` (resolved via 2-step query: fetch project IDs in account → `.in("project_id", …)`), `assignee_id`, `status` (csv → `.in()`), `priority` (csv → `.in()`), `tags` (csv → `.overlaps()` ANY-match), `due` (keyword via `dueFilterToDateRange`), `q` (substring with `[,().]` sanitization → `.ilike()`), `page`, `page_size` (max 200).
+  - PostgREST nested embed: `*, projects(id, name, account_id, accounts(id, name))`. No reverse-FK ambiguity.
+  - Order: `due_date asc nullsFirst:false`, `created_at desc`.
+  - Pagination via `.range(from, to)` + `apiPaginated` helper.
+- **`PATCH /api/v1/tasks/[id]` extended** — new fields: `assignee_id` (nullable UUID with regex), `due_date` (nullable ISO date `YYYY-MM-DD`), `priority` (enum), `tags` (string array). Validation inline (UUID regex + ISO date regex + array check). Uses `"key" in body` (not `!== undefined`) for assignee_id + due_date so explicit `null` clears the column. Gate kept on ACCOUNTS for legacy compatibility (per brief).
+- **`lib/due-keywords.ts`** — `dueFilterToDateRange(keyword)` returns `{ from?, to?, isNull? } | null`. overdue → `{ to: yesterday }` + caller adds `.not("due_date", "is", null)`. today → exact day range. this_week → today + 7. none → `{ isNull: true }`. Unknown / empty → null.
+- **`<TasksView>`** (469 lines) — shadcn `<Table>` with 8 columns: Title · Project · Status · Assignee · Priority · Due · Tags · Log time. All sortable except Tags + Log time. Default sort: due_date asc; tiebreakers: priority desc, created_at desc. Inline edits via PATCH per row:
+  - Status: shadcn `<Select>` with TaskStatus enum.
+  - Assignee: `<AssigneePicker>` (violet variant of OwnerPicker).
+  - Priority: `<PriorityPill>` (colored pill doubles as dropdown trigger).
+  - Due date: HTML `<input type="date">`, red text + border when overdue (`due_date != null && status !== 'done' && due_date < today`).
+  - Tags: chip display + inline `<input>` for adding (Enter key submits). PATCH sends full new array.
+  - Log time: `<Timer>` icon button revealed on row hover (opacity transition) → opens `<LogTimeDialog>` with `defaultTaskId` + `defaultProjectId` pre-set.
+- **`<AssigneePicker>`** — initials avatar button → dropdown with team list + Check on selected + Clear option. Violet tint distinguishes from OwnerPicker (blue). Click-outside close. Reusable shape.
+- **`<PriorityPill>`** — `PRIORITY_CONFIG` maps each priority to label + Tailwind classes (low=gray, normal=blue, high=amber, urgent=red). Has `readOnly` mode for pure-display contexts; doubles as dropdown trigger when `onChange` is set.
+- **Workspace header extension** — new "Tasks" tab (ListTodo icon) + task-view-specific filters surfaced when view === "tasks": Assignee dropdown, Task Status chip row, Priority chip row, Tags chip input with current-filter chips + X removers, Due keyword dropdown (overdue/today/this_week/none/all). Owner + Show-cancelled hidden when tasks view active. Project status chips hidden too.
+- **`useWorkspaceFilters` extension** — fields `view: "board" | "table" | "tasks"`; new state `assignee`, `taskStatuses`, `priorities`, `tags`, `due`. URL params: `assignee=`, `task_status=`, `priority=`, `tags=`, `due=`. Empty arrays serialize as "no param".
+- **`<LogTimeDialog>` + `<TimeEntryAddForm>` extension** — both accept optional `defaultTaskId` + `defaultProjectId` props. TimeEntryAddForm pre-selects task only if it's in the loaded list (defensive — avoids stale state). Existing project-detail caller unchanged (verified by diff: only adds optional props, no behavior shift).
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean; `/api/v1/tasks` registered.
+- ✓ All 6 standing checklist items: PostgREST nested embed unambiguous · PATCH preserves invariants ·  no new route shells needed · `.select()` after PATCH returns plain task; TasksView setState merge preserves projects/accounts join via spread order · no Radix `value=""` (custom pickers used) · no new cross-cutting predicate filters.
+- ✓ Phase 3-specific items: `scopedClient(auth)` used · counselor scoping at line 33-35 · `FEATURES.PROJECT_BOARD` gate (not ACCOUNTS) · LogTimeDialog extension is prop-only addition (verified via diff).
+- ✓ Counselor scoping defense in depth: even though workspace is admin-only via page-shell gate, the API enforces `assignee_id = auth.userId` if the role is counselor.
+- ⚠️ **Sonnet's verification was "code inspection" only this phase** (lighter than Phase 1/2 which ran headless smoke matrices). Inline-edits + tag persistence + log-time pre-fill all need a visual dev smoke. Code reads correctly across all paths reviewed.
+
+### Files Changed (squash commit `867a750`)
+
+- **New** (5): `src/app/(main)/api/v1/tasks/route.ts` (117 lines), `lib/due-keywords.ts` (44 lines), `components/assignee-picker.tsx` (105 lines), `components/priority-pill.tsx` (85 lines), `components/views/tasks-view.tsx` (469 lines).
+- **Modified** (6): `api/v1/tasks/[id]/route.ts` (PATCH extension), `time-tracking/components/log-time-dialog.tsx` (+ defaultTaskId/defaultProjectId props), `time-tracking/components/time-entry-add-form.tsx` (pre-select after load), `project-board/hooks/use-workspace-filters.ts` (new fields + URL params), `project-board/components/workspace-header.tsx` (Tasks tab + view-specific filters), `project-board/pages/workspace.tsx` (routes view==="tasks" → TasksView).
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594`. Phases 4 + 5 remaining before the prod promotion observation window.
+
+### Outstanding visual smoke gaps (accumulating across Phases 2+3)
+
+Worth a focused session on `dev-lead-crm.zunkireelabs.com/projects` before more phases stack up. Concretely:
+
+1. **Phase 2**: drag a project card between columns; reload; confirm persistence.
+2. **Phase 2**: open same project in two tabs, drag in tab 1, drag in tab 2 → 409 toast + auto-refetch.
+3. **Phase 2**: click status chips → board narrows correctly; Clear restores.
+4. **Phase 3**: switch to Tasks tab; verify rows render with project + assignee + priority + due.
+5. **Phase 3**: change status / assignee / priority / due / tags inline → all persist across reload.
+6. **Phase 3**: add a tag via chip input (Enter) and remove a tag via X → both persist.
+7. **Phase 3**: click "Log time" on a task row → `<LogTimeDialog>` opens with project + task pre-selected → submit → entry appears on `/time-tracking` timesheet.
+8. **Phase 3** (creds-blocked but worth eventually): counselor account hits `/api/v1/tasks` → only own tasks.
 
 ---
 
