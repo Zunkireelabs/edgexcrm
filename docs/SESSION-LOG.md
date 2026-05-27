@@ -11,18 +11,61 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Time Tracking v1 is fully shipped to `stage`** — all 5 phases done. Phase 5 (rates + billable totals) merged at `f50f3ef`. Combined with CRM Contacts v1 (which closed at `eb1cce6` earlier the same day), the IT-agency feature set is now feature-complete: Accounts → Projects → Tasks → Time entries → Approvals → Billable totals AND Leads → Contacts → Account/Project linkage. `dev-lead-crm.zunkireelabs.com` is current with everything. **The next logical action is to promote `stage` → `main`** for production rollout. Production is on a pre-industry-modules version and will get a big diff: industry modules + hardening + Anish's tags/contacts/lead-types + all of time-tracking + all of accounts + all of CRM contacts in one release.
-- **Workflow split** (held through ~12 phases now across Time Tracking + Accounts + Contacts + TT Phase 5): Opus plans + reviews + pushes to stage + writes docs. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Local-verify-before-push. Phase 5 held the pattern cleanly: Sonnet's initial commit was clean per spec on first pass (no fixbacks needed), 14 files, 26/26 verification matrix passed before reporting back, Opus re-ran 8/8 smoke + full code review before squash-merge.
-- **Phase 5 review summary** (2026-05-27): code review covered all 14 files; build clean; live smoke verified rate_snapshot atomicity, immutability under post-approval rate change, fallback project-rate→member-rate→0, TOCTOU precondition, summary shape/validation/counselor-scope/Admizz-403. One notable Sonnet decision affirmed: `/api/v1/team` PATCH is NOT industry-gated because `tenant_users.default_hourly_rate` is a universal-table column (added in migration 020); the UI gate at `industryId === "it_agency"` is the meaningful gate. One pre-existing nit not in Phase 5 scope: team route uses `apiServiceUnavailable` (503) for validation errors — Sonnet mirrored the existing pattern; cleanup deferred to a future hardening sweep.
-- **Branch state**: `stage` at the doc-sweep commit (this entry's commit). Local matches origin. No in-flight branches. `main` (production) untouched.
-- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · Radix Select forbids `<SelectItem value="">` (sentinel) · cross-cutting predicate audits must grep `from("Table")` across the whole repo. **No new items from Phase 5** — first time Sonnet's initial commit was clean across all 6 items with no fixbacks.
-- **What Opus does next on resume**: confirm Sadin wants to promote `stage` → `main` and run the promotion. Pre-flight: (1) full smoke matrix on staging (or trust the per-feature smokes already done — that's a judgment call), (2) confirm no Anish PRs in flight that should be bundled, (3) `git checkout main && git merge stage && git push origin main` triggers the production deploy via the existing CI workflow. Production domain: `lead-crm.zunkireelabs.com`. Rollback path documented in CLAUDE.md (`gh workflow run rollback.yml -f commit_sha=<SHA>`).
-- **Tenant DB residue from smoke runs**: Phase E + Phase 5 smoke runs left test data in Zunkireelabs tenant — a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts. Harmless in dev/staging; will replicate to prod on promotion. Not worth a cleanup migration — flagged here so future-me sees it.
-- **Counselor + Admizz passwords were rotated by Sonnet during Phase 5 verification** (Sonnet's report flagged this). Sadin's original passwords (manjila/xyz12345, admizzdotcom2020/admizz123) no longer work. Sonnet didn't include the new passwords in the handoff. **Future smoke runs that need those users will need a fresh password reset via service role; ask Sadin before doing this, since it locks out real teammates.**
-- **Blockers**: none. Clean slate; production promotion is the only outstanding item.
+- **Current state**: **Production promotion shipped.** `stage` → `main` merged at `c13e594` (non-FF, see entry below). Deploy-to-Production workflow green in 4m22s. `lead-crm.zunkireelabs.com` is now current with industry modules + Accounts + CRM Contacts v1 + Time Tracking v1 + Anish's tags/contacts/lead-types — the full ~14k-line promotion went out clean. Live smoke: `/login` 200, `/dashboard` 200. **Anish is on leave** so the next stretch is Opus+Sonnet only.
+- **What's next** (no committed work in flight): FEATURE-ROADMAP "Planned/next up" is empty post-Time-Tracking. "Approved for dev" has 4 IT-agency candidates Sadin signed off on 2026-05-25: Project board (kanban for client deliverables, multi-day build, highest value), Service catalog/packages, Proposal/SOW generator (v2-ish), plus a placeholder for a 4th. **Project board is the natural next pick** — biggest leverage, reuses existing dnd-kit patterns from the pipeline. Awaiting Sadin's go-ahead to write the brief.
+- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
+- **Workflow split** (held through ~13 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `d20cccc`. Local main matches origin. **4 dangling already-merged branches** safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (Sadin, 2026-04-10, 7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules — would need full re-homing into `src/industries/<id>/features/orca/` + 104-commit rebase before resurrection).
+- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · Radix Select forbids `<SelectItem value="">` (sentinel) · cross-cutting predicate audits must grep `from("Table")` across the whole repo. **No new items from Phase 5** (first zero-fixback phase) and **no new items from the prod promotion** (it was a merge, not a feature).
+- **What Opus does next on resume**: confirm Sadin wants to start the IT-agency Project board feature (or some other pick from the roadmap) and write the brief. Workflow split applies: Opus brief → Sonnet builds → Opus reviews/pushes to stage.
+- **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
+- **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Production promotion shipped — stage → main, full IT-agency v1 + industry modules live (2026-05-27)
+
+### What shipped
+
+`stage` (`d20cccc`) merged into `main` via a non-FF merge at `c13e594`. Production (`lead-crm.zunkireelabs.com`) is now current with the full Q2 build:
+
+- **Industry modules architecture** — every feature now lives under `src/industries/<id>/features/<feature>/` or the universal `src/app/...` two-homes. `_loader.ts` + `_registry.ts` + per-industry `manifest.ts` give one truth function (`getFeatureAccess`) for sidebar / route / API gating.
+- **Accounts** — top-level CRM entity for `it_agency`, `FEATURES.ACCOUNTS` gate, `/accounts/*` URLs.
+- **CRM Contacts v1** (Phases A–E) — contacts CRUD, project↔contact junction, lead→contact conversion with TOCTOU safety, cross-cutting `converted_at IS NULL` filters with `?include_converted=1` flag.
+- **Time Tracking v1** (Phases 1–5) — accounts/projects/tasks/time-entries hierarchy, approvals queue with atomic status precondition + audit + events, rates plumbing (`tenant_users.default_hourly_rate` + `projects.default_rate` + `resolveEffectiveRate` precedence), atomic `rate_snapshot` on approval, billable totals on project detail + approvals queue + home stats.
+- **Anish's lead-tags + contacts page + lead-type toggle + ID generation + phone country-code handling + sidebar ordering fixes**.
+- **Doc reorg**: SESSION-LOG / STATUS-BOARD / FEATURE-ROADMAP / FEATURE-CATALOG as 4 living docs; everything else under `docs/archive/<series>/` or `docs/reference/`.
+
+DB migrations 019–022 applied: 019 (lead tags), 020 (time tracking schema + tenant_users.default_hourly_rate + leads.account_id), 021 (contacts + project_contacts + leads conversion columns), 022 (project_contacts RLS hardening).
+
+### Merge mechanics
+
+- Local `main` was 43 commits behind origin/main → fast-forwarded clean to `e10b97d`.
+- Fast-forward of stage onto main was NOT possible: main had 2 commits stage didn't (`02fe74e` empty CI redeploy trigger from 2026-05-12 + `e10b97d` Anish's "Merge stage" from 2026-05-21). Both were operational, no application code to preserve, no rebase needed.
+- Used `git merge --no-ff stage` → ort strategy, no conflicts, 173 files changed (14,313 insertions / 448 deletions). Merge commit `c13e594` preserves both histories. **Force-pushing main was explicitly not on the table** (CLAUDE.md § CI/CD + the resume prompt's "production-affecting actions confirm first" rule).
+- Push to origin/main triggered Deploy-to-Production run `26502204163`. Pre-deploy Checks (lint + tsc + build) + Deploy job both green. 4m22s total (09:13:31Z → 09:17:53Z UTC).
+
+### Live verification
+
+- `lead-crm.zunkireelabs.com` → 307 (redirect to /login, expected unauthenticated).
+- `lead-crm.zunkireelabs.com/login` → 200, ~0.6s TTFB.
+- `lead-crm.zunkireelabs.com/dashboard` → 200 after redirect-follow.
+- Deeper smoke (dashboard render as both Zunkireelabs + Admizz admin, sidebar item visibility per industry) **not** run as part of this entry — visual verification of staging was Sadin's call; staging was current with the same diff. If a regression surfaces, rollback path is `gh workflow run rollback.yml -f commit_sha=e10b97d -f reason="..."`.
+
+### Pre-flight: Anish's work surveyed
+
+Before the merge, surveyed all non-main/stage branches because the resume prompt called out "any Anish PRs in flight that should be bundled." Result: **no in-flight Anish work**. 4 of his branches (`check-in`, `consultancy-update`, `create-form`, `tags`) are zero-commits-ahead of stage — already-merged dangling branches, safe to delete on cleanup. 1 unmerged branch (`feature/ai-orchestrate-orca`) is by Sadin not Anish, 7 weeks old, predates industry modules. No open PRs on GitHub. The "Anish tags/contacts/lead-types" line in STATUS-BOARD referred to work *already on stage*, which this promotion shipped to prod as intended.
+
+### Test residue replicated to prod (known)
+
+Phase E + Phase 5 smoke runs left test data in Zunkireelabs tenant — PhaseE-Smoke-NoRate projects, SmokeConvert leads, smoke contacts. These now live on `lead-crm.zunkireelabs.com`. Cosmetic, harmless, not worth a cleanup migration. Flagged in RESUME block so a future "the prod data looks weird" question has an immediate answer.
+
+### Workflow held
+
+Production-affecting action confirmed with Sadin via AskUserQuestion before the merge. Opus did the merge + push + monitoring + verification + doc updates — all brain/orchestration work. No code written. No Sonnet handoff needed.
 
 ---
 
