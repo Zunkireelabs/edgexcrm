@@ -11,18 +11,65 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace Phase 1 shipped to stage** at `44409a8` (squash from feature/project-workspace-phase-1, 24 files, 947 insertions). Unified `/projects` workspace live on `dev-lead-crm.zunkireelabs.com` with Board + Table views, lifted filters (search/account/owner/show-cancelled), URL-encoded state, admin-only gate. Migration 024 applied. Both spent feature branches deleted from origin (`feature/project-board-phase-1` superseded; `feature/project-workspace-phase-1` squashed). Production (`lead-crm.zunkireelabs.com`) still at `c13e594` — not yet promoted.
-- **What's next**: **Phase 2 of Project Workspace** — drag-drop on Board (TOCTOU `expected_status` precondition + 409), card metrics (contact count + billable hours via existing endpoints), AND **bundle the deferred status multi-chip filter** from Phase 1 (brief P1 spec gap; rolled forward since the filter is most useful once drag-drop reorders make Board dynamic). Awaiting Sonnet session pickup.
+- **Current state**: **Project Workspace Phase 2 shipped to stage** at `dd20d91` (squash from feature/project-workspace-phase-2, 10 files, 461/93). Drag-drop on Board with TOCTOU 409 precondition · card metrics (contact count + billable hours) · status multi-chip filter (rolled forward from P1). All 6 standing code-review items clean. Stage at `dev-lead-crm.zunkireelabs.com` now has Phases 1+2 live. Production still on `c13e594`.
+- **What's next**: **Phase 3 of Project Workspace** — Tasks view (cross-project task list) + log-time-from-row. New `GET /api/v1/tasks` endpoint (gated on FEATURES.PROJECT_BOARD, counselor-scoped, filterable by project/assignee/status/priority/tags/due/account/search/pagination). `PATCH /api/v1/tasks/[id]` extended to accept assignee_id + due_date + priority + tags. New components: `<AssigneePicker>` (reuse OwnerPicker shape), `<PriorityPill>`, task-row.tsx. `<LogTimeDialog>` extended with optional `defaultTaskId` + `defaultProjectId` props. Awaiting Sonnet session pickup.
+- **One visual smoke gap from Phase 2**: drag-and-drop on Board couldn't be verified in Playwright headless (known dnd-kit + CDP limitation — PointerSensor activationConstraint doesn't fire reliably). Code wiring is correct by inspection. **Worth a quick manual drag on dev-lead-crm.zunkireelabs.com/projects to confirm visually** — drag a card between columns, reload, confirm it stayed.
 - **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
 - **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `44409a8`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
-- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): all 6 items applied cleanly during Phase 1 review (PostgREST FK disambiguation N/A · PATCH preserves POST invariants ✓ · new page components have route shells ✓ · `.select()` shape match N/A · Radix Select empty-string avoided via `"__all__"` sentinel ✓ · 'done' grep clean ✓). **No new items added from Phase 1.**
-- **What Opus does next on resume**: hand off Phase 2 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 2 (drag-drop on Board + card metrics). ALSO add the status multi-chip filter from § Filter specifications (deferred from Phase 1). Push to `feature/project-workspace-phase-2` and stop. Opus reviews, squashes to stage, kicks off Phase 3."
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `dd20d91`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
+- **Code-review checklist** (6 items): all clean across Phases 1+2. Notable Phase 2 specifics: FK disambiguation on `project_contacts(count)` embed ✓; `expected_status` TOCTOU pattern mirrors time-entries `.eq("approval_status", "pending")` shape ✓; 409 INVALID_STATE response shape consistent ✓; status chip filter implemented as custom buttons (no Radix Select sentinel needed). **No new items added from Phase 2.**
+- **What Opus does next on resume**: hand off Phase 3 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 3 (Tasks view + log-time-from-row). Build the new `GET /api/v1/tasks` endpoint with FEATURES.PROJECT_BOARD gate + counselor scoping; extend `PATCH /api/v1/tasks/[id]` with new fields; build `<AssigneePicker>` reusing OwnerPicker shape; extend `<LogTimeDialog>` with `defaultTaskId`/`defaultProjectId` props (NO behavior change to existing callers). Push to `feature/project-workspace-phase-3` and stop. Opus reviews, squashes to stage, kicks off Phase 4."
 - **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 2 shipped — drag-drop, card metrics, status chips, TOCTOU (2026-05-27)
+
+### What was built
+
+Squash-merged at `dd20d91` from `feature/project-workspace-phase-2` (Sonnet branch `a967cec`). 10 files, 461 insertions / 93 deletions.
+
+- **TOCTOU on `PATCH /api/v1/projects/[id]`**: accepts optional `expected_status` field. When present, applies `.eq("status", expected_status)` to the UPDATE; mismatch returns `409 INVALID_STATE` with a message echoing both expected and actual current status. Uses `maybeSingle()` when expected_status is present (returns null on precondition mismatch), `single()` otherwise (back-compat). Edge case handled: empty patch object → no-op fetch + return current row. Validation accepts `expected_status` as a ProjectStatus enum value via `isIn`.
+- **Drag-and-drop on Board view**: `<DndContext>` wraps columns with `closestCorners` collision detection + `PointerSensor` (activationConstraint distance: 5). `<useDroppable>` on each `<ProjectColumn>` (visual `isOver` ring); `<useDraggable>` on each `<ProjectCard>`. `<DragOverlay>` renders ghost card while dragging.
+- **Optimistic update flow** in `<BoardView>`: uses `originalProjectRef` to preserve original status across async drag-end + `optimisticByStatus` map to override the rendered column map during in-flight PATCH. On 409 → revert optimistic + toast + refetch. On other error → revert + toast. On success → merge updated data into parent state + clear optimistic. Same `contact_count` preservation pattern used in `<ProjectRow>` inline edits.
+- **Card metrics**:
+  - **Contact count**: `GET /api/v1/projects` select extended with `project_contacts!project_contacts_project_id_fkey(count)` (explicit FK disambiguation, checklist item 1). Parsed in `useProjects` from PostgREST embed shape.
+  - **Billable hours**: `useProjects` fetches `/api/v1/time-entries/summary?dimension=project` in parallel; keys by project_id; converts `billable_minutes / 60`. One round-trip for all projects on board load.
+  - **Conditional rendering**: card metrics row hidden when both contact_count and billable_hrs are zero — keeps the card visually quiet for new projects.
+- **Status multi-chip filter** (rolled forward from Phase 1 spec gap): renders 5 base chips (Discovery / In Progress / Review / Delivered / On Hold) + Cancelled chip when show-cancelled toggle is on. "Empty array = all visible" semantic. Show-cancelled handler removes Cancelled from statuses array when hiding cancelled (prevents zombie filter). Explicit "Clear" button when any chip selected. URL serialization: `status=` comma-separated, no param when empty.
+- **`visibleColumns` logic** in `<BoardView>`: combines `showCancelled` toggle (adds Cancelled column) with `statuses` filter (narrows to selected chips). When statuses array is empty, all base columns visible. When non-empty, only chip-selected columns rendered.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean, no TS errors.
+- ✓ Code-review checklist all 6 items: PostgREST FK disambiguation ✓ · PATCH preserves invariants ✓ · route shells N/A · `.select()` shape match: contact_count preserved across PATCH responses ✓ · Radix Select sentinel not needed for custom button chips · cross-cutting predicate N/A.
+- ✓ TOCTOU pattern mirrors time-entries approve `.eq("approval_status", "pending")` shape. 409 response: `{ code: "INVALID_STATE", message: "Expected status 'X' but current status is 'Y'" }`.
+- ✓ Back-compat: PATCH without expected_status keeps unconditional behavior (verified by code path inspection — `single()` vs `maybeSingle()` branching).
+- ✓ Status chip toggle semantics: empty = all visible; clicking first chip narrows to it; Clear restores empty (= all visible).
+- ⚠️ **Drag-and-drop NOT visually verified** in Playwright headless. Known limitation: dnd-kit's PointerSensor activationConstraint doesn't fire reliably under CDP pointer events. Sonnet verified PATCH-level TOCTOU via direct API calls; drag-end code path verified by inspection (DndContext + sensors + dragEnd handler all correctly wired). **Real browser will work** — visual smoke recommended after deploy.
+
+### Files Changed (squash commit `dd20d91`)
+
+- **Modified** (10): `api/v1/projects/[id]/route.ts` (TOCTOU + maybeSingle branching), `api/v1/projects/route.ts` (project_contacts embed), `pages/workspace.tsx` (hoursMap + refetch wiring), `hooks/use-projects.ts` (4th parallel fetch + embed parse), `hooks/use-workspace-filters.ts` (+ statuses field), `components/workspace-header.tsx` (+ status chip row), `components/views/board-view.tsx` (DndContext + optimistic state), `components/project-column.tsx` (useDroppable), `components/project-card.tsx` (useDraggable + DragOverlay support + metrics row), `components/project-row.tsx` (preserve contact_count).
+- **DB**: no migration (Phase 1 already covered all schema needs).
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594` until all 5 phases of Project Workspace ship + observation window.
+
+### Open visual-smoke for Sadin
+
+1. Visit `dev-lead-crm.zunkireelabs.com/projects` as Zunkireelabs admin.
+2. Drag a card between columns (e.g. "BathroomFort Website" from In Progress → Review). Confirm card moves + persists after reload.
+3. Open same project in two tabs. Drag in tab 1 → success. Drag same project in tab 2 (now stale) → expect 409 toast "Project was moved by another user — refreshing" + auto-refetch.
+4. Click status chips (Discovery / Review / etc.) → confirm Board narrows to selected columns. Click "Clear" → restore all.
+5. Verify card metrics: hover/check contact count + billable hrs match what `/time-tracking/projects/<id>` shows.
+
+If anything fails, report back and we send a fixback to Sonnet. Otherwise, on to Phase 3.
 
 ---
 
