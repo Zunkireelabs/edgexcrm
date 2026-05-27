@@ -11,23 +11,79 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace Phase 4 shipped to stage** at `29345f3` (squash from feature/project-workspace-phase-4, 4 files, 325/6). All 4 of the 5 phases shipped. Members view live: one section per team member with ≥1 owned project OR ≥1 open task; aggregation is non-N+1 (≤3 requests: team + projects from useProjects, tasks via 1 fetch); collapsible sections; sort by busiest first; client-side filters honor account/search/owner/priority/due. Stage now exposes Board + Table + Tasks + Members. Production still on `c13e594`. **Admizz admin password reset to `admizz123` on 2026-05-27** via service-role (Sadin authorized) — login restored for Admizz tenant smoke. Counselor password (`manjila`) still rotated.
-- **What's next**: **Phase 5 of Project Workspace** — polish + URL hardening + empty-state UX + keyboard shortcuts + accessibility audit. Also bundles **one Phase 4 spec gap to fix**: Members view should expose Assignee + Priority + Due filters in the header (brief Filter specifications table), but Sonnet only added Owner — the other filter conditionals stayed `isTasksView`-only. MembersView code already APPLIES those filters; only the header conditionals need a small fix. Awaiting Sonnet session pickup for Phase 5.
-- **Visual smoke status** (after Sadin's smoke pass on 2026-05-27):
-  - ✓ Phase 2 drag-drop, two-tab 409 race, status chips, card metrics, show-cancelled toggle — all confirmed working.
-  - ✓ Phase 3 Tasks view, inline edits (status/assignee/priority/due), task filters, log-time-from-row — all confirmed.
-  - ✓ Tag picker fixback confirmed by Sadin (smoke pass led directly into Phase 4 build).
-  - **Phase 4 awaiting smoke**: switch to Members tab → sections render with correct counts → expand/collapse holds across filter changes → Owner filter narrows to one member → click project/task name navigates to detail.
-- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
-- **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` HEAD at `f48c17c` (Phase 4 squash `29345f3` + this docs commit). Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
-- **Code-review checklist** (6 items): all clean across Phases 1+2+3+4 + tag-picker fixback. Phase 4 specifics: no new API routes; no PostgREST embeds added (Members view aggregation is client-side from existing data); no inserts/updates from Members view (read-only by design); no Radix Select empty-string risk. **No new items added from Phase 4.**
-- **What Opus does next on resume**: hand off Phase 5 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 5 (polish + a11y + URL hardening + empty states + keyboard shortcuts). ALSO fix the Phase 4 spec gap: extend workspace-header conditionals so Assignee + Priority + Due filters render on Members view (they're applied in MembersView code but the header hides them). Push to `feature/project-workspace-phase-5` and stop. Opus reviews, squashes to stage. Then we look at stage→main production promotion after observation window."
-- **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
-- **Blockers**: none.
+- **Current state**: **Project Workspace v1 fully shipped to stage.** Stage HEAD at `04d7895`: 5 phases done (Phase 1 `44409a8` → Phase 2 `dd20d91` → Phase 3 `867a750` → Phase 4 `29345f3` → Phase 5 `97e490d`), tag-picker fixback `ed7ff15`, eslint hotfix `04d7895`. Dev container current — `dev-lead-crm.zunkireelabs.com/login` 200, `/projects` 307 (auth redirect, expected). Production still on `c13e594`. **Discovery during Phase 5 ship**: stage deploy had been red since the tag fixback (6 consecutive runs) due to a `react-hooks/set-state-in-effect` hard error in `tag-multi-picker.tsx:39`. Local `npm run build` doesn't run ESLint — it's a separate CI step. Container was frozen at Phase 3 the whole time. Hotfix `04d7895` (Sonnet branch `89a50a7`, wrapped `setQuery` in `setTimeout(0)` mirroring the focus-on-open pattern) unblocked the pipeline; container jumped Phase 3 → Phase 5+fix in one 4m4s deploy. **Tag fixback + Phase 4 + Phase 5 ALL need fresh visual smoke** — the earlier "tag picker fixback confirmed by Sadin" entry was on a phantom (local dev server or cached page); the deployed staging container only just received the changes.
+- **What's next**: Sadin runs visual smoke on `dev-lead-crm.zunkireelabs.com/projects` covering tag fixback + Phase 4 + Phase 5 (checklist below). When clean, Opus writes the stage→main production promotion plan — bigger diff than the last prod push (4 phases + 2 fixbacks). Confirm with Sadin before the prod merge.
+- **Visual smoke checklist on the real dev container**:
+  - **Tag fixback** (Tasks view): click a task's Tags column → Notion-style picker opens with search input autofocused; checkable rows from tenant-wide pool; type a new name → "Create" row appears; click creates and selects. Filter chip applies ANY-match.
+  - **Phase 4 (Members)**: switch to Members tab → one section per team-member-with-work; section counts match DB; expand/collapse holds across filter changes; Owner filter narrows section list; click project name → `/time-tracking/projects/[id]`; click task title → same.
+  - **Phase 5**: press `b`/`t`/`k`/`m` outside any input → view switches; `/` focuses search; Esc clears query or blurs empty input. Apply filters that strand a view → empty state with Clear-filters CTA appears. Tab order rotates through interactive controls without trap. Optional: Lighthouse a11y on `/projects` should clear 95.
+- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU two-window test — shipped on visual-confirmation, not exhaustively verified. (2) Counselor (`manjila@zunkireelabs.com`) password still rotated from Time Tracking Phase 5 verification. Admizz admin restored to `admizz123` on 2026-05-27. (3) Branch cleanup: 4 dangling already-merged branches safe to delete (`check-in`, `consultancy-update`, `create-form`, `tags`); 1 stale unmerged `feature/ai-orchestrate-orca` (7 weeks, 3,859 LOC predating industry modules).
+- **Workflow split** (held through Phase 5 + the eslint fixback): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase / per-fix branches. **Production-affecting actions** (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
+- **Branch state**: `main` at `c13e594` (production HEAD, unchanged). `stage` HEAD at `04d7895`. Local matches origin. Stage→main diff now includes all 4 Project Workspace phases + tag fixback + Phase 5 + eslint hotfix on top of `c13e594`.
+- **Code-review checklist** (6 items): all clean across Phases 1–5 + tag-picker fixback + eslint hotfix. No new items added — Phase 5 was UI-only (no DB / API / mutation surface).
+- **Lesson logged from the CI red-streak**: `npm run build` does NOT include ESLint — it's a separate CI step gated at `--max-warnings 50`. A failed Pre-deploy Checks job stops the container deploy entirely; the previous container keeps serving. "Sonnet pushed and reported success" without a `gh run watch` check can hide a multi-commit deploy backlog. The per-phase verification matrix in future briefs should add `npx eslint --max-warnings 50 .` as a pre-push gate, especially under React 19 (new rules like `react-hooks/set-state-in-effect` keep landing).
+- **What Opus does next on resume**: (1) wait for Sadin's smoke report; (2) if regressions surface, route via Sonnet fixback; (3) if clean, write the stage→main production promotion plan covering ≈6 squashed commits' worth of feature code. The prior prod merge (`c13e594`) used a non-FF ort merge — same shape will work here unless `main` has drifted; pre-flight check `git log origin/main..origin/stage` then `git merge --no-ff origin/stage` from main.
+- **Tenant DB residue from smoke runs replicated to prod**: cosmetic, harmless — not worth a cleanup migration. Expect another small round from the upcoming Phase 4 + 5 + tag smoke pass on dev.
+- **Blockers**: none on stage. Production promotion blocked on Sadin's visual smoke + go-ahead.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 5 shipped — polish, keyboard shortcuts, a11y; CI red-streak reconciled (2026-05-27)
+
+### What was built
+
+Squash-merged at `97e490d` from `feature/project-workspace-phase-5` (Sonnet branch `393484f`). 6 files, 263 insertions / 104 deletions. Closes Project Workspace v1.
+
+- **Keyboard shortcuts** (workspace-header.tsx): `b`/`t`/`k`/`m` switch views; `/` focuses search; `Esc` clears query (or blurs an empty search input). Document-level listener with a ref pattern (`onFilterChangeRef`) so the empty-dep-array effect never closes over a stale callback. Modifier-key guard (`ctrlKey || metaKey || altKey`) plus `role="combobox"` detection prevent text-input hijack and Radix Select interference.
+- **Empty states**: all 4 views render icon + helpful copy + Clear-filters CTA when the active filter combo returns zero rows. New `handleClearFilters` in `workspace.tsx` resets all 10 filter fields (`account`, `q`, `owner`, `showCancelled`, `statuses`, `assignee`, `taskStatuses`, `priorities`, `tags`, `due`) — single reset point for every view.
+- **Accessibility**: `aria-label` on search input, due-date input, Log-time button; `aria-pressed` on every chip toggle (project status / task status / priority); `aria-sort` on all 11 sortable column headers across Table + Tasks; `aria-expanded` + `aria-label` on Members section toggle. The combined surface should clear Lighthouse a11y ≥ 95 (needs visual confirmation).
+- **Phase 4 spec-gap fix bundled**: `workspace-header.tsx` conditionals for Assignee + Priority + Due filters extended to `(isTasksView || isMembersView)` — chips finally visible on Members. `members-view.tsx:116` adds `if (filters.assignee !== "__all__" && member.user_id !== filters.assignee) continue;` to the section-narrowing loop (the resume block claimed the body already applied this — true for priority + due, but assignee specifically was missing).
+
+URL hardening was already in place — `use-workspace-filters.ts:131` is the only `router.replace` in the feature and already uses `{ scroll: false }`. New shortcuts route through the same `onFilterChange` callback, so the scroll-jump-free invariant holds across keyboard nav.
+
+### Stage CI red-streak reconciled
+
+**Discovery during Phase 5 ship**: stage deploy had been failing for 6 consecutive pushes since the tag-multi-picker fixback (`ed7ff15`, 2026-05-27 12:16). Pre-deploy Checks (`npx eslint --max-warnings 50`) was hitting a hard error in `tag-multi-picker.tsx:39` — the new React 19 rule `react-hooks/set-state-in-effect` — because `setQuery("")` ran synchronously inside the `[open]` effect's else branch. Local `npm run build` doesn't run ESLint, so this was invisible until the CI step exited 1 and skipped the container deploy. **Container at `dev-lead-crm.zunkireelabs.com` was frozen at Phase 3 (`867a750`) the entire time.** All "shipped to stage" entries since the tag fixback were technically merged to the `stage` branch but never reached the running container.
+
+**Fix**: hotfix branch `fix/tag-multi-picker-eslint` (Sonnet `89a50a7`), squash-merged at `04d7895`. 1 file, 5 / 1. Wrapped `setQuery` in `setTimeout(0)` mirroring the focus pattern in the if-branch (`Why:` comment added). Behavior preserved: query clears on popover close.
+
+**Deploy after unblock**: 4m4s. Container jumped Phase 3 → tag fixback + Phase 4 + Phase 5 + eslint fix + all docs in one go. Smoke: `/login` 200, `/projects` 307 (auth redirect, expected).
+
+### Smoke reset — all three phases need fresh visual confirmation on dev
+
+Because tag fixback + Phase 4 + Phase 5 never actually ran on `dev-lead-crm` until 2026-05-27 13:18, the prior "tag picker fixback confirmed by Sadin" entry is reconciled — whatever was smoked then could not have been the deployed dev container. Likely a local `npm run dev` or a cached browser tab. No regression evidence, but the visual confirmation MUST re-run on the actual staging URL before prod promotion.
+
+Outstanding on the real dev container:
+- **Tag fixback**: Tasks view → tag dropdown shows Notion-style picker (search + autofocus + checkable rows + Create-new fallback). Filter chip works.
+- **Phase 4**: Members tab renders, expand/collapse holds, Owner filter narrows section list, click-through navigates to project detail. Counts match DB.
+- **Phase 5**: keyboard shortcuts work as specified, empty states show Clear-filters CTA, Lighthouse a11y ≥ 95.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean on Phase 5 push.
+- ✓ `npx eslint --max-warnings 50 .` clean post-hotfix (0 errors / 18 warnings vs the 50 cap).
+- ✓ Phase 5 diff added zero new lint errors — only 7 warnings, all stylistic (unused vars, complex dep arrays).
+- ✓ Keyboard handler ref pattern verified — `onFilterChangeRef.current` updates every render via a second `useEffect`, so no stale closure across filter changes.
+- ✓ `router.replace({ scroll: false })` remains the single URL mutation point; new shortcuts route through `onFilterChange` → same hook.
+- ✓ Stage deploy `26513579125` completed in 4m4s; live smoke green.
+- ✓ All 6 standing code-review checklist items N/A — no new DB tables, no new API routes, no PostgREST embeds, no new POST/PATCH, no new page components, no new `<SelectItem>`, no new cross-cutting predicate filters.
+- ✓ Phase 5-specific brief item: all `router.replace` calls use `{ scroll: false }`.
+
+### Known minor UX wart (not a blocker)
+
+Keyboard shortcuts (`b`/`t`/`k`/`m`) fire while a Radix Dialog is open if focus is outside the dialog's input fields — view changes under the modal. Acceptable for admin-only polish; future tightening could detect Radix's `body[style*="pointer-events: none"]` mode and skip the shortcut.
+
+### Files Changed
+
+- **Phase 5 squash `97e490d`** (6 files): `workspace.tsx`, `workspace-header.tsx`, `views/board-view.tsx`, `views/members-view.tsx`, `views/table-view.tsx`, `views/tasks-view.tsx`.
+- **Eslint hotfix squash `04d7895`** (1 file): `components/tag-multi-picker.tsx`.
+
+### Project Workspace v1 — fully shipped to stage
+
+All 5 phases done: Phase 1 unified workspace + Board + Table + URL state (`44409a8`), Phase 2 drag-drop + card metrics + status chips (`dd20d91`), Phase 3 Tasks view + GET /api/v1/tasks + log-time-from-row (`867a750`), Phase 4 Members view (`29345f3`), Phase 5 polish + a11y (`97e490d`), plus tag-picker fixback (`ed7ff15`) + eslint hotfix (`04d7895`). Brief moved to `docs/archive/features/PROJECT-WORKSPACE-BRIEF.md`. **Production promotion blocked on Sadin's visual smoke pass on Phases 4 + 5 + tag fixback.**
 
 ---
 
