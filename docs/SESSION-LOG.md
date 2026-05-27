@@ -11,18 +11,73 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Production promotion shipped.** `stage` → `main` merged at `c13e594` (non-FF, see entry below). Deploy-to-Production workflow green in 4m22s. `lead-crm.zunkireelabs.com` is now current with industry modules + Accounts + CRM Contacts v1 + Time Tracking v1 + Anish's tags/contacts/lead-types — the full ~14k-line promotion went out clean. Live smoke: `/login` 200, `/dashboard` 200. **Anish is on leave** so the next stretch is Opus+Sonnet only.
-- **What's next**: **Project Workspace brief written** at `docs/PROJECT-WORKSPACE-BRIEF.md` (5 phases, ~550 lines — renamed from PROJECT-BOARD-BRIEF after Sadin pushed back on the narrow kanban-only scope). Unified Notion-style workspace at `/projects` with 4 views (Board / Table / Tasks / Members), lifted filters, URL-encoded state. Migration 024 adds `tasks.assignee_id + due_date + priority + tags` and `projects.owner_id + accounts.owner_id`. Phase 1 = shell + Board reshape + Table; Phase 2 = drag-drop + card metrics; Phase 3 = Tasks view + log-time-from-row; Phase 4 = Members view; Phase 5 = polish + a11y. Sonnet's first attempt is parked on `feature/project-board-phase-1` (eeeb7e6) — kanban-only, ~70% reusable in Phase 1 of the new brief. Service catalog + Proposal/SOW remain queued behind Project Workspace.
-- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
-- **Workflow split** (held through ~13 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `d20cccc`. Local main matches origin. **4 dangling already-merged branches** safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (Sadin, 2026-04-10, 7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules — would need full re-homing into `src/industries/<id>/features/orca/` + 104-commit rebase before resurrection).
-- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): PostgREST FK disambiguation when reverse FKs exist · PATCH preserves POST invariants · new page components need route shells · `.select()` after insert/update matches read shape · Radix Select forbids `<SelectItem value="">` (sentinel) · cross-cutting predicate audits must grep `from("Table")` across the whole repo. **No new items from Phase 5** (first zero-fixback phase) and **no new items from the prod promotion** (it was a merge, not a feature).
-- **What Opus does next on resume**: hand off `docs/PROJECT-WORKSPACE-BRIEF.md` to a Sonnet session for Phase 1 (workspace shell reshape + Table view + migration 024). Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` end-to-end. Cherry-pick the rendering work from `feature/project-board-phase-1` (eeeb7e6) where applicable; restructure into the new layout per § UI architecture; apply migration 024; build Board view + Table view + lifted filters + URL state. Push to `feature/project-workspace-phase-1` and stop. Opus reviews, squashes to stage, kicks off Phase 2."
+- **Current state**: **Project Workspace Phase 1 shipped to stage** at `44409a8` (squash from feature/project-workspace-phase-1, 24 files, 947 insertions). Unified `/projects` workspace live on `dev-lead-crm.zunkireelabs.com` with Board + Table views, lifted filters (search/account/owner/show-cancelled), URL-encoded state, admin-only gate. Migration 024 applied. Both spent feature branches deleted from origin (`feature/project-board-phase-1` superseded; `feature/project-workspace-phase-1` squashed). Production (`lead-crm.zunkireelabs.com`) still at `c13e594` — not yet promoted.
+- **What's next**: **Phase 2 of Project Workspace** — drag-drop on Board (TOCTOU `expected_status` precondition + 409), card metrics (contact count + billable hours via existing endpoints), AND **bundle the deferred status multi-chip filter** from Phase 1 (brief P1 spec gap; rolled forward since the filter is most useful once drag-drop reorders make Board dynamic). Awaiting Sonnet session pickup.
+- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
+- **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `44409a8`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags` — all zero-ahead of stage. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
+- **Code-review checklist** (6 items, see STATUS-BOARD § "Code-review checklist additions"): all 6 items applied cleanly during Phase 1 review (PostgREST FK disambiguation N/A · PATCH preserves POST invariants ✓ · new page components have route shells ✓ · `.select()` shape match N/A · Radix Select empty-string avoided via `"__all__"` sentinel ✓ · 'done' grep clean ✓). **No new items added from Phase 1.**
+- **What Opus does next on resume**: hand off Phase 2 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 2 (drag-drop on Board + card metrics). ALSO add the status multi-chip filter from § Filter specifications (deferred from Phase 1). Push to `feature/project-workspace-phase-2` and stop. Opus reviews, squashes to stage, kicks off Phase 3."
 - **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace Phase 1 shipped — unified /projects with Board + Table views (2026-05-27)
+
+### What was built
+
+Squash-merged at `44409a8` from `feature/project-workspace-phase-1` (Sonnet branch — 2 raw commits squashed into one). 24 files, 947 insertions / 14 deletions.
+
+- **Migration 024 applied**: `tasks.assignee_id + due_date + priority + tags`; `projects.owner_id`; `accounts.owner_id`; 6 supporting indexes (assignee + due + priority + tags GIN + projects.owner + accounts.owner). Migration 023 (stage enum extension) folded in from the parked branch.
+- **Workspace shell** at `src/industries/it-agency/features/project-board/pages/workspace.tsx` — Suspense boundary (Next 16 useSearchParams requirement), fetches projects + accounts + team in parallel via `useProjects`, applies filters client-side, dispatches to active view.
+- **Lifted filters** (`workspace-header.tsx`): search input, account `FilterDropdown`, owner `FilterDropdown`, show-cancelled checkbox. View toggle as shadcn `<Tabs>` (Board / Table). All state URL-encoded via `useWorkspaceFilters` hook (sentinel `"__all__"` for "all" selections; `router.replace` with `{ scroll: false }`).
+- **Board view** (`views/board-view.tsx`): cherry-picked from the parked Phase 1 work. 5 columns visible by default (Discovery / In Progress / Review / Delivered / On Hold), Cancelled added as 6th when checkbox on. Each column sorted by `updated_at` desc. On Hold styled muted (opacity-60).
+- **Table view** (`views/table-view.tsx`): shadcn `<Table>` with 5 sortable columns (Project / Account / Owner / Status / Updated). Default sort updated desc. Inline Status dropdown + inline Owner picker on each row via `<ProjectRow>` + `<OwnerPicker>`. Empty state present.
+- **`<OwnerPicker>`** (`components/owner-picker.tsx`): initials avatar button → dropdown with member list + Clear option. Reusable shape ready for `<AssigneePicker>` in Phase 3.
+- **`<ProjectCard>`** (Board view) now shows owner initials when `owner_id` is set.
+- **API extensions**: `PATCH /api/v1/projects/[id]` accepts `owner_id`; `PATCH /api/v1/accounts/[id]` accepts `owner_id`. `PROJECT_STATUSES` arrays updated in both project routes.
+- **Permission gates**: page shell at `/projects/page.tsx` does `getCurrentUserTenant() → redirect(/login)` then `getFeatureAccess(industry_id, PROJECT_BOARD) → notFound()` then admin-only check (`role === "owner" || role === "admin" → notFound()`). Non-admin members within it_agency still see a 404; cross-cutting member self-view is a follow-up brief.
+- **Type updates**: `TaskPriority` type, `Task.{assignee_id, due_date, priority, tags}`, `Project.owner_id`, `Account.owner_id`, `ProjectStatus` enum reshaped.
+
+### One brief gap rolled forward to Phase 2
+
+The brief's Phase 1 spec called for a **status multi-chip filter** alongside the show-cancelled toggle. Sonnet shipped show-cancelled only; status chip filter was missed. Real but small gap — Board view already shows all statuses as columns (filter is somewhat redundant there), but Table view currently can't be narrowed to a single status without sorting. Decision: bundle into Phase 2's scope since the filter is most useful once drag-drop makes Board dynamic. Logged in STATUS-BOARD for Phase 2 kickoff.
+
+### Workflow note: Sonnet's pre-emptive correctness on the brief divergence
+
+The brief incorrectly told Sonnet to use `authenticateRequest()` in the page shell. Sonnet noticed every existing page shell uses `getCurrentUserTenant()` and used that instead. Surfaced the divergence in the handoff report rather than silently doing what the brief said. **That's the behavior we want from Sonnet** — judgment over slavish adherence. Brief was updated mid-flight to reflect the correct pattern (already incorporated in `PROJECT-WORKSPACE-BRIEF.md` § "What's already built").
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean, 53 routes, `/projects` shows.
+- ✓ Migration 024 applied; column existence confirmed via `information_schema`.
+- ✓ Code-review checklist (all 6 standing items): PostgREST FK N/A · PATCH preserves invariants ✓ · route shell exists in same commit ✓ · `.select()` shape match N/A · Radix Select sentinel ✓ · 'done' grep clean in project-status context ✓.
+- ✓ Admin gate: `if (!isAdmin) notFound()` at page.tsx:13-14.
+- ✓ Industry gate: `FEATURES.PROJECT_BOARD` via `getFeatureAccess` at page.tsx:10.
+- ✓ Filter hook uses `router.replace({ scroll: false })` (Phase 5 checklist already satisfied pre-emptively).
+- ✓ Sentinel `"__all__"` consistent across hooks + header.
+- ✓ Suspense boundary around `useSearchParams` (Next 16 requirement met).
+- **Deferred** (creds rotated, can't verify):
+  - As Admizz admin: `/projects` 404, sidebar absent. Verified by code-reading the industry gate at page.tsx:10 + manifest entry under it-agency only.
+  - As Zunkireelabs counselor: `/projects` 404, sidebar absent. Verified by code-reading the admin gate at page.tsx:13-14 + counselor role check.
+
+### Files Changed (squash commit `44409a8`)
+
+- **New** (15): `src/app/(main)/(dashboard)/projects/page.tsx` (22 lines), `src/industries/it-agency/features/project-board/pages/workspace.tsx` (86 lines), 11 components under `project-board/components/`, 2 hooks under `project-board/hooks/`, `meta.ts`, migrations 023 + 024.
+- **Modified** (9): `src/app/(main)/api/v1/{projects,accounts}/[id]/route.ts` (accept owner_id), `src/app/(main)/api/v1/projects/route.ts` (PROJECT_STATUSES), `src/components/dashboard/shell.tsx` (+ LayoutGrid icon), `src/industries/_registry.ts` (+ PROJECT_BOARD), `src/industries/it-agency/manifest.ts` (+ project-board feature + sidebar entry), `src/industries/it-agency/features/accounts/components/project-form.tsx` (status enum update), `src/industries/it-agency/features/time-tracking/components/status-badge.tsx` (in_review + delivered).
+- **DB**: migration 023 (status enum) + 024 (new fields + indexes).
+
+### Branch hygiene
+
+Both spent feature branches deleted from origin: `feature/project-board-phase-1` (Sonnet's parked kanban-only work, superseded by this phase) and `feature/project-workspace-phase-1` (squashed into this commit). Local copies remain as orphan refs; will get GC'd next reflog expiry.
+
+### Not yet promoted to `main`
+
+Production stays on `c13e594` until all 5 phases of Project Workspace ship + observation window.
 
 ---
 
