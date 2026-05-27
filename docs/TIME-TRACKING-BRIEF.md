@@ -287,15 +287,49 @@ Each phase ends with: `npm run build` clean → Sonnet commits → reports back 
 
 ### Phase 5 — Rates + billable totals (~1 day)
 
-- Extend team page (or settings) so admin can set `default_hourly_rate` on each member. Update `/api/v1/team` PATCH.
-- `RateInput` component (NUMERIC, currency symbol cosmetic).
-- Add `default_rate` field to `ProjectForm`.
-- `lib/rates.ts` with `resolveEffectiveRate`.
-- On approval, snapshot the rate into `time_entries.rate_snapshot`.
-- `lib/totals.ts` with `calculateBillableMinutes`, `calculateBillableAmount`.
-- Show billable totals on project detail page and approvals queue.
-- `/api/v1/time-entries/summary` endpoint for cross-cutting reports (used by future report pages; surface minimally on home page as "this week's total").
-- Manual smoke: set $X rate on Anish, set $Y override on BathroomFort project. Log entry against BathroomFort → effective rate is Y. Approve → rate_snapshot = Y. Change Y on project → existing entry's rate_snapshot unchanged.
+> **Pre-Phase-5 state check (2026-05-27)**: DB columns for rates already exist from migration 020 (`tenant_users.default_hourly_rate`, `projects.default_rate`, `time_entries.rate_snapshot`). `ProjectForm` already has the `default_rate` input field — but it now lives at `src/industries/it-agency/features/accounts/components/project-form.tsx` (moved during the Accounts promotion; was originally under time-tracking). Brief line 25's "reuse leads as contacts attached to accounts" assumption is also obsolete — Contacts is now a real entity (see CRM Contacts feature). Neither drift changes Phase 5 scope; just be aware of paths.
+
+**Still to build (this phase):**
+
+- **Team rate UI + API plumbing.** Extend the team page so admin/owner can set `default_hourly_rate` per member. Update `/api/v1/team` PATCH to accept the field (admin-only; already has `requireAdmin(auth)` gate).
+- **`RateInput` component** at `src/industries/it-agency/features/time-tracking/components/rate-input.tsx`. NUMERIC input with cosmetic currency prefix (USD assumed; multi-currency is explicit non-goal for v1). Single shared component used by both the team rate field and the existing project-form rate field — refactor `ProjectForm` to use it instead of its current inline `<input type="text">` once `RateInput` lands.
+- **`lib/rates.ts`** at `src/industries/it-agency/features/time-tracking/lib/rates.ts` (the `lib/` dir doesn't exist yet — create it). Single function:
+  ```ts
+  export function resolveEffectiveRate(
+    project: Pick<Project, "default_rate"> | null,
+    member: Pick<TenantUser, "default_hourly_rate">,
+  ): number {
+    return project?.default_rate ?? member.default_hourly_rate ?? 0;
+  }
+  ```
+- **Atomic rate_snapshot on approval.** Extend `src/app/(main)/api/v1/time-entries/[id]/approve/route.ts` to snapshot the effective rate. Current route only sets `approval_status`, `approved_by`, `approved_at` (verified 2026-05-27). The TOCTOU pattern (`.eq("approval_status", "pending")` precondition + `.maybeSingle()`) is already there — preserve it. New shape:
+  1. Single fetch up front gets the time_entry + its `project_id` + `user_id`.
+  2. Parallel fetch (or one query with embeds) gets `projects.default_rate` and `tenant_users.default_hourly_rate` for that member.
+  3. Compute `rate_snapshot = resolveEffectiveRate(project, member)` in app code.
+  4. The atomic UPDATE adds `rate_snapshot` alongside the existing fields. Precondition `.eq("approval_status", "pending")` already protects against race. **Do not introduce a separate UPDATE for the snapshot — it must land in the same atomic write as the approval status change.**
+- **`lib/totals.ts`** at `src/industries/it-agency/features/time-tracking/lib/totals.ts`. Pure functions:
+  - `calculateBillableMinutes(entries: TimeEntry[])` — sum of `minutes` where `is_billable=true && approval_status='approved'`.
+  - `calculateBillableAmount(entries: TimeEntry[])` — `Σ (minutes/60) * rate_snapshot` over the same filter; uses `rate_snapshot` (not effective rate) so historical invoice integrity is preserved.
+- **UI surfaces for billable totals:**
+  - **`project-detail.tsx`** (`src/industries/it-agency/features/time-tracking/pages/project-detail.tsx`): add a "Billable totals" stats card to the page header area. This page already has a Contacts section (added in CRM Contacts Phase C) AND a Tasks section. The new card goes near the header alongside the existing project metadata — **don't disrupt the existing Contacts/Tasks sections layout.**
+  - **`approvals-queue.tsx`**: show the to-be-snapshotted effective rate + projected billable amount per pending row (so admin sees what they're approving before clicking).
+  - **`time-tracking-home.tsx`** (the team timesheet view from Phase 4.5): add a "This week's billable" stat to the existing stats strip. Member-scoped for members; tenant-wide for admins (matches the existing role-aware home pattern).
+- **`/api/v1/time-entries/summary`** at `src/app/(main)/api/v1/time-entries/summary/route.ts`. Supports `?dimension=member|project|account&from=YYYY-MM-DD&to=YYYY-MM-DD`. Returns `[{ key, label, minutes, billable_minutes, billable_amount }, ...]`. Counselor scoping: if `auth.role === "counselor"`, `dimension=member` is locked to `key === auth.userId`.
+
+**Verification:**
+
+1. **Build + lint clean**.
+2. **Admin sets a rate on a team member** via the team page. Refresh → rate persists.
+3. **Admin sets `default_rate` on a project** via `ProjectForm`. Refresh → persists.
+4. **Log a time entry, approve it.** Inspect the row's `rate_snapshot`: equals the project rate if set, else the member rate, else 0.
+5. **Change the project's `default_rate` AFTER approval.** Inspect the approved entry's `rate_snapshot`: **unchanged** (this is the whole point of the snapshot).
+6. **Reject + re-approve cycle**: rejecting clears `rate_snapshot` (or doesn't write it); re-approval re-snapshots fresh.
+7. **Billable totals card** on project-detail shows the same number as `Σ rate_snapshot/60 * minutes` from a direct DB query (sanity check totals.ts logic).
+8. **Approvals queue** shows the projected billable per row using `resolveEffectiveRate` (NOT `rate_snapshot` — the entry hasn't been approved yet).
+9. **`/api/v1/time-entries/summary?dimension=project`** as Zunkireelabs admin returns rows per project with billable totals. As Admizz: 403 (industry gate).
+10. **Counselor scoping** on the summary endpoint: counselor calling with `dimension=member` only ever sees their own row.
+
+**Manual happy-path** (as in original brief): set $X rate on Anish, set $Y override on BathroomFort project. Log entry against BathroomFort → effective rate displayed = Y. Approve → `rate_snapshot = Y` persists. Change Y → existing entry's `rate_snapshot` unchanged.
 
 **Total v1 estimate: 4–5 working days for Sonnet execution. Opus review adds incremental hours between phases.**
 
