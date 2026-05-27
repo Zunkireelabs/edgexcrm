@@ -11,17 +11,16 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace Phase 3 shipped to stage** at `867a750` (squash from feature/project-workspace-phase-3, 11 files, 1213/78). Cross-project Tasks view live: shadcn Table with 8 sortable columns + inline edits (status, assignee, priority, due_date, tags) + "Log time" per row → pre-filled `<LogTimeDialog>`. New `GET /api/v1/tasks` endpoint (FEATURES.PROJECT_BOARD gate, counselor-scoped). `<AssigneePicker>` + `<PriorityPill>` reusable components landed. Stage now has Phases 1+2+3 live on `dev-lead-crm.zunkireelabs.com`. Production still on `c13e594`.
+- **Current state**: **Project Workspace Phases 1+2+3 live on stage + tag-multi-picker fixback shipped** at `ed7ff15`. Phase 3 (`867a750`) brought the Tasks view; the tag-picker fixback unified the per-task and per-filter tag UX into a single Notion-style multi-select dropdown backed by a tenant-wide tag pool (new `GET /api/v1/tasks/tags` + `<TagMultiPicker>` + `useTaskTags` hook). Stage now exposes Board + Table + Tasks views with admin-only gate, drag-drop TOCTOU, card metrics, status/priority/tags/due filters, log-time-from-row, and the unified tag picker. Production still on `c13e594`.
 - **What's next**: **Phase 4 of Project Workspace** — Members view. One section per team member with ≥1 owned project OR ≥1 assigned open task. Section header: avatar/initials + email + (count of owned projects) + (count of open tasks). Collapsible body with sub-headers "Projects (owner)" + "Tasks (open)". Workspace Owner filter narrows section list. Aggregation must not N+1 — batch with `IN (?, ?, ?, ...)` for member lookups OR accept a single joined query. Awaiting Sonnet session pickup.
-- **Outstanding visual smoke gaps** (carryover from Phases 2+3, accumulating):
-  - **Phase 2**: drag-and-drop on Board couldn't be verified in Playwright headless (dnd-kit + CDP limitation). Code wiring correct by inspection.
-  - **Phase 2**: two-tab race showing 409 toast + auto-refetch.
-  - **Phase 3**: Tasks view full smoke — inline edits persist after reload (status/assignee/priority/due/tags), tag chip add/remove, "Log time" pre-fills dialog correctly, submitted entry shows in /time-tracking timesheet.
-  - **Phase 3**: counselor scoping on `/api/v1/tasks` — counselor account hits should be filtered to `assignee_id = self`. Sonnet verified the code path, no live test (credential rotation still blocks).
-  - **Worth a focused dev-smoke session** on `dev-lead-crm.zunkireelabs.com/projects` before Phase 4 ships (or wait til all 5 phases land — judgment call).
+- **Visual smoke status** (after Sadin's smoke pass on 2026-05-27):
+  - ✓ Phase 2 drag-drop, two-tab 409 race, status chips, card metrics, show-cancelled toggle — all confirmed working.
+  - ✓ Phase 3 Tasks view, inline edits (status/assignee/priority/due), task filters, log-time-from-row — all confirmed.
+  - ✓ Tag picker fixback **now needs a quick re-smoke**: create a tag on Task A → appears in Task B's picker AND in the workspace filter dropdown immediately. Filter by [tagA, tagB] narrows to tasks with EITHER. Type new tag in picker → "Create '<x>'" option → click → tag added + propagates.
+  - **Pending (creds-blocked)**: counselor scoping on `/api/v1/tasks` — would need password reset before live test. Verified by code inspection.
 - **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU race two-window test — shipped on visual-confirmation, not exhaustively verified. Worth a focused sweep in a quiet window. (2) Counselor (manjila@zunkireelabs.com) + Admizz admin (admizzdotcom2020@gmail.com) passwords rotated by Sonnet during Time Tracking Phase 5 verification — Sadin's xyz12345/admizz123 no longer work. Future smoke runs need a fresh reset via service-role admin API; **ask Sadin first since it locks out real teammates**.
 - **Workflow split** (held through ~14 phases now): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase branches — including small fixbacks Opus catches in review. Production-affecting actions (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `867a750`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
+- **Branch state**: `main` at `c13e594` (production HEAD). `stage` at `ed7ff15`. Local matches origin. **4 dangling already-merged branches** still safe to delete on cleanup pass: `check-in`, `consultancy-update`, `create-form`, `tags`. **1 stale unmerged branch**: `feature/ai-orchestrate-orca` (7 weeks old, 3,859 LOC UI shell, flat-pattern predating industry modules).
 - **Code-review checklist** (6 items): all clean across Phases 1+2+3. Phase 3 specifics: PostgREST nested embed `projects(id, name, account_id, accounts(id, name))` unambiguous; PATCH back-compat preserved (uses `"key" in body` for nullable assignee_id/due_date so explicit null clears); `.select()` after PATCH returns plain task — TasksView setState merges with existing state preserving the projects/accounts join (correct pattern). **No new items added from Phase 3.**
 - **What Opus does next on resume**: hand off Phase 4 to a Sonnet session. Sonnet's prompt: "Read `docs/PROJECT-WORKSPACE-BRIEF.md` § Phase 4 (Members view). Aggregate via batched queries (NOT N+1): single `/api/v1/team` call for members + single `/api/v1/projects?owner_id_in=…` if backend supports OR small concurrency loop + single `/api/v1/tasks?assignee_id_in=…` call. Build `<MembersView>` with collapsible sections per member, counts in header, sorted by busiest first. Workspace Owner filter narrows section list. Push to `feature/project-workspace-phase-4` and stop. Opus reviews, squashes to stage, kicks off Phase 5."
 - **Tenant DB residue from smoke runs replicated to prod**: a handful of "PhaseE-Smoke-NoRate" projects, "SmokeConvert" leads, smoke contacts now live on `lead-crm.zunkireelabs.com` Zunkireelabs tenant. Cosmetic, harmless — not worth a cleanup migration. Flagged so future-me sees it before any "the prod data looks weird" panic.
@@ -29,6 +28,52 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Project Workspace tag-picker fixback shipped — Notion-style multi-select + tenant-wide pool (2026-05-27)
+
+### Why this was needed
+
+Sadin's visual smoke on Phase 3 caught the tag UX gap: per-task and per-filter tag inputs were both naive free-text — type a word, press Enter. Two real problems:
+
+1. **No tenant-wide pool.** Tag "QC" added to one task didn't surface as a suggestion when tagging another. Users would have to remember and re-type.
+2. **Filter slot used the same naive shape.** Couldn't pick from existing tags.
+
+Both surfaces wanted the same Notion-style multi-picker behavior.
+
+### What shipped
+
+Squash-merged at `ed7ff15` from `fix/project-workspace-tag-multi-picker` (Sonnet branch `cabb9d7`). 6 files, 315 insertions / 97 deletions.
+
+- **New endpoint `GET /api/v1/tasks/tags`** (42 lines) — `FEATURES.PROJECT_BOARD` gate, `scopedClient(auth)`, fetches all `tasks.tags` arrays then flattens + dedupes + alphabetic-sorts in app code. No new SQL function. Returns `string[]`. No counselor scoping (read-only pool of strings, non-PII).
+- **`<TagMultiPicker>`** (206 lines) — shadcn Popover with autofocus search input, scrollable checkable list, `Create "<query>"` row when query is non-empty AND doesn't case-insensitively match an existing tag AND isn't already selected. Trigger button renders chips when value is non-empty, placeholder + Plus icon when empty. Click-X on a chip removes via `stopPropagation` (doesn't open popover). Two sizes: `sm` (task row) + `md` (filter slot). Case-insensitive duplicate guard against current value when creating.
+- **`useTaskTags()` hook** (25 lines) — fetches pool on mount, toast.warning on failure (picker still usable with empty pool), exposes `refetchTags` for the on-PATCH-success propagation.
+
+Integration:
+- `workspace.tsx`: wires `useTaskTags`; passes `poolTags` to header and `poolTags + refetchTags` to TasksView.
+- `workspace-header.tsx`: filter slot now uses `<TagMultiPicker size="md">`. Removed `<input>` + chip-loop + dead `tagInput` state.
+- `tasks-view.tsx`: previous `handleTagAdd` + `handleTagRemove` collapsed into one `handleTagsChange` that optimistically updates → PATCHes → reverts on error + toast → calls `refetchTags()` on success so newly-created tags appear immediately in other rows + the filter. TaskRow tags cell uses `<TagMultiPicker size="sm">`. No more inline `<input>` in the row.
+
+Filter semantics: ANY-match (OR) preserved — existing `.overlaps()` in `GET /api/v1/tasks` unchanged.
+
+### Verification (Opus review)
+
+- ✓ `npm run build` clean; `/api/v1/tasks/tags` registered in route table.
+- ✓ All 6 standing code-review checklist items: no PostgREST embeds added (route fetches single column array) · PATCH preserves existing tags invariants · no new page components · `.select()` shape match preserved · no Radix `value=""` (uses checkable buttons inside custom popover content) · no new soft-state filter.
+- ✓ Auto-refetch on PATCH success — new tags propagate to other rows + filter without page reload.
+- ✓ Case-insensitive guards: `Create "qc"` doesn't appear if pool has "QC"; selecting "qc" when "QC" exists treats them as the same tag.
+- ✓ Optimistic update revert on PATCH failure (clean state-rollback to prevTags).
+- **Visual smoke after merge** is the next ask — quick test that creating a tag on one task surfaces it on another row + in the filter.
+
+### Files Changed (squash commit `ed7ff15`)
+
+- **New** (3): `api/v1/tasks/tags/route.ts`, `components/tag-multi-picker.tsx`, `hooks/use-task-tags.ts`.
+- **Modified** (3): `pages/workspace.tsx` (wires hook), `components/workspace-header.tsx` (replaces filter input), `components/views/tasks-view.tsx` (collapses tag handlers + uses picker in TaskRow).
+
+### Not yet promoted to `main`
+
+Stays on `c13e594`. Phase 4 (Members view) + Phase 5 (polish + a11y) still to come.
 
 ---
 
