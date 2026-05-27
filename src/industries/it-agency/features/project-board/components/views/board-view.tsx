@@ -12,7 +12,7 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
-import { Building2 } from "lucide-react";
+import { Building2, LayoutGrid } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectColumn, COLUMN_ORDER } from "../project-column";
@@ -46,6 +46,7 @@ interface BoardViewProps {
   hoursMap: Map<string, number>;
   onProjectUpdated: (updated: ProjectWithAccount) => void;
   onRefetch: () => void;
+  onClearFilters: () => void;
 }
 
 export function BoardView({
@@ -55,6 +56,7 @@ export function BoardView({
   hoursMap,
   onProjectUpdated,
   onRefetch,
+  onClearFilters,
 }: BoardViewProps) {
   const visibleColumns: ProjectStatus[] = useMemo(() => {
     const base: ProjectStatus[] = filters.showCancelled
@@ -64,7 +66,6 @@ export function BoardView({
     return base.filter((s) => filters.statuses.includes(s));
   }, [filters.showCancelled, filters.statuses]);
 
-  // optimisticByStatus is non-null only during an in-flight PATCH
   const [optimisticByStatus, setOptimisticByStatus] = useState<ColumnMap | null>(null);
   const [draggingProject, setDraggingProject] = useState<ProjectWithAccount | null>(null);
 
@@ -77,7 +78,6 @@ export function BoardView({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
   );
 
-  // Ref to hold the original project during the async drag-end cycle
   const originalProjectRef = useRef<ProjectWithAccount | null>(null);
 
   function handleDragStart(event: DragStartEvent) {
@@ -103,7 +103,6 @@ export function BoardView({
 
     if (originalProject.status === targetStatus) return;
 
-    // Optimistic: rebuild column map with the project at its new status
     const optimisticProjects = projects.map((p) =>
       p.id === projectId ? { ...p, status: targetStatus } : p
     );
@@ -141,12 +140,27 @@ export function BoardView({
         contact_count: originalProject.contact_count,
       };
       onProjectUpdated(updatedProject);
-      // Clear optimistic state — projects prop will update via onProjectUpdated
       setOptimisticByStatus(null);
     } catch {
       setOptimisticByStatus(null);
       toast.error("Failed to move project. Please try again.");
     }
+  }
+
+  if (projects.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+        <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">No projects match these filters.</p>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="text-xs text-blue-600 hover:underline underline-offset-2"
+        >
+          Clear filters
+        </button>
+      </div>
+    );
   }
 
   return (

@@ -52,9 +52,10 @@ interface MembersViewProps {
   team: TeamMember[];
   projects: ProjectWithMetrics[];
   accountMap: Map<string, Account>;
+  onClearFilters: () => void;
 }
 
-export function MembersView({ filters, team, projects, accountMap }: MembersViewProps) {
+export function MembersView({ filters, team, projects, accountMap, onClearFilters }: MembersViewProps) {
   const [allTasks, setAllTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
@@ -111,8 +112,8 @@ export function MembersView({ filters, team, projects, accountMap }: MembersView
     const result: MemberSection[] = [];
 
     for (const member of team) {
-      // Owner filter narrows the section list
       if (filters.owner !== "__all__" && member.user_id !== filters.owner) continue;
+      if (filters.assignee !== "__all__" && member.user_id !== filters.assignee) continue;
 
       const ownedProjects = (projectsByOwner.get(member.user_id) ?? []).map((p) => ({
         ...p,
@@ -173,6 +174,13 @@ export function MembersView({ filters, team, projects, accountMap }: MembersView
         <p className="text-xs text-muted-foreground">
           Admins assign owners in the Table view.
         </p>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="text-xs text-blue-600 hover:underline underline-offset-2"
+        >
+          Clear filters
+        </button>
       </div>
     );
   }
@@ -190,6 +198,8 @@ export function MembersView({ filters, team, projects, accountMap }: MembersView
             <button
               type="button"
               onClick={() => toggleExpand(member.user_id)}
+              aria-expanded={expanded}
+              aria-label={`${member.email}, ${ownedProjects.length} projects, ${openTasks.length} open tasks`}
               className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
             >
               {expanded ? (

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect } from "react";
 import { Search, LayoutGrid, TableProperties, ListTodo, Users } from "lucide-react";
 import { TagMultiPicker } from "./tag-multi-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,6 +62,52 @@ export function WorkspaceHeader({
   team,
   poolTags,
 }: WorkspaceHeaderProps) {
+  const searchRef = useRef<HTMLInputElement>(null);
+  const onFilterChangeRef = useRef(onFilterChange);
+  useEffect(() => { onFilterChangeRef.current = onFilterChange; });
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const target = e.target as Element;
+      const inInput =
+        target.tagName === "INPUT" ||
+        target.tagName === "TEXTAREA" ||
+        target.getAttribute("role") === "combobox";
+
+      if (e.key === "Escape") {
+        const el = searchRef.current;
+        if (el && document.activeElement === el) {
+          if (el.value) {
+            onFilterChangeRef.current({ q: "" });
+          } else {
+            el.blur();
+          }
+          e.preventDefault();
+        }
+        return;
+      }
+
+      if (e.key === "/") {
+        if (!inInput) {
+          e.preventDefault();
+          searchRef.current?.focus();
+        }
+        return;
+      }
+
+      if (inInput || e.ctrlKey || e.metaKey || e.altKey) return;
+
+      switch (e.key) {
+        case "b": onFilterChangeRef.current({ view: "board" }); break;
+        case "t": onFilterChangeRef.current({ view: "table" }); break;
+        case "k": onFilterChangeRef.current({ view: "tasks" }); break;
+        case "m": onFilterChangeRef.current({ view: "members" }); break;
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const accountOptions: FilterOption[] = [
     { value: ALL_SENTINEL, label: "All accounts" },
@@ -77,7 +124,6 @@ export function WorkspaceHeader({
     ...team.map((m) => ({ value: m.user_id, label: m.email })),
   ];
 
-  // Project status chips (Board + Table)
   const availableChips = filters.showCancelled
     ? [...STATUS_CHIPS, CANCELLED_CHIP]
     : STATUS_CHIPS;
@@ -161,10 +207,12 @@ export function WorkspaceHeader({
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
           <input
+            ref={searchRef}
             type="text"
             value={filters.q}
             onChange={(e) => onFilterChange({ q: e.target.value })}
             placeholder={isTasksView ? "Search tasks…" : isMembersView ? "Search projects & tasks…" : "Search projects…"}
+            aria-label="Search"
             className="h-7 pl-8 pr-3 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-44"
           />
         </div>
@@ -187,8 +235,8 @@ export function WorkspaceHeader({
           />
         )}
 
-        {/* Assignee filter — Tasks only */}
-        {isTasksView && (
+        {/* Assignee filter — Tasks + Members */}
+        {(isTasksView || isMembersView) && (
           <FilterDropdown
             label="Assignee"
             value={filters.assignee}
@@ -197,8 +245,8 @@ export function WorkspaceHeader({
           />
         )}
 
-        {/* Due keyword — Tasks only */}
-        {isTasksView && (
+        {/* Due keyword — Tasks + Members */}
+        {(isTasksView || isMembersView) && (
           <FilterDropdown
             label="Due"
             value={filters.due}
@@ -239,6 +287,7 @@ export function WorkspaceHeader({
               <button
                 key={chip.value}
                 type="button"
+                aria-pressed={active}
                 onClick={() => toggleProjectStatus(chip.value)}
                 className={[
                   "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
@@ -263,88 +312,91 @@ export function WorkspaceHeader({
         </div>
       )}
 
-      {/* Row 3+: task-specific filters (Tasks view) */}
+      {/* Task status chips — Tasks view only */}
       {isTasksView && (
-        <>
-          {/* Task status chips */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground mr-1">Status:</span>
-            {TASK_STATUS_CHIPS.map((chip) => {
-              const active = isTaskStatusActive(chip.value);
-              return (
-                <button
-                  key={chip.value}
-                  type="button"
-                  onClick={() => toggleTaskStatus(chip.value)}
-                  className={[
-                    "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                    active
-                      ? "bg-blue-600 text-white border-blue-600"
-                      : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
-                  ].join(" ")}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-            {filters.taskStatuses.length > 0 && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground mr-1">Status:</span>
+          {TASK_STATUS_CHIPS.map((chip) => {
+            const active = isTaskStatusActive(chip.value);
+            return (
               <button
+                key={chip.value}
                 type="button"
-                onClick={() => onFilterChange({ taskStatuses: [] })}
-                className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
+                aria-pressed={active}
+                onClick={() => toggleTaskStatus(chip.value)}
+                className={[
+                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
+                  active
+                    ? "bg-blue-600 text-white border-blue-600"
+                    : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
+                ].join(" ")}
               >
-                Clear
+                {chip.label}
               </button>
-            )}
-          </div>
+            );
+          })}
+          {filters.taskStatuses.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onFilterChange({ taskStatuses: [] })}
+              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
-          {/* Priority chips */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground mr-1">Priority:</span>
-            {PRIORITY_CHIPS.map((chip) => {
-              const active = isPriorityActive(chip.value);
-              return (
-                <button
-                  key={chip.value}
-                  type="button"
-                  onClick={() => togglePriority(chip.value)}
-                  className={[
-                    "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                    active
-                      ? `${chip.cls}`
-                      : "bg-white text-gray-400 border-gray-200 hover:border-gray-300",
-                    filters.priorities.length > 0 && !filters.priorities.includes(chip.value)
-                      ? "opacity-40"
-                      : "",
-                  ].join(" ")}
-                >
-                  {chip.label}
-                </button>
-              );
-            })}
-            {filters.priorities.length > 0 && (
+      {/* Priority chips — Tasks + Members views */}
+      {(isTasksView || isMembersView) && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground mr-1">Priority:</span>
+          {PRIORITY_CHIPS.map((chip) => {
+            const active = isPriorityActive(chip.value);
+            return (
               <button
+                key={chip.value}
                 type="button"
-                onClick={() => onFilterChange({ priorities: [] })}
-                className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
+                aria-pressed={active}
+                onClick={() => togglePriority(chip.value)}
+                className={[
+                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
+                  active
+                    ? `${chip.cls}`
+                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300",
+                  filters.priorities.length > 0 && !filters.priorities.includes(chip.value)
+                    ? "opacity-40"
+                    : "",
+                ].join(" ")}
               >
-                Clear
+                {chip.label}
               </button>
-            )}
-          </div>
+            );
+          })}
+          {filters.priorities.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onFilterChange({ priorities: [] })}
+              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
-          {/* Tags filter */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-            <TagMultiPicker
-              value={filters.tags}
-              onChange={(next) => onFilterChange({ tags: next })}
-              allTags={poolTags}
-              placeholder="Filter by tag…"
-              size="md"
-            />
-          </div>
-        </>
+      {/* Tags filter — Tasks view only */}
+      {isTasksView && (
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs text-muted-foreground mr-1">Tags:</span>
+          <TagMultiPicker
+            value={filters.tags}
+            onChange={(next) => onFilterChange({ tags: next })}
+            allTags={poolTags}
+            placeholder="Filter by tag…"
+            size="md"
+          />
+        </div>
       )}
     </div>
   );

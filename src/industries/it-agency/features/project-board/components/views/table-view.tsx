@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -26,9 +26,10 @@ interface TableViewProps {
   team: TeamMember[];
   teamMap: Map<string, TeamMember>;
   onProjectUpdated: (updated: ProjectWithAccount) => void;
+  onClearFilters: () => void;
 }
 
-export function TableView({ projects, team, teamMap, onProjectUpdated }: TableViewProps) {
+export function TableView({ projects, team, teamMap, onProjectUpdated, onClearFilters }: TableViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("updated_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -55,9 +56,17 @@ export function TableView({ projects, team, teamMap, onProjectUpdated }: TableVi
 
   if (projects.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-12">
-        No projects match these filters.
-      </p>
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+        <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">No projects match these filters.</p>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="text-xs text-blue-600 hover:underline underline-offset-2"
+        >
+          Clear filters
+        </button>
+      </div>
     );
   }
 
@@ -67,19 +76,39 @@ export function TableView({ projects, team, teamMap, onProjectUpdated }: TableVi
     <Table>
       <TableHeader>
         <TableRow className="border-b border-gray-200">
-          <TableHead className={headCls} onClick={() => handleSort("name")}>
+          <TableHead
+            className={headCls}
+            onClick={() => handleSort("name")}
+            aria-sort={sortKey === "name" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+          >
             <span className="flex items-center gap-1">Project <SortIcon col="name" sortKey={sortKey} dir={sortDir} /></span>
           </TableHead>
-          <TableHead className={headCls} onClick={() => handleSort("account_name")}>
+          <TableHead
+            className={headCls}
+            onClick={() => handleSort("account_name")}
+            aria-sort={sortKey === "account_name" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+          >
             <span className="flex items-center gap-1">Account <SortIcon col="account_name" sortKey={sortKey} dir={sortDir} /></span>
           </TableHead>
-          <TableHead className={headCls} onClick={() => handleSort("owner")}>
+          <TableHead
+            className={headCls}
+            onClick={() => handleSort("owner")}
+            aria-sort={sortKey === "owner" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+          >
             <span className="flex items-center gap-1">Owner <SortIcon col="owner" sortKey={sortKey} dir={sortDir} /></span>
           </TableHead>
-          <TableHead className={headCls} onClick={() => handleSort("status")}>
+          <TableHead
+            className={headCls}
+            onClick={() => handleSort("status")}
+            aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+          >
             <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
           </TableHead>
-          <TableHead className={headCls} onClick={() => handleSort("updated_at")}>
+          <TableHead
+            className={headCls}
+            onClick={() => handleSort("updated_at")}
+            aria-sort={sortKey === "updated_at" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+          >
             <span className="flex items-center gap-1">Updated <SortIcon col="updated_at" sortKey={sortKey} dir={sortDir} /></span>
           </TableHead>
         </TableRow>

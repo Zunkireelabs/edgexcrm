@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, Timer } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -75,9 +75,10 @@ interface TasksViewProps {
   teamMap: Map<string, TeamMember>;
   poolTags: string[];
   refetchTags: () => Promise<void>;
+  onClearFilters: () => void;
 }
 
-export function TasksView({ filters, team, teamMap, poolTags, refetchTags }: TasksViewProps) {
+export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters }: TasksViewProps) {
   const [tasks, setTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -239,9 +240,17 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags }: Tas
 
   if (tasks.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-12">
-        No tasks match these filters.
-      </p>
+      <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
+        <ListTodo className="h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">No tasks match these filters.</p>
+        <button
+          type="button"
+          onClick={onClearFilters}
+          className="text-xs text-blue-600 hover:underline underline-offset-2"
+        >
+          Clear filters
+        </button>
+      </div>
     );
   }
 
@@ -252,22 +261,46 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags }: Tas
       <Table>
         <TableHeader>
           <TableRow className="border-b border-gray-200">
-            <TableHead className={headCls} onClick={() => handleSort("title")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("title")}
+              aria-sort={sortKey === "title" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Title <SortIcon col="title" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className={headCls} onClick={() => handleSort("project")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("project")}
+              aria-sort={sortKey === "project" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Project <SortIcon col="project" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className={headCls} onClick={() => handleSort("status")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("status")}
+              aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className={headCls} onClick={() => handleSort("assignee")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("assignee")}
+              aria-sort={sortKey === "assignee" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Assignee <SortIcon col="assignee" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className={headCls} onClick={() => handleSort("priority")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("priority")}
+              aria-sort={sortKey === "priority" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className={headCls} onClick={() => handleSort("due_date")}>
+            <TableHead
+              className={headCls}
+              onClick={() => handleSort("due_date")}
+              aria-sort={sortKey === "due_date" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+            >
               <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
             <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tags</TableHead>
@@ -401,6 +434,7 @@ function TaskRow({
           type="date"
           value={task.due_date ?? ""}
           onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
+          aria-label="Due date"
           className={[
             "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-transparent",
             isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
@@ -426,6 +460,7 @@ function TaskRow({
             type="button"
             onClick={() => onLogTime(task)}
             title="Log time for this task"
+            aria-label="Log time for this task"
             className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100"
           >
             <Timer className="h-3.5 w-3.5 text-muted-foreground" />

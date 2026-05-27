@@ -50,6 +50,21 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
     );
   }
 
+  function handleClearFilters() {
+    setFilters({
+      account: "__all__",
+      q: "",
+      owner: "__all__",
+      showCancelled: false,
+      statuses: [],
+      assignee: "__all__",
+      taskStatuses: [],
+      priorities: [],
+      tags: [],
+      due: "__all__",
+    });
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -76,6 +91,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           hoursMap={hoursMap}
           onProjectUpdated={handleProjectUpdated}
           onRefetch={refetch}
+          onClearFilters={handleClearFilters}
         />
       ) : filters.view === "table" ? (
         <TableView
@@ -83,6 +99,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           team={team}
           teamMap={teamMap}
           onProjectUpdated={handleProjectUpdated}
+          onClearFilters={handleClearFilters}
         />
       ) : filters.view === "tasks" ? (
         <TasksView
@@ -91,6 +108,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           teamMap={teamMap}
           poolTags={poolTags}
           refetchTags={refetchTags}
+          onClearFilters={handleClearFilters}
         />
       ) : (
         <MembersView
@@ -98,6 +116,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           team={team}
           projects={projects}
           accountMap={accountMap}
+          onClearFilters={handleClearFilters}
         />
       )}
     </div>
