@@ -12,8 +12,7 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
-import { Building2, LayoutGrid } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { LayoutGrid } from "lucide-react";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectColumn, COLUMN_ORDER } from "../project-column";
 import { ProjectCard, type ProjectWithAccount } from "../project-card";
@@ -184,18 +183,13 @@ export function BoardView({
 
       <DragOverlay>
         {draggingProject ? (
-          <div className="opacity-90 cursor-grabbing w-[220px]">
-            <Card className="shadow-xl">
-              <CardContent className="p-3 space-y-1">
-                <p className="text-sm font-medium leading-tight line-clamp-2">
-                  {draggingProject.name}
-                </p>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <Building2 className="h-3 w-3 shrink-0" />
-                  <span className="truncate">{draggingProject.account_name}</span>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="opacity-90 cursor-grabbing w-80">
+            <ProjectCard
+              project={draggingProject}
+              teamMap={teamMap}
+              hoursMap={hoursMap}
+              isDragOverlay={true}
+            />
           </div>
         ) : null}
       </DragOverlay>

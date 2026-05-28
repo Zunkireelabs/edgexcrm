@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FilterDropdown, type FilterOption } from "@/components/ui/filter-dropdown";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import type { Account, ProjectStatus, TaskStatus, TaskPriority } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 import type { WorkspaceFilters } from "../hooks/use-workspace-filters";
@@ -53,6 +54,8 @@ interface WorkspaceHeaderProps {
   accounts: Account[];
   team: TeamMember[];
   poolTags: string[];
+  projectCount: number;
+  onClearFilters: () => void;
 }
 
 export function WorkspaceHeader({
@@ -61,6 +64,8 @@ export function WorkspaceHeader({
   accounts,
   team,
   poolTags,
+  projectCount,
+  onClearFilters,
 }: WorkspaceHeaderProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const onFilterChangeRef = useRef(onFilterChange);
@@ -128,17 +133,10 @@ export function WorkspaceHeader({
     ? [...STATUS_CHIPS, CANCELLED_CHIP]
     : STATUS_CHIPS;
 
-  function toggleProjectStatus(value: ProjectStatus) {
-    const current = filters.statuses;
-    const next = current.includes(value)
-      ? current.filter((s) => s !== value)
-      : [...current, value];
-    onFilterChange({ statuses: next });
-  }
-
-  function isProjectStatusActive(value: ProjectStatus): boolean {
-    return filters.statuses.length === 0 || filters.statuses.includes(value);
-  }
+  const statusOptions: FilterOption[] = availableChips.map((chip) => ({
+    value: chip.value,
+    label: chip.label,
+  }));
 
   function toggleTaskStatus(value: TaskStatus) {
     const current = filters.taskStatuses;
@@ -167,15 +165,30 @@ export function WorkspaceHeader({
   const isTasksView = filters.view === "tasks";
   const isBoardOrTable = filters.view === "board" || filters.view === "table";
   const isMembersView = filters.view === "members";
+  const isTasksOrMembersView = isTasksView || isMembersView;
+
+  const hasActiveFilters =
+    !!filters.q ||
+    filters.account !== ALL_SENTINEL ||
+    filters.owner !== ALL_SENTINEL ||
+    filters.statuses.length > 0 ||
+    (isTasksOrMembersView && filters.assignee !== ALL_SENTINEL) ||
+    (isTasksOrMembersView && filters.due !== ALL_SENTINEL);
+
+  const activeFiltersCount = [
+    !!filters.q,
+    filters.account !== ALL_SENTINEL,
+    filters.owner !== ALL_SENTINEL,
+    filters.statuses.length > 0,
+    isTasksOrMembersView && filters.assignee !== ALL_SENTINEL,
+    isTasksOrMembersView && filters.due !== ALL_SENTINEL,
+  ].filter(Boolean).length;
 
   return (
-    <div className="flex flex-col gap-3 pb-3 border-b border-gray-200">
-      {/* Row 1: title + view tabs */}
+    <div className="flex flex-col gap-3">
+      {/* Title row */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <LayoutGrid className="h-5 w-5 text-muted-foreground" />
-          <h1 className="text-xl font-semibold">Projects</h1>
-        </div>
+        <h1 className="text-xl font-semibold">Projects</h1>
         <Tabs
           value={filters.view}
           onValueChange={(v) => onFilterChange({ view: v as WorkspaceFilters["view"] })}
@@ -201,116 +214,123 @@ export function WorkspaceHeader({
         </Tabs>
       </div>
 
-      {/* Row 2: search + shared dropdowns + view-specific dropdowns */}
-      <div className="flex items-center gap-3 flex-wrap">
-        {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400 pointer-events-none" />
-          <input
-            ref={searchRef}
-            type="text"
-            value={filters.q}
-            onChange={(e) => onFilterChange({ q: e.target.value })}
-            placeholder={isTasksView ? "Search tasks…" : isMembersView ? "Search projects & tasks…" : "Search projects…"}
-            aria-label="Search"
-            className="h-7 pl-8 pr-3 text-xs border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 w-44"
-          />
+      {/* Toolbar card */}
+      <div className="shrink-0 bg-card rounded-lg border">
+        {/* Top row: count + search + spacer */}
+        <div className="flex flex-wrap items-center gap-3 p-3">
+          <div className="text-sm font-medium text-muted-foreground shrink-0">
+            {projectCount} {projectCount === 1 ? "Project" : "Projects"}
+          </div>
+          <div className="relative w-60">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              type="text"
+              value={filters.q}
+              onChange={(e) => onFilterChange({ q: e.target.value })}
+              placeholder={isTasksView ? "Search tasks…" : isMembersView ? "Search projects & tasks…" : "Search projects…"}
+              aria-label="Search"
+              className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
+            />
+          </div>
+          <div className="flex-1" />
         </div>
 
-        {/* Account filter — all views */}
-        <FilterDropdown
-          label="Account"
-          value={filters.account}
-          onChange={(v) => onFilterChange({ account: v })}
-          options={accountOptions}
-        />
+        {/* Divider */}
+        <div className="h-px bg-border" />
 
-        {/* Owner filter — Board, Table, Members */}
-        {(isBoardOrTable || isMembersView) && (
+        {/* Filter row */}
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          {/* Account filter — all views */}
           <FilterDropdown
-            label="Owner"
-            value={filters.owner}
-            onChange={(v) => onFilterChange({ owner: v })}
-            options={ownerOptions}
+            label="Account"
+            value={filters.account}
+            onChange={(v) => onFilterChange({ account: v })}
+            options={accountOptions}
           />
-        )}
 
-        {/* Assignee filter — Tasks + Members */}
-        {(isTasksView || isMembersView) && (
-          <FilterDropdown
-            label="Assignee"
-            value={filters.assignee}
-            onChange={(v) => onFilterChange({ assignee: v })}
-            options={assigneeOptions}
-          />
-        )}
-
-        {/* Due keyword — Tasks + Members */}
-        {(isTasksView || isMembersView) && (
-          <FilterDropdown
-            label="Due"
-            value={filters.due}
-            onChange={(v) => onFilterChange({ due: v })}
-            options={DUE_OPTIONS}
-            searchable={false}
-          />
-        )}
-
-        {/* Show cancelled toggle — Board + Table only */}
-        {isBoardOrTable && (
-          <div className="flex items-center gap-1.5 ml-1">
-            <Checkbox
-              id="show-cancelled"
-              checked={filters.showCancelled}
-              onCheckedChange={(checked) => {
-                const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
-                if (!checked && filters.statuses.includes("cancelled")) {
-                  next.statuses = filters.statuses.filter((s) => s !== "cancelled");
-                }
-                onFilterChange(next);
-              }}
+          {/* Owner filter — Board, Table, Members */}
+          {(isBoardOrTable || isMembersView) && (
+            <FilterDropdown
+              label="Owner"
+              value={filters.owner}
+              onChange={(v) => onFilterChange({ owner: v })}
+              options={ownerOptions}
             />
-            <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
-              Show cancelled
-            </Label>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* Row 3: project status chips (Board + Table) */}
-      {isBoardOrTable && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Status:</span>
-          {availableChips.map((chip) => {
-            const active = isProjectStatusActive(chip.value);
-            return (
+          {/* Status filter — Board + Table only */}
+          {isBoardOrTable && (
+            <FilterDropdown
+              label="Status"
+              multiple
+              value={filters.statuses}
+              onChange={(next) => onFilterChange({ statuses: next as ProjectStatus[] })}
+              options={statusOptions}
+              searchable={false}
+            />
+          )}
+
+          {/* Assignee filter — Tasks + Members */}
+          {isTasksOrMembersView && (
+            <FilterDropdown
+              label="Assignee"
+              value={filters.assignee}
+              onChange={(v) => onFilterChange({ assignee: v })}
+              options={assigneeOptions}
+            />
+          )}
+
+          {/* Due keyword — Tasks + Members */}
+          {isTasksOrMembersView && (
+            <FilterDropdown
+              label="Due"
+              value={filters.due}
+              onChange={(v) => onFilterChange({ due: v })}
+              options={DUE_OPTIONS}
+              searchable={false}
+            />
+          )}
+
+          {/* Show cancelled toggle — Board + Table only */}
+          {isBoardOrTable && (
+            <div className="flex items-center gap-1.5 ml-1">
+              <Checkbox
+                id="show-cancelled"
+                checked={filters.showCancelled}
+                onCheckedChange={(checked) => {
+                  const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
+                  if (!checked && filters.statuses.includes("cancelled")) {
+                    next.statuses = filters.statuses.filter((s) => s !== "cancelled");
+                  }
+                  onFilterChange(next);
+                }}
+              />
+              <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
+                Show cancelled
+              </Label>
+            </div>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Active filters indicator */}
+          {hasActiveFilters && (
+            <div className="flex items-center gap-1.5">
+              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
+                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
+              </Badge>
               <button
-                key={chip.value}
                 type="button"
-                aria-pressed={active}
-                onClick={() => toggleProjectStatus(chip.value)}
-                className={[
-                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
-                ].join(" ")}
+                onClick={onClearFilters}
+                className="text-xs text-muted-foreground hover:text-foreground underline"
               >
-                {chip.label}
+                Clear
               </button>
-            );
-          })}
-          {filters.statuses.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onFilterChange({ statuses: [] })}
-              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Clear
-            </button>
+            </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Task status chips — Tasks view only */}
       {isTasksView && (
@@ -348,7 +368,7 @@ export function WorkspaceHeader({
       )}
 
       {/* Priority chips — Tasks + Members views */}
-      {(isTasksView || isMembersView) && (
+      {isTasksOrMembersView && (
         <div className="flex items-center gap-1.5 flex-wrap">
           <span className="text-xs text-muted-foreground mr-1">Priority:</span>
           {PRIORITY_CHIPS.map((chip) => {
