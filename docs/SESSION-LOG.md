@@ -19,14 +19,65 @@
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at `2aa45df` + this docs commit. Stage leads main by 2 squashes (Projects Board chrome + Projects pipeline-parity) + multiple docs commits; production promotion pending Sadin's go-ahead.
-- **Code-review checklist** (6 items): all N/A across all 7 squashes this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
-- **New CI gotcha to bake into future promotions**: don't promote stage→main while a stage deploy is still running. The SSH-action `command_timeout` for the Deploy step is ~10 minutes — concurrent `npm ci` + `next build` on the same host (dev container + prod container) doubles each build's wall time and trips that timeout. **Pre-flight check before pushing to main**: `gh run list --branch stage --limit 1` — wait for the most recent stage deploy to be `completed` before pushing to main. Recovery if it does happen: `gh run rerun <run_id> --failed` re-runs only the failed Deploy job; Pre-deploy Checks doesn't repeat (saves ~1m30s). Adding a permanent fix (bump `command_timeout` on the SSH action, or add a workflow-level concurrency guard) is a separate workflow-tweak branch.
+- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at `5ce03d2`. Stage leads main by 2 chore squashes (Projects Board chrome + Projects pipeline-parity) + 1 CI workflow fix + multiple docs commits; production promotion pending Sadin's go-ahead.
+- **Code-review checklist** (7 items): all N/A across all 7 squashes this session for the design pass — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. **New item added this session**: page-padding stacks with the dashboard shell (`shell.tsx:409` provides `p-4`; pages that add their own `p-4`/`p-6` double-pad). See STATUS-BOARD.
+- **CI gotcha permanently fixed** (`5ce03d2`): `deploy.yml` now sets `command_timeout: 30m` on the production SSH action, matching stage. The 2026-05-28 PM promotion timed out at the appleboy/ssh-action's default 10m because stage was deploying concurrently and dual `npm ci` + `next build` slowed each build past 9m. Bumping to 30m gives ~50% headroom over the worst-case dual-deploy time observed (15m51s on stage). The pre-flight guidance ("don't push to main while stage is deploying") is now belt-and-suspenders — still good practice but the failure mode is no longer load-bearing. **The next prod promotion will use the new timeout** — `deploy.yml` is read from the commit being deployed.
 - **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## CI: bump production SSH `command_timeout` to 30m (2026-05-28 PM)
+
+### What was built
+
+1-line change to `.github/workflows/deploy.yml`: added `command_timeout: 30m` to the production `Deploy via SSH` step. Direct commit on stage as `5ce03d2`.
+
+### Why
+
+The 2026-05-28 PM production promotion (`f78abcc`) timed out at the appleboy/ssh-action's default `command_timeout` of 10m. Root cause: a docs-only stage deploy was running concurrently on the same SSH host; dual `npm ci` + `next build` slowed the prod build to >9m. TypeScript started at 10:59:47 (after ~3.9min of Next.js compile under contention); the SSH session timed out at 11:01:35 — exactly the 10-minute mark.
+
+Diagnosis on review:
+
+- `deploy-staging.yml:54` already had `command_timeout: 30m`. That's why the docs-only stage deploy completed `success` at 15m51s under the same contention — it had 30m of headroom.
+- `deploy.yml` had **no `command_timeout` set**, so it inherited the action's default 10m. That was the asymmetry.
+
+### The fix
+
+```yaml
+       uses: appleboy/ssh-action@v1
+       with:
+         host: ${{ secrets.SSH_HOST }}
+         username: ${{ secrets.SSH_USERNAME }}
+         key: ${{ secrets.SSH_PRIVATE_KEY }}
++        command_timeout: 30m
+         script: |
+```
+
+One line. Defensive change — only widens the window, never narrows behavior. Recovery via `gh run rerun <id> --failed` still works for unrelated failure modes.
+
+### What this does NOT do
+
+Both workflows still have their own `concurrency:` groups (`deploy-staging` vs `deploy-production`), which means stage and main deploys can still run simultaneously. The dual-deploy contention isn't eliminated — it's just no longer fatal because both timeouts are now wide enough to absorb it.
+
+If we want to fully serialize stage and main against the same host, a second pass could:
+- Unify the concurrency group across both files (e.g., `group: deploy-ssh-host`) so stage queues against main and vice versa.
+- Trade-off: a stage push during an in-flight prod deploy would wait until prod finishes. Could be 5-15 minutes of explicit queueing.
+
+Not done in this commit — wait-and-see if 30m is enough headroom. If we see another contention timeout, that's the next move.
+
+### Verification
+
+- ✓ `git diff` shows exactly +1 line on `deploy.yml`. No other changes.
+- ✓ The change is read from the commit being deployed (GitHub Actions reads workflow files from the ref that triggered the run, not from the default branch), so the **next stage→main promotion will use the new 30m timeout** because the merge commit includes this change.
+- ✓ Stage deploy runs normally (its workflow already had 30m; this commit doesn't change its behavior).
+
+### Files Changed
+
+`.github/workflows/deploy.yml` (+1 line).
 
 ---
 
