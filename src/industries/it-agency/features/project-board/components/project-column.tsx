@@ -47,11 +47,12 @@ interface ProjectColumnProps {
 export function ProjectColumn({ status, projects, teamMap, hoursMap }: ProjectColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const cfg = COLUMN_CONFIG[status];
+  const totalBillableHrs = projects.reduce((sum, p) => sum + (hoursMap.get(p.id) ?? 0) / 60, 0);
 
   return (
     <div
       className={[
-        "flex flex-col min-w-[220px] w-[220px]",
+        "flex flex-col min-w-80 w-80",
         cfg.muted ? "opacity-60" : "",
       ].filter(Boolean).join(" ")}
     >
@@ -74,7 +75,7 @@ export function ProjectColumn({ status, projects, teamMap, hoursMap }: ProjectCo
       <div
         ref={setNodeRef}
         className={[
-          "flex-1 overflow-y-auto space-y-2 p-2 border border-t-0 bg-gray-50/40 transition-colors min-h-40 rounded-b-lg",
+          "flex-1 overflow-y-auto space-y-2 p-2 border border-t-0 bg-gray-50/40 transition-colors min-h-40",
           isOver
             ? "border-[#0f0f10] bg-[#0000170b]"
             : "border-gray-200",
@@ -92,6 +93,22 @@ export function ProjectColumn({ status, projects, teamMap, hoursMap }: ProjectCo
           projects.map((p) => (
             <ProjectCard key={p.id} project={p} teamMap={teamMap} hoursMap={hoursMap} />
           ))
+        )}
+      </div>
+
+      {/* Column footer */}
+      <div className="px-3 py-2 bg-card rounded-b-lg border border-t-0 border-gray-200 space-y-0.5">
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-[#787871]">Total</span>
+          <span className="font-medium text-[#0f0f10]">
+            {projects.length} project{projects.length !== 1 ? "s" : ""}
+          </span>
+        </div>
+        {projects.length > 0 && totalBillableHrs > 0 && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[#787871]">Billable</span>
+            <span className="font-medium text-[#0f0f10]">{totalBillableHrs.toFixed(1)} hrs</span>
+          </div>
         )}
       </div>
     </div>

@@ -74,13 +74,15 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6 h-full">
+    <div className="flex flex-col gap-4 h-full">
       <WorkspaceHeader
         filters={filters}
         onFilterChange={setFilters}
         accounts={accounts}
         team={team}
         poolTags={poolTags}
+        projectCount={filtered.length}
+        onClearFilters={handleClearFilters}
       />
 
       {filters.view === "board" ? (

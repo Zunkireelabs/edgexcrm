@@ -1,9 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Users, Clock } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Folder, MoreHorizontal, ExternalLink, Clock, User } from "lucide-react";
 import { useDraggable } from "@dnd-kit/core";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Button } from "@/components/ui/button";
 import type { Project } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 
@@ -34,70 +41,145 @@ function ownerInitials(email: string): string {
     .join("");
 }
 
+function getDaysSinceUpdate(updatedAt: string): number {
+  const diff = Date.now() - new Date(updatedAt).getTime();
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
+function getUrgencyStyles(days: number): { bg: string; text: string } {
+  if (days >= 7) return { bg: "bg-red-100", text: "text-red-700" };
+  if (days >= 3) return { bg: "bg-amber-100", text: "text-amber-700" };
+  return { bg: "bg-muted", text: "text-muted-foreground" };
+}
+
 interface ProjectCardProps {
   project: ProjectWithAccount;
   teamMap: Map<string, TeamMember>;
   hoursMap: Map<string, number>;
-  /** True when rendered inside DragOverlay — disables drag listeners */
+  /** True when rendered inside DragOverlay — disables drag listeners and click handler */
   isDragOverlay?: boolean;
 }
 
 export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false }: ProjectCardProps) {
+  const router = useRouter();
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: project.id,
     disabled: isDragOverlay,
   });
 
-  const updatedAgo = relativeTime(project.updated_at);
   const owner = project.owner_id ? teamMap.get(project.owner_id) : null;
   const billableHrs = (hoursMap.get(project.id) ?? 0) / 60;
-  const hasMetrics = project.contact_count > 0 || billableHrs > 0;
+  const days = getDaysSinceUpdate(project.updated_at);
+  const urgencyStyles = getUrgencyStyles(days);
+
+  function handleCardClick() {
+    router.push(`/time-tracking/projects/${project.id}`);
+  }
 
   return (
     <div
       ref={setNodeRef}
       {...(isDragOverlay ? {} : listeners)}
       {...(isDragOverlay ? {} : attributes)}
-      className={isDragging ? "opacity-40" : ""}
+      onClick={isDragOverlay ? undefined : handleCardClick}
+      className={`group rounded-xl border bg-card p-4 transition-all cursor-pointer ${
+        isDragging
+          ? "opacity-50 ring-2 ring-primary/20 scale-[1.02]"
+          : "hover:border-muted-foreground/30"
+      }`}
     >
-      <Link href={`/time-tracking/projects/${project.id}`} draggable={false}>
-        <Card className="cursor-grab active:cursor-grabbing hover:shadow-md transition-shadow">
-          <CardContent className="p-3 space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-sm font-medium leading-tight line-clamp-2 flex-1">{project.name}</p>
-              {owner && (
-                <span
-                  title={owner.email}
-                  className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold shrink-0"
-                >
-                  {ownerInitials(owner.email)}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Building2 className="h-3 w-3 shrink-0" />
-              <span className="truncate">{project.account_name}</span>
-            </div>
-            {hasMetrics && (
-              <div className="flex items-center gap-3 text-xs text-muted-foreground/70">
-                {project.contact_count > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Users className="h-3 w-3" />
-                    {project.contact_count} contact{project.contact_count !== 1 ? "s" : ""}
-                  </span>
-                )}
-                {billableHrs > 0 && (
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    {billableHrs.toFixed(1)} billable hrs
-                  </span>
-                )}
-              </div>
-            )}
-            <p className="text-xs text-muted-foreground/70">Updated {updatedAgo}</p>
-          </CardContent>
-        </Card>
-      </Link>
+      {/* Section 1: Header — icon + name + dropdown */}
+      <div className="flex items-start gap-3 mb-2">
+        <div className="flex-shrink-0 h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+          <Folder className="h-4 w-4 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <Link
+            href={`/time-tracking/projects/${project.id}`}
+            className="text-sm font-semibold hover:text-primary transition-colors line-clamp-1 block"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {project.name}
+          </Link>
+        </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 -mr-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-44">
+            <DropdownMenuItem asChild>
+              <Link href={`/time-tracking/projects/${project.id}`}>
+                <ExternalLink className="mr-2 h-3.5 w-3.5" />
+                View Details
+              </Link>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border/50 my-3" />
+
+      {/* Section 2: Metadata key:value grid */}
+      <div className="space-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground w-16 flex-shrink-0">Account</span>
+          <span className="text-foreground truncate">{project.account_name}</span>
+        </div>
+        {project.contact_count > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground w-16 flex-shrink-0">Contacts</span>
+            <span className="text-foreground">{project.contact_count}</span>
+          </div>
+        )}
+        {billableHrs > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground w-16 flex-shrink-0">Billable</span>
+            <span className="text-foreground">{billableHrs.toFixed(1)} hrs</span>
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <span className="text-muted-foreground w-16 flex-shrink-0">Updated</span>
+          <span className="text-foreground">{relativeTime(project.updated_at)}</span>
+        </div>
+      </div>
+
+      {/* Divider */}
+      <div className="border-t border-border/50 my-3" />
+
+      {/* Section 3: Footer — urgency badge + owner avatar */}
+      <div className="flex items-center justify-between">
+        <div
+          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
+        >
+          <Clock className="h-3 w-3" />
+          <span>{days === 0 ? "Today" : `${days}d`}</span>
+        </div>
+        {owner ? (
+          <div
+            title={owner.email}
+            className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary"
+          >
+            {ownerInitials(owner.email)}
+          </div>
+        ) : (
+          <div
+            title="Unassigned"
+            className="h-6 w-6 rounded-full bg-muted border border-border flex items-center justify-center"
+          >
+            <User className="h-3 w-3 text-muted-foreground" />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
