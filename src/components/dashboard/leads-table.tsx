@@ -827,7 +827,7 @@ export function LeadsTable({
                         {/* Name link - padding increases on hover to make room for Preview button */}
                         <Link
                           href={`/leads/${lead.id}`}
-                          className="text-sm font-medium text-[#2272B4] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
+                          className="text-sm font-medium text-[#0f0f10] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
                         >
                           <TruncatedText
                             text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
@@ -875,13 +875,13 @@ export function LeadsTable({
                         }} />
                       </td>
                     )}
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-700 font-normal">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-700 font-normal">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
                       {lead.city || <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-700 font-normal">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
                       {assignedEmail ? (
                         <span>{assignedEmail.split("@")[0]}</span>
                       ) : (
@@ -927,7 +927,7 @@ export function LeadsTable({
                         );
                       })()}
                     </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-700 font-normal">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-1.5 text-right">

@@ -338,12 +338,12 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                       <td className="px-3 py-1.5">
                         <Link
                           href={`/contacts/${contact.id}`}
-                          className="text-sm font-medium text-[#2272B4] hover:underline"
+                          className="text-sm font-medium text-[#0f0f10] hover:underline"
                         >
                           {fullName(contact)}
                         </Link>
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
+                      <td className="px-3 py-1.5 text-sm font-normal text-[#787871]">
                         {contact.accounts ? (
                           <Link href={`/accounts/${contact.accounts.id}`} className="hover:underline">
                             {contact.accounts.name}
@@ -352,7 +352,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
+                      <td className="px-3 py-1.5 text-sm font-normal text-[#787871]">
                         {contact.email ? (
                           <a href={`mailto:${contact.email}`} className="hover:underline">
                             {contact.email}
@@ -361,7 +361,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
+                      <td className="px-3 py-1.5 text-sm font-normal text-[#787871]">
                         {contact.title ?? <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-3 py-1.5">
