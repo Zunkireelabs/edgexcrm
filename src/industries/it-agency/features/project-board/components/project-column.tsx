@@ -1,6 +1,7 @@
 "use client";
 
 import { useDroppable } from "@dnd-kit/core";
+import { FolderOpen } from "lucide-react";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectCard, type ProjectWithAccount } from "./project-card";
 import type { TeamMember } from "../hooks/use-projects";
@@ -27,6 +28,15 @@ export const COLUMN_ORDER: ProjectStatus[] = [
   "on_hold",
 ];
 
+export const STATUS_COLOR: Record<ProjectStatus, string> = {
+  planning:  "#3B82F6",
+  active:    "#F59E0B",
+  in_review: "#A855F7",
+  delivered: "#10B981",
+  on_hold:   "#9CA3AF",
+  cancelled: "#EF4444",
+};
+
 interface ProjectColumnProps {
   status: ProjectStatus;
   projects: ProjectWithAccount[];
@@ -40,26 +50,44 @@ export function ProjectColumn({ status, projects, teamMap, hoursMap }: ProjectCo
 
   return (
     <div
-      ref={setNodeRef}
       className={[
-        "flex flex-col gap-2 min-w-[220px] w-[220px]",
+        "flex flex-col min-w-[220px] w-[220px]",
         cfg.muted ? "opacity-60" : "",
-        isOver ? "ring-2 ring-blue-300 ring-inset rounded-lg" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      ].filter(Boolean).join(" ")}
     >
-      <div className="flex items-center justify-between px-1">
-        <span className="text-sm font-semibold text-foreground">{cfg.label}</span>
-        <span className="text-xs text-muted-foreground bg-muted rounded-full px-2 py-0.5">
+      {/* Header bar */}
+      <div className="flex items-center gap-2 px-3 py-2.5 bg-card rounded-t-lg border border-b-0 border-gray-200">
+        <div
+          className="h-2.5 w-2.5 rounded-full shrink-0"
+          style={{ backgroundColor: STATUS_COLOR[status] }}
+        />
+        <h3 className="text-sm font-semibold text-[#0f0f10] truncate flex-1">{cfg.label}</h3>
+        <span className="text-xs text-[#787871] bg-gray-100 rounded-full px-2 py-0.5 font-medium">
           {projects.length}
         </span>
       </div>
-      <div className="flex flex-col gap-2 min-h-[80px]">
+
+      {/* Header divider */}
+      <div className="h-px bg-gray-200" />
+
+      {/* Droppable body */}
+      <div
+        ref={setNodeRef}
+        className={[
+          "flex-1 overflow-y-auto space-y-2 p-2 border border-t-0 bg-gray-50/40 transition-colors min-h-40 rounded-b-lg",
+          isOver
+            ? "border-[#0f0f10] bg-[#0000170b]"
+            : "border-gray-200",
+        ].join(" ")}
+      >
         {projects.length === 0 ? (
-          <p className="text-xs text-muted-foreground/60 text-center py-4 px-2 border border-dashed rounded-lg">
-            No projects
-          </p>
+          <div className="flex flex-col items-center justify-center h-32 text-center px-4">
+            <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center mb-2">
+              <FolderOpen className="h-5 w-5 text-[#787871]" />
+            </div>
+            <p className="text-sm text-[#0f0f10] font-medium">No projects</p>
+            <p className="text-xs text-[#787871] mt-0.5">Drag projects here to update</p>
+          </div>
         ) : (
           projects.map((p) => (
             <ProjectCard key={p.id} project={p} teamMap={teamMap} hoursMap={hoursMap} />

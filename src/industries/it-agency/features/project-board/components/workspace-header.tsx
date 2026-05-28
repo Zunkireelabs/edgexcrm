@@ -128,17 +128,10 @@ export function WorkspaceHeader({
     ? [...STATUS_CHIPS, CANCELLED_CHIP]
     : STATUS_CHIPS;
 
-  function toggleProjectStatus(value: ProjectStatus) {
-    const current = filters.statuses;
-    const next = current.includes(value)
-      ? current.filter((s) => s !== value)
-      : [...current, value];
-    onFilterChange({ statuses: next });
-  }
-
-  function isProjectStatusActive(value: ProjectStatus): boolean {
-    return filters.statuses.length === 0 || filters.statuses.includes(value);
-  }
+  const statusOptions: FilterOption[] = availableChips.map((chip) => ({
+    value: chip.value,
+    label: chip.label,
+  }));
 
   function toggleTaskStatus(value: TaskStatus) {
     const current = filters.taskStatuses;
@@ -235,6 +228,18 @@ export function WorkspaceHeader({
           />
         )}
 
+        {/* Status filter — Board + Table only */}
+        {isBoardOrTable && (
+          <FilterDropdown
+            label="Status"
+            multiple
+            value={filters.statuses}
+            onChange={(next) => onFilterChange({ statuses: next as ProjectStatus[] })}
+            options={statusOptions}
+            searchable={false}
+          />
+        )}
+
         {/* Assignee filter — Tasks + Members */}
         {(isTasksView || isMembersView) && (
           <FilterDropdown
@@ -276,41 +281,6 @@ export function WorkspaceHeader({
           </div>
         )}
       </div>
-
-      {/* Row 3: project status chips (Board + Table) */}
-      {isBoardOrTable && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Status:</span>
-          {availableChips.map((chip) => {
-            const active = isProjectStatusActive(chip.value);
-            return (
-              <button
-                key={chip.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggleProjectStatus(chip.value)}
-                className={[
-                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
-                ].join(" ")}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-          {filters.statuses.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onFilterChange({ statuses: [] })}
-              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Task status chips — Tasks view only */}
       {isTasksView && (
