@@ -875,13 +875,13 @@ export function LeadsTable({
                         }} />
                       </td>
                     )}
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-700 font-normal">
                       <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
                     </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-700 font-normal">
                       {lead.city || <span className="text-gray-400">—</span>}
                     </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-500 font-light">
+                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm text-gray-700 font-normal">
                       {assignedEmail ? (
                         <span>{assignedEmail.split("@")[0]}</span>
                       ) : (
@@ -927,7 +927,7 @@ export function LeadsTable({
                         );
                       })()}
                     </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-500 font-light">
+                    <td className="px-3 py-1.5 hidden md:table-cell text-sm text-gray-700 font-normal">
                       {new Date(lead.created_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-1.5 text-right">

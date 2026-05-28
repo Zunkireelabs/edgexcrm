@@ -343,7 +343,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                           {fullName(contact)}
                         </Link>
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-500 font-light">
+                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
                         {contact.accounts ? (
                           <Link href={`/accounts/${contact.accounts.id}`} className="hover:underline">
                             {contact.accounts.name}
@@ -352,7 +352,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-500 font-light">
+                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
                         {contact.email ? (
                           <a href={`mailto:${contact.email}`} className="hover:underline">
                             {contact.email}
@@ -361,7 +361,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                           <span className="text-gray-400">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-1.5 text-sm text-gray-500 font-light">
+                      <td className="px-3 py-1.5 text-sm text-gray-700 font-normal">
                         {contact.title ?? <span className="text-gray-400">—</span>}
                       </td>
                       <td className="px-3 py-1.5">
