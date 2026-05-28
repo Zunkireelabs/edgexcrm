@@ -11,19 +11,90 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Time Approvals nav link shipped to stage** (`683e85e`, squash from `feature/nav-approvals-link`). `/time-tracking/approvals` now has a sidebar entry under Time Tracking for IT agency admins/owners, hidden from counselors/viewers via a new optional `minRoles` field on `SidebarItem`. Stage HEAD at `683e85e` + this docs commit. Main HEAD still at `d3cd235`. Prod is unchanged from the 2026-05-28 promotion. Dev container green: stage deploy 4m40s, /login 200, /time-tracking/approvals 307 (auth redirect, expected).
-- **Sadin pivoted from the post-promotion smoke plan to a styling/UX pass** dashboard-by-dashboard for IT agency, then education_consultancy. First step before the styling pass was surfacing the orphan Time Approvals route — that's done. **Audit finding**: it was the ONLY meaningful orphan for IT agency; everything else is either a detail subpage (correct), or correctly industry-gated to another tenant type.
-- **What's next**: **start the IT agency dashboard styling/UX pass, one page at a time**. Sadin will pick which dashboard to start with (Dashboard / Leads / Pipeline / Team / Settings / Contacts / Accounts / Projects / Time Tracking / Approvals). Workflow: Opus audits the page → writes a per-page brief → Sonnet implements → Opus reviews + stage merge → Sadin smokes. After IT agency is clean, repeat the same pass for education_consultancy (Contacts / Check-In / Forms in addition to the universal pages).
-- **Sonnet flagged 3 grey-in-white surfaces during chrome restyle** that almost certainly come up during the styling pass: `/pipeline` kanban lane backgrounds, `/projects` workspace full-bleed grey, `/leads` table chrome. Each paints its own grey bg, which now reads as a grey-card-inside-the-white-card. These will likely get repainted to `bg-transparent` or `bg-white` as part of the per-page pass.
-- **Carryover from STATUS-BOARD**: (1) Visual smoke on the 2026-05-28 production bundle is still technically open — Sadin pivoted before smoking. Most of what would have been smoked there is now folded into the upcoming styling pass anyway, so the standalone smoke item can stay parked or close after the styling pass completes. (2) Phase 4 + 4.5 Time Tracking smoke gaps — pure thoroughness backlog. (3) Counselor password still rotated. (4) Branch cleanup still optional.
-- **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page / per-fix branches. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `683e85e` + this docs commit. Stage leads main by the nav fix + this docs commit; next prod promotion will sync.
-- **Code-review checklist** (6 items): all clean on the nav-approvals change — UI-only, no DB / no API / no new page / no Select / no embed / no mutations. No new items.
-- **What Opus does next on resume**: (1) ask Sadin which dashboard page to audit first; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page styling brief; (4) hand off to Sonnet.
+- **Current state**: **IT agency design pass — first wave shipped to stage**. Six squash commits on top of the Time Approvals nav (`683e85e`): `/contacts` chrome aligned to `/leads` (`285b2a8`), `/contacts` polish — avatars + sort + pagination (`0d47bf3`), primary button → near-black + 8px corners + table text bump (`f3ad73d`), table text hierarchy refinement (`8791e66`), FilterDropdown + PipelineSelector retoned (no more blue accents) (`aec9cf5`), `/accounts` list rewrite as a table mirroring leads + contacts (`56f6299`). Stage HEAD at `56f6299` + this docs commit. Main HEAD still at `d3cd235`. **Stage leads main by 7 squash commits + this docs commit; production promotion pending Sadin's go-ahead.** Dev container green throughout.
+- **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
+- **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`. Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (kanban — different paradigm), `/team`, `/projects`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages).
+- **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
+- **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
+- **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
+- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `56f6299` + this docs commit. Stage ahead of main by 7 squash commits + docs commit; pre-flight `git log origin/main..origin/stage` to scope before promoting; `git log origin/stage..origin/main` to spot main-only commits (3 expected: prior promotion `d3cd235`, Anish merge `e10b97d`, CI nudge `02fe74e`).
+- **Code-review checklist** (6 items): all N/A across all 7 commits this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
+- **What Opus does next on resume**: (1) if Sadin authorizes prod push, run the non-FF ort merge stage→main and live-smoke; (2) ask Sadin which dashboard to audit next; (3) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (4) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## IT agency design pass — first wave shipped to stage: /contacts + /accounts + design tokens (2026-05-28)
+
+### What shipped
+
+Six squash commits on top of `683e85e` (the Time Approvals nav fix), all UI-only, all IT-agency focused. Sadin pivoted into a dashboard-by-dashboard styling/UX pass: Opus audits → writes a per-page brief → Sonnet implements on a feature branch → Sadin pastes the handoff prompt himself → Opus fetches, reviews diff, runs `npm run build` + `npx eslint --max-warnings 50 .` locally → squash-merges to stage → deletes the feature branch → writes the next brief.
+
+**`285b2a8` — `/contacts` chrome aligned to `/leads` pattern.** Toolbar card with count + search + Add, divider, FilterDropdown chips, active-filter badge + Clear, table card with `bg-gray-50` thead + `divide-y` body + hover rows. File: `contacts-list.tsx`.
+
+**`0d47bf3` — `/contacts` polish.** Avatar initials column, Sort popover (Name / Email / Title / Created × A→Z / Z→A), client-side pagination (10/25/50/100). `safePage = Math.min(currentPage, totalPages)` derivation pattern — React 19's `react-hooks/set-state-in-effect` rule blocks the leads-style `useEffect` recovery, so derive instead of repair. File: `contacts-list.tsx`.
+
+**`f3ad73d` — primary button → near-black + 8px corners + table text bump.** `--primary` CSS var swapped from `#2272B4` (Zunkireelabs blue) to `#171717`. `button.tsx` default variant switched from hardcoded hex to tokens (`bg-primary text-primary-foreground hover:bg-primary/90`). All button sizes: `rounded` → `rounded-lg`. Table data cells in `/leads` + `/contacts`: `text-gray-500 font-light` → `text-gray-700 font-normal`. Dropped unused `--primary-hover` CSS var. Files: `globals.css`, `button.tsx`, `leads-table.tsx`, `contacts-list.tsx`.
+
+**`8791e66` — table text hierarchy refinement.** Name links in `/leads` + `/contacts`: `text-[#2272B4]` (blue) → `text-[#0f0f10]` (near-black). Secondary data cells: `text-gray-700` (cool dark) → `text-[#787871]` (warm-muted). Files: `leads-table.tsx`, `contacts-list.tsx`.
+
+**`aec9cf5` — FilterDropdown + PipelineSelector retoned, blue accents removed.** Hover bg: `bg-gray-50` → `bg-[#0000170b]` (~4% black-with-alpha overlay, Anthropic-style). Selected text drops the blue color treatment (now same `#0f0f10` as unselected). Selected row drops `bg-blue-50` entirely — selection signaled only by the filled radio-circle + check icon (now `#0f0f10`). Search input focus ring: blue → `ring-gray-300`. Pipeline "Default" badge retoned to neutral `bg-gray-100 text-gray-700`. Files: `filter-dropdown.tsx`, `PipelineSelector.tsx`.
+
+**`56f6299` — `/accounts` list rewrite as a table mirroring leads + contacts.** Dropped the Card-stack layout entirely. New columns: avatar initials · Name (`#0f0f10` link) · Contact Email · Projects · Status pill (Active green / Inactive gray) · Actions (Edit + Delete, admin-only). Toolbar with count + search + Sort + New Account; Status FilterDropdown (Active default / Inactive / All); pagination footer. `getInitials` helper handles single-name accounts. File: `accounts-list.tsx`.
+
+### Color tokens established this session
+
+Bake these into any future briefs:
+
+- **Primary action**: `--primary` CSS var, currently `#171717` near-black. Buttons use `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`.
+- **Primary text** (names, labels): `#0f0f10` (near-black, slightly darker than `--foreground` at `#171717`).
+- **Secondary text** (data cells, descriptions): `#787871` (warm-muted gray).
+- **Em-dash placeholders**: `text-gray-400`.
+- **Hover overlay** (dropdowns only for now): `#0000170b` (~4% black-with-alpha).
+- **Table row hover** (still): `bg-gray-50`. Intentional inconsistency vs the dropdown overlay — flagged for a potential future unify branch, not yet decided.
+- **Border radius on buttons**: `rounded-lg` (8px) across all sizes.
+- **Status pills** (Active / Inactive): `bg-green-50 text-green-700 border-green-200` / `bg-gray-100 text-gray-500 border-gray-200` (matches ContactStatusBadge).
+- **Name link** (table cells): `text-sm font-medium text-[#0f0f10] hover:underline`.
+- **Data cell** (table cells): `text-sm font-normal text-[#787871]`.
+
+### Verification
+
+- ✓ `npm run build` clean locally on each commit before merge.
+- ✓ `npx eslint --max-warnings 50 .` clean locally on each commit before merge (the CI hard gate that ESLint-stripped local builds don't run).
+- ✓ Stage deploys green throughout — most recent deploy was the `/accounts` rewrite (`56f6299`).
+- ✓ All 6 code-review checklist items N/A across all 6 commits — UI-only, no DB / no API / no new page / no Select / no embed / no mutations. No new items.
+
+### Out of scope (deferred to separate branches)
+
+- `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4` (separate consolidation branch).
+- `button.tsx` link variant keeps `text-[#2272B4]` blue intentionally (link convention; only buttons turned black).
+- `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4` (separate branch).
+- `.dark` color block in `globals.css` unchanged (dark mode not deployed).
+- `account-detail.tsx`, `contacts-detail.tsx` — follow-up branches if Sadin wants them styled.
+- Bulk select / Export / Preview panel — feature work, deferred.
+
+### Eyeball items flagged for Sadin's smoke
+
+None blocking; all post-merge polish judgment:
+
+- Selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection. Pipeline selector with multiple pipelines is the test surface for "is this hard to spot?"
+- Pipeline "Default" badge is now neutral gray — if admins scanning long pipeline lists can't identify the default at a glance, follow-up could give it soft amber (`bg-amber-50 text-amber-700`) or purple.
+- Table-row hover (`bg-gray-50`) vs dropdown-option hover (`#0000170b`) is intentionally different right now. Could unify in a follow-up.
+- Status filter chip on `/contacts` + `/accounts` always renders "engaged" since the default value `"active"` ≠ `"all"` — FilterDropdown's `isActive` logic counts anything-other-than-`"all"` as active. Not a bug; visual quirk.
+
+### Files Changed
+
+- `285b2a8`: `contacts-list.tsx`
+- `0d47bf3`: `contacts-list.tsx`
+- `f3ad73d`: `globals.css`, `button.tsx`, `leads-table.tsx`, `contacts-list.tsx`
+- `8791e66`: `leads-table.tsx`, `contacts-list.tsx`
+- `aec9cf5`: `filter-dropdown.tsx`, `PipelineSelector.tsx`
+- `56f6299`: `accounts-list.tsx`
+
+Six briefs from this session archived alongside this entry: `CONTACTS-LIST-CHROME-BRIEF.md`, `CONTACTS-LIST-POLISH-BRIEF.md`, `DESIGN-PRIMARY-BUTTON-BRIEF.md`, `DESIGN-TEXT-HIERARCHY-BRIEF.md`, `DESIGN-DROPDOWN-RETONE-BRIEF.md`, `ACCOUNTS-LIST-REWRITE-BRIEF.md`.
 
 ---
 
