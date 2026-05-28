@@ -56,10 +56,9 @@
   --card-foreground: #171717;
   --popover: #ffffff;
   --popover-foreground: #171717;
-  /* Primary: Zunkireelabs blue #2272B4 */
-  --primary: #2272B4;
+  /* Primary: near-black for actions (matches --foreground tone) */
+  --primary: #171717;
   --primary-foreground: #ffffff;
-  --primary-hover: #0E538B;
   --secondary: #f5f5f5;
   --secondary-foreground: #374151;
   --muted: #f5f5f5;

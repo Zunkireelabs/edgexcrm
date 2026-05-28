@@ -37,6 +37,13 @@ export interface SidebarItem {
   href: string;
   label: string;
   icon: string;
+  /**
+   * If present, only show this sidebar item to users whose role is in
+   * the list. Mirrors role gates already enforced at the API / page
+   * level — this just hides the nav entry. Absent = visible to all
+   * roles in the tenant.
+   */
+  minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[];
 }
 
 /**

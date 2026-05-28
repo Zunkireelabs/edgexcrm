@@ -69,14 +69,23 @@ export function getFeatureAccess(
  * Returns sidebar entries contributed by the tenant's industry. The
  * dashboard shell merges these with the universal nav items. Filters
  * out items whose featureId is no longer registered (catches
- * sidebar/features drift inside a single manifest).
+ * sidebar/features drift inside a single manifest) and items whose
+ * `minRoles` list does not include the current user's role.
+ *
+ * `role` is optional so callers without role context still work — they
+ * receive unfiltered nav (role-gated items are included).
  */
 export function getIndustrySidebarItems(
   industryId: string | null | undefined,
+  role?: string,
 ): readonly SidebarItem[] {
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
-  return m.sidebar.filter((item) => registeredFeatureIds.has(item.featureId));
+  return m.sidebar.filter((item) => {
+    if (!registeredFeatureIds.has(item.featureId)) return false;
+    if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
+    return true;
+  });
 }
 
 /**

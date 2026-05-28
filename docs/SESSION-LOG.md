@@ -11,23 +11,165 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Project Workspace v1 fully shipped to stage.** Stage HEAD at `04d7895`: 5 phases done (Phase 1 `44409a8` → Phase 2 `dd20d91` → Phase 3 `867a750` → Phase 4 `29345f3` → Phase 5 `97e490d`), tag-picker fixback `ed7ff15`, eslint hotfix `04d7895`. Dev container current — `dev-lead-crm.zunkireelabs.com/login` 200, `/projects` 307 (auth redirect, expected). Production still on `c13e594`. **Discovery during Phase 5 ship**: stage deploy had been red since the tag fixback (6 consecutive runs) due to a `react-hooks/set-state-in-effect` hard error in `tag-multi-picker.tsx:39`. Local `npm run build` doesn't run ESLint — it's a separate CI step. Container was frozen at Phase 3 the whole time. Hotfix `04d7895` (Sonnet branch `89a50a7`, wrapped `setQuery` in `setTimeout(0)` mirroring the focus-on-open pattern) unblocked the pipeline; container jumped Phase 3 → Phase 5+fix in one 4m4s deploy. **Tag fixback + Phase 4 + Phase 5 ALL need fresh visual smoke** — the earlier "tag picker fixback confirmed by Sadin" entry was on a phantom (local dev server or cached page); the deployed staging container only just received the changes.
-- **What's next**: Sadin runs visual smoke on `dev-lead-crm.zunkireelabs.com/projects` covering tag fixback + Phase 4 + Phase 5 (checklist below). When clean, Opus writes the stage→main production promotion plan — bigger diff than the last prod push (4 phases + 2 fixbacks). Confirm with Sadin before the prod merge.
-- **Visual smoke checklist on the real dev container**:
-  - **Tag fixback** (Tasks view): click a task's Tags column → Notion-style picker opens with search input autofocused; checkable rows from tenant-wide pool; type a new name → "Create" row appears; click creates and selects. Filter chip applies ANY-match.
-  - **Phase 4 (Members)**: switch to Members tab → one section per team-member-with-work; section counts match DB; expand/collapse holds across filter changes; Owner filter narrows section list; click project name → `/time-tracking/projects/[id]`; click task title → same.
-  - **Phase 5**: press `b`/`t`/`k`/`m` outside any input → view switches; `/` focuses search; Esc clears query or blurs empty input. Apply filters that strand a view → empty state with Clear-filters CTA appears. Tab order rotates through interactive controls without trap. Optional: Lighthouse a11y on `/projects` should clear 95.
-- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU two-window test — shipped on visual-confirmation, not exhaustively verified. (2) Counselor (`manjila@zunkireelabs.com`) password still rotated from Time Tracking Phase 5 verification. Admizz admin restored to `admizz123` on 2026-05-27. (3) Branch cleanup: 4 dangling already-merged branches safe to delete (`check-in`, `consultancy-update`, `create-form`, `tags`); 1 stale unmerged `feature/ai-orchestrate-orca` (7 weeks, 3,859 LOC predating industry modules).
-- **Workflow split** (held through Phase 5 + the eslint fixback): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase / per-fix branches. **Production-affecting actions** (merges to main, force-pushes, rollbacks) ALWAYS confirm with Sadin first.
-- **Branch state**: `main` at `c13e594` (production HEAD, unchanged). `stage` HEAD at `04d7895`. Local matches origin. Stage→main diff now includes all 4 Project Workspace phases + tag fixback + Phase 5 + eslint hotfix on top of `c13e594`.
-- **Code-review checklist** (6 items): all clean across Phases 1–5 + tag-picker fixback + eslint hotfix. No new items added — Phase 5 was UI-only (no DB / API / mutation surface).
-- **Lesson logged from the CI red-streak**: `npm run build` does NOT include ESLint — it's a separate CI step gated at `--max-warnings 50`. A failed Pre-deploy Checks job stops the container deploy entirely; the previous container keeps serving. "Sonnet pushed and reported success" without a `gh run watch` check can hide a multi-commit deploy backlog. The per-phase verification matrix in future briefs should add `npx eslint --max-warnings 50 .` as a pre-push gate, especially under React 19 (new rules like `react-hooks/set-state-in-effect` keep landing).
-- **What Opus does next on resume**: (1) wait for Sadin's smoke report; (2) if regressions surface, route via Sonnet fixback; (3) if clean, write the stage→main production promotion plan covering ≈6 squashed commits' worth of feature code. The prior prod merge (`c13e594`) used a non-FF ort merge — same shape will work here unless `main` has drifted; pre-flight check `git log origin/main..origin/stage` then `git merge --no-ff origin/stage` from main.
-- **Tenant DB residue from smoke runs replicated to prod**: cosmetic, harmless — not worth a cleanup migration. Expect another small round from the upcoming Phase 4 + 5 + tag smoke pass on dev.
-- **Blockers**: none on stage. Production promotion blocked on Sadin's visual smoke + go-ahead.
+- **Current state**: **IT agency design pass — first wave shipped to stage**. Six squash commits on top of the Time Approvals nav (`683e85e`): `/contacts` chrome aligned to `/leads` (`285b2a8`), `/contacts` polish — avatars + sort + pagination (`0d47bf3`), primary button → near-black + 8px corners + table text bump (`f3ad73d`), table text hierarchy refinement (`8791e66`), FilterDropdown + PipelineSelector retoned (no more blue accents) (`aec9cf5`), `/accounts` list rewrite as a table mirroring leads + contacts (`56f6299`). Stage HEAD at `56f6299` + this docs commit. Main HEAD still at `d3cd235`. **Stage leads main by 7 squash commits + this docs commit; production promotion pending Sadin's go-ahead.** Dev container green throughout.
+- **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
+- **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`. Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (kanban — different paradigm), `/team`, `/projects`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages).
+- **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
+- **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
+- **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
+- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `56f6299` + this docs commit. Stage ahead of main by 7 squash commits + docs commit; pre-flight `git log origin/main..origin/stage` to scope before promoting; `git log origin/stage..origin/main` to spot main-only commits (3 expected: prior promotion `d3cd235`, Anish merge `e10b97d`, CI nudge `02fe74e`).
+- **Code-review checklist** (6 items): all N/A across all 7 commits this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
+- **What Opus does next on resume**: (1) if Sadin authorizes prod push, run the non-FF ort merge stage→main and live-smoke; (2) ask Sadin which dashboard to audit next; (3) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (4) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
+- **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## IT agency design pass — first wave shipped to stage: /contacts + /accounts + design tokens (2026-05-28)
+
+### What shipped
+
+Six squash commits on top of `683e85e` (the Time Approvals nav fix), all UI-only, all IT-agency focused. Sadin pivoted into a dashboard-by-dashboard styling/UX pass: Opus audits → writes a per-page brief → Sonnet implements on a feature branch → Sadin pastes the handoff prompt himself → Opus fetches, reviews diff, runs `npm run build` + `npx eslint --max-warnings 50 .` locally → squash-merges to stage → deletes the feature branch → writes the next brief.
+
+**`285b2a8` — `/contacts` chrome aligned to `/leads` pattern.** Toolbar card with count + search + Add, divider, FilterDropdown chips, active-filter badge + Clear, table card with `bg-gray-50` thead + `divide-y` body + hover rows. File: `contacts-list.tsx`.
+
+**`0d47bf3` — `/contacts` polish.** Avatar initials column, Sort popover (Name / Email / Title / Created × A→Z / Z→A), client-side pagination (10/25/50/100). `safePage = Math.min(currentPage, totalPages)` derivation pattern — React 19's `react-hooks/set-state-in-effect` rule blocks the leads-style `useEffect` recovery, so derive instead of repair. File: `contacts-list.tsx`.
+
+**`f3ad73d` — primary button → near-black + 8px corners + table text bump.** `--primary` CSS var swapped from `#2272B4` (Zunkireelabs blue) to `#171717`. `button.tsx` default variant switched from hardcoded hex to tokens (`bg-primary text-primary-foreground hover:bg-primary/90`). All button sizes: `rounded` → `rounded-lg`. Table data cells in `/leads` + `/contacts`: `text-gray-500 font-light` → `text-gray-700 font-normal`. Dropped unused `--primary-hover` CSS var. Files: `globals.css`, `button.tsx`, `leads-table.tsx`, `contacts-list.tsx`.
+
+**`8791e66` — table text hierarchy refinement.** Name links in `/leads` + `/contacts`: `text-[#2272B4]` (blue) → `text-[#0f0f10]` (near-black). Secondary data cells: `text-gray-700` (cool dark) → `text-[#787871]` (warm-muted). Files: `leads-table.tsx`, `contacts-list.tsx`.
+
+**`aec9cf5` — FilterDropdown + PipelineSelector retoned, blue accents removed.** Hover bg: `bg-gray-50` → `bg-[#0000170b]` (~4% black-with-alpha overlay, Anthropic-style). Selected text drops the blue color treatment (now same `#0f0f10` as unselected). Selected row drops `bg-blue-50` entirely — selection signaled only by the filled radio-circle + check icon (now `#0f0f10`). Search input focus ring: blue → `ring-gray-300`. Pipeline "Default" badge retoned to neutral `bg-gray-100 text-gray-700`. Files: `filter-dropdown.tsx`, `PipelineSelector.tsx`.
+
+**`56f6299` — `/accounts` list rewrite as a table mirroring leads + contacts.** Dropped the Card-stack layout entirely. New columns: avatar initials · Name (`#0f0f10` link) · Contact Email · Projects · Status pill (Active green / Inactive gray) · Actions (Edit + Delete, admin-only). Toolbar with count + search + Sort + New Account; Status FilterDropdown (Active default / Inactive / All); pagination footer. `getInitials` helper handles single-name accounts. File: `accounts-list.tsx`.
+
+### Color tokens established this session
+
+Bake these into any future briefs:
+
+- **Primary action**: `--primary` CSS var, currently `#171717` near-black. Buttons use `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`.
+- **Primary text** (names, labels): `#0f0f10` (near-black, slightly darker than `--foreground` at `#171717`).
+- **Secondary text** (data cells, descriptions): `#787871` (warm-muted gray).
+- **Em-dash placeholders**: `text-gray-400`.
+- **Hover overlay** (dropdowns only for now): `#0000170b` (~4% black-with-alpha).
+- **Table row hover** (still): `bg-gray-50`. Intentional inconsistency vs the dropdown overlay — flagged for a potential future unify branch, not yet decided.
+- **Border radius on buttons**: `rounded-lg` (8px) across all sizes.
+- **Status pills** (Active / Inactive): `bg-green-50 text-green-700 border-green-200` / `bg-gray-100 text-gray-500 border-gray-200` (matches ContactStatusBadge).
+- **Name link** (table cells): `text-sm font-medium text-[#0f0f10] hover:underline`.
+- **Data cell** (table cells): `text-sm font-normal text-[#787871]`.
+
+### Verification
+
+- ✓ `npm run build` clean locally on each commit before merge.
+- ✓ `npx eslint --max-warnings 50 .` clean locally on each commit before merge (the CI hard gate that ESLint-stripped local builds don't run).
+- ✓ Stage deploys green throughout — most recent deploy was the `/accounts` rewrite (`56f6299`).
+- ✓ All 6 code-review checklist items N/A across all 6 commits — UI-only, no DB / no API / no new page / no Select / no embed / no mutations. No new items.
+
+### Out of scope (deferred to separate branches)
+
+- `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4` (separate consolidation branch).
+- `button.tsx` link variant keeps `text-[#2272B4]` blue intentionally (link convention; only buttons turned black).
+- `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4` (separate branch).
+- `.dark` color block in `globals.css` unchanged (dark mode not deployed).
+- `account-detail.tsx`, `contacts-detail.tsx` — follow-up branches if Sadin wants them styled.
+- Bulk select / Export / Preview panel — feature work, deferred.
+
+### Eyeball items flagged for Sadin's smoke
+
+None blocking; all post-merge polish judgment:
+
+- Selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection. Pipeline selector with multiple pipelines is the test surface for "is this hard to spot?"
+- Pipeline "Default" badge is now neutral gray — if admins scanning long pipeline lists can't identify the default at a glance, follow-up could give it soft amber (`bg-amber-50 text-amber-700`) or purple.
+- Table-row hover (`bg-gray-50`) vs dropdown-option hover (`#0000170b`) is intentionally different right now. Could unify in a follow-up.
+- Status filter chip on `/contacts` + `/accounts` always renders "engaged" since the default value `"active"` ≠ `"all"` — FilterDropdown's `isActive` logic counts anything-other-than-`"all"` as active. Not a bug; visual quirk.
+
+### Files Changed
+
+- `285b2a8`: `contacts-list.tsx`
+- `0d47bf3`: `contacts-list.tsx`
+- `f3ad73d`: `globals.css`, `button.tsx`, `leads-table.tsx`, `contacts-list.tsx`
+- `8791e66`: `leads-table.tsx`, `contacts-list.tsx`
+- `aec9cf5`: `filter-dropdown.tsx`, `PipelineSelector.tsx`
+- `56f6299`: `accounts-list.tsx`
+
+Six briefs from this session archived alongside this entry: `CONTACTS-LIST-CHROME-BRIEF.md`, `CONTACTS-LIST-POLISH-BRIEF.md`, `DESIGN-PRIMARY-BUTTON-BRIEF.md`, `DESIGN-TEXT-HIERARCHY-BRIEF.md`, `DESIGN-DROPDOWN-RETONE-BRIEF.md`, `ACCOUNTS-LIST-REWRITE-BRIEF.md`.
+
+---
+
+## Time Approvals nav link shipped to stage + role-gated sidebar items (2026-05-28)
+
+### What was built
+
+Squash-merged at `683e85e` from `feature/nav-approvals-link` (Sonnet branch `02ef73e`). 5 files, 28 / 3.
+
+**Audit finding before the work**: `/time-tracking/approvals` was a built, prod-deployed admin page with **no sidebar nav entry** — only reachable from a stats card inside `/time-tracking` (`timesheet-stats-cards.tsx:44`). Same audit confirmed it was the ONLY meaningful orphan in the IT agency sidebar — everything else (`/accounts/[id]`, `/contacts/[id]`, `/time-tracking/projects/[id]`, etc.) is a detail subpage that correctly doesn't get its own nav entry; `/forms` and `/check-in` are correctly industry-gated to education_consultancy.
+
+**Fix**:
+
+- `src/industries/_types.ts`: added optional `minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[]` to `SidebarItem`. Named `minRoles` (plural) explicit-list-not-ordered because the role hierarchy isn't strictly linear in this codebase.
+- `src/industries/_loader.ts`: `getIndustrySidebarItems(industryId, role?)` now filters sidebar items by role when `minRoles` is present. Role param is optional → existing callers without role context still work (just see unfiltered nav).
+- `src/app/(main)/(dashboard)/layout.tsx`: passes `tenantData.role` through to the loader (1-line change).
+- `src/industries/it-agency/manifest.ts`: new sidebar entry for `/time-tracking/approvals`, label `Approvals`, icon `Stamp`, `minRoles: ["owner", "admin"]`. Reuses `FEATURES.TIME_TRACKING` as the feature gate (sub-pages of a feature don't get their own feature ID).
+- `src/components/dashboard/shell.tsx`: registered `Stamp` in `INDUSTRY_ICONS`.
+
+**Page-level role gate verification**: `<ApprovalsQueuePage>` at `approvals-queue.tsx:388` already enforces role with a "no permission" UI state. No route-shell `notFound()` guard added — the sidebar hide + component check are sufficient defense in depth.
+
+### Verification
+
+- ✓ `npm run build` clean locally.
+- ✓ `npx eslint --max-warnings 50 .` clean locally (0 errors / 18 pre-existing warnings, all unrelated files).
+- ✓ Stage deploy `26563050422` succeeded: Pre-deploy Checks (lint + tsc + build) + Deploy to Staging both green. End-to-end 4m40s.
+- ✓ Live smoke: `dev-lead-crm.zunkireelabs.com/login` 200, `/time-tracking/approvals` 307 (auth redirect, expected).
+- ✓ All 6 code-review checklist items N/A — UI-only change, no DB / no API / no new page / no Select / no embed / no mutations.
+
+### Workflow
+
+This was a single audit→brief→Sonnet-implement→Opus-review→stage-merge cycle. Brief at `docs/NAV-APPROVALS-BRIEF.md` (now archived at `docs/archive/features/`). Workflow split held: Opus audited, briefed, reviewed, merged; Sonnet wrote all code.
+
+### Pivot context
+
+Sadin pivoted from the post-2026-05-28-promotion smoke plan to a **dashboard-by-dashboard styling/UX pass for IT agency** (then education_consultancy after). The nav fix was the prerequisite — without an Approvals link in the sidebar, the upcoming styling pass would have been working off an incomplete IT agency dashboard. Next step is Sadin picking the first dashboard page for the styling pass.
+
+### Files Changed
+
+- Squash `683e85e`: `_types.ts`, `_loader.ts`, `(main)/(dashboard)/layout.tsx`, `it-agency/manifest.ts`, `shell.tsx`.
+
+---
+
+## Production promotion shipped — Project Workspace v1 + chrome restyle + Orca/Ops tabs + EdgeX wordmark (2026-05-28)
+
+### What shipped to `lead-crm.zunkireelabs.com`
+
+Non-FF ort merge `d3cd235` of `stage` (HEAD `c042e22`) into `main`. 19 stage commits, 41 files changed, 4159 insertions / 133 deletions. Same merge shape as the prior production promotion (`c13e594`) — main had three commits stage didn't (the prior promotion merge `c13e594`, Anish's old `e10b97d` merge from 2026-05-21, and the `02fe74e` CI nudge); ort merge resolved with zero conflicts.
+
+**Feature bundle:**
+
+- **Project Workspace v1** — all 5 phases shipped to prod for the first time: Phase 1 (unified `/projects` shell + Board + Table + lifted URL-encoded filters + admin-only gate); Phase 2 (drag-drop with TOCTOU `expected_status` precondition + card metrics + status chips); Phase 3 (Tasks view with cross-project `GET /api/v1/tasks` + inline edits + log-time-from-row); Phase 4 (Members view with non-N+1 aggregation); Phase 5 (keyboard shortcuts `b`/`t`/`k`/`m`/`/`/`Esc`, empty states with Clear-filters CTAs, comprehensive a11y attributes). Migration 024 added `tasks.assignee_id` + `due_date` + `priority` + `tags TEXT[]` + `projects.owner_id` + `accounts.owner_id` + 6 indexes; migration 023 (`project_board_stages`) for the kanban status enum. Both already live in the shared Supabase DB since stage development.
+- **Tag picker fixback** — Notion-style `<TagMultiPicker>` backed by `GET /api/v1/tasks/tags` (tenant-wide tag pool). Replaced the original Phase 3 free-text per-task and per-filter tag inputs with one unified picker (search + autofocus + checkable rows + Create-new fallback).
+- **ESLint hotfix** — `tag-multi-picker.tsx:39` `setQuery` wrapped in `setTimeout(0)` to satisfy React 19's `react-hooks/set-state-in-effect`. The earlier failure of this lint rule had blocked the stage deploy pipeline for 6 consecutive pushes before being caught during the Phase 5 ship.
+- **Dashboard chrome restyle** — three-tone grey chrome retired in favor of a single `#fafafa` chrome + white inset card. `<main>` becomes a true `#ffffff` card with `1px solid #00001d13` border on all 4 sides, `8px` radius all corners, and `mr-4 mb-4` so the rounded corners breathe. Sidebar hover/active retoned from `#fafafa` to `#ebebeb` (the prior chrome bg now repurposed as the highlight).
+- **Orca/Ops sidebar mode switcher** — global tab control at the top of the sidebar, modeled after Claude's Chat/Cowork/Code segmented control. `Ops` (default) shows the existing nav unchanged; `Orca` is a placeholder empty state for future AI-native / AI agents / AI orchestration features. Mode persists in `localStorage["dashboard-nav-mode"]`. Switching tabs does not navigate or change URL — only the sidebar nav swaps. Mobile Sheet sidebar inherits the tab control via the shared `sidebarContent` block.
+- **EdgeX brand wordmark** — top-left of sidebar swapped from tenant avatar + tenant name (which was duplicated in the top-right header dropdown) to the constant `EdgeX` product brand wordmark. Tenant identity remains in the top-right.
+
+### Verification (Opus pre-flight + post-flight)
+
+- ✓ Pre-flight `git log origin/main..origin/stage` showed 19 stage commits, all expected (no surprise drift).
+- ✓ Pre-flight `git log origin/stage..origin/main` showed 3 main-only operational commits (prior promotion, Anish merge, CI nudge) — same situation as the previous prod push. Non-FF ort merge required; resolved clean.
+- ✓ Stage deploy `26518315439` (Orca/Ops tabs) succeeded 3m56s before the promotion ran. Stage was green and current.
+- ✓ Production deploy `26518685807` succeeded in 3m57s.
+- ✓ Live smoke: `lead-crm.zunkireelabs.com/login` HTTP 200; `/projects` HTTP 307 (auth redirect, expected); `/dashboard` HTTP 307 (auth redirect, expected).
+
+### Visual smoke pending (deferred from stage)
+
+The promotion went out without a separate explicit dev smoke pass — Sadin authorized the merge directly. The visual smoke for tag picker + Members view + Phase 5 keyboard shortcuts + chrome restyle + Orca/Ops tabs + EdgeX wordmark is now a single combined pass on production (or dev — same code). No regression evidence; no blocking concern. If any of Sonnet's three flagged grey-in-white surfaces (`/pipeline`, `/projects`, `/leads`) need repainting after smoke, that's a follow-up stage commit.
+
+### Workflow notes
+
+- This was the 2nd stage→main production promotion in 24 hours (`c13e594` on 2026-05-27 AM; `d3cd235` on 2026-05-28). Both used the same non-FF ort merge shape; both went out clean.
+- The "Production-affecting actions require Sadin's explicit go-ahead each time" rule held — Sadin's direct "now push to main as well" was the authorization.
+- The 4 dangling already-merged branches (`check-in`, `consultancy-update`, `create-form`, `tags`) and the stale `feature/ai-orchestrate-orca` are still on origin. None blocked the promotion. Naming overlap to track: "Orca" is now both the sidebar mode tab AND the name of the 7-week-old unmerged UI shell branch — the unmerged branch's content is unrelated (a pre-industry-modules orchestrator shell); naming collision is incidental.
 
 ---
 

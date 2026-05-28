@@ -2,7 +2,7 @@
 
 > Human-readable view of every feature in the codebase, where it lives, and which industries use it. Auto-generation script is a future improvement; for now this is maintained by hand alongside `src/industries/_registry.ts`.
 
-Last updated: 2026-05-27 (Project Workspace v1 — Phases 1 through 5 shipped to stage + tag-picker fixback + eslint hotfix; Time Tracking v1 + CRM Contacts v1 also live on stage)
+Last updated: 2026-05-28 (Production promotion 2026-05-28 — Project Workspace v1 + chrome restyle + Orca/Ops sidebar tabs + EdgeX wordmark all now live on `lead-crm.zunkireelabs.com`. Time Tracking v1 + CRM Contacts v1 + Accounts also in prod from prior promotions.)
 
 ---
 
