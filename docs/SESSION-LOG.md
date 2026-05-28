@@ -11,20 +11,59 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **Production promotion shipped.** Main HEAD at `d3cd235` (non-FF ort merge from stage). Stage HEAD at `c042e22`. Both prod and dev containers are current and green: `lead-crm.zunkireelabs.com/login` 200, `dev-lead-crm.zunkireelabs.com/login` 200, both `/projects` + `/dashboard` 307 (auth redirects, expected). The promotion bundled **Project Workspace v1** (5 phases + tag-picker fixback + eslint hotfix), the **dashboard chrome restyle** (`#fafafa` chrome + white inset card with `#00001d13` border + 8px corners), the **Orca/Ops sidebar mode switcher** (localStorage-persisted, global, empty Orca state for now), and the **EdgeX brand wordmark** replacing the tenant top-left. 19 stage commits, 41 files, 4159 / 133. Same non-FF ort merge pattern as the prior `c13e594` promotion — main had 3 commits stage didn't (prior prod merge + Anish merge + CI nudge); ort merge resolved clean with zero conflicts.
-- **What's next**: **Visual smoke on production** (or on dev — same code). The smoke pass was deferred during the prod push — Sadin authorized the merge directly. Single combined smoke now covers everything: tag picker (Notion-style multi-picker), Members view (`/projects` → Members tab, sections + counts + expand/collapse + Owner narrowing), Phase 5 keyboard shortcuts (`b`/`t`/`k`/`m`/`/`/`Esc` + empty states + a11y), chrome restyle (`#fafafa` chrome + white inset card), Orca/Ops tabs (default Ops + reload-persists + Orca empty state + EdgeX wordmark + active-pill style). After smoke, pick the next feature from FEATURE-ROADMAP.
-- **Sonnet flagged 3 grey-in-white surfaces during chrome restyle** that may want follow-up after smoke: `/pipeline` kanban lane backgrounds, `/projects` workspace full-bleed grey, `/leads` table chrome. Each paints its own grey bg, which now reads as a grey-card-inside-the-white-card. Cosmetic — decide after smoke whether to repaint to `bg-transparent` or `bg-white` on those surfaces.
-- **Carryover from STATUS-BOARD**: (1) Phase 4 + 4.5 Time Tracking smoke gaps — bulk approve/reject, non-admin member view, Admizz 404 on /time-tracking, CSV export contents, TOCTOU two-window test — pure thoroughness backlog. (2) Counselor (`manjila@zunkireelabs.com`) password still rotated from Time Tracking Phase 5 verification. Admizz admin restored to `admizz123` on 2026-05-27. (3) Branch cleanup: 4 dangling already-merged branches safe to delete (`check-in`, `consultancy-update`, `create-form`, `tags`); 1 stale unmerged `feature/ai-orchestrate-orca` (now 7+ weeks, 3,859 LOC predating industry modules — note that "Orca" is now also the name of the sidebar AI-mode tab; the unmerged branch's content is unrelated UI shell work, but the name overlap is worth tracking).
-- **Workflow split** (held through 6+ phases now including the prod push): Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes ALL code on per-phase / per-fix branches. **Production-affecting actions** (merges to main, force-pushes, rollbacks) require Sadin's explicit go-ahead each time — granted on 2026-05-28 for this promotion.
-- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `c042e22` + this docs commit. After this docs commit ships, stage will lead main by 1 docs-only commit — that's expected post-prod-push housekeeping; next prod promotion will sync.
-- **Code-review checklist** (6 items): all clean across Phases 1–5 + tag-picker fixback + eslint hotfix + chrome restyle + Orca tabs. No new items added in this stretch — chrome + Orca tabs were UI-only (no DB / API / mutation surface).
-- **Lesson logged from the CI red-streak** (2026-05-27): `npm run build` does NOT include ESLint — it's a separate CI step gated at `--max-warnings 50`. A failed Pre-deploy Checks job stops the container deploy entirely; the previous container keeps serving. "Sonnet pushed and reported success" without a `gh run watch` check can hide a multi-commit deploy backlog. The per-phase verification matrix in future briefs should add `npx eslint --max-warnings 50 .` as a pre-push gate, especially under React 19 (new rules like `react-hooks/set-state-in-effect` keep landing).
-- **What Opus does next on resume**: (1) take Sadin's smoke report on production; (2) if a regression surfaces, route via Sonnet fixback to stage → next stage→main promotion; (3) if any of the 3 grey-in-white surfaces need repainting, route via Sonnet to stage; (4) if clean, pick the next feature from FEATURE-ROADMAP.
-- **Tenant DB residue from smoke runs replicated to prod**: cosmetic, harmless — not worth a cleanup migration. No new residue added in this push (Project Workspace was tested against existing tenant data; no new seed scripts).
+- **Current state**: **Time Approvals nav link shipped to stage** (`683e85e`, squash from `feature/nav-approvals-link`). `/time-tracking/approvals` now has a sidebar entry under Time Tracking for IT agency admins/owners, hidden from counselors/viewers via a new optional `minRoles` field on `SidebarItem`. Stage HEAD at `683e85e` + this docs commit. Main HEAD still at `d3cd235`. Prod is unchanged from the 2026-05-28 promotion. Dev container green: stage deploy 4m40s, /login 200, /time-tracking/approvals 307 (auth redirect, expected).
+- **Sadin pivoted from the post-promotion smoke plan to a styling/UX pass** dashboard-by-dashboard for IT agency, then education_consultancy. First step before the styling pass was surfacing the orphan Time Approvals route — that's done. **Audit finding**: it was the ONLY meaningful orphan for IT agency; everything else is either a detail subpage (correct), or correctly industry-gated to another tenant type.
+- **What's next**: **start the IT agency dashboard styling/UX pass, one page at a time**. Sadin will pick which dashboard to start with (Dashboard / Leads / Pipeline / Team / Settings / Contacts / Accounts / Projects / Time Tracking / Approvals). Workflow: Opus audits the page → writes a per-page brief → Sonnet implements → Opus reviews + stage merge → Sadin smokes. After IT agency is clean, repeat the same pass for education_consultancy (Contacts / Check-In / Forms in addition to the universal pages).
+- **Sonnet flagged 3 grey-in-white surfaces during chrome restyle** that almost certainly come up during the styling pass: `/pipeline` kanban lane backgrounds, `/projects` workspace full-bleed grey, `/leads` table chrome. Each paints its own grey bg, which now reads as a grey-card-inside-the-white-card. These will likely get repainted to `bg-transparent` or `bg-white` as part of the per-page pass.
+- **Carryover from STATUS-BOARD**: (1) Visual smoke on the 2026-05-28 production bundle is still technically open — Sadin pivoted before smoking. Most of what would have been smoked there is now folded into the upcoming styling pass anyway, so the standalone smoke item can stay parked or close after the styling pass completes. (2) Phase 4 + 4.5 Time Tracking smoke gaps — pure thoroughness backlog. (3) Counselor password still rotated. (4) Branch cleanup still optional.
+- **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page / per-fix branches. Production-affecting actions require Sadin's explicit go-ahead each time.
+- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `683e85e` + this docs commit. Stage leads main by the nav fix + this docs commit; next prod promotion will sync.
+- **Code-review checklist** (6 items): all clean on the nav-approvals change — UI-only, no DB / no API / no new page / no Select / no embed / no mutations. No new items.
+- **What Opus does next on resume**: (1) ask Sadin which dashboard page to audit first; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page styling brief; (4) hand off to Sonnet.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Time Approvals nav link shipped to stage + role-gated sidebar items (2026-05-28)
+
+### What was built
+
+Squash-merged at `683e85e` from `feature/nav-approvals-link` (Sonnet branch `02ef73e`). 5 files, 28 / 3.
+
+**Audit finding before the work**: `/time-tracking/approvals` was a built, prod-deployed admin page with **no sidebar nav entry** — only reachable from a stats card inside `/time-tracking` (`timesheet-stats-cards.tsx:44`). Same audit confirmed it was the ONLY meaningful orphan in the IT agency sidebar — everything else (`/accounts/[id]`, `/contacts/[id]`, `/time-tracking/projects/[id]`, etc.) is a detail subpage that correctly doesn't get its own nav entry; `/forms` and `/check-in` are correctly industry-gated to education_consultancy.
+
+**Fix**:
+
+- `src/industries/_types.ts`: added optional `minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[]` to `SidebarItem`. Named `minRoles` (plural) explicit-list-not-ordered because the role hierarchy isn't strictly linear in this codebase.
+- `src/industries/_loader.ts`: `getIndustrySidebarItems(industryId, role?)` now filters sidebar items by role when `minRoles` is present. Role param is optional → existing callers without role context still work (just see unfiltered nav).
+- `src/app/(main)/(dashboard)/layout.tsx`: passes `tenantData.role` through to the loader (1-line change).
+- `src/industries/it-agency/manifest.ts`: new sidebar entry for `/time-tracking/approvals`, label `Approvals`, icon `Stamp`, `minRoles: ["owner", "admin"]`. Reuses `FEATURES.TIME_TRACKING` as the feature gate (sub-pages of a feature don't get their own feature ID).
+- `src/components/dashboard/shell.tsx`: registered `Stamp` in `INDUSTRY_ICONS`.
+
+**Page-level role gate verification**: `<ApprovalsQueuePage>` at `approvals-queue.tsx:388` already enforces role with a "no permission" UI state. No route-shell `notFound()` guard added — the sidebar hide + component check are sufficient defense in depth.
+
+### Verification
+
+- ✓ `npm run build` clean locally.
+- ✓ `npx eslint --max-warnings 50 .` clean locally (0 errors / 18 pre-existing warnings, all unrelated files).
+- ✓ Stage deploy `26563050422` succeeded: Pre-deploy Checks (lint + tsc + build) + Deploy to Staging both green. End-to-end 4m40s.
+- ✓ Live smoke: `dev-lead-crm.zunkireelabs.com/login` 200, `/time-tracking/approvals` 307 (auth redirect, expected).
+- ✓ All 6 code-review checklist items N/A — UI-only change, no DB / no API / no new page / no Select / no embed / no mutations.
+
+### Workflow
+
+This was a single audit→brief→Sonnet-implement→Opus-review→stage-merge cycle. Brief at `docs/NAV-APPROVALS-BRIEF.md` (now archived at `docs/archive/features/`). Workflow split held: Opus audited, briefed, reviewed, merged; Sonnet wrote all code.
+
+### Pivot context
+
+Sadin pivoted from the post-2026-05-28-promotion smoke plan to a **dashboard-by-dashboard styling/UX pass for IT agency** (then education_consultancy after). The nav fix was the prerequisite — without an Approvals link in the sidebar, the upcoming styling pass would have been working off an incomplete IT agency dashboard. Next step is Sadin picking the first dashboard page for the styling pass.
+
+### Files Changed
+
+- Squash `683e85e`: `_types.ts`, `_loader.ts`, `(main)/(dashboard)/layout.tsx`, `it-agency/manifest.ts`, `shell.tsx`.
 
 ---
 
