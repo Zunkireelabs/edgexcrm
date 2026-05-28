@@ -11,7 +11,7 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **IT agency design pass — first wave promoted to production** (`f78abcc`, non-FF ort merge stage→main on 2026-05-28 PM). All 10 stage commits (7 chore/feat squashes + 3 docs) now live on `lead-crm.zunkireelabs.com`. Live smoke clean: `/login` 200, `/dashboard` + `/contacts` + `/accounts` + `/leads` + `/time-tracking/approvals` all 307 (auth redirects). Main HEAD at `f78abcc`; stage HEAD at the post-promotion docs commit. **The promotion's first attempt failed at the SSH `command_timeout` (~9m31s) because the docs-only stage deploy was running concurrently and the dual `npm ci` + `next build` slowed each build past the SSH action's timeout.** Recovery: waited for stage to finish (15m51s — also slow for the same reason), then `gh run rerun 26570173859 --failed` re-ran only the Deploy job (Pre-deploy Checks was already green) on its own; success on retry in normal time.
+- **Current state**: **IT agency design pass — second wave + CI SSH timeout fix promoted to production** (`f9af70d`, non-FF ort merge stage→main on 2026-05-28). 7 stage commits land on main (3 chore/CI squashes + 4 docs). Live smoke clean: `/login` 200, `/dashboard` + `/projects` + `/pipeline` + `/contacts` + `/accounts` all 307 (auth redirects). Prod deploy completed clean in ~1m48s — no stage deploys running concurrently, the new 30m timeout wasn't even tested. The first prod promotion of the day (`f78abcc`) hit the original 10m timeout under contention, which is now permanently fixed in `deploy.yml`. Two consecutive promotions today.
 - **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
 - **`/projects` Board chrome shipped to stage** (`6de03ab`, squash from `chore/projects-board-chrome`). Bordered kanban columns mirroring `/pipeline`, multi-select Status FilterDropdown replacing the blue chip strip, FolderOpen empty state, design-token isOver highlight. `FilterDropdown` extended with discriminated-union `multiple` mode (13 single-select call sites unchanged). Drive-by fix: `isActive` now also handles the `__all__` sentinel. Brief archived. Build + ESLint local gates clean; not yet deployed at the time of this resume but stage deploy was running.
 - **`/projects` Board pipeline-parity shipped to stage** (`2aa45df`, squash from `chore/projects-pipeline-parity`). Second pass closes the remaining visual gaps: toolbar restructured into Pipeline's shape (bordered card with count chip + h-9 search + spacer top row, internal divider, filter row with active-filters Badge + Clear); LayoutGrid icon dropped from title; full ProjectCard rewrite mirroring LeadCard (3-section structure with dividers, Folder icon-square + name Link + 3-dot dropdown, key:value metadata grid for Account/Contacts/Billable/Updated, footer with urgency badge + owner avatar moved here from the header); whole-card-clickable via useRouter; columns widened 220→320 (min-w-80) with new Total/Billable footer; DragOverlay rewired through `<ProjectCard isDragOverlay />`. **Sonnet drive-by fix**: the page wrapper's `p-6` was double-padding /projects to 40px from each edge (vs /pipeline's 16px). Removed entirely — `/projects` now relies solely on the dashboard shell's `p-4` (shell.tsx:409), matching Pipeline. New code-review checklist note added (padding-stacking with the shell).
@@ -19,7 +19,7 @@
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at `5ce03d2`. Stage leads main by 2 chore squashes (Projects Board chrome + Projects pipeline-parity) + 1 CI workflow fix + multiple docs commits; production promotion pending Sadin's go-ahead.
+- **Branch state**: `main` at `f9af70d` (production HEAD, current — design pass second wave + CI fix). `stage` at the post-promotion docs commit. App-code-wise stage and main are in sync; stage ahead by exactly the docs commit recording this promotion until the next promotion.
 - **Code-review checklist** (7 items): all N/A across all 7 squashes this session for the design pass — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. **New item added this session**: page-padding stacks with the dashboard shell (`shell.tsx:409` provides `p-4`; pages that add their own `p-4`/`p-6` double-pad). See STATUS-BOARD.
 - **CI gotcha permanently fixed** (`5ce03d2`): `deploy.yml` now sets `command_timeout: 30m` on the production SSH action, matching stage. The 2026-05-28 PM promotion timed out at the appleboy/ssh-action's default 10m because stage was deploying concurrently and dual `npm ci` + `next build` slowed each build past 9m. Bumping to 30m gives ~50% headroom over the worst-case dual-deploy time observed (15m51s on stage). The pre-flight guidance ("don't push to main while stage is deploying") is now belt-and-suspenders — still good practice but the failure mode is no longer load-bearing. **The next prod promotion will use the new timeout** — `deploy.yml` is read from the commit being deployed.
 - **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
@@ -27,6 +27,38 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Production promotion shipped — /projects pipeline-parity + CI SSH timeout fix (2026-05-28 — late PM)
+
+### What shipped to `lead-crm.zunkireelabs.com`
+
+Non-FF ort merge `f9af70d` of `stage` (HEAD `35359a7`) into `main`. 7 stage commits land on production (3 chore/CI squashes + 4 docs), 11 files, +1400 / -233. Same merge shape as the prior 3 promotions (`c13e594`, `d3cd235`, `f78abcc`) — main had 5 main-only operational commits (4 prior promotion merges + the CI nudge); ort merge clean, zero conflicts.
+
+**Feature bundle:**
+
+- **`/projects` Board chrome — first wave** (`6de03ab`). `FilterDropdown` extended with discriminated-union `multiple` prop (13 single-select call sites unchanged). Project Status chip row collapsed into a multi-select FilterDropdown. `ProjectColumn` restructured with bordered header bar + colored status dot + bordered body + `FolderOpen` empty state. Design-token `isOver` (no blue ring). `STATUS_COLOR` map hardcoded per status.
+- **`/projects` Board pipeline-parity — second wave** (`2aa45df`). Toolbar restructured into Pipeline's shape (bordered card with count chip + `h-9` search + active-filters Badge + Clear). LayoutGrid icon dropped from title. Full `ProjectCard` rewrite mirroring `LeadCard` (3-section structure with dividers; Folder icon-square + name Link + 3-dot dropdown; Account/Contacts/Billable/Updated key:value grid; urgency badge + owner avatar footer). Whole-card-clickable via `useRouter`. Columns widened 220→320 with Total/Billable footer. DragOverlay rewired through `<ProjectCard isDragOverlay />`. **Sonnet drive-by fix in the same branch**: dropped `workspace.tsx`'s outer `p-6` which was stacking with shell's own `p-4` to produce 40px-from-edge inset vs `/pipeline`'s 16px.
+- **CI: production SSH `command_timeout` bumped to 30m** (`5ce03d2`). Closes the earlier 2026-05-28 PM `f78abcc` 10-minute timeout incident. Matches the value `deploy-staging.yml` has had since setup.
+
+### Verification
+
+- ✓ Pre-flight `git log origin/main..origin/stage` showed exactly 7 expected commits (3 squashes + 4 docs).
+- ✓ Pre-flight `git log origin/stage..origin/main` showed 5 expected operational commits (4 prior promotion merges + CI nudge). Non-FF ort merge required; clean.
+- ✓ Pre-flight stage deploy state check: both in-flight stage runs (`5ce03d2` CI fix, `35359a7` docs) waited to completion before pushing main, per the new pre-flight discipline.
+- ✓ Production deploy `26575044319` completed in ~1m48s. No contention (no concurrent stage deploys); new 30m timeout wasn't tested but is now in place for future incidents.
+- ✓ Live smoke: `lead-crm.zunkireelabs.com/login` HTTP 200; `/dashboard` + `/projects` + `/pipeline` + `/contacts` + `/accounts` all HTTP 307 (auth redirects, expected).
+
+### Workflow notes
+
+- **Second production promotion of the day** (`f78abcc` AM/PM design pass first wave, `f9af70d` PM design pass second wave + CI fix). First hit the timeout; this one didn't because we fixed the workflow first per Sadin's "do 4 and then 1" sequencing.
+- **The new pre-flight discipline** ("wait for stage deploys to clear before pushing main") was followed for the first time today. Worked cleanly.
+- **Two new design briefs archived this promotion**: `PROJECTS-BOARD-CHROME-BRIEF.md` and `PROJECTS-PIPELINE-PARITY-BRIEF.md`. Both at `docs/archive/features/`.
+
+### Files Changed (vs `f78abcc`)
+
+`.github/workflows/deploy.yml` (+1), `docs/SESSION-LOG.md`, `docs/STATUS-BOARD.md`, 2 new files in `docs/archive/features/`, `src/components/ui/filter-dropdown.tsx`, `…/project-card.tsx`, `…/project-column.tsx`, `…/views/board-view.tsx`, `…/workspace-header.tsx`, `…/pages/workspace.tsx`.
 
 ---
 
