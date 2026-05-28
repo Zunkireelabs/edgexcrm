@@ -39,6 +39,13 @@ export const manifest: IndustryManifest = {
       label: "Time Tracking",
       icon: "Clock",
     },
+    {
+      featureId: FEATURES.TIME_TRACKING,
+      href: "/time-tracking/approvals",
+      label: "Approvals",
+      icon: "Stamp",
+      minRoles: ["owner", "admin"],
+    },
   ],
   ai: aiConfig,
 };

@@ -33,7 +33,7 @@ export default async function DashboardLayout({
   }
 
   const formConfigs = await getFormConfigsForTenant(tenantData.tenant.id);
-  const industrySidebarItems = getIndustrySidebarItems(tenantData.tenant.industry_id);
+  const industrySidebarItems = getIndustrySidebarItems(tenantData.tenant.industry_id, tenantData.role);
 
   return (
     <AIAssistantProvider>

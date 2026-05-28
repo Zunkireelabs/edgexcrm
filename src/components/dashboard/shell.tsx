@@ -31,6 +31,7 @@ import {
   User as UserIcon,
   Search,
   Sparkles,
+  Stamp,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -69,6 +70,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LayoutGrid,
   Kanban,
+  Stamp,
   Users,
   UsersRound,
   Settings,
