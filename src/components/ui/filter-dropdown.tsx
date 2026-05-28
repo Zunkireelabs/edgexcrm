@@ -101,8 +101,8 @@ export function FilterDropdown({
           rounded-md border transition-colors
           ${
             isActive
-              ? "border-[#2272B4] bg-blue-50 text-[#2272B4]"
-              : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+              ? "border-[#0f0f10] bg-[#0000170b] text-[#0f0f10]"
+              : "border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
           }
         `}
       >
@@ -134,7 +134,7 @@ export function FilterDropdown({
                   placeholder="Search..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-[#2272B4] focus:border-transparent"
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent"
                 />
               </div>
             </div>
@@ -155,16 +155,13 @@ export function FilterDropdown({
                     key={option.value}
                     type="button"
                     onClick={() => handleSelect(option.value)}
-                    className={`
-                      w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors
-                      ${isSelected ? "bg-blue-50" : "hover:bg-gray-50"}
-                    `}
+                    className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
                   >
                     {/* Radio-style selection indicator */}
                     <div
                       className={`
                         mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0
-                        ${isSelected ? "border-[#2272B4] bg-[#2272B4]" : "border-gray-300"}
+                        ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
                       `}
                     >
                       {isSelected && <Check className="w-2 h-2 text-white" />}
@@ -173,14 +170,12 @@ export function FilterDropdown({
                     {/* Option content */}
                     <div className="flex-1 min-w-0">
                       <div
-                        className={`text-xs font-medium ${
-                          isSelected ? "text-[#2272B4]" : "text-gray-900"
-                        }`}
+                        className="text-xs font-medium text-[#0f0f10]"
                       >
                         {option.label}
                       </div>
                       {option.description && (
-                        <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                        <div className="text-[11px] text-[#787871] mt-0.5 truncate">
                           {option.description}
                         </div>
                       )}
