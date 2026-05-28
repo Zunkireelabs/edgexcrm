@@ -13,11 +13,12 @@
 
 - **Current state**: **IT agency design pass — first wave promoted to production** (`f78abcc`, non-FF ort merge stage→main on 2026-05-28 PM). All 10 stage commits (7 chore/feat squashes + 3 docs) now live on `lead-crm.zunkireelabs.com`. Live smoke clean: `/login` 200, `/dashboard` + `/contacts` + `/accounts` + `/leads` + `/time-tracking/approvals` all 307 (auth redirects). Main HEAD at `f78abcc`; stage HEAD at the post-promotion docs commit. **The promotion's first attempt failed at the SSH `command_timeout` (~9m31s) because the docs-only stage deploy was running concurrently and the dual `npm ci` + `next build` slowed each build past the SSH action's timeout.** Recovery: waited for stage to finish (15m51s — also slow for the same reason), then `gh run rerun 26570173859 --failed` re-ran only the Deploy job (Pre-deploy Checks was already green) on its own; success on retry in normal time.
 - **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
-- **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`. Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (kanban — different paradigm), `/team`, `/projects`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages).
+- **`/projects` Board chrome shipped to stage** (`6de03ab`, squash from `chore/projects-board-chrome`). Bordered kanban columns mirroring `/pipeline`, multi-select Status FilterDropdown replacing the blue chip strip, FolderOpen empty state, design-token isOver highlight. `FilterDropdown` extended with discriminated-union `multiple` mode (13 single-select call sites unchanged). Drive-by fix: `isActive` now also handles the `__all__` sentinel. Brief archived. Build + ESLint local gates clean; not yet deployed at the time of this resume but stage deploy was running.
+- **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`, `/projects` (Board view chrome only — Tasks/Members views and project-card content still pending if Sadin wants). Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (kanban — different paradigm), `/team`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages).
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at the post-promotion docs commit. Stage and main are now in sync app-code-wise; stage will be ahead by exactly the docs commit recording this promotion until the next promotion.
+- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at `6de03ab` + this docs commit (`/projects` Board chrome). Stage leads main by 1 squash + 2 docs commits; production promotion pending Sadin's go-ahead.
 - **Code-review checklist** (6 items): all N/A across all 7 squashes this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
 - **New CI gotcha to bake into future promotions**: don't promote stage→main while a stage deploy is still running. The SSH-action `command_timeout` for the Deploy step is ~10 minutes — concurrent `npm ci` + `next build` on the same host (dev container + prod container) doubles each build's wall time and trips that timeout. **Pre-flight check before pushing to main**: `gh run list --branch stage --limit 1` — wait for the most recent stage deploy to be `completed` before pushing to main. Recovery if it does happen: `gh run rerun <run_id> --failed` re-runs only the failed Deploy job; Pre-deploy Checks doesn't repeat (saves ~1m30s). Adding a permanent fix (bump `command_timeout` on the SSH action, or add a workflow-level concurrency guard) is a separate workflow-tweak branch.
 - **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
@@ -25,6 +26,49 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## `/projects` Board chrome shipped to stage — bordered columns + multi-select Status filter (2026-05-28 PM)
+
+### What was built
+
+Squash-merged at `6de03ab` from `chore/projects-board-chrome` (Sonnet branch `2bdb52f`). 3 files, +157 / -99. UI-only — no DB, no API, no new pages. All 6 code-review checklist items N/A.
+
+**Goal**: bring the IT-agency `/projects` Board view's chrome in line with `/pipeline`'s kanban visual vocabulary. The loudest mismatches were a bright-blue solid-pill row for Project Status filtering, bare kanban column headers (just text + count), and a sparse "No projects" empty state.
+
+**Three changes:**
+
+- **`src/components/ui/filter-dropdown.tsx`** — extended `FilterDropdown` with a discriminated-union `multiple?: boolean` prop. Single-select callers (13 across the repo: `/leads`, `/accounts`, `/contacts`, `/pipeline`, `/projects` Account/Owner/Assignee/Due) compile unchanged because no `multiple` field on their prop sets puts them on the `multiple?: false` branch. Multi-select branch renders square (rounded-sm) checkbox indicators instead of round radios, keeps the dropdown open on toggle, shows count-in-label (`"Status"` → `"Status: Discovery"` → `"Status (3)"`), and adds a Clear button at the bottom of the panel when selections exist. Drive-by fix: `isActive` now also handles the `__all__` sentinel (previously `value !== "all"` only — `__all__` callers were rendering as active at default state).
+- **`src/industries/it-agency/features/project-board/components/workspace-header.tsx`** — Row 3 blue status-chip strip removed entirely. `toggleProjectStatus` and `isProjectStatusActive` helpers deleted. New `statusOptions` array derived from `availableChips` (so the Show Cancelled toggle still controls which statuses are options). New `<FilterDropdown multiple label="Status" />` inserted in Row 2 between Owner and Assignee, conditional on `isBoardOrTable`. The cast `next as ProjectStatus[]` is safe — the only option values are valid `ProjectStatus` enum members.
+- **`src/industries/it-agency/features/project-board/components/project-column.tsx`** — module-level `STATUS_COLOR: Record<ProjectStatus, string>` map (`planning #3B82F6` blue, `active #F59E0B` amber, `in_review #A855F7` purple, `delivered #10B981` green, `on_hold #9CA3AF` gray, `cancelled #EF4444` red — Tailwind 500-level palette, chosen for legibility at 2.5×2.5 dot size). Column render restructured to mirror `PipelineColumn`: outer flex column → bordered header bar (`bg-card rounded-t-lg border border-b-0 border-gray-200`) with colored dot + `text-[#0f0f10]` name + `bg-gray-100 text-[#787871]` count chip → `h-px bg-gray-200` divider → droppable body (`bg-gray-50/40 rounded-b-lg border border-t-0`) with `isOver` swapped from `ring-2 ring-blue-300 ring-inset` to `border-[#0f0f10] bg-[#0000170b]` → richer empty state with `FolderOpen` icon-in-circle + "No projects" + "Drag projects here to update". Column width unchanged (`min-w-[220px] w-[220px]`) — projects card density is higher than pipeline leads; pipeline's 320px width wasn't needed.
+
+### Out of scope (per brief, deliberately untouched)
+
+- Task status chips on Tasks view — same blue treatment, follow-up brief later if wanted.
+- Priority chips on Tasks + Members views — colored variants are intentional hierarchy.
+- Project card content (name, account avatar, contact count, billable hours, "Updated Xd ago") — pure chrome work.
+- Column footer totals — `/pipeline` has them; for `/projects` Sadin called skip (projects fewer per column, per-card billable already surfaces what matters).
+- Column width — kept at 220px not widened to 320px.
+- "Show cancelled" checkbox — no Pipeline equivalent.
+- View tabs (Board/Table/Tasks/Members) — already on token.
+
+### Verification
+
+- ✓ `npm run build` clean locally before squash-merge.
+- ✓ `npx eslint --max-warnings 50 .` clean locally — 0 errors, 18 warnings (all pre-existing in unrelated files).
+- ✓ All 6 code-review checklist items N/A — UI-only, no DB / no API / no new page / no Radix Select / no embed / no mutations.
+- Stage deploy in progress at the time of this entry. Live smoke pending Sadin's eyeball on `dev-lead-crm.zunkireelabs.com/projects` once the deploy lands.
+
+### Eyeball items to confirm post-deploy
+
+- The `bg-gray-50/40` column body may read nearly identical to the `#fafafa` page chrome. If the columns don't feel distinct enough, the one-line bump is `bg-gray-100/60`. Brief flagged this; Sonnet kept the brief's spec.
+- Status FilterDropdown trigger label cycles `"Status"` → `"Status: Discovery"` (1) → `"Status (3)"` (3). Loses at-a-glance multi-state vs the old chip row; mitigated by the row of visible kanban columns still showing exactly what's filtered.
+- The 6 hardcoded status colors are picks, not derived from any existing palette. Trivially editable in `project-column.tsx` if Sadin wants different hues.
+
+### Files Changed
+
+`src/components/ui/filter-dropdown.tsx`, `src/industries/it-agency/features/project-board/components/project-column.tsx`, `src/industries/it-agency/features/project-board/components/workspace-header.tsx`. Brief archived at `docs/archive/features/PROJECTS-BOARD-CHROME-BRIEF.md`.
 
 ---
 
