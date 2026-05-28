@@ -11,19 +11,59 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
-- **Current state**: **IT agency design pass — first wave shipped to stage**. Six squash commits on top of the Time Approvals nav (`683e85e`): `/contacts` chrome aligned to `/leads` (`285b2a8`), `/contacts` polish — avatars + sort + pagination (`0d47bf3`), primary button → near-black + 8px corners + table text bump (`f3ad73d`), table text hierarchy refinement (`8791e66`), FilterDropdown + PipelineSelector retoned (no more blue accents) (`aec9cf5`), `/accounts` list rewrite as a table mirroring leads + contacts (`56f6299`). Stage HEAD at `56f6299` + this docs commit. Main HEAD still at `d3cd235`. **Stage leads main by 7 squash commits + this docs commit; production promotion pending Sadin's go-ahead.** Dev container green throughout.
+- **Current state**: **IT agency design pass — first wave promoted to production** (`f78abcc`, non-FF ort merge stage→main on 2026-05-28 PM). All 10 stage commits (7 chore/feat squashes + 3 docs) now live on `lead-crm.zunkireelabs.com`. Live smoke clean: `/login` 200, `/dashboard` + `/contacts` + `/accounts` + `/leads` + `/time-tracking/approvals` all 307 (auth redirects). Main HEAD at `f78abcc`; stage HEAD at the post-promotion docs commit. **The promotion's first attempt failed at the SSH `command_timeout` (~9m31s) because the docs-only stage deploy was running concurrently and the dual `npm ci` + `next build` slowed each build past the SSH action's timeout.** Recovery: waited for stage to finish (15m51s — also slow for the same reason), then `gh run rerun 26570173859 --failed` re-ran only the Deploy job (Pre-deploy Checks was already green) on its own; success on retry in normal time.
 - **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
 - **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`. Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (kanban — different paradigm), `/team`, `/projects`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages).
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `d3cd235` (production HEAD, current). `stage` at `56f6299` + this docs commit. Stage ahead of main by 7 squash commits + docs commit; pre-flight `git log origin/main..origin/stage` to scope before promoting; `git log origin/stage..origin/main` to spot main-only commits (3 expected: prior promotion `d3cd235`, Anish merge `e10b97d`, CI nudge `02fe74e`).
-- **Code-review checklist** (6 items): all N/A across all 7 commits this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
-- **What Opus does next on resume**: (1) if Sadin authorizes prod push, run the non-FF ort merge stage→main and live-smoke; (2) ask Sadin which dashboard to audit next; (3) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (4) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
+- **Branch state**: `main` at `f78abcc` (production HEAD, current — design pass first wave). `stage` at the post-promotion docs commit. Stage and main are now in sync app-code-wise; stage will be ahead by exactly the docs commit recording this promotion until the next promotion.
+- **Code-review checklist** (6 items): all N/A across all 7 squashes this session — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. No new items added.
+- **New CI gotcha to bake into future promotions**: don't promote stage→main while a stage deploy is still running. The SSH-action `command_timeout` for the Deploy step is ~10 minutes — concurrent `npm ci` + `next build` on the same host (dev container + prod container) doubles each build's wall time and trips that timeout. **Pre-flight check before pushing to main**: `gh run list --branch stage --limit 1` — wait for the most recent stage deploy to be `completed` before pushing to main. Recovery if it does happen: `gh run rerun <run_id> --failed` re-runs only the failed Deploy job; Pre-deploy Checks doesn't repeat (saves ~1m30s). Adding a permanent fix (bump `command_timeout` on the SSH action, or add a workflow-level concurrency guard) is a separate workflow-tweak branch.
+- **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Production promotion shipped — IT agency design pass first wave + Time Approvals nav + SSH-timeout incident (2026-05-28 PM)
+
+### What shipped to `lead-crm.zunkireelabs.com`
+
+Non-FF ort merge `f78abcc` of `stage` (HEAD `a9c681f`) into `main`. 10 stage commits land on production, 22 files changed, ~2,746 insertions / ~284 deletions (most of the line-count is the 6 archived briefs landing on main's `docs/archive/features/`). Same merge shape as the prior 2 promotions (`c13e594`, `d3cd235`) — `main` had 4 commits stage didn't (2 prior promotion merges + Anish's older merge + a CI nudge); ort merge clean with zero conflicts.
+
+**Feature bundle:**
+
+- **Time Approvals nav link + role-gated sidebar items** (`683e85e`). `/time-tracking/approvals` sidebar entry under Time Tracking, gated to owner/admin via the new optional `minRoles` field on `SidebarItem` (filtered in `getIndustrySidebarItems(industryId, role?)`).
+- **IT agency design pass first wave** (6 squash commits, all UI-only). `/contacts` chrome aligned to `/leads` (`285b2a8`); avatars + Sort popover + client-side pagination (`0d47bf3`); primary button → near-black + 8px corners + table text bump (`f3ad73d`); table text hierarchy — names `#0f0f10`, secondary `#787871` warm-muted (`8791e66`); FilterDropdown + PipelineSelector retoned, blue accents removed (`aec9cf5`); `/accounts` Card-stack rewritten as a table (`56f6299`). Color tokens established for future briefs — see the design-pass entry below.
+
+### The SSH-timeout incident
+
+First push to `main` (`f78abcc`) triggered Deploy to Production run `26570173859`. The Deploy step uses an SSH action with a default `command_timeout: 10m`. A docs-only `Deploy to Staging` run (`26570080248`) was concurrently running on the same host (started ~2 min earlier). Both jobs ran `npm ci` (which took 194s on prod vs the usual ~60s) followed by `next build` (`✓ Compiled successfully in 3.9min` — also longer than normal). TypeScript began at 10:59:47 and the SSH command timed out 1m48s later at 11:01:35 — exactly the 10-minute mark. Exit 1, deploy failed before flipping the container, so prod stayed at `d3cd235` and served 200s the whole time.
+
+**Recovery sequence:**
+
+1. Inspected job logs → identified `Run Command Timeout` at the 9m31s mark.
+2. Confirmed root cause (dual-deploy contention on the same host) by cross-referencing the still-running stage run.
+3. Asked Sadin between 3 options (cancel stage / wait for stage / investigate timeout config); he chose wait-for-stage.
+4. Stage deploy completed `success` at 11:03:07 — 15m51s total wall time, slow for the same contention reason.
+5. `gh run rerun 26570173859 --failed` re-ran only the failed Deploy job (Pre-deploy Checks stayed at its 10:51:10 success).
+6. Re-run completed `success` at 11:06:34 — normal time once stage wasn't competing.
+
+**Lesson** (now also in the resume block): before promoting stage→main, wait for the most recent stage deploy to be `completed`. Permanent fix (bump SSH `command_timeout` or add workflow `concurrency:` group) is a separate workflow-tweak branch.
+
+### Verification
+
+- ✓ Pre-flight `git log origin/main..origin/stage` showed exactly the 10 expected commits.
+- ✓ Pre-flight `git log origin/stage..origin/main` showed 4 expected operational commits (prior promotion `d3cd235`, prior promotion `c13e594`, Anish merge `e10b97d`, CI nudge `02fe74e`) — non-FF ort merge required; clean.
+- ✓ Production Deploy re-run succeeded in normal time.
+- ✓ Live smoke: `lead-crm.zunkireelabs.com/login` HTTP 200; `/dashboard` + `/contacts` + `/accounts` + `/leads` + `/time-tracking/approvals` all HTTP 307 (auth redirect, expected).
+
+### Files Changed (vs `d3cd235`)
+
+`docs/FEATURE-CATALOG.md`, `docs/SESSION-LOG.md`, `docs/STATUS-BOARD.md`, 7 new files in `docs/archive/features/` (the 6 design briefs + NAV-APPROVALS-BRIEF.md from the earlier ship), `(main)/(dashboard)/layout.tsx`, `globals.css`, `leads-table.tsx`, `shell.tsx`, `PipelineSelector.tsx`, `button.tsx`, `filter-dropdown.tsx`, `_loader.ts`, `_types.ts`, `accounts-list.tsx`, `contacts-list.tsx`, `it-agency/manifest.ts`.
 
 ---
 
