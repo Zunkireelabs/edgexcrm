@@ -14,12 +14,13 @@
 - **Current state**: **IT agency design pass — second wave + CI SSH timeout fix promoted to production** (`f9af70d`, non-FF ort merge stage→main on 2026-05-28). 7 stage commits land on main (3 chore/CI squashes + 4 docs). Live smoke clean: `/login` 200, `/dashboard` + `/projects` + `/pipeline` + `/contacts` + `/accounts` all 307 (auth redirects). Prod deploy completed clean in ~1m48s — no stage deploys running concurrently, the new 30m timeout wasn't even tested. The first prod promotion of the day (`f78abcc`) hit the original 10m timeout under contention, which is now permanently fixed in `deploy.yml`. Two consecutive promotions today.
 - **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
 - **`/projects` Board chrome shipped to stage** (`6de03ab`, squash from `chore/projects-board-chrome`). Bordered kanban columns mirroring `/pipeline`, multi-select Status FilterDropdown replacing the blue chip strip, FolderOpen empty state, design-token isOver highlight. `FilterDropdown` extended with discriminated-union `multiple` mode (13 single-select call sites unchanged). Drive-by fix: `isActive` now also handles the `__all__` sentinel. Brief archived. Build + ESLint local gates clean; not yet deployed at the time of this resume but stage deploy was running.
-- **`/projects` Board pipeline-parity shipped to stage** (`2aa45df`, squash from `chore/projects-pipeline-parity`). Second pass closes the remaining visual gaps: toolbar restructured into Pipeline's shape (bordered card with count chip + h-9 search + spacer top row, internal divider, filter row with active-filters Badge + Clear); LayoutGrid icon dropped from title; full ProjectCard rewrite mirroring LeadCard (3-section structure with dividers, Folder icon-square + name Link + 3-dot dropdown, key:value metadata grid for Account/Contacts/Billable/Updated, footer with urgency badge + owner avatar moved here from the header); whole-card-clickable via useRouter; columns widened 220→320 (min-w-80) with new Total/Billable footer; DragOverlay rewired through `<ProjectCard isDragOverlay />`. **Sonnet drive-by fix**: the page wrapper's `p-6` was double-padding /projects to 40px from each edge (vs /pipeline's 16px). Removed entirely — `/projects` now relies solely on the dashboard shell's `p-4` (shell.tsx:409), matching Pipeline. New code-review checklist note added (padding-stacking with the shell).
-- **What's next**: Sadin to pick the NEXT IT agency dashboard. Done: `/contacts`, `/accounts`, `/projects` Board view (now visually at parity with `/pipeline` — Tasks/Members/Table views still untouched if Sadin wants to extend the pattern). Remaining: `/dashboard`, `/leads` (mostly already the reference), `/pipeline` (no work needed — it IS the reference), `/team`, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass (Contacts/ProspectsView, Check-In, Forms + universal pages). Possible follow-ups for /projects: `+ New Project` button (requires extending ProjectForm with an account picker), Sort popover, Export CSV.
+- **`/projects` Board pipeline-parity shipped + promoted** (`2aa45df` stage / `f9af70d` prod). Toolbar restructured to Pipeline's shape, full ProjectCard rewrite mirroring LeadCard, columns widened 220→320 with footer, DragOverlay rewired. Sonnet drive-by fix: dropped `workspace.tsx`'s outer `p-6` that double-padded on top of the shell's `p-4`. Both waves of `/projects` work now in production.
+- **`/contacts/[id]` 360° detail page shipped to stage** (`4890488`, squash from `feat/contact-detail-360`). 11 files (1 rewrite + 9 new subcomponents + 1 API extend), +1049/-269. 3-column layout mirroring Lead detail v2; left = ContactSummaryCard (avatar + name + status + email/phone + 5 action buttons: Note/Email/Call/Add to Project/More) + ContactKeyInfoSection (Status/Title/Account/Account Owner/Created/Updated); middle = ContactTabs with Overview wired (Personal Info + Pro Details cards), Notes + Activity disabled with "Coming soon" tooltips; right = ContactRelatedPanel with AccountCard → LinkedProjectsCard → RelatedContactsCard → LeadProvenanceCard (last one returns null when source_lead absent). Backend extends `GET /api/v1/contacts/[id]` with `source_lead` (leads.converted_contact_id reverse-lookup), `account_siblings` (LIMIT 11 to detect >10 cheaply), `account_owner_email` (via `scopedClient.raw().auth.admin.getUserById` — documented escape hatch for auth.users access). Page-padding fix applied preemptively (dropped wrapper's `p-6` + `max-w-3xl`). Built per CRM-expert review which flipped Sadin's proposed right-column ordering (account first as the umbrella) and excluded several Lead-page features that don't translate (Stage, Convert, AI Insights, Score, Checklist, Log Meeting). Brief archived. V2 deferrals: contact_notes table + timeline composer, contact_activities audit log, last interaction date, Log Meeting persistence.
+- **What's next**: Sadin to pick the NEXT IT agency surface. Done: `/contacts` list + `/contacts/[id]` detail, `/accounts` list, `/projects` Board view (Tasks/Members/Table views still untouched). Remaining: `/dashboard`, `/leads` (mostly the reference), `/pipeline` (IS the reference, no work needed), `/team`, `/accounts/[id]` detail, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass.
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `f9af70d` (production HEAD, current — design pass second wave + CI fix). `stage` at the post-promotion docs commit. App-code-wise stage and main are in sync; stage ahead by exactly the docs commit recording this promotion until the next promotion.
+- **Branch state**: `main` at `f9af70d` (production HEAD). `stage` at `4890488` + this docs commit. Stage leads main by 1 feature squash (Contact 360 detail) + 2 docs commits; production promotion pending Sadin's go-ahead.
 - **Code-review checklist** (7 items): all N/A across all 7 squashes this session for the design pass — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. **New item added this session**: page-padding stacks with the dashboard shell (`shell.tsx:409` provides `p-4`; pages that add their own `p-4`/`p-6` double-pad). See STATUS-BOARD.
 - **CI gotcha permanently fixed** (`5ce03d2`): `deploy.yml` now sets `command_timeout: 30m` on the production SSH action, matching stage. The 2026-05-28 PM promotion timed out at the appleboy/ssh-action's default 10m because stage was deploying concurrently and dual `npm ci` + `next build` slowed each build past 9m. Bumping to 30m gives ~50% headroom over the worst-case dual-deploy time observed (15m51s on stage). The pre-flight guidance ("don't push to main while stage is deploying") is now belt-and-suspenders — still good practice but the failure mode is no longer load-bearing. **The next prod promotion will use the new timeout** — `deploy.yml` is read from the commit being deployed.
 - **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
@@ -27,6 +28,72 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## `/contacts/[id]` 360° detail page shipped to stage — Lead-detail-v2 parity, CRM-expert reviewed (2026-05-29)
+
+### What was built
+
+Squash-merged at `4890488` from `feat/contact-detail-360` (Sonnet branch `5b40767`). 11 files (1 rewrite + 9 new + 1 API extend), +1,049 / -269. UI restructure + 2 small backend additions; no DB migrations.
+
+**Context**: prior to this brief, `/contacts/[id]` was a single-column form view (Contact Info card + Projects card + optional Notes blob). Functional but reading as a form, not a stakeholder 360°. The user wanted parity with `/leads/[id]`'s 3-column Lead-detail-v2 page.
+
+**Pre-flight CRM-expert consultation** (via the `crm-expert` skill): industry-best-practice review surfaced several things to NOT copy from the Lead page even though we're mirroring its shape:
+
+- No Stage / Convert / Score / AI Insights — Lead-specific concepts that don't translate to a post-conversion stakeholder.
+- No Lead-style Checklist on the right column — would create a parallel tasking system competing with project tasks. Defer to v2 only if explicitly requested as "Reminders".
+- Right-column ordering: account-first (the umbrella), then projects under it, then related contacts, then lead provenance. (Sadin had proposed "projects + account + real work types"; the expert flipped it.)
+- Add lead provenance ("Converted from lead X") — closes a context loop the contact page was missing.
+- Add account-siblings card — common day-to-day question is "who else at this org should I cc?".
+
+**Backend (`GET /api/v1/contacts/[id]`)** — extended response with 3 new fields via parallel `Promise.all` queries:
+
+- `source_lead`: `SELECT id, first_name, last_name, created_at FROM leads WHERE converted_contact_id = id AND deleted_at IS NULL LIMIT 1`.
+- `account_siblings`: `SELECT id, first_name, last_name, title FROM contacts WHERE account_id = X AND id != self AND deleted_at IS NULL ORDER BY first_name LIMIT 11`. The LIMIT 11 is a Sonnet judgment — detects ">10" cheaply for the "See all" link without a separate `count()` round-trip.
+- `account_owner_email`: resolved via `scopedClient.raw().auth.admin.getUserById(owner_id)`. `raw()` is the documented escape hatch from CLAUDE.md for cross-tenant operations like `auth.users` reads (owner_id lives outside tenant-scoped tables).
+
+Also extended the `accounts!contacts_account_id_fkey` embed to include `owner_id` + `primary_contact_id` for the AccountCard and the isPrimary derivation.
+
+**Frontend — 9 new subcomponents under `src/industries/it-agency/features/crm-contacts/components/contact-detail/`**:
+
+- `ContactSummaryCard` (~200 LOC): avatar with initials + name + status badge + email/phone with copy buttons + 5-button action row (Note · Email · Call · Add to Project · More). More dropdown contains Set as Primary Contact (hidden via `!isPrimary` guard), Edit, Delete.
+- `ContactKeyInfoSection` (~100 LOC): collapsible "KEY INFORMATION" with Status / Title / Account link / Account Owner / Created / Last Updated. All display-only in v1; editing flows through `ContactForm`.
+- `ContactTabs` (~140 LOC): tabs orchestrator. Overview tab wired with Personal Information + Professional Details cards (Pro Details has Edit icon → opens ContactForm). Notes and Activity tabs are `disabled` with `<TooltipContent>Coming soon</TooltipContent>` — no fake content panels.
+- `ContactRelatedPanel` (~85 LOC): right-column orchestrator. Renders AccountCard → LinkedProjectsCard → RelatedContactsCard → LeadProvenanceCard.
+- `AccountCard` (~50 LOC): account name (link) + owner email + two badges (`{N} projects` + `{N} other contacts`).
+- `LinkedProjectsCard` (~165 LOC): relocated from the old page's middle column. Same project-link logic (role pills, change-role dropdown, remove action, Add-to-project button) — just visually re-skinned.
+- `RelatedContactsCard` (~80 LOC): up to 10 sibling contacts with avatar + name link + title. Paired with the backend's LIMIT 11: when `siblings.length > 10`, render "See all at {account name} →" link. Empty state: "No other contacts at this account yet."
+- `LeadProvenanceCard` (~50 LOC): `if (!sourceLead) return null;` then renders compact card with link to originating lead + creation date. No empty-state card when contact wasn't converted.
+- `index.ts` (~10 LOC): barrel.
+
+**Page rewrite (`contact-detail.tsx`, 498 → 367 lines)**: orchestrator pattern — state (contact, loading, dialog flags, project links, etc.) stays here; subcomponents receive props + callbacks. Added `handleSetPrimary` with optimistic update on the account's `primary_contact_id`. `isPrimary` derived inline (`!contact.accounts || contact.accounts.primary_contact_id === contact.id` — the `!contact.accounts` branch treats no-account as "is primary" which correctly hides the action). **Page-padding fix applied preemptively**: dropped the old `<div className="p-6 space-y-6 max-w-3xl">` wrapper for a `<div className="space-y-6">` that lets the dashboard shell's `p-4` (shell.tsx:409) do the inset work. Same pattern as the `/projects` workspace fix from `f9af70d`.
+
+### V2 deferrals (explicit in brief)
+
+- `contact_notes` table + notes timeline composer (today the `notes` blob is edited via ContactForm).
+- `contact_activities` audit log (Activity tab is disabled with "Coming soon" hint).
+- Last interaction date computed field.
+- Log Meeting action with persistence (would need a `meetings` table or a notes-table with type discriminator).
+- AI Insights tab (no clear contact-specific signal).
+- Reminders / Tasks on contact (CRM-expert flagged as a parallel tasking system; defer unless owner explicitly asks).
+- Communications history (HubSpot's killer feature; requires Gmail/calendar integration; v3 territory).
+
+### Verification
+
+- ✓ `npm run build` clean locally.
+- ✓ `npx eslint --max-warnings 50 .` clean locally (0 errors / 17 warnings, all pre-existing in unrelated files — no new warnings introduced).
+- ✓ All 7 code-review checklist items considered: PostgREST embed FK disambiguation explicit on the new `source_lead` query (uses `contacts_account_id_fkey` correctly); PATCH/POST invariants N/A; route shell pre-exists; no inserts/updates; no Radix Selects added; no cross-cutting predicate; page-padding stacks check addressed via the wrapper rewrite.
+
+### Review notes (non-blocking — not worth a fixback round)
+
+- A few inline `style={{ color: "#0f0f10" }}` instead of the codebase-conventional `text-[#0f0f10]` Tailwind class. Functionally identical.
+- Unused `style={{ "--dropdown-hover-overlay": "#0000170b" }}` CSS custom property set on `DropdownMenuContent`. Dead code, harmless (DropdownMenu has its own hover styling).
+- The "Note" action button currently opens `ContactForm` without auto-focusing the notes textarea. Brief said "with the notes field focused" as a stretch; Sonnet flagged it as an "acceptable v1 substitute". Could add a `focusField?: "notes"` prop to ContactForm in a follow-up if it bites.
+
+### Files Changed
+
+`src/app/(main)/api/v1/contacts/[id]/route.ts`, `src/industries/it-agency/features/crm-contacts/pages/contact-detail.tsx`, plus 9 new files under `src/industries/it-agency/features/crm-contacts/components/contact-detail/` (account-card, contact-key-info-section, contact-related-panel, contact-summary-card, contact-tabs, index, lead-provenance-card, linked-projects-card, related-contacts-card). Brief archived at `docs/archive/features/CONTACT-DETAIL-360-BRIEF.md`.
 
 ---
 
