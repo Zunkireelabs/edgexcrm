@@ -22,6 +22,8 @@ export interface FeatureMeta<TConfig = unknown> {
   defaultConfig?: TConfig;
 }
 
+type SidebarPosition = "before-pipeline" | "after-pipeline";
+
 /**
  * Sidebar entry contributed by an industry. Rendered alongside the
  * universal nav items in the dashboard shell.
@@ -33,6 +35,8 @@ export interface FeatureMeta<TConfig = unknown> {
  * when you reference it from a manifest.
  */
 export interface SidebarItem {
+  kind?: "item";
+  position?: SidebarPosition;
   featureId: string;
   href: string;
   label: string;
@@ -45,6 +49,25 @@ export interface SidebarItem {
    */
   minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[];
 }
+
+/**
+ * Collapsible group of SidebarItems contributed by an industry.
+ * Renders as an expandable parent with indented children in the shell.
+ *
+ * `id` is a stable identifier used as a React key and reserved for
+ * future localStorage persistence of collapse state.
+ */
+export interface SidebarGroup {
+  kind: "group";
+  position?: SidebarPosition;
+  id: string;
+  label: string;
+  icon: string;
+  children: readonly SidebarItem[];
+}
+
+/** Discriminated union for an industry manifest sidebar entry. */
+export type SidebarEntry = SidebarItem | SidebarGroup;
 
 /**
  * Per-industry feature registration. Carries optional config that the
@@ -72,6 +95,6 @@ export interface AiConfig {
 export interface IndustryManifest {
   id: IndustryId;
   features: readonly FeatureRegistration[];
-  sidebar: readonly SidebarItem[];
+  sidebar: readonly SidebarEntry[];
   ai?: AiConfig;
 }
