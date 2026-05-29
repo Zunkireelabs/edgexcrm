@@ -15,19 +15,81 @@
 - **Color tokens established this session** (bake into future briefs): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b` (~4% black-with-alpha, Anthropic-style); table row hover still `bg-gray-50` (intentional inconsistency, flagged); status pills = green-50/700 + gray-100/500 matching ContactStatusBadge.
 - **`/projects` Board chrome shipped to stage** (`6de03ab`, squash from `chore/projects-board-chrome`). Bordered kanban columns mirroring `/pipeline`, multi-select Status FilterDropdown replacing the blue chip strip, FolderOpen empty state, design-token isOver highlight. `FilterDropdown` extended with discriminated-union `multiple` mode (13 single-select call sites unchanged). Drive-by fix: `isActive` now also handles the `__all__` sentinel. Brief archived. Build + ESLint local gates clean; not yet deployed at the time of this resume but stage deploy was running.
 - **`/projects` Board pipeline-parity shipped + promoted** (`2aa45df` stage / `f9af70d` prod). Toolbar restructured to Pipeline's shape, full ProjectCard rewrite mirroring LeadCard, columns widened 220→320 with footer, DragOverlay rewired. Sonnet drive-by fix: dropped `workspace.tsx`'s outer `p-6` that double-padded on top of the shell's `p-4`. Both waves of `/projects` work now in production.
-- **`/contacts/[id]` 360° detail page shipped to stage** (`4890488`, squash from `feat/contact-detail-360`). 11 files (1 rewrite + 9 new subcomponents + 1 API extend), +1049/-269. 3-column layout mirroring Lead detail v2; left = ContactSummaryCard (avatar + name + status + email/phone + 5 action buttons: Note/Email/Call/Add to Project/More) + ContactKeyInfoSection (Status/Title/Account/Account Owner/Created/Updated); middle = ContactTabs with Overview wired (Personal Info + Pro Details cards), Notes + Activity disabled with "Coming soon" tooltips; right = ContactRelatedPanel with AccountCard → LinkedProjectsCard → RelatedContactsCard → LeadProvenanceCard (last one returns null when source_lead absent). Backend extends `GET /api/v1/contacts/[id]` with `source_lead` (leads.converted_contact_id reverse-lookup), `account_siblings` (LIMIT 11 to detect >10 cheaply), `account_owner_email` (via `scopedClient.raw().auth.admin.getUserById` — documented escape hatch for auth.users access). Page-padding fix applied preemptively (dropped wrapper's `p-6` + `max-w-3xl`). Built per CRM-expert review which flipped Sadin's proposed right-column ordering (account first as the umbrella) and excluded several Lead-page features that don't translate (Stage, Convert, AI Insights, Score, Checklist, Log Meeting). Brief archived. V2 deferrals: contact_notes table + timeline composer, contact_activities audit log, last interaction date, Log Meeting persistence.
-- **What's next**: Sadin to pick the NEXT IT agency surface. Done: `/contacts` list + `/contacts/[id]` detail, `/accounts` list, `/projects` Board view (Tasks/Members/Table views still untouched). Remaining: `/dashboard`, `/leads` (mostly the reference), `/pipeline` (IS the reference, no work needed), `/team`, `/accounts/[id]` detail, `/time-tracking`, `/time-tracking/approvals`, `/settings`. After IT agency feels done, education_consultancy gets the same pass.
+- **`/contacts/[id]` 360° detail page shipped to stage** (`4890488`, squash from `feat/contact-detail-360`). 11 files (1 rewrite + 9 new subcomponents + 1 API extend), +1049/-269. 3-column Lead-detail-v2 parity, CRM-expert reviewed (right column = account-first umbrella). Backend extends GET `/api/v1/contacts/[id]` with `source_lead` + `account_siblings` (LIMIT 11 trick) + `account_owner_email` (via `scopedClient.raw()` escape hatch). Page-padding fix applied preemptively. V2 deferrals: contact_notes table + timeline, contact_activities audit log, last interaction date, Log Meeting persistence.
+- **Sidebar nav grouping shipped to stage** (`b6219b2`, squash from `feat/sidebar-nav-grouping`). 4 files, +186/-53. Introduces 1-level-deep collapsible group pattern via discriminated union `SidebarEntry = SidebarItem | SidebarGroup` + optional `position?: "before-pipeline" | "after-pipeline"` field. Applied to IT-agency: Projects + Time Tracking + Approvals now nest under a "Project Management" parent (icon `FolderKanban`). Pipeline repositioned to sit between Accounts and the new group (no longer at the bottom). Shell renderer now has 5 regions (TOP → before-pipeline industry → MIDDLE Pipeline → after-pipeline industry → BOTTOM). `SidebarGroupRender` mirrors Public Forms collapsible UX with added `aria-expanded` on the toggle. Default expansion: expanded; auto-re-expand on `hasActiveChild` via useEffect. Other 5 industries unchanged (their flat manifests default to before-pipeline). Counselor filtering: group drops Approvals child; group itself stays. Brief archived.
+- **What's next**: Sadin to pick the NEXT IT agency surface. Done: `/contacts` list + `/contacts/[id]` detail, `/accounts` list, `/projects` Board view, sidebar nav grouping. Remaining: `/dashboard`, `/leads` (mostly the reference), `/team`, `/accounts/[id]` detail, `/time-tracking`, `/time-tracking/approvals`, `/settings`, plus `/projects` Tasks/Members/Table views. After IT agency feels done, education_consultancy gets the same pass.
 - **Out of scope (deferred to separate branches)**: `--ring`, `--sidebar-primary`, `--chart-1`, `--sidebar-ring` CSS vars still reference `#2272B4`; `button.tsx` link variant keeps blue intentionally; `tenant.primary_color` fallback in `shell.tsx:342` still `#2272B4`; `.dark` color block unchanged (dark mode not deployed); `account-detail.tsx` + `contacts-detail.tsx` styling; bulk select / Export / Preview panel.
 - **Eyeball items pending Sadin's call** (none blocking, all post-merge polish judgment): (1) selected row in dropdowns has zero background at rest now — only the radio-circle + check signals selection — pipeline selector with multiple pipelines is the test surface; (2) Pipeline "Default" badge is now neutral gray — if hard to spot in long lists, could be soft amber/purple; (3) table-row hover (`bg-gray-50`) vs dropdown hover (`#0000170b`) intentionally different right now — could unify in a follow-up; (4) Status filter chip on `/contacts` + `/accounts` always renders "engaged" since `"active" ≠ "all"` and FilterDropdown's `isActive` logic flags anything-other-than-`"all"` as active — visual quirk, not a bug.
 - **Workflow split holds**: Opus plans + reviews + pushes to stage + writes docs + runs prod merges. Sonnet writes all code on per-page branches; Sadin pastes the Sonnet handoff prompt himself. Production-affecting actions require Sadin's explicit go-ahead each time.
-- **Branch state**: `main` at `f9af70d` (production HEAD). `stage` at `4890488` + this docs commit. Stage leads main by 1 feature squash (Contact 360 detail) + 2 docs commits; production promotion pending Sadin's go-ahead.
+- **Branch state**: `main` at `f9af70d` (production HEAD). `stage` at `b6219b2` + this end-of-session docs commit. Stage leads main by 2 feature squashes (Contact 360 detail + Sidebar nav grouping) + 3 docs commits. Production promotion intentionally deferred this session per "lets do some more work before pushing to main" — when resuming, ask Sadin about prod push timing.
 - **Code-review checklist** (7 items): all N/A across all 7 squashes this session for the design pass — UI-only changes, no DB / no API / no new page / no Select / no embed / no mutations. **New item added this session**: page-padding stacks with the dashboard shell (`shell.tsx:409` provides `p-4`; pages that add their own `p-4`/`p-6` double-pad). See STATUS-BOARD.
 - **CI gotcha permanently fixed** (`5ce03d2`): `deploy.yml` now sets `command_timeout: 30m` on the production SSH action, matching stage. The 2026-05-28 PM promotion timed out at the appleboy/ssh-action's default 10m because stage was deploying concurrently and dual `npm ci` + `next build` slowed each build past 9m. Bumping to 30m gives ~50% headroom over the worst-case dual-deploy time observed (15m51s on stage). The pre-flight guidance ("don't push to main while stage is deploying") is now belt-and-suspenders — still good practice but the failure mode is no longer load-bearing. **The next prod promotion will use the new timeout** — `deploy.yml` is read from the commit being deployed.
-- **What Opus does next on resume**: (1) ask Sadin which dashboard to audit next; (2) audit that page (visual hierarchy + spacing + chrome consistency + a11y + interaction patterns + grey-in-white if applicable); (3) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
+- **What Opus does next on resume**: (1) ask Sadin if he wants to smoke dev (`dev-lead-crm.zunkireelabs.com`) for the sidebar grouping + contact 360 + push to prod; (2) if prod push authorized, follow the pre-flight discipline (wait for stage deploys to clear, then non-FF ort merge stage→main, watch deploy, live smoke); (3) ask Sadin which dashboard to audit next; (4) write per-page brief ending with the Sonnet handoff prompt in a fenced code block — Sadin pastes it himself.
 - **Blockers**: none.
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Sidebar nav grouping shipped to stage — Project Management group + Pipeline reposition (2026-05-29 PM)
+
+### What was built
+
+Squash-merged at `b6219b2` from `feat/sidebar-nav-grouping` (Sonnet branch `8dd5d3d`). 4 files, +186 / -53. UI + types only — no DB, no API, no migrations.
+
+**Workflow note**: this brief was drafted and Sonnet ran in parallel before Sadin asked me for an end-of-session resume. By the time I checked branch state, Sonnet had already committed + pushed. The branch was reviewed normally (diff against brief, build + ESLint gates) and squash-merged.
+
+**Schema additions (`src/industries/_types.ts`)**:
+
+- `SidebarPosition` discriminated string union: `"before-pipeline" | "after-pipeline"`.
+- `SidebarGroup` type: `kind: "group"` + `id` (stable identifier for React keys + future localStorage persistence) + `label` + `icon` (string, resolved via INDUSTRY_ICONS) + `children: readonly SidebarItem[]` + optional `position`.
+- `SidebarEntry = SidebarItem | SidebarGroup` discriminated union, replacing the flat `SidebarItem[]` typing on `IndustryManifest.sidebar`.
+- Optional `kind?: "item"` + `position?` added to `SidebarItem` — back-compat: existing manifests with no `kind`/`position` default to flat item + before-pipeline slot.
+
+**Loader update (`src/industries/_loader.ts`)**:
+
+- `getIndustrySidebarItems` now returns `readonly SidebarEntry[]`.
+- Filters recursively via `flatMap` — children filtered by `minRoles` + `featureId` registration; **empty groups dropped entirely** when all children get filtered out (e.g. a counselor who can't see Approvals would still see the group because Projects + Time Tracking remain).
+- `position` passes through unchanged (consumed by the shell renderer, not the loader).
+
+**Manifest update (`src/industries/it-agency/manifest.ts`)**:
+
+- 3 delivery entries (Projects, Time Tracking, Approvals) now nest under a `SidebarGroup` with `kind: "group"`, `position: "after-pipeline"`, `id: "project-management"`, `icon: "FolderKanban"`.
+- Contacts and Accounts stay as flat top-level items (no `position` → default before-pipeline → render in their current slot above Pipeline).
+
+**Shell renderer (`src/components/dashboard/shell.tsx`)**:
+
+- New `SidebarGroupRender` component (inline, ~60 LOC, not extracted to a separate file). Mirrors the existing Public Forms collapsible pattern (lines 204-235): chevron + indent + left border. Adds `aria-expanded` on the toggle button (small a11y improvement vs Public Forms).
+- Active-state: parent group highlights (`bg-#ebebeb`) when any child's pathname matches; active child has `bg-#ebebeb` + `font-medium`.
+- Default expansion: `useState(true)`. Auto-re-expand via `useEffect` on `hasActiveChild` change (covers the case where user manually collapses and then navigates to a child via URL).
+- No localStorage persistence in v1 — manually collapsing resets on reload.
+- Render restructured into **5 regions**: UNIVERSAL_NAV_TOP → industry entries with position=before-pipeline → UNIVERSAL_NAV_MIDDLE (Pipeline) → industry entries with position=after-pipeline → UNIVERSAL_NAV_BOTTOM. The two helper functions `renderNavItem` (universal items) and `renderIndustryEntry` (branches on `kind`) keep the JSX readable.
+- `FolderKanban` added to `INDUSTRY_ICONS` registry.
+- Mobile Sheet sidebar inherits automatically (same `sidebarContent` block).
+
+### Final visible order for IT-agency
+
+Dashboard → All Leads → Contacts → Accounts → **Pipeline** → **Project Management group (Projects · Time Tracking · Approvals)** → Team → Settings → View Public Form.
+
+Pipeline moved up from below the 3 delivery items to between Accounts and the new group. Achieved purely via the `position: "after-pipeline"` on the group — Pipeline itself wasn't moved out of `UNIVERSAL_NAV_MIDDLE`.
+
+### Out of scope (deferred)
+
+- localStorage persistence of user-toggled collapse state. v1 ships with no persistence — manually collapsing resets on reload. Add in v2 if it annoys.
+- Nested groups > 1 level deep. The discriminated union shape-wise allows it but the renderer doesn't support it.
+- CRM grouping (Contacts + Accounts under a "CRM" parent). Not asked for; not done.
+- aria-expanded retrofit on the existing Public Forms toggle. Worth doing in a separate small a11y pass; not in this brief.
+
+### Verification
+
+- ✓ `npm run build` clean locally.
+- ✓ `npx eslint --max-warnings 50 .` clean locally (0 errors / 17 warnings — same count as before).
+- ✓ All 7 code-review checklist items N/A — UI + types only, no DB / no API / no new page / no Radix Select / no embed / no mutations / no page-padding change.
+
+### Files Changed
+
+`src/industries/_types.ts` (+25 / -3) · `src/industries/_loader.ts` (+13 / -3) · `src/industries/it-agency/manifest.ts` (+28 / -19) · `src/components/dashboard/shell.tsx` (+120 / -28). Brief archived at `docs/archive/features/SIDEBAR-NAV-GROUPING-BRIEF.md`.
 
 ---
 
