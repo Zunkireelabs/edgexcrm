@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge";
 import type { ProjectStatus, TaskStatus, ApprovalStatus } from "@/types/database";
 
-const PROJECT_STATUS_MAP: Record<ProjectStatus, { label: string; className: string }> = {
+export const PROJECT_STATUS_MAP: Record<ProjectStatus, { label: string; className: string }> = {
   planning:   { label: "Planning",   className: "bg-slate-100 text-slate-700 border-slate-200" },
   active:     { label: "Active",     className: "bg-blue-50 text-blue-700 border-blue-200" },
   in_review:  { label: "In Review",  className: "bg-purple-50 text-purple-700 border-purple-200" },

@@ -14,6 +14,9 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import type { ProjectStatus } from "@/types/database";
+
+type ProjectStatusMix = Record<ProjectStatus, number>;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -34,7 +37,47 @@ export async function GET(_request: NextRequest, { params }: Props) {
 
   if (error) return apiError("DB_ERROR", "Failed to fetch account", 500);
   if (!account) return apiNotFound("Account");
-  return apiSuccess(account);
+
+  const accountRow = account as unknown as { owner_id: string | null };
+  const defaultMix: ProjectStatusMix = { planning: 0, active: 0, in_review: 0, delivered: 0, on_hold: 0, cancelled: 0 };
+
+  async function fetchOwnerEmail(): Promise<string | null> {
+    if (!accountRow.owner_id) return null;
+    try {
+      const { data } = await db.raw().auth.admin.getUserById(accountRow.owner_id);
+      return data?.user?.email ?? null;
+    } catch { return null; }
+  }
+
+  async function fetchProjectStatusMix(): Promise<ProjectStatusMix> {
+    try {
+      const { data } = await db.from("projects").select("status").eq("account_id", id);
+      const mix = { ...defaultMix };
+      for (const row of (data ?? []) as unknown as Array<{ status: string }>) {
+        if (row.status in mix) mix[row.status as keyof ProjectStatusMix]++;
+      }
+      return mix;
+    } catch { return defaultMix; }
+  }
+
+  async function fetchOpenLeadsCount(): Promise<number> {
+    try {
+      const { count } = await db.from("leads").select("*", { count: "exact", head: true })
+        .eq("account_id", id)
+        .is("converted_at", null)
+        .is("deleted_at", null);
+      return count ?? 0;
+    } catch { return 0; }
+  }
+
+  const [ownerEmail, projectStatusMix, openLeadsCount] = await Promise.all([
+    fetchOwnerEmail(),
+    fetchProjectStatusMix(),
+    fetchOpenLeadsCount(),
+  ]);
+
+  const accountData = account as unknown as Record<string, unknown>;
+  return apiSuccess({ ...accountData, owner_email: ownerEmail, project_status_mix: projectStatusMix, open_leads_count: openLeadsCount });
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
