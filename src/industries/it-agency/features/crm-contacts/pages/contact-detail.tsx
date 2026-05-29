@@ -4,20 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import {
-  ArrowLeft,
-  Loader2,
-  Mail,
-  Phone,
-  Building2,
-  Pencil,
-  Trash2,
-  FileText,
-  Plus,
-} from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -26,16 +14,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { ContactStatusBadge } from "../components/contact-status-badge";
 import { ContactForm } from "../components/contact-form";
 import { ProjectContactPicker } from "../components/project-contact-picker";
+import {
+  ContactSummaryCard,
+  ContactKeyInfoSection,
+  ContactTabs,
+  ContactRelatedPanel,
+} from "../components/contact-detail";
 import type { Contact, ContactStatus } from "@/types/database";
 
 type ProjectContactRole = "primary" | "technical" | "billing" | "other" | null;
@@ -50,35 +36,37 @@ interface ProjectLink {
   } | null;
 }
 
+interface AccountSibling {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  title: string | null;
+}
+
+interface SourceLead {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  created_at: string;
+}
+
 interface ContactWithJoins extends Contact {
-  accounts: { id: string; name: string } | null;
+  accounts: {
+    id: string;
+    name: string;
+    owner_id: string | null;
+    primary_contact_id: string | null;
+  } | null;
   project_contacts: ProjectLink[];
+  source_lead: SourceLead | null;
+  account_siblings: AccountSibling[];
+  account_owner_email: string | null;
 }
 
 interface ContactDetailPageProps {
   tenantId: string;
   role: "owner" | "admin" | "viewer" | "counselor";
   contactId: string;
-}
-
-function rolePill(role: ProjectContactRole) {
-  if (!role) {
-    return (
-      <span className="text-xs text-muted-foreground">—</span>
-    );
-  }
-  const cfg: Record<string, { label: string; className: string }> = {
-    primary: { label: "Primary", className: "bg-green-100 text-green-800 border-green-200" },
-    technical: { label: "Technical", className: "bg-blue-100 text-blue-800 border-blue-200" },
-    billing: { label: "Billing", className: "bg-amber-100 text-amber-800 border-amber-200" },
-    other: { label: "Other", className: "bg-muted text-muted-foreground border-border" },
-  };
-  const c = cfg[role] ?? cfg.other;
-  return (
-    <Badge variant="outline" className={`text-xs ${c.className}`}>
-      {c.label}
-    </Badge>
-  );
 }
 
 export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
@@ -90,9 +78,8 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [showActions, setShowActions] = useState(false);
+  const [settingPrimary, setSettingPrimary] = useState(false);
 
-  // Phase C: project link state
   const [projectLinks, setProjectLinks] = useState<ProjectLink[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<ProjectLink | null>(null);
@@ -124,7 +111,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
     setDeleting(true);
     try {
       const res = await fetch(`/api/v1/contacts/${contact.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete contact");
+      if (!res.ok) throw new Error();
       toast.success("Contact deleted");
       router.push("/contacts");
     } catch {
@@ -132,6 +119,34 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
     } finally {
       setDeleting(false);
       setDeleteOpen(false);
+    }
+  }
+
+  async function handleSetPrimary() {
+    if (!contact?.accounts) return;
+    setSettingPrimary(true);
+    try {
+      const res = await fetch(`/api/v1/accounts/${contact.accounts.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ primary_contact_id: contact.id }),
+      });
+      if (!res.ok) throw new Error();
+      setContact((prev) =>
+        prev
+          ? {
+              ...prev,
+              accounts: prev.accounts
+                ? { ...prev.accounts, primary_contact_id: prev.id }
+                : null,
+            }
+          : null
+      );
+      toast.success("Set as primary contact");
+    } catch {
+      toast.error("Failed to set primary contact");
+    } finally {
+      setSettingPrimary(false);
     }
   }
 
@@ -156,8 +171,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
       });
       const json = await res.json();
       if (!res.ok) {
-        const msg = json.error?.message ?? "Failed to update role";
-        toast.error(msg);
+        toast.error(json.error?.message ?? "Failed to update role");
         return;
       }
       setProjectLinks((prev) =>
@@ -181,7 +195,7 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
         `/api/v1/contacts/${contactId}/projects?project_id=${removeTarget.projects.id}`,
         { method: "DELETE" }
       );
-      if (!res.ok) throw new Error("Failed to remove link");
+      if (!res.ok) throw new Error();
       setProjectLinks((prev) => prev.filter((pl) => pl.projects?.id !== removeTarget.projects!.id));
       toast.success("Project removed");
     } catch {
@@ -202,234 +216,88 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
 
   if (!contact) return null;
 
-  const fullName = `${contact.first_name} ${contact.last_name}`.trim();
+  const fullName = [contact.first_name, contact.last_name].filter(Boolean).join(" ").trim() || "Unknown";
+  const isPrimary = !contact.accounts || contact.accounts.primary_contact_id === contact.id;
 
   return (
-    <div className="p-6 space-y-6 max-w-3xl">
-      {/* Back nav */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/contacts">
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
-          Contacts
-        </Link>
-      </Button>
-
+    <div className="space-y-6">
       {/* Header */}
-      <div
-        className="flex items-start justify-between gap-4 group"
-        onMouseEnter={() => setShowActions(true)}
-        onMouseLeave={() => setShowActions(false)}
-      >
-        <div className="space-y-1">
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-semibold">{fullName}</h1>
-            <ContactStatusBadge status={contact.status as ContactStatus} />
-          </div>
-          {contact.title && (
-            <p className="text-muted-foreground text-sm">{contact.title}</p>
-          )}
-        </div>
-        {isAdmin && (
-          <div
-            className={`flex items-center gap-1 shrink-0 transition-opacity ${
-              showActions ? "opacity-100" : "opacity-0"
-            }`}
-          >
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0"
-              onClick={() => setEditOpen(true)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-              onClick={() => setDeleteOpen(true)}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        )}
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" asChild>
+          <Link href="/contacts">
+            <ArrowLeft className="h-4 w-4" />
+          </Link>
+        </Button>
+        <h1 className="text-2xl font-semibold" style={{ color: "#0f0f10" }}>
+          {fullName}
+        </h1>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Info card */}
-        <div className="lg:col-span-1 space-y-4">
-          <Card className="border shadow-none">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                Contact Info
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-0">
-              {contact.email && (
-                <div className="flex items-start gap-2.5">
-                  <Mail className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="text-sm hover:underline break-all"
-                  >
-                    {contact.email}
-                  </a>
-                </div>
-              )}
-              {contact.phone && (
-                <div className="flex items-start gap-2.5">
-                  <Phone className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <a href={`tel:${contact.phone}`} className="text-sm hover:underline">
-                    {contact.phone}
-                  </a>
-                </div>
-              )}
-              {contact.accounts && (
-                <div className="flex items-start gap-2.5">
-                  <Building2 className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-                  <Link
-                    href={`/accounts/${contact.accounts.id}`}
-                    className="text-sm hover:underline"
-                  >
-                    {contact.accounts.name}
-                  </Link>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Notes */}
-          {contact.notes && (
-            <Card className="border shadow-none">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-                  Notes
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pt-0">
-                <p className="text-sm text-muted-foreground whitespace-pre-wrap">
-                  {contact.notes}
-                </p>
-              </CardContent>
-            </Card>
-          )}
+      {/* 3-column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_1fr_320px] gap-6">
+        {/* Left column */}
+        <div className="space-y-4">
+          <ContactSummaryCard
+            firstName={contact.first_name}
+            lastName={contact.last_name}
+            status={contact.status as ContactStatus}
+            email={contact.email}
+            phone={contact.phone}
+            isAdmin={isAdmin}
+            isPrimary={isPrimary}
+            settingPrimary={settingPrimary}
+            onNoteClick={() => setEditOpen(true)}
+            onAddToProject={() => setPickerOpen(true)}
+            onSetPrimary={handleSetPrimary}
+            onEditClick={() => setEditOpen(true)}
+            onDeleteClick={() => setDeleteOpen(true)}
+          />
+          <ContactKeyInfoSection
+            status={contact.status as ContactStatus}
+            title={contact.title}
+            accountId={contact.accounts?.id ?? null}
+            accountName={contact.accounts?.name ?? null}
+            accountOwnerEmail={contact.account_owner_email}
+            createdAt={contact.created_at}
+            updatedAt={contact.updated_at}
+          />
         </div>
 
-        {/* Projects section */}
-        <div className="lg:col-span-2">
-          <Card className="border shadow-none">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-muted-foreground" />
-                  Projects
-                </CardTitle>
-                {isAdmin && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-7 text-xs"
-                    onClick={() => setPickerOpen(true)}
-                  >
-                    <Plus className="h-3 w-3 mr-1" />
-                    Add to project
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {projectLinks.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">
-                  No projects linked yet.
-                </p>
-              ) : (
-                <div className="divide-y">
-                  {projectLinks.map((pl) => {
-                    if (!pl.projects) return null;
-                    const proj = pl.projects;
-                    const isChanging = changingRoleFor === proj.id;
-                    return (
-                      <div
-                        key={proj.id}
-                        className="flex items-center justify-between gap-3 py-2.5 group/row"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="min-w-0">
-                            <Link
-                              href={`/time-tracking/projects/${proj.id}`}
-                              className="text-sm font-medium hover:underline truncate block"
-                            >
-                              {proj.name}
-                            </Link>
-                            {proj.accounts?.name && (
-                              <p className="text-xs text-muted-foreground">
-                                at {proj.accounts.name}
-                              </p>
-                            )}
-                          </div>
-                          {rolePill(pl.role)}
-                        </div>
-                        {isAdmin && (
-                          <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
-                            {isChanging ? (
-                              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-                            ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 px-2 text-xs text-muted-foreground"
-                                  >
-                                    Change role
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  {(["primary", "technical", "billing", "other"] as const).map(
-                                    (r) => (
-                                      <DropdownMenuItem
-                                        key={r}
-                                        onClick={() => handleChangeRole(proj.id, r)}
-                                        className={pl.role === r ? "font-medium" : ""}
-                                      >
-                                        {r.charAt(0).toUpperCase() + r.slice(1)}
-                                      </DropdownMenuItem>
-                                    )
-                                  )}
-                                  {pl.role !== null && (
-                                    <>
-                                      <DropdownMenuSeparator />
-                                      <DropdownMenuItem
-                                        onClick={() => handleChangeRole(proj.id, null)}
-                                      >
-                                        Clear role
-                                      </DropdownMenuItem>
-                                    </>
-                                  )}
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
-                              onClick={() => setRemoveTarget(pl)}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+        {/* Middle column */}
+        <div className="min-w-0">
+          <ContactTabs
+            contact={{
+              first_name: contact.first_name,
+              last_name: contact.last_name,
+              email: contact.email,
+              phone: contact.phone,
+              title: contact.title,
+              status: contact.status as ContactStatus,
+              notes: contact.notes,
+              accounts: contact.accounts ? { id: contact.accounts.id, name: contact.accounts.name } : null,
+            }}
+            onEditClick={() => setEditOpen(true)}
+          />
+        </div>
+
+        {/* Right column */}
+        <div className="lg:col-span-full xl:col-span-1">
+          <ContactRelatedPanel
+            account={contact.accounts ? { id: contact.accounts.id, name: contact.accounts.name } : null}
+            accountOwnerEmail={contact.account_owner_email}
+            projectLinks={projectLinks}
+            accountSiblings={contact.account_siblings ?? []}
+            sourceLead={contact.source_lead}
+            isAdmin={isAdmin}
+            changingRoleFor={changingRoleFor}
+            onAddToProject={() => setPickerOpen(true)}
+            onChangeRole={handleChangeRole}
+            onRemoveLink={setRemoveTarget}
+          />
         </div>
       </div>
 
-      {/* Project picker dialog */}
+      {/* Project picker */}
       {contact && (
         <ProjectContactPicker
           mode="pick-project"
@@ -447,8 +315,8 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
           <DialogHeader>
             <DialogTitle>Remove Project Link</DialogTitle>
             <DialogDescription>
-              Remove {fullName} from &quot;{removeTarget?.projects?.name}&quot;? This only
-              removes the link — the project and contact remain.
+              Remove {fullName} from &quot;{removeTarget?.projects?.name}&quot;? This only removes
+              the link — the project and contact remain.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
