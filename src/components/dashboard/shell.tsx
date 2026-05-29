@@ -40,6 +40,7 @@ import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
+import { TruncatedText } from "@/components/ui/truncated-text";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -114,9 +115,9 @@ function SidebarGroupRender({
             : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
-        <div className="flex items-center gap-3">
-          <ParentIcon className="w-[18px] h-[18px]" />
-          {group.label}
+        <div className="flex items-center gap-3 min-w-0">
+          <ParentIcon className="w-[18px] h-[18px] shrink-0" />
+          <TruncatedText text={group.label} />
         </div>
         <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
       </button>
