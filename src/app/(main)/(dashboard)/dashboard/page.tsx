@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
+import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
 import type { TenantEntity, Industry } from "@/types/database";
 
 export default async function DashboardPage() {
@@ -67,6 +68,11 @@ export default async function DashboardPage() {
           <LeadsByCounselorChart leads={leads} memberMap={memberMap} />
         )}
       </div>
+
+      {/* UTM Attribution (education_consultancy only) */}
+      {tenantData.tenant.industry_id === "education_consultancy" && (
+        <UtmAnalyticsSection leads={leads} />
+      )}
 
       {/* Leads Table */}
       <LeadsTable
