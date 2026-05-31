@@ -93,7 +93,7 @@ export function UtmBarChart({
                 width={120}
               />
               <Tooltip
-                cursor={isInteractive ? { fill: "rgba(0,0,0,0.04)" } : false}
+                cursor={false}
                 content={({ active, payload }) => {
                   if (active && payload && payload.length) {
                     const p = payload[0].payload as { fullName: string; count: number };
