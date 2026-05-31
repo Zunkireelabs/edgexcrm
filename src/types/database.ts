@@ -206,6 +206,21 @@ export interface FormAttribution {
   default_campaign?: string | null;
 }
 
+export interface UtmLink {
+  id: string;
+  tenant_id: string;
+  form_id: string | null;
+  destination_url: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  tracking_url: string;
+  created_by: string | null;
+  created_at: string;
+  // Joined from form_configs (set by API/server when listing)
+  form_name?: string | null;
+}
+
 export interface FormConfig {
   id: string;
   tenant_id: string;

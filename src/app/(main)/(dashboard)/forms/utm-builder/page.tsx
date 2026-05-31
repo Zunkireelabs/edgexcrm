@@ -1,8 +1,14 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/queries";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { UtmLinkBuilder } from "@/industries/education-consultancy/features/form-builder/components/utm-link-builder";
+import { UtmBuilderPageClient } from "@/industries/education-consultancy/features/form-builder/components/utm-builder-page-client";
+import type { UtmLink } from "@/types/database";
+
+type UtmLinkRow = Omit<UtmLink, "form_name"> & {
+  form: { name: string } | null;
+};
 
 export default async function UtmBuilderPage() {
   const tenantData = await getCurrentUserTenant();
@@ -10,6 +16,17 @@ export default async function UtmBuilderPage() {
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
 
   const forms = await getFormConfigsForTenant(tenantData.tenant.id);
+
+  const supabase = await createServiceClient();
+  const { data: rawLinks } = await supabase
+    .from("utm_links")
+    .select("*, form:form_configs(name)")
+    .eq("tenant_id", tenantData.tenant.id)
+    .order("created_at", { ascending: false });
+
+  const initialLinks: UtmLink[] = ((rawLinks ?? []) as UtmLinkRow[]).map(
+    ({ form, ...row }) => ({ ...row, form_name: form?.name ?? null }),
+  );
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -19,9 +36,10 @@ export default async function UtmBuilderPage() {
           Pick one of your forms or paste any destination URL, then add UTM params. Share the result in your Facebook ad, email, or social post.
         </p>
       </div>
-      <UtmLinkBuilder
+      <UtmBuilderPageClient
         tenantSlug={tenantData.tenant.slug}
         forms={forms.map((f) => ({ id: f.id, name: f.name, slug: f.slug }))}
+        initialLinks={initialLinks}
       />
     </div>
   );

@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronsUpDown, Check, ExternalLink, Search } from "lucide-react";
+import { ChevronsUpDown, Check, ExternalLink, Loader2, Save, Search } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CopyButton } from "@/components/ui/copy-button";
+import type { UtmLink } from "@/types/database";
 
 interface FormOption {
   id: string;
@@ -18,6 +20,7 @@ interface FormOption {
 interface UtmLinkBuilderProps {
   tenantSlug: string;
   forms: FormOption[];
+  onSaved?: (link: UtmLink) => void;
 }
 
 function getBaseUrl(): string {
@@ -49,12 +52,13 @@ function buildTrackingUrl(
   return url.toString();
 }
 
-export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
+export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderProps) {
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
   const [destinationUrl, setDestinationUrl] = useState("");
   const [source, setSource] = useState("");
   const [medium, setMedium] = useState("");
   const [campaign, setCampaign] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -79,6 +83,35 @@ export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
     () => buildTrackingUrl(destinationUrl, source, medium, campaign),
     [destinationUrl, source, medium, campaign],
   );
+
+  async function handleSave() {
+    if (!trackingUrl || saving) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/v1/utm-links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          form_id: selectedFormId,
+          destination_url: destinationUrl,
+          utm_source: source,
+          utm_medium: medium,
+          utm_campaign: campaign,
+          tracking_url: trackingUrl,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json?.error?.message || "Failed to save link");
+      }
+      toast.success("Link saved");
+      onSaved?.(json.data as UtmLink);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save link");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   return (
     <Card>
@@ -218,17 +251,35 @@ export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
             </code>
             {trackingUrl && <CopyButton value={trackingUrl} label="Tracking link" />}
           </div>
-          {trackingUrl && (
-            <a
-              href={trackingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline mt-1"
-            >
-              <ExternalLink className="h-3 w-3" />
-              Open in new tab
-            </a>
-          )}
+          <div className="flex items-center gap-3 pt-1">
+            {trackingUrl && (
+              <a
+                href={trackingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+              >
+                <ExternalLink className="h-3 w-3" />
+                Open in new tab
+              </a>
+            )}
+            <div className="ml-auto">
+              <Button
+                type="button"
+                size="sm"
+                variant="default"
+                disabled={!trackingUrl || saving}
+                onClick={handleSave}
+              >
+                {saving ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                ) : (
+                  <Save className="h-3.5 w-3.5 mr-1.5" />
+                )}
+                Save link
+              </Button>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
