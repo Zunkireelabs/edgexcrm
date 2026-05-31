@@ -11,6 +11,7 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
+- **Email Phase 3 (inbound polling + thread display + reply-from-CRM) shipped to stage 2026-05-31 night** (`6acd9f8`, squash from `feat/email-phase-3-poll-reply`). 13 files / +1,215 / -238 (includes 2 orphan deletes — `use-sent-emails.ts` + `sent-email-card.tsx`, superseded by `use-email-threads.ts` + `email-thread-card.tsx`). The email feature is now bi-directional. Reviewed against the brief + 9-item code-review checklist + verification matrix; all 6 of Sonnet's self-flags verified clean (no real bugs); zero fixback round needed. **The end-to-end loop needs Sadin's dev smoke before considering prod promotion** — see STATUS-BOARD top item for the verification matrix. **NEW env var Phase 3 introduces**: `INTERNAL_CRON_SECRET` (per env; generate with `openssl rand -hex 32`; set in dev `.env.local` + GH repo secret as `INTERNAL_CRON_SECRET_DEV`). Without this, the polling endpoint fails-closed (401 on any request). Same setup needed on prod's `.env.local` + `INTERNAL_CRON_SECRET_PROD` GH secret + a parallel `email-poll-prod.yml` workflow (or matrix) added during the prod-promotion bundle.
 - **Side quest complete**: Anish's UTM feature shipped to stage 2026-05-31 night (`6b9d741`). Original `utm` branch was 9 commits behind stage and had a migration-number collision with Phase 1's email foundation (both claimed 025); Opus rebased onto current stage as `feat/utm-rebased`, renumbering migrations to 026/027, cherry-picked just the UTM-feature files (deliberately dropped: utm's CLAUDE.md Developer Persona additions, the Dockerfile heap revert, the email-feature deletions, the doc reverts). Anish's original utm branch is preserved on origin for history. **Migrations 026 + 027 still need application to the dev DB** before UTM features work on dev — see STATUS-BOARD.
 - **Current state**: **Email Phase 2 (compose + send + log on lead detail) shipped to stage 2026-05-31 evening** (`977fc44` squash). 14 files / +1,642 / -38. No schema changes — Phase 1's migration 025 had everything Phase 2 needs. Reviewed against the brief + 7-item code-review checklist; first Sonnet push had 4 findings (TipTap silently uncontrolled / scopedClient not used / `refreshAccessTokenIfNeeded` defined-but-never-called / counselor scoping gap on merge-field lead lookup); all 4 fixed in `80e3232` before squash. Local gates passed (build clean — all 6 email routes register; ESLint at 17 baseline). Phase 1 was already shipped + smoke-verified on dev (Connect/Disconnect/Reconnect roundtrip works for Admizz admin `shrestha.sadin007@gmail.com`). Production HEAD at `0f58a0a` (Account 360 v2 live). **Stage now leads main by Phase 1 brief + Phase 1 squash + ship docs + Docker heap fix + STATUS-BOARD hardening + Phase 1 smoke docs + Phase 2 brief + Phase 2 squash + this docs commit (~9 commits)**.
 - **Color tokens** (unchanged): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b`; status pills = green-50/700 + gray-100/500. New role pills introduced in v2: Account Manager `bg-purple-50 text-purple-700`, Project Lead `bg-blue-50 text-blue-700`, Contributor `bg-gray-100 text-gray-600`.
@@ -32,6 +33,89 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Email Phase 3 (inbound polling + thread display + reply-from-CRM) shipped to stage — 2026-05-31 night
+
+Squash-merged at `6acd9f8` from `feat/email-phase-3-poll-reply` (Sonnet's `7709ceb` commit). 13 files, +1,215 / -238 (includes 2 orphan deletes for Phase 2's `use-sent-emails.ts` + `sent-email-card.tsx`, superseded by the new threaded versions). Closes Phase 3 of the 4-phase Email feature plan. The email feature is now **bi-directional**: counselor sends → recipient replies → reply lands in CRM within ~5 min (via GitHub Actions cron) → counselor replies from CRM → recipient sees reply continue the same Gmail thread.
+
+### What was built
+
+**Inbound polling** (`/api/internal/email/poll` + `lib.ts` per-account loop):
+- NOT under `/api/v1/` — internal surface. Bearer-auth via `INTERNAL_CRON_SECRET` env var; fail-closed if env unset (rejects ALL requests).
+- Hit by `.github/workflows/email-poll.yml` every 5 min + `workflow_dispatch` for testing. ~8.6k invocations/month within GH Actions free quota.
+- DB-level industry gate: `tenants!inner(industry_id)` + `.eq("tenants.industry_id", "education_consultancy")` — Zunkireelabs's legacy email-forward accounts aren't polled wastefully.
+- Per-account `Promise.allSettled` over chunks of 5; per-account try/catch; per-message try/catch within the per-account loop. One account's OAuth-revoked failure doesn't block other accounts; one bad message doesn't block other messages on the same account.
+- First-time bootstrap from `profile.historyId` (skips historical messages, no false matches).
+- History API 404 (>7-day gap): bootstrap from current `profile.historyId`, log `last_error='history_expired_bootstrapped'`, skip the gap.
+- Reply matching: Gmail `threadId` primary (exact for Gmail-to-Gmail) → RFC `In-Reply-To` fallback → `References` chain fallback. Orphan inbound silently dropped (privacy + storage + noise design call).
+- Skip counselor's own outbound that Gmail's history surfaces (`from_email.toLowerCase() === account.email.toLowerCase()`).
+- Idempotency: `idx_emails_gmail_message` unique index on `(connected_email_account_id, gmail_message_id)` catches duplicate inserts from overlapping polls; logged and continued.
+- Token refresh chained through `listHistory` + `getMessage`; persisted fire-and-forget via `persistRefreshedToken` helper.
+- Emits `email.received` event per new inbound (thread_id, lead_id, contact_id, from_email, subject, received_at, from_account_id).
+
+**Thread display** (`<EmailThreadCard>` replaces `<SentEmailCard>`):
+- Collapsed shows: subject + participant pills + count badge + last-activity time + ⬅ Reply or ✉ Sent badge depending on direction mix.
+- Expanded shows messages oldest→newest with inbound (blue bubble, left-aligned) vs outbound (gray bubble, right-aligned via `flex-row-reverse`) visually distinct.
+- Reply button at the bottom of expanded view.
+- `useEmailThreads(leadId)` hook returns threads with embedded emails via PostgREST embed (`emails(...)` on `email_threads` — unambiguous because only forward FK between them); client-side sorts messages oldest→newest within each thread.
+- `/api/v1/email/threads` rewritten to return embedded shape. **Counselor scoping change** — Phase 2's `.eq("sender_user_id", auth.userId)` silently dropped EVERY inbound row (sender_user_id is NULL on inbound); Phase 3 pre-fetches own account IDs via 2-query approach + `.in("connected_email_account_id", ownAccountIds)`. Covers both directions.
+- Logged emails (`lead_activities WHERE activity_type='email'`) moved below the threads section under a "Past activity" subheader — threads are the active surface, logged emails are historical backfill.
+
+**Reply-from-CRM** (`<ComposeEmailDialog>` extended + `/api/v1/email/send` extended):
+- New optional `replyContext` prop on the compose dialog. When set: From picker **locked** to the thread's account (renders as disabled Select with "Loading…" placeholder until inboxes resolve); To pre-filled with the message-being-replied-to's `from_email`; Subject pre-filled with "Re: ..." (only prefixed when not already prefixed via `/^re:/i` test); body empty per locked decision (no quoted block).
+- POST `/api/v1/email/send` extended with optional `reply_context: { thread_id, in_reply_to, references[] }`. Validates same-account constraint — returns 400 `REPLY_ACCOUNT_MISMATCH` if `from_account_id !== thread.connected_email_account_id` (because Gmail wouldn't thread it correctly + CRM would have a thread spanning two accounts). Reuses existing thread instead of creating new; increments `message_count` + updates `last_message_at`. Effective `lead_id` / `contact_id` falls back to the thread's values when not in body.
+- `sendMessage()` wires the previously-stubbed `threadId` (passes to `gmail.users.messages.send.requestBody.threadId` so Gmail groups the reply) + `inReplyTo` (sets `In-Reply-To` header via MailComposer) + `references` (sets `References` header, space-separated string per RFC 5322).
+- `email.sent` event payload adds `is_reply` boolean.
+- Optimistic UI in `<ActivitiesPanel>`: replies find-and-update the existing thread (`setThreads(prev => prev.map(...))`); fresh sends prepend a new thread. `handleComposeClose` clears `replyContext` so state doesn't leak between compose sessions.
+
+**`gmail-client.ts` evolution** (2 new exports + sendMessage extension):
+- `listHistory(account, startHistoryId)` wraps `gmail.users.history.list` with `historyTypes: ['messageAdded']`, `maxResults: 100`. Dedupes message IDs across history entries. 404 detection returns `expired: true` so the caller bootstraps.
+- `getMessage(account, messageId)` wraps `gmail.users.messages.get({ format: 'full' })`, delegates to `parseGmailMessage()` from the new `gmail-parser.ts` sibling.
+- `sendMessage` extended to use the 3 Phase 2 stubs (threadId, inReplyTo, references) — no longer dead-code stubs.
+
+**`gmail-parser.ts`** (new helper):
+- `parseGmailMessage(data) → ParsedMessage`. Walks payload tree extracting headers (From, To, Cc, Subject, Message-ID, In-Reply-To, References, Date) + body parts (text/html preferred, falls back to text/plain). Custom RFC822 address parser handles `"Display Name" <addr@host>` and bare `addr@host` forms. References parser extracts `<id@host>` tokens via regex.
+
+### Review outcomes — Opus's 9-item checklist
+
+1. **PostgREST embed FK disambiguation** — handled. `emails(...)` embed on `email_threads` is unambiguous (single forward FK between the tables); build succeeded; live curl confirmation deferred to smoke. Same for the polling endpoint's `tenants!inner(industry_id)` join.
+2. **PATCH preserves POST invariants** — N/A (no new PATCH endpoints; the existing `/email/send` is POST-only).
+3. **New page components need a route shell** — N/A (no new top-level pages).
+4. **`.select()` after insert/update** — clean. `email_threads` insert (fresh compose path) and `emails` insert use `.select("id").single<{id:string}>()`; threading endpoint returns the full embedded shape per the brief contract.
+5. **Radix Select empty-string sentinel** — clean. Reply-mode locked Select uses the locked inbox's UUID; fresh-compose Select uses inbox UUIDs.
+6. **Cross-cutting predicate audits** — done. Polling worker scopes per-account; threads endpoint scopes by tenant_id (auto via scopedClient) + lead_id/contact_id at thread level + counselor by `.in("connected_email_account_id", ownAccountIds)`.
+7. **Page-padding stacks with shell** — N/A.
+8. **Bearer-secret env-var presence (new in Phase 3)** — handled correctly. `route.ts:11-15` checks `process.env.INTERNAL_CRON_SECRET` before accepting any request; returns 401 + logs error if unset. Misconfigured dev with empty env can't accept any bearer.
+9. **Sync-state concurrency safety (new in Phase 3)** — handled by per-account serial processing within `pollOneAccount`; concurrent polls of the same account can't happen because GH Actions runs one workflow per tick. Idempotency via the unique index on `(connected_email_account_id, gmail_message_id)` is the secondary defense.
+
+### Sonnet's 6 self-flagged concerns — all verified clean
+
+1. PostgREST embed shape (`emails(...)` not explicit FK name) — unambiguous; works.
+2. MailComposer `references` as space-joined string — valid per RFC 5322 + nodemailer accepts string-or-array.
+3. Inlined Select for reply-mode locked From (not reusing `<FromAccountPicker>`) — acceptable UX trade-off; "Loading…" placeholder until inboxes resolve.
+4. Orphan files (`use-sent-emails.ts` + `sent-email-card.tsx`) — confirmed no other importers via grep; deleted as part of the squash commit.
+5. `email_sync_state.connected_email_account_id` is PRIMARY KEY (not just a column) — verified in migration 025; upsert with `onConflict` works.
+6. Industry-gate join `tenants!inner(industry_id)` — FK `connected_email_accounts.tenant_id → tenants.id` exists; PostgREST inner-join filter works at build.
+
+### Minor non-blocking observations
+
+- **`gmail-parser.ts:115` empty-body fallback** produces `<pre></pre>` when both `body_html` and `body_text` are empty. Pure cosmetic; counts as graceful degradation.
+- **Counselor scoping on `/email/threads` runs 2 queries** per request (own_accounts + threads). Small overhead, acceptable; could be collapsed into a single PostgREST embed query if it ever matters.
+- **`useConnectedInboxes()` is called unconditionally** in `<ActivitiesPanel>` even for non-education tenants; hook silently catches 403 and stays at []. One wasted call per lead-detail mount; minor.
+- **Reply-mode `<Select>` with `lockedInbox` undefined briefly** during initial load — renders "Loading…" via placeholder. If the user disconnected the inbox between threads-load and Reply-click, Select shows empty forever. Edge case; not blocking.
+
+### Local gates
+
+- `npm run build` — `✓ Compiled successfully in 7.4s`. `/api/internal/email/poll` registers.
+- `npx eslint --max-warnings 50 .` — 17 warnings, baseline preserved.
+
+### Workflow notes
+
+- **Fourth consecutive Sonnet handoff with no fixback round needed** — quality trending up. Sonnet's self-flag discipline is paying off (6 self-flags this round, all verified harmless before squash). Reinforce by referencing in future handoff prompts.
+- **PostgREST embed implicit FK form is "fine until proven otherwise"** — the brief's recommendation to use `emails!emails_thread_id_fkey(...)` defensively turned out unnecessary in this case (single forward FK = unambiguous). Worth a brief-template note: don't pre-emptively add the explicit FK form unless there's actually ambiguity (forward + reverse FKs between same two tables).
+- **GH Actions cron precision** worth a smoke note — schedule can lag up to 15 min during high-load periods. Test the `workflow_dispatch` path during smoke to confirm immediate trigger works; rely on the scheduled cron for ongoing operation.
 
 ---
 
