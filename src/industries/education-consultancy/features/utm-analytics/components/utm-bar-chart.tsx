@@ -76,7 +76,7 @@ export function UtmBarChart({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[220px] w-full">
+        <div className="h-[220px] w-full [&_.recharts-bar-rectangle]:outline-none [&_.recharts-bar-rectangle_path]:outline-none [&_.recharts-rectangle]:outline-none [&_path]:focus:outline-none">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
