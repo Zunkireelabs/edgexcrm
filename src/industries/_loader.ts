@@ -8,7 +8,7 @@
  */
 
 import { INDUSTRIES, type FeatureId, type IndustryId } from "./_registry";
-import type { IndustryManifest, SidebarItem } from "./_types";
+import type { IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
 
 import { manifest as educationConsultancyManifest } from "./education-consultancy/manifest";
 import { manifest as itAgencyManifest } from "./it-agency/manifest";
@@ -78,13 +78,23 @@ export function getFeatureAccess(
 export function getIndustrySidebarItems(
   industryId: string | null | undefined,
   role?: string,
-): readonly SidebarItem[] {
+): readonly SidebarEntry[] {
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
-  return m.sidebar.filter((item) => {
+
+  function isItemAllowed(item: SidebarItem): boolean {
     if (!registeredFeatureIds.has(item.featureId)) return false;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
     return true;
+  }
+
+  return m.sidebar.flatMap((entry): SidebarEntry[] => {
+    if (entry.kind === "group") {
+      const allowedChildren = entry.children.filter(isItemAllowed);
+      if (allowedChildren.length === 0) return [];
+      return [{ ...entry, children: allowedChildren }];
+    }
+    return isItemAllowed(entry) ? [entry] : [];
   });
 }
 

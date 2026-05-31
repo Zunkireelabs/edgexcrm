@@ -15,6 +15,7 @@ import {
   Bot,
   Building2,
   Contact,
+  FolderKanban,
   LayoutDashboard,
   LayoutGrid,
   Users,
@@ -38,7 +39,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
-import type { SidebarItem } from "@/industries/_types";
+import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
+import { TruncatedText } from "@/components/ui/truncated-text";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -67,6 +69,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   FileText,
   Clock,
   Contact,
+  FolderKanban,
   LayoutDashboard,
   LayoutGrid,
   Kanban,
@@ -76,6 +79,74 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Settings,
   Building2,
 };
+
+function SidebarGroupRender({
+  group,
+  pathname,
+  onNavigate,
+}: {
+  group: SidebarGroup;
+  pathname: string;
+  onNavigate: () => void;
+}) {
+  const ParentIcon = INDUSTRY_ICONS[group.icon] ?? FileText;
+
+  const isChildActive = (item: SidebarItem) =>
+    pathname === item.href ||
+    (item.href !== "/dashboard" && pathname.startsWith(item.href));
+
+  const hasActiveChild = group.children.some(isChildActive);
+  const [expanded, setExpanded] = useState(true);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (hasActiveChild) setExpanded(true);
+  }, [hasActiveChild]);
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((v) => !v)}
+        className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          hasActiveChild
+            ? "bg-[#ebebeb] text-gray-900"
+            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+        }`}
+      >
+        <div className="flex items-center gap-3 min-w-0">
+          <ParentIcon className="w-[18px] h-[18px] shrink-0" />
+          <TruncatedText text={group.label} />
+        </div>
+        <ChevronDown className={`w-4 h-4 transition-transform ${expanded ? "rotate-180" : ""}`} />
+      </button>
+      {expanded && (
+        <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300 space-y-1">
+          {group.children.map((child) => {
+            const ChildIcon = INDUSTRY_ICONS[child.icon] ?? FileText;
+            const active = isChildActive(child);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={onNavigate}
+                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                  active
+                    ? "bg-[#ebebeb] text-gray-900 font-medium"
+                    : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                }`}
+              >
+                <ChildIcon className="w-4 h-4" />
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface FormSummary {
   name: string;
@@ -87,7 +158,7 @@ interface DashboardShellProps {
   tenant: Tenant;
   role: string;
   formConfigs?: FormSummary[];
-  industrySidebarItems?: readonly SidebarItem[];
+  industrySidebarItems?: readonly SidebarEntry[];
   children: React.ReactNode;
 }
 
@@ -140,16 +211,52 @@ export function DashboardShell({
     }
   }
 
-  const navItems = [
-    ...UNIVERSAL_NAV_TOP,
-    ...industrySidebarItems.map((item) => ({
-      href: item.href,
-      label: item.label,
-      icon: INDUSTRY_ICONS[item.icon] ?? FileText,
-    })),
-    ...UNIVERSAL_NAV_MIDDLE,
-    ...UNIVERSAL_NAV_BOTTOM,
-  ];
+  const industryBefore = industrySidebarItems.filter(
+    (e) => (e.position ?? "before-pipeline") === "before-pipeline",
+  );
+  const industryAfter = industrySidebarItems.filter(
+    (e) => e.position === "after-pipeline",
+  );
+
+  function renderNavItem(item: { href: string; label: string; icon: LucideIcon }) {
+    const isActive =
+      pathname === item.href ||
+      (item.href !== "/dashboard" && pathname.startsWith(item.href));
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-[#ebebeb] text-gray-900"
+            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+        }`}
+      >
+        <item.icon className="w-[18px] h-[18px]" />
+        {item.label}
+      </Link>
+    );
+  }
+
+  function renderIndustryEntry(entry: SidebarEntry) {
+    if (entry.kind === "group") {
+      return (
+        <SidebarGroupRender
+          key={entry.id}
+          group={entry}
+          pathname={pathname}
+          onNavigate={() => setMobileOpen(false)}
+        />
+      );
+    }
+    return renderNavItem({
+      href: entry.href,
+      label: entry.label,
+      icon: INDUSTRY_ICONS[entry.icon] ?? FileText,
+    });
+  }
+
   const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
@@ -179,26 +286,11 @@ export function DashboardShell({
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
           <>
-            {navItems.map((item) => {
-              const isActive =
-                pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href));
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setMobileOpen(false)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
-                    isActive
-                      ? "bg-[#ebebeb] text-gray-900"
-                      : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                  }`}
-                >
-                  <item.icon className="w-[18px] h-[18px]" />
-                  {item.label}
-                </Link>
-              );
-            })}
+            {UNIVERSAL_NAV_TOP.map(renderNavItem)}
+            {industryBefore.map(renderIndustryEntry)}
+            {UNIVERSAL_NAV_MIDDLE.map(renderNavItem)}
+            {industryAfter.map(renderIndustryEntry)}
+            {UNIVERSAL_NAV_BOTTOM.map(renderNavItem)}
 
             {/* Public Forms Section */}
             {hasManyForms ? (

@@ -28,14 +28,55 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: contact, error } = await db
     .from("contacts")
-    .select("*, accounts!contacts_account_id_fkey(id, name), project_contacts(role, projects(id, name, account_id, accounts!projects_account_id_fkey(id, name)))")
+    .select("*, accounts!contacts_account_id_fkey(id, name, owner_id, primary_contact_id), project_contacts(role, projects(id, name, account_id, accounts!projects_account_id_fkey(id, name)))")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
 
   if (error) return apiError("DB_ERROR", "Failed to fetch contact", 500);
   if (!contact) return apiNotFound("Contact");
-  return apiSuccess(contact);
+
+  const contactRow = contact as unknown as {
+    account_id: string | null;
+    accounts: { owner_id: string | null } | null;
+  };
+
+  const [sourceLead, accountSiblings, accountOwnerEmail] = await Promise.all([
+    db
+      .from("leads")
+      .select("id, first_name, last_name, created_at")
+      .eq("converted_contact_id", id)
+      .is("deleted_at", null)
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => data ?? null),
+    contactRow.account_id
+      ? db
+          .from("contacts")
+          .select("id, first_name, last_name, title")
+          .eq("account_id", contactRow.account_id)
+          .neq("id", id)
+          .is("deleted_at", null)
+          .order("first_name", { ascending: true })
+          .limit(11)
+          .then(({ data }) => data ?? [])
+      : Promise.resolve([]),
+    contactRow.accounts?.owner_id
+      ? db
+          .raw()
+          .auth.admin.getUserById(contactRow.accounts.owner_id)
+          .then(({ data }) => data?.user?.email ?? null)
+          .catch(() => null)
+      : Promise.resolve(null),
+  ]);
+
+  const contactData = contact as unknown as Record<string, unknown>;
+  return apiSuccess({
+    ...contactData,
+    source_lead: sourceLead,
+    account_siblings: accountSiblings,
+    account_owner_email: accountOwnerEmail,
+  });
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
