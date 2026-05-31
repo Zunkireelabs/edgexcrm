@@ -11,6 +11,7 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
+- **Side quest complete**: Anish's UTM feature shipped to stage 2026-05-31 night (`6b9d741`). Original `utm` branch was 9 commits behind stage and had a migration-number collision with Phase 1's email foundation (both claimed 025); Opus rebased onto current stage as `feat/utm-rebased`, renumbering migrations to 026/027, cherry-picked just the UTM-feature files (deliberately dropped: utm's CLAUDE.md Developer Persona additions, the Dockerfile heap revert, the email-feature deletions, the doc reverts). Anish's original utm branch is preserved on origin for history. **Migrations 026 + 027 still need application to the dev DB** before UTM features work on dev — see STATUS-BOARD.
 - **Current state**: **Email Phase 2 (compose + send + log on lead detail) shipped to stage 2026-05-31 evening** (`977fc44` squash). 14 files / +1,642 / -38. No schema changes — Phase 1's migration 025 had everything Phase 2 needs. Reviewed against the brief + 7-item code-review checklist; first Sonnet push had 4 findings (TipTap silently uncontrolled / scopedClient not used / `refreshAccessTokenIfNeeded` defined-but-never-called / counselor scoping gap on merge-field lead lookup); all 4 fixed in `80e3232` before squash. Local gates passed (build clean — all 6 email routes register; ESLint at 17 baseline). Phase 1 was already shipped + smoke-verified on dev (Connect/Disconnect/Reconnect roundtrip works for Admizz admin `shrestha.sadin007@gmail.com`). Production HEAD at `0f58a0a` (Account 360 v2 live). **Stage now leads main by Phase 1 brief + Phase 1 squash + ship docs + Docker heap fix + STATUS-BOARD hardening + Phase 1 smoke docs + Phase 2 brief + Phase 2 squash + this docs commit (~9 commits)**.
 - **Color tokens** (unchanged): primary action `--primary` = `#171717` near-black, buttons `bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg`; primary text (names, labels) = `#0f0f10`; secondary text (data cells) = `#787871` warm-muted; em-dash placeholders = `text-gray-400`; dropdown hover overlay = `#0000170b`; status pills = green-50/700 + gray-100/500. New role pills introduced in v2: Account Manager `bg-purple-50 text-purple-700`, Project Lead `bg-blue-50 text-blue-700`, Contributor `bg-gray-100 text-gray-600`.
 - **What's next**: **Sadin smokes Phase 2 on `dev-lead-crm.zunkireelabs.com`** as Admizz admin per the verification matrix at the bottom of the (now-archived) brief: open a lead → Activity tab → Emails sub-tab → Compose Email → confirm From dropdown shows connected inbox(es) → fill To (defaults to `lead.email`) + Subject + Body (with optional `{{first_name}}` / `{{last_name}}` merge fields) → Send → recipient receives real email from the connected Gmail address → toast success → modal closes → sent row prepends to the Emails list with the ✉ Sent badge within 1 sec. DB checks: `email_threads` row created with `lead_id` + `connected_email_account_id`; `emails` row with `direction='outbound'` + `gmail_message_id` + `rfc_message_id`; `events` row `email.sent` with full payload. Counselor-scoping check: as a counselor user on the same lead, GET /api/v1/email/threads returns only their own sent emails. Industry-gating check: as Zunkireelabs admin, Compose CTA NOT visible + POST /api/v1/email/send returns 403. Token-refresh persistence check: manually expire `token_expiry` in DB → send → confirm `access_token` + `token_expiry` updated post-send.
@@ -31,6 +32,60 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## UTM feature (Anish's `utm` branch) rebased + shipped to stage — 2026-05-31 night
+
+Squash-merged at `6b9d741` from `feat/utm-rebased` (a fresh branch off current stage onto which the UTM-feature files from `origin/utm` were cherry-picked). 27 files, +1,385 / -62. Anish's original `utm` branch is preserved on origin (`origin/utm`, tip `3155381`) for commit history. Migrations 026 + 027 added (renumbered from utm's original 025 + 026 to sit after Phase 1's `025_email_send_foundation`).
+
+### What was on `utm` and what landed
+
+Sadin asked Opus to check Anish's pushed `utm` branch and merge if alright. Initial review surfaced a major problem: Anish branched off stage **before** Email Phase 1 shipped earlier today (commit `22f291` was the merge-base) and never rebased. The raw branch diff showed it would (a) wipe the entire Email feature (Phase 1 + Phase 2), (b) cause a migration number collision (his `025_form_config_attribution.sql` vs the just-shipped `025_email_send_foundation.sql`), (c) revert CLAUDE.md, SESSION-LOG, STATUS-BOARD, and delete both archived email briefs.
+
+Three paths considered: (1) ask Anish to rebase + force-push, (2) cherry-pick UTM files myself off stage, (3) merge as-is and lose email. Sadin picked option 2 — "do the recommended so no work is lost" — so Opus rebased locally.
+
+### The rebase mechanics (preserved for future precedent)
+
+For each modified file in `origin/utm` vs `origin/stage`, computed whether stage had also touched the file since the merge-base. Result: 11 modified files were utm-only-changed → straight `git checkout origin/utm -- <path>`. 2 files needed manual merge (`lead-tabs.tsx` and `types/database.ts`). 1 file (`.gitignore`) showed 0 changes on utm — preserved stage's version.
+
+For files we deliberately did NOT apply: `CLAUDE.md` (Developer Persona section parked), `Dockerfile` (kept stage's 4096 heap), `_registry.ts` + `manifest.ts` (kept email registration), `settings/page.tsx` (kept InboxConnector), `activities-panel.tsx` (kept Phase 2 compose integration), `email-accounts/gmail/callback/route.ts` (kept Phase 1 user_id capture), `package.json` + `package-lock.json` (kept @tiptap + googleapis deps), all of `src/industries/education-consultancy/features/email/`, all `/api/v1/email/*` routes, `025_email_send_foundation.sql`, and the SESSION-LOG / STATUS-BOARD / FEATURE-CATALOG doc files (Opus wrote fresh UTM-feature entries instead of replacing email entries).
+
+For `lead-tabs.tsx`: added utm's `import { getLeadFullName }` + the InfoGridRow Full Name expression change, **kept** Phase 2's `industryId` + `leadEmail` + `leadFirstName` + `leadLastName` props passed through to `<ActivitiesPanel>`.
+
+For `types/database.ts`: **kept** Phase 1's `ConnectedEmailAccount` fields (user_id, display_name, refresh_token, access_token, token_expiry), **added** utm's `FormAttribution` + `UtmLink` interfaces + `attribution: FormAttribution | null` field on `FormConfig`.
+
+### What ships in the UTM feature
+
+- **Auto-capture from form URL**: `public-form.tsx` reads `?utm_source/medium/campaign` once on mount for `industry_id === "education_consultancy"`, falls back to per-form `attribution` defaults, then to "form". Threaded into the existing `leads.intake_source/intake_medium/intake_campaign` columns via `/api/public/submit/...` (the columns were already on Lead — no schema gap).
+- **Per-form attribution defaults**: `form_configs.attribution` JSONB (default `{}`) holds `{ default_source, default_medium, default_campaign }`. Admin-side `<AttributionEditor>` mounted in form-builder; URL params still override defaults at submit.
+- **UTM Link Builder + Saved Links**: new `/forms/utm-builder` admin page (industry-gated FEATURES.FORM_BUILDER) with `<UtmLinkBuilder>` (form picker / paste-URL mode / utm_* inputs) + `<UtmLinkList>` for managing saved links. Backed by `POST/GET /api/v1/utm-links` + `DELETE /api/v1/utm-links/[id]` — all industry-gated, admin-only on mutations, `scopedClient(auth)`, validates URL syntax, verifies `form_id` tenant ownership before insert.
+- **Dashboard analytics for education_consultancy**: `<UtmAnalyticsSection>` on `/dashboard` with bar charts that cross-filter on click. Reads from `lead.intake_*` (no new query). Recharts wrapper with several incremental focus-outline / cursor-rectangle suppression fixes Anish iterated on.
+- **Dashboard cleanup (non-UTM bundled)**: removed the duplicate LeadsTable from `/dashboard` (`/leads` is the canonical lead-list surface). Stats + 3 existing charts (LeadsByStage/Source/Counselor) remain. This was a separate decision Anish bundled into the branch (commit `7cfbdc3`) — kept since Sadin pivoted to education focus and the dashboard reads cleaner with stats/charts as the primary content.
+- **`lead-name.ts` cross-cutting util**: `getLeadFullName` / `getLeadInitials` with `custom_fields.fullname` fallback when `first_name`/`last_name` are empty (real case from partial form data). Adopted by `<ContactCard>` (initials + name), `<LeadDetailV2>` (h1), `<LeadTabs>` (Personal Information Full Name row).
+
+### Schema (2 new migrations — NEED MANUAL APPLY TO DEV DB)
+
+- `026_form_config_attribution.sql`: 1-line `ALTER TABLE form_configs ADD COLUMN attribution JSONB DEFAULT '{}'`.
+- `027_utm_links.sql`: `CREATE TABLE utm_links` with `tenant_id` FK ON DELETE CASCADE, `form_id` FK ON DELETE SET NULL, RLS (SELECT via `get_user_tenant_ids()`, INSERT/DELETE gated by `is_tenant_admin(tenant_id)`, **intentionally NO UPDATE policy** — records are immutable per the design docstring; admins delete + recreate to "change"), index on `(tenant_id, created_at DESC)`.
+
+### Local gates
+
+- `npm run build` — `✓ Compiled successfully in 10.4s`. All 6 email routes + both new UTM routes register (`/api/v1/utm-links`, `/api/v1/utm-links/[id]`, `/forms/utm-builder`).
+- `npx eslint --max-warnings 50 .` — 17 warnings, baseline preserved.
+
+### Items deliberately deferred / parked
+
+- **CLAUDE.md "Developer Persona & System Guardrails" section** (commit `5679eaa`): Anish added +41 lines of meta-rules (Plan Mode default, sub-agents liberally, "demand elegance", autonomous bug fixing "do not prompt the user for direction", `lessons.md` pattern, rigorous verification). Some bits (rigorous verification) genuinely useful; some (autonomous-fix-no-prompting) conflict with the prod-merge-requires-explicit-approval rule. **Park for separate Sadin discussion** — bring back as its own PR after deciding which pieces fit.
+- **Anish's feature-table additions in CLAUDE.md**: `Contacts (prospects)` row mislabeled as education_consultancy (it's actually `it_agency` via `FEATURES.CRM_CONTACTS`); `Time tracking` row correct. If we revisit CLAUDE.md, fix the mislabel.
+- **UTM as a proper registered feature**: today UTM uses `FEATURES.FORM_BUILDER` for industry gating on the link-builder endpoints and inline `tenant.industry_id === "education_consultancy"` for the dashboard analytics surface. Cleaner long-term would be `FEATURES.UTM_TRACKING` constant in `_registry.ts` + manifest entry, but it's a refactor not a bug. Defer.
+- **Anish's original `utm` branch** stays on `origin/utm` for now. Delete it after Anish confirms his work is captured (don't auto-delete someone else's branch).
+
+### Workflow notes
+
+- **Sonnet/Anish shared-clone branch staleness** is now a recurring pattern: Phase 2 first push was local-only; Anish's utm branch was 9 commits behind stage. Both recoverable but worth a checklist item — when a teammate hands off a branch for review, **always `git fetch && git log <branch>..origin/stage` first to see how stale the base is**. If non-zero, ask for rebase before reviewing the diff (or rebase yourself if you have time + permission to force-push).
+- **Cherry-picking a teammate's stale branch off current main is a viable Plan B** when the teammate is offline or the conflicts are surgical. Preserve their original branch on origin for credit + audit. This was the first time we used the pattern; it worked cleanly because most utm files weren't touched on stage since utm branched. Could be tricky if stage had touched the same files heavily.
+- **Migration application** is decoupled from deploy — `supabase/migrations/` ships in the container but they're applied manually via Supabase MCP (per CLAUDE.md). When a stage deploy includes new migrations, ALWAYS add an explicit STATUS-BOARD action to apply them, otherwise the deploy "looks green" but the new features 500 on first DB write.
 
 ---
 
