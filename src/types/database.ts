@@ -68,8 +68,13 @@ export interface TenantConfig {
 export interface ConnectedEmailAccount {
   id: string;
   tenant_id: string;
+  user_id: string;
   provider: string;
   email: string;
+  display_name: string | null;
+  refresh_token: string;
+  access_token: string | null;
+  token_expiry: string | null;
   created_at: string;
   updated_at: string;
 }

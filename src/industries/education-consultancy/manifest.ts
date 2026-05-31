@@ -3,6 +3,7 @@ import type { IndustryManifest } from "../_types";
 import { checkInMeta } from "./features/check-in/meta";
 import { formBuilderMeta } from "./features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
+import { emailMeta } from "./features/email/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -11,6 +12,7 @@ export const manifest: IndustryManifest = {
     { meta: checkInMeta },
     { meta: formBuilderMeta },
     { meta: contactsMeta },
+    { meta: emailMeta },
   ],
   sidebar: [
     {

@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { SettingsForm } from "@/components/dashboard/settings-form";
@@ -6,6 +7,9 @@ import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
 import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-card";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
+import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { FormConfig, Industry, TenantEntity } from "@/types/database";
 
 export default async function SettingsPage() {
@@ -74,6 +78,11 @@ export default async function SettingsPage() {
         />
       )}
       <EmailRulesManager tenantId={tenantData.tenant.id} />
+      {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.EMAIL) && (
+        <Suspense>
+          <InboxConnector />
+        </Suspense>
+      )}
       <ApiKeysManager
         tenantId={tenantData.tenant.id}
         initialKeys={apiKeys}
