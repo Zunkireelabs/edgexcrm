@@ -5,51 +5,44 @@ import { ExternalLink } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { CopyButton } from "@/components/ui/copy-button";
 
-interface UtmLinkBuilderProps {
-  tenantSlug: string;
-  forms: { id: string; name: string; slug: string }[];
+function buildTrackingUrl(
+  destinationUrl: string,
+  source: string,
+  medium: string,
+  campaign: string,
+): string | null {
+  const trimmed = destinationUrl.trim();
+  if (!trimmed) return null;
+  let url: URL;
+  try {
+    // Allow relative-ish input by prefixing https:// when scheme missing
+    const withScheme = /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+    url = new URL(withScheme);
+  } catch {
+    return null;
+  }
+  // Strip any existing UTM params so we don't duplicate
+  url.searchParams.delete("utm_source");
+  url.searchParams.delete("utm_medium");
+  url.searchParams.delete("utm_campaign");
+  if (source.trim()) url.searchParams.set("utm_source", source.trim());
+  if (medium.trim()) url.searchParams.set("utm_medium", medium.trim());
+  if (campaign.trim()) url.searchParams.set("utm_campaign", campaign.trim());
+  return url.toString();
 }
 
-function getBaseUrl(): string {
-  if (typeof window !== "undefined") return window.location.origin;
-  return process.env.NEXT_PUBLIC_APP_URL || "";
-}
-
-export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
-  const [formSlug, setFormSlug] = useState<string>(forms[0]?.slug ?? "");
+export function UtmLinkBuilder() {
+  const [destinationUrl, setDestinationUrl] = useState("");
   const [source, setSource] = useState("");
   const [medium, setMedium] = useState("");
   const [campaign, setCampaign] = useState("");
 
-  const trackingUrl = useMemo(() => {
-    if (!formSlug) return "";
-    const base = `${getBaseUrl()}/form/${tenantSlug}/${formSlug}`;
-    const params = new URLSearchParams();
-    if (source.trim()) params.set("utm_source", source.trim());
-    if (medium.trim()) params.set("utm_medium", medium.trim());
-    if (campaign.trim()) params.set("utm_campaign", campaign.trim());
-    const qs = params.toString();
-    return qs ? `${base}?${qs}` : base;
-  }, [formSlug, source, medium, campaign, tenantSlug]);
-
-  if (forms.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-12 text-center text-muted-foreground">
-          You haven&apos;t created any forms yet. Create a form first, then come back to generate tracking links.
-        </CardContent>
-      </Card>
-    );
-  }
+  const trackingUrl = useMemo(
+    () => buildTrackingUrl(destinationUrl, source, medium, campaign),
+    [destinationUrl, source, medium, campaign],
+  );
 
   return (
     <Card>
@@ -57,21 +50,18 @@ export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
         <CardTitle className="text-base">Build your tracking link</CardTitle>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Form picker */}
+        {/* Destination URL */}
         <div className="space-y-2">
-          <Label htmlFor="utm-form">Form *</Label>
-          <Select value={formSlug} onValueChange={setFormSlug}>
-            <SelectTrigger id="utm-form">
-              <SelectValue placeholder="Pick a form" />
-            </SelectTrigger>
-            <SelectContent>
-              {forms.map((f) => (
-                <SelectItem key={f.id} value={f.slug}>
-                  {f.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Label htmlFor="utm-destination">Destination URL *</Label>
+          <Input
+            id="utm-destination"
+            value={destinationUrl}
+            onChange={(e) => setDestinationUrl(e.target.value)}
+            placeholder="https://your-website.com/contact"
+          />
+          <p className="text-xs text-muted-foreground">
+            The page you&apos;ll send Facebook/Google/etc. visitors to. Can be your own website, our form widget, or any URL.
+          </p>
         </div>
 
         {/* UTM inputs */}
@@ -115,7 +105,11 @@ export function UtmLinkBuilder({ tenantSlug, forms }: UtmLinkBuilderProps) {
           </Label>
           <div className="flex items-start gap-2 rounded-md border bg-muted/50 px-3 py-2.5">
             <code className="flex-1 text-xs break-all leading-relaxed">
-              {trackingUrl || "Pick a form to generate a link"}
+              {trackingUrl || (
+                <span className="text-muted-foreground italic">
+                  Paste a destination URL to generate a tracking link
+                </span>
+              )}
             </code>
             {trackingUrl && <CopyButton value={trackingUrl} label="Tracking link" />}
           </div>
