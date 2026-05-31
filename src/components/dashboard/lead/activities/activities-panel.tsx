@@ -11,7 +11,8 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
-import { useSentEmails, type SentEmail } from "@/industries/education-consultancy/features/email/hooks/use-sent-emails";
+import { useEmailThreads, type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -22,12 +23,12 @@ const ComposeEmailDialog = dynamic(
   { ssr: false },
 );
 
-// Lazy-load sent-email card
-const SentEmailCard = dynamic(
+// Lazy-load thread card
+const EmailThreadCard = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/sent-email-card"
-    ).then((m) => m.SentEmailCard),
+      "@/industries/education-consultancy/features/email/components/email-thread-card"
+    ).then((m) => m.EmailThreadCard),
   { ssr: false },
 );
 
@@ -74,14 +75,17 @@ export function ActivitiesPanel({
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<ActivityType>("call");
   const [composeOpen, setComposeOpen] = useState(false);
+  const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
 
   const isEducation = industryId === "education_consultancy";
 
-  // Sent emails (education only — hook is a no-op for non-education since the Emails tab is always shown
-  // but the API will 403 for non-education tenants, so we gate rendering instead of the hook call)
-  const { emails: sentEmails, setEmails: setSentEmails, loading: sentLoading } = useSentEmails(
+  // Email threads (education only — API will 403 for non-education)
+  const { threads, setThreads, loading: threadsLoading } = useEmailThreads(
     isEducation ? leadId : "",
   );
+
+  // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
+  const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
 
   // Fetch logged activities
   const fetchActivities = useCallback(async () => {
@@ -128,11 +132,54 @@ export function ActivitiesPanel({
     }
   };
 
+  const handleReply = (thread: EmailThread, lastMessage: Email) => {
+    setReplyContext({ thread, lastMessage });
+    setComposeOpen(true);
+  };
+
   const handleSent = (
-    _result: { thread_id: string; email_id: string },
-    optimisticEmail: SentEmail,
+    result: { thread_id: string; email_id: string },
+    optimisticEmail: Email,
   ) => {
-    setSentEmails((prev) => [optimisticEmail, ...prev]);
+    if (replyContext) {
+      // Reply: find existing thread and append the new message in-place
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === replyContext.thread.id
+            ? {
+                ...t,
+                emails: [...t.emails, optimisticEmail],
+                message_count: t.message_count + 1,
+                last_message_at: optimisticEmail.sent_at ?? t.last_message_at,
+              }
+            : t,
+        ),
+      );
+    } else {
+      // Fresh compose: prepend a new thread
+      const now = new Date().toISOString();
+      const matchingInbox = ownConnectedInboxes.find((i) => i.email === optimisticEmail.from_email);
+      const newThread: EmailThread = {
+        id: result.thread_id,
+        connected_email_account_id: matchingInbox?.id ?? "",
+        gmail_thread_id: "",
+        lead_id: leadId,
+        contact_id: null,
+        subject: optimisticEmail.subject,
+        last_message_at: optimisticEmail.sent_at ?? now,
+        message_count: 1,
+        emails: [optimisticEmail],
+        created_at: now,
+        updated_at: now,
+      };
+      setThreads((prev) => [newThread, ...prev]);
+    }
+    setReplyContext(null);
+  };
+
+  const handleComposeClose = (open: boolean) => {
+    setComposeOpen(open);
+    if (!open) setReplyContext(null);
   };
 
   // Filter activities by type
@@ -161,27 +208,10 @@ export function ActivitiesPanel({
     return groups;
   }, [filteredActivities]);
 
-  // Combined + sorted email list for the Emails sub-tab
-  type EmailListItem =
-    | { kind: "sent"; data: SentEmail; sortKey: string }
-    | { kind: "logged"; data: LeadActivityRecord; sortKey: string };
-
-  const combinedEmailItems = useMemo((): EmailListItem[] => {
-    if (activeTab !== "emails") return [];
-    const sentItems: EmailListItem[] = sentEmails.map((e) => ({
-      kind: "sent",
-      data: e,
-      sortKey: e.sent_at,
-    }));
-    const loggedItems: EmailListItem[] = loggedActivities
-      .filter((a) => a.activity_type === "email")
-      .map((a) => ({
-        kind: "logged",
-        data: a,
-        sortKey: a.created_at,
-      }));
-    return [...sentItems, ...loggedItems].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
-  }, [activeTab, sentEmails, loggedActivities]);
+  const loggedEmailActivities = useMemo(
+    () => loggedActivities.filter((a) => a.activity_type === "email"),
+    [loggedActivities],
+  );
 
   // Get action buttons based on active tab
   const getActionButtons = () => {
@@ -201,7 +231,7 @@ export function ActivitiesPanel({
         return (
           <div className="flex gap-2">
             {isEducation && (
-              <Button size="sm" onClick={() => setComposeOpen(true)}>
+              <Button size="sm" onClick={() => { setReplyContext(null); setComposeOpen(true); }}>
                 Compose Email
               </Button>
             )}
@@ -245,7 +275,8 @@ export function ActivitiesPanel({
     }
   };
 
-  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && sentLoading));
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && threadsLoading));
+  const hasEmailContent = threads.length > 0 || loggedEmailActivities.length > 0;
 
   return (
     <div className="space-y-4">
@@ -275,7 +306,7 @@ export function ActivitiesPanel({
         </div>
       )}
 
-      {/* Notes tab - show existing notes functionality */}
+      {/* Notes tab */}
       {activeTab === "notes" && (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-4">
@@ -299,7 +330,7 @@ export function ActivitiesPanel({
         </Card>
       )}
 
-      {/* Tasks tab - point to checklist */}
+      {/* Tasks tab */}
       {activeTab === "tasks" && (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-8 text-center">
@@ -311,7 +342,7 @@ export function ActivitiesPanel({
         </Card>
       )}
 
-      {/* Emails sub-tab — combined sent + logged list */}
+      {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
       {activeTab === "emails" && (
         <>
           {isEmailsTabLoading ? (
@@ -320,7 +351,7 @@ export function ActivitiesPanel({
                 <p className="text-muted-foreground">Loading emails...</p>
               </CardContent>
             </Card>
-          ) : combinedEmailItems.length === 0 ? (
+          ) : !hasEmailContent ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
                 <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
@@ -328,22 +359,44 @@ export function ActivitiesPanel({
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-2">
-              {combinedEmailItems.map((item) =>
-                item.kind === "sent" ? (
-                  <SentEmailCard key={`sent-${item.data.id}`} email={item.data} />
-                ) : (
-                  <div key={`logged-${item.data.id}`} className="relative">
-                    <div className="absolute top-3 right-10 z-10">
-                      <Badge variant="secondary" className="text-xs">📝 Logged</Badge>
-                    </div>
-                    <ActivityCard
-                      activity={item.data}
-                      onDelete={handleDeleteActivity}
-                      canDelete={isAdmin || item.data.user_id === currentUserId}
+            <div className="space-y-4">
+              {/* Thread cards */}
+              {threads.length > 0 && (
+                <div className="space-y-2">
+                  {threads.map((thread) => (
+                    <EmailThreadCard
+                      key={thread.id}
+                      thread={thread}
+                      currentUserId={currentUserId}
+                      teamMemberEmails={teamMemberEmails}
+                      ownConnectedInboxes={ownConnectedInboxes}
+                      onReply={handleReply}
                     />
+                  ))}
+                </div>
+              )}
+
+              {/* Logged emails — "Past activity" subheader */}
+              {loggedEmailActivities.length > 0 && (
+                <div className="mt-2">
+                  <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                    Past activity
+                  </h3>
+                  <div className="space-y-2">
+                    {loggedEmailActivities.map((activity) => (
+                      <div key={`logged-${activity.id}`} className="relative">
+                        <div className="absolute top-3 right-10 z-10">
+                          <Badge variant="secondary" className="text-xs">📝 Logged</Badge>
+                        </div>
+                        <ActivityCard
+                          activity={activity}
+                          onDelete={handleDeleteActivity}
+                          canDelete={isAdmin || activity.user_id === currentUserId}
+                        />
+                      </div>
+                    ))}
                   </div>
-                )
+                </div>
               )}
             </div>
           )}
@@ -388,7 +441,7 @@ export function ActivitiesPanel({
             </div>
           )}
 
-          {/* Also show system activities on "all" tab */}
+          {/* System activities on "all" tab */}
           {activeTab === "all" && systemActivities.length > 0 && (
             <div className="mt-6 pt-4 border-t">
               <h3 className="text-sm font-medium text-muted-foreground mb-3">System Activity</h3>
@@ -419,12 +472,13 @@ export function ActivitiesPanel({
       {isEducation && (
         <ComposeEmailDialog
           open={composeOpen}
-          onOpenChange={setComposeOpen}
+          onOpenChange={handleComposeClose}
           defaultTo={leadEmail ?? ""}
           leadId={leadId}
           leadFirstName={leadFirstName}
           leadLastName={leadLastName}
           currentUserId={currentUserId}
+          replyContext={replyContext ?? undefined}
           onSent={handleSent}
         />
       )}

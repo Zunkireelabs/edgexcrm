@@ -6,6 +6,8 @@ import {
   apiInternalError,
   apiValidationError,
   apiServiceUnavailable,
+  apiNotFound,
+  apiError,
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -49,17 +51,73 @@ export async function POST(request: Request) {
     .single<ConnectedEmailAccount>();
   if (acctErr || !account) return apiForbidden();
 
+  // Phase 3: validate reply_context if provided
+  let thread: {
+    id: string;
+    message_count: number;
+    connected_email_account_id: string;
+    lead_id: string | null;
+    contact_id: string | null;
+    gmail_thread_id: string;
+  } | null = null;
+
+  if (body.reply_context && typeof body.reply_context === "object") {
+    const { thread_id, in_reply_to, references } = body.reply_context;
+    if (!thread_id || typeof thread_id !== "string") {
+      return apiValidationError({ reply_context: ["reply_context.thread_id is required"] });
+    }
+
+    const { data: t, error: threadErr } = await db
+      .from("email_threads")
+      .select("id, message_count, connected_email_account_id, lead_id, contact_id, gmail_thread_id")
+      .eq("id", thread_id)
+      .single<{
+        id: string;
+        message_count: number;
+        connected_email_account_id: string;
+        lead_id: string | null;
+        contact_id: string | null;
+        gmail_thread_id: string;
+      }>();
+
+    if (threadErr || !t) return apiNotFound("Email thread");
+
+    // Same-account constraint: can't reply on a thread belonging to a different inbox
+    if (t.connected_email_account_id !== body.from_account_id) {
+      return apiError(
+        "REPLY_ACCOUNT_MISMATCH",
+        "Reply must be sent from the thread's original account.",
+        400,
+      );
+    }
+
+    thread = {
+      ...t,
+      // Preserve validated reply fields on the local variable
+    };
+
+    // Attach validated fields to body for use below
+    body.reply_context = {
+      thread_id,
+      in_reply_to: typeof in_reply_to === "string" ? in_reply_to : null,
+      references: isStringArray(references) ? references : [],
+    };
+  }
+
   // Server-side merge-field interpolation before send + store
   let subject = body.subject as string;
   let bodyHtml = body.body_html as string;
 
-  if (body.lead_id && typeof body.lead_id === "string") {
+  const effectiveLeadId = body.lead_id ?? thread?.lead_id ?? null;
+  const effectiveContactId = body.contact_id ?? thread?.contact_id ?? null;
+
+  if (effectiveLeadId && typeof effectiveLeadId === "string") {
     let leadQuery = db
       .from("leads")
       .select("first_name, last_name")
-      .eq("id", body.lead_id);
+      .eq("id", effectiveLeadId);
 
-    // Counselor scoping: only interpolate from leads assigned to this user (Fix 4)
+    // Counselor scoping: only interpolate from leads assigned to this user
     if (auth.role === "counselor") {
       leadQuery = leadQuery.eq("assigned_to", auth.userId);
     }
@@ -76,7 +134,11 @@ export async function POST(request: Request) {
     }
   }
 
-  // Send via Gmail (Fix 3: sendMessage now calls refreshAccessTokenIfNeeded internally)
+  // Build the references chain for reply: [...lastMessage.rfc_references, lastMessage.rfc_message_id]
+  const replyInReplyTo = body.reply_context?.in_reply_to ?? undefined;
+  const replyReferences: string[] = body.reply_context?.references ?? [];
+
+  // Send via Gmail
   let result: Awaited<ReturnType<typeof sendMessage>>;
   try {
     result = await sendMessage(account, {
@@ -87,6 +149,9 @@ export async function POST(request: Request) {
       bcc: isStringArray(body.bcc) ? body.bcc : [],
       subject,
       bodyHtml,
+      threadId: thread?.gmail_thread_id,
+      inReplyTo: replyInReplyTo,
+      references: replyReferences.length > 0 ? replyReferences : undefined,
     });
   } catch (err) {
     logger.error({ err, from_account_id: account.id }, "Gmail send failed");
@@ -109,30 +174,44 @@ export async function POST(request: Request) {
       });
   }
 
-  // Persist thread (Phase 2 always creates a new thread)
-  const { data: thread, error: threadErr } = await db
-    .from("email_threads")
-    .insert({
-      connected_email_account_id: account.id,
-      gmail_thread_id: result.gmail_thread_id,
-      lead_id: body.lead_id ?? null,
-      contact_id: body.contact_id ?? null,
-      subject,
-      last_message_at: new Date().toISOString(),
-      message_count: 1,
-    })
-    .select("id")
-    .single<{ id: string }>();
-  if (threadErr || !thread) {
-    logger.error({ threadErr, gmail_message_id: result.gmail_message_id }, "email_threads insert failed after successful Gmail send");
-    return apiInternalError();
+  // Persist thread: reuse for reply, create new for fresh compose
+  let threadId: string;
+  if (thread) {
+    threadId = thread.id;
+    await db
+      .from("email_threads")
+      .update({
+        message_count: thread.message_count + 1,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", thread.id);
+  } else {
+    const { data: newThread, error: threadErr } = await db
+      .from("email_threads")
+      .insert({
+        connected_email_account_id: account.id,
+        gmail_thread_id: result.gmail_thread_id,
+        lead_id: effectiveLeadId,
+        contact_id: effectiveContactId,
+        subject,
+        last_message_at: new Date().toISOString(),
+        message_count: 1,
+      })
+      .select("id")
+      .single<{ id: string }>();
+    if (threadErr || !newThread) {
+      logger.error({ threadErr, gmail_message_id: result.gmail_message_id }, "email_threads insert failed after successful Gmail send");
+      return apiInternalError();
+    }
+    threadId = newThread.id;
   }
 
   // Persist outbound email row
   const { data: email, error: emailErr } = await db
     .from("emails")
     .insert({
-      thread_id: thread.id,
+      thread_id: threadId,
       connected_email_account_id: account.id,
       direction: "outbound",
       from_email: account.email,
@@ -145,15 +224,15 @@ export async function POST(request: Request) {
       body_text: null,
       gmail_message_id: result.gmail_message_id,
       rfc_message_id: result.rfc_message_id,
-      in_reply_to: null,
-      rfc_references: [],
+      in_reply_to: replyInReplyTo ?? null,
+      rfc_references: replyReferences,
       sent_at: new Date().toISOString(),
       sender_user_id: auth.userId,
     })
     .select("id")
     .single<{ id: string }>();
   if (emailErr || !email) {
-    logger.error({ emailErr, thread_id: thread.id }, "emails insert failed after successful Gmail send");
+    logger.error({ emailErr, thread_id: threadId }, "emails insert failed after successful Gmail send");
     return apiInternalError();
   }
 
@@ -163,9 +242,10 @@ export async function POST(request: Request) {
     entityType: "email",
     entityId: email.id,
     payload: {
-      thread_id: thread.id,
-      lead_id: body.lead_id ?? null,
-      contact_id: body.contact_id ?? null,
+      thread_id: threadId,
+      is_reply: !!thread,
+      lead_id: effectiveLeadId,
+      contact_id: effectiveContactId,
       subject,
       from_account_id: account.id,
       sender_user_id: auth.userId,
@@ -174,7 +254,7 @@ export async function POST(request: Request) {
   });
 
   return apiSuccess({
-    thread_id: thread.id,
+    thread_id: threadId,
     email_id: email.id,
     gmail_message_id: result.gmail_message_id,
   });

@@ -24,20 +24,33 @@ export async function GET(request: Request) {
 
   const db = await scopedClient(auth);
 
-  // scopedClient auto-injects emails.tenant_id; belt-and-suspenders for the join column
+  // Counselor scoping: pre-fetch own account IDs (2-query approach — cleaner than PostgREST inner join)
+  let ownAccountIds: string[] | null = null;
+  if (auth.role === "counselor") {
+    const { data: ownAccounts } = await db
+      .from("connected_email_accounts")
+      .select("id")
+      .eq("user_id", auth.userId);
+    ownAccountIds = ((ownAccounts ?? []) as unknown as { id: string }[]).map((a) => a.id);
+    if (ownAccountIds.length === 0) {
+      return apiSuccess([]);
+    }
+  }
+
+  // Return threads with embedded messages (PostgREST embed via FK emails.thread_id → email_threads.id)
   let query = db
-    .from("emails")
+    .from("email_threads")
     .select(
-      "id, thread_id, direction, from_email, from_name, to_emails, cc_emails, subject, body_html, sent_at, sender_user_id, email_threads!inner(id, lead_id, contact_id, tenant_id)",
+      "id, connected_email_account_id, gmail_thread_id, lead_id, contact_id, subject, message_count, last_message_at, created_at, updated_at, emails(id, direction, from_email, from_name, to_emails, cc_emails, subject, body_html, sent_at, received_at, sender_user_id, in_reply_to, rfc_references, gmail_message_id, rfc_message_id)",
     )
-    .eq("email_threads.tenant_id", auth.tenantId)
-    .order("sent_at", { ascending: false });
+    .order("last_message_at", { ascending: false });
 
-  if (leadId) query = query.eq("email_threads.lead_id", leadId);
-  if (contactId) query = query.eq("email_threads.contact_id", contactId);
+  if (leadId) query = query.eq("lead_id", leadId);
+  if (contactId) query = query.eq("contact_id", contactId);
 
-  // Counselor sees only own sent emails
-  if (auth.role === "counselor") query = query.eq("sender_user_id", auth.userId);
+  if (ownAccountIds !== null) {
+    query = query.in("connected_email_account_id", ownAccountIds);
+  }
 
   const { data, error } = await query;
   if (error) return apiInternalError();
