@@ -10,6 +10,8 @@ import {
 import { OverviewTab } from "./overview-tab";
 import { ProjectsTab } from "./projects-tab";
 import { ContactsTab } from "./contacts-tab";
+import { ActivityTab } from "./activity-tab";
+import type { ActivityItem } from "./activity-row";
 import type { Project, ProjectStatus } from "@/types/database";
 
 interface AccountContact {
@@ -29,6 +31,11 @@ interface Lead {
   status: string;
 }
 
+interface ActivityData {
+  items: ActivityItem[];
+  next_page: number | null;
+}
+
 interface AccountTabsProps {
   notes: string | null;
   contacts: AccountContact[];
@@ -41,6 +48,8 @@ interface AccountTabsProps {
   onCreateProject: () => void;
   onCreateContact: () => void;
   onEditNotes: () => void;
+  accountId: string;
+  initialActivity?: ActivityData | null;
 }
 
 export function AccountTabs({
@@ -55,6 +64,8 @@ export function AccountTabs({
   onCreateProject,
   onCreateContact,
   onEditNotes,
+  accountId,
+  initialActivity,
 }: AccountTabsProps) {
   return (
     <TooltipProvider>
@@ -63,16 +74,7 @@ export function AccountTabs({
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <TabsTrigger value="activity" disabled>
-                  Activity
-                </TabsTrigger>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Coming soon — account activity feed v2</TooltipContent>
-          </Tooltip>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
           <Tooltip>
             <TooltipTrigger asChild>
               <span>
@@ -81,7 +83,7 @@ export function AccountTabs({
                 </TabsTrigger>
               </span>
             </TooltipTrigger>
-            <TooltipContent>Coming soon — invoices, retainer, billable totals v2</TooltipContent>
+            <TooltipContent>Coming soon — invoices, retainer, billable totals v3</TooltipContent>
           </Tooltip>
         </TabsList>
 
@@ -110,6 +112,10 @@ export function AccountTabs({
             isAdmin={isAdmin}
             onCreateContact={onCreateContact}
           />
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-0">
+          <ActivityTab accountId={accountId} initialData={initialActivity ?? null} />
         </TabsContent>
       </Tabs>
     </TooltipProvider>

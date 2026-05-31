@@ -172,6 +172,7 @@ export async function POST(request: NextRequest, { params }: Props) {
       entityType: "lead",
       entityId: id,
       requestId,
+      payload: { lead_id: id, contact_id: newContact.id, account_id: resolvedAccountId },
     }),
   ]);
 

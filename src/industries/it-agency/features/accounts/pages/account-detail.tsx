@@ -24,6 +24,8 @@ import {
   AccountRelatedPanel,
 } from "../components/account-detail";
 import type { Account, Project, ProjectStatus, ContactStatus } from "@/types/database";
+import type { AccountTeam } from "../components/account-detail/account-team-card";
+import type { ActivityItem } from "../components/account-detail/activity-row";
 
 type ProjectStatusMix = Record<ProjectStatus, number>;
 
@@ -51,6 +53,17 @@ interface Lead {
   status: string;
 }
 
+interface BillableSummary {
+  this_month: { billable_minutes: number; billable_amount: number };
+  last_month: { billable_minutes: number; billable_amount: number };
+  lifetime: { billable_minutes: number; billable_amount: number };
+}
+
+interface ActivityData {
+  items: ActivityItem[];
+  next_page: number | null;
+}
+
 interface AccountDetailPageProps {
   tenantId: string;
   role: string;
@@ -65,6 +78,9 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
   const [contacts, setContacts] = useState<AccountContact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [billableSummary, setBillableSummary] = useState<BillableSummary | null>(null);
+  const [team, setTeam] = useState<AccountTeam | null>(null);
+  const [activity, setActivity] = useState<ActivityData | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [togglingActive, setTogglingActive] = useState(false);
@@ -85,8 +101,11 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
       fetch(`/api/v1/accounts/${accountId}/leads`).then((r) => r.json()),
       fetch(`/api/v1/projects?account_id=${accountId}`).then((r) => r.json()),
       fetch(`/api/v1/accounts/${accountId}/contacts?include_inactive=1`).then((r) => r.json()),
+      fetch(`/api/v1/accounts/${accountId}/billable-summary`).then((r) => r.json()),
+      fetch(`/api/v1/accounts/${accountId}/team`).then((r) => r.json()),
+      fetch(`/api/v1/accounts/${accountId}/activity?page=1&limit=30`).then((r) => r.json()),
     ])
-      .then(([accRes, leadsRes, projRes, contactsRes]) => {
+      .then(([accRes, leadsRes, projRes, contactsRes, billableRes, teamRes, activityRes]) => {
         if (accRes.error) {
           toast.error("Account not found");
           router.push("/accounts");
@@ -96,6 +115,9 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
         setLeads(leadsRes.data ?? []);
         setProjects(projRes.data ?? []);
         setContacts(contactsRes.data ?? []);
+        setBillableSummary(billableRes.data ?? null);
+        setTeam(teamRes.data ?? null);
+        setActivity(activityRes.data ?? null);
       })
       .catch(() => toast.error("Failed to load account"))
       .finally(() => setLoading(false));
@@ -221,6 +243,8 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
             createdAt={account.created_at}
             updatedAt={account.updated_at}
             onJumpToTab={(tab) => setActiveTab(tab)}
+            billableSummary={billableSummary}
+            role={role}
           />
         </div>
 
@@ -238,6 +262,8 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
             onCreateProject={() => setCreateProjectOpen(true)}
             onCreateContact={() => setCreateContactOpen(true)}
             onEditNotes={() => setEditOpen(true)}
+            accountId={accountId}
+            initialActivity={activity}
           />
         </div>
 
@@ -249,6 +275,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
             projectStatusMix={projectStatusMix}
             openLeadsCount={account.open_leads_count ?? 0}
             leads={leads}
+            team={team}
           />
         </div>
       </div>

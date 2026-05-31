@@ -110,10 +110,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  // Verify it exists and belongs to this tenant
+  // Verify it exists and belongs to this tenant (select * for changed-fields payload)
   const { data: existing } = await db
     .from("accounts")
-    .select("id")
+    .select("*")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Account");
@@ -154,15 +154,26 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("DB_ERROR", "Failed to update account", 500);
   }
 
-  await createAuditLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: "account.updated",
-    entityType: "account",
-    entityId: id,
-    changes: { patch: { old: existing, new: patch } },
-    requestId,
-  });
+  const changedFields = Object.keys(patch);
+  await Promise.all([
+    createAuditLog({
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      action: "account.updated",
+      entityType: "account",
+      entityId: id,
+      changes: { patch: { old: existing, new: patch } },
+      requestId,
+    }),
+    emitEvent({
+      tenantId: auth.tenantId,
+      type: "account.updated",
+      entityType: "account",
+      entityId: id,
+      requestId,
+      payload: { changed_fields: changedFields, old: existing, new: patch },
+    }),
+  ]);
 
   log.info({ accountId: id }, "Account updated");
   return apiSuccess(updated);

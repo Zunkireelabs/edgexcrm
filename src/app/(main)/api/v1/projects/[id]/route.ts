@@ -67,7 +67,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("projects")
-    .select("id, status")
+    .select("id, status, account_id, owner_id, name")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Project");
@@ -113,15 +113,27 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     return apiError("INVALID_STATE", `Expected status '${expectedStatus}' but current status is '${currentStatus}'`, 409);
   }
 
-  await createAuditLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: "project.updated",
-    entityType: "project",
-    entityId: id,
-    changes: { patch: { old: existing, new: patch } },
-    requestId,
-  });
+  const changedFields = Object.keys(patch);
+  const existingRow = existing as unknown as { account_id: string | null };
+  await Promise.all([
+    createAuditLog({
+      tenantId: auth.tenantId,
+      userId: auth.userId,
+      action: "project.updated",
+      entityType: "project",
+      entityId: id,
+      changes: { patch: { old: existing, new: patch } },
+      requestId,
+    }),
+    emitEvent({
+      tenantId: auth.tenantId,
+      type: "project.updated",
+      entityType: "project",
+      entityId: id,
+      requestId,
+      payload: { changed_fields: changedFields, old: existing, new: patch, account_id: existingRow.account_id },
+    }),
+  ]);
 
   log.info({ projectId: id }, "Project updated");
   return apiSuccess(updated);
