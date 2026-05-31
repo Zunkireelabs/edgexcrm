@@ -99,7 +99,7 @@ export async function getFormConfigByTenantSlug(
   // Only select columns needed by PublicForm component
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, name, slug, primary_color")
+    .select("id, name, slug, primary_color, industry_id")
     .eq("slug", slug)
     .single();
 

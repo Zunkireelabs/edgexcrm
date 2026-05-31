@@ -104,6 +104,8 @@ When a second industry wants a feature that already exists in one industry's fol
 | Notifications | Global | all |
 | **Student check-in** | **Industry-scoped** | **education_consultancy** |
 | **Form builder** | **Industry-scoped** | **education_consultancy** |
+| **Contacts (prospects)** | **Industry-scoped** | **education_consultancy** |
+| **Time tracking** | **Industry-scoped** | **it_agency** |
 
 For a fuller, machine-friendly view see `docs/FEATURE-CATALOG.md`.
 
@@ -389,7 +391,7 @@ These bypass RLS internally since `tenant_users` policies can't reference `tenan
 
 ### Migrations
 
-Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applied via Supabase MCP or directly. Migration 019 adds `tags TEXT[]` column to leads.
+Migrations are in `supabase/migrations/` numbered sequentially (001-020). Applied via Supabase MCP or directly. Notable recent migrations: 019 adds `tags TEXT[]` to leads, 020 adds time-tracking tables (accounts, projects, tasks, time_entries).
 
 ### Current Data
 
