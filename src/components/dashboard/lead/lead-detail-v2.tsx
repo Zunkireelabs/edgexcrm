@@ -14,6 +14,7 @@ import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
+import { getLeadFullName } from "./lead-name";
 
 interface TeamMember {
   id: string;
@@ -204,7 +205,7 @@ export function LeadDetailV2({
           </Link>
           <div>
             <h1 className="text-2xl font-bold">
-              {lead.first_name} {lead.last_name}
+              {getLeadFullName(lead)}
             </h1>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}

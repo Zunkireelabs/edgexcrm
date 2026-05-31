@@ -205,6 +205,27 @@ export interface LeadNote {
   created_at: string;
 }
 
+export interface FormAttribution {
+  default_source?: string | null;
+  default_medium?: string | null;
+  default_campaign?: string | null;
+}
+
+export interface UtmLink {
+  id: string;
+  tenant_id: string;
+  form_id: string | null;
+  destination_url: string;
+  utm_source: string | null;
+  utm_medium: string | null;
+  utm_campaign: string | null;
+  tracking_url: string;
+  created_by: string | null;
+  created_at: string;
+  // Joined from form_configs (set by API/server when listing)
+  form_name?: string | null;
+}
+
 export interface FormConfig {
   id: string;
   tenant_id: string;
@@ -214,6 +235,7 @@ export interface FormConfig {
   steps: FormStep[];
   branding: FormBranding;
   redirect_url: string | null;
+  attribution: FormAttribution | null;
   created_at: string;
   updated_at: string;
 }

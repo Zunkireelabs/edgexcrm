@@ -12,6 +12,7 @@ import { NotesTab } from "./notes-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
 import { ActivitiesPanel } from "./activities/activities-panel";
+import { getLeadFullName } from "./lead-name";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -83,7 +84,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               <CardTitle className="text-base">Personal Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
-              <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
+              <InfoGridRow label="Full Name" value={getLeadFullName(lead, "—")} />
               {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
               {industryId === "education_consultancy" && (
                 <InfoGridRow

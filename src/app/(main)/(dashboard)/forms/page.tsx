@@ -1,4 +1,7 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
+import { Link2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { FormList } from "@/industries/education-consultancy/features/form-builder/components/form-list";
@@ -42,11 +45,19 @@ export default async function FormsPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-semibold">Forms</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Create and manage your lead collection forms.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Forms</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Create and manage your lead collection forms.
+          </p>
+        </div>
+        <Link href="/forms/utm-builder">
+          <Button variant="outline" size="sm">
+            <Link2 className="h-4 w-4 mr-2" />
+            UTM Link Builder
+          </Button>
+        </Link>
       </div>
       <FormList
         forms={(formConfigsResult.data ?? []) as FormConfig[]}

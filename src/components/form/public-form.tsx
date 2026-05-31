@@ -49,6 +49,21 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     return new URLSearchParams(window.location.search).get("compact") === "1";
   });
 
+  // UTM params for lead attribution (education_consultancy only)
+  const isEducation = tenant.industry_id === "education_consultancy";
+  const [utmSource] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("utm_source");
+  });
+  const [utmMedium] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("utm_medium");
+  });
+  const [utmCampaign] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("utm_campaign");
+  });
+
   // Auto-select the first option for country fields linked to a phone field,
   // so the displayed dial code matches the actual form state.
   useEffect(() => {
@@ -239,6 +254,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       idempotency_key: `${sessionId}-step-${currentStep + 1}`,
       ...(leadId && { lead_id: leadId }),
       ...(entityId && { entity_id: entityId }),
+      ...(isEducation && {
+        intake_source: utmSource || formConfig.attribution?.default_source || "form",
+        intake_medium: utmMedium || formConfig.attribution?.default_medium || null,
+        intake_campaign: utmCampaign || formConfig.attribution?.default_campaign || null,
+      }),
     };
 
     try {
@@ -342,6 +362,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         idempotency_key: `${sessionId}-final`,
         ...(leadId && { lead_id: leadId }),
         ...(entityId && { entity_id: entityId }),
+        ...(isEducation && {
+          intake_source: utmSource || "form",
+          intake_medium: utmMedium || null,
+          intake_campaign: utmCampaign || null,
+        }),
       };
 
       const res = await fetch("/api/v1/leads", {
