@@ -76,7 +76,19 @@ export function UtmBarChart({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[220px] w-full">
+        <style>{`
+          .utm-chart .recharts-bar-rectangle,
+          .utm-chart .recharts-bar-rectangle path,
+          .utm-chart .recharts-rectangle,
+          .utm-chart svg :focus,
+          .utm-chart svg :focus-visible,
+          .utm-chart svg :active {
+            outline: none !important;
+            outline-offset: 0 !important;
+            stroke: none !important;
+          }
+        `}</style>
+        <div className="utm-chart h-[220px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -101,6 +113,11 @@ export function UtmBarChart({
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
                         <p className="font-medium">{p.fullName}</p>
                         <p className="text-sm text-muted-foreground">{p.count} leads</p>
+                        {isInteractive && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {selectedValue === p.fullName ? "Click to clear" : "Click to filter"}
+                          </p>
+                        )}
                       </div>
                     );
                   }
@@ -112,6 +129,14 @@ export function UtmBarChart({
                 radius={[0, 4, 4, 0]}
                 maxBarSize={30}
                 isAnimationActive={false}
+                activeBar={false}
+                onClick={(payload, _idx, event) => {
+                  const target = (event as unknown as { target?: HTMLElement })?.target;
+                  target?.blur?.();
+                  const p = payload as unknown as { fullName?: string };
+                  if (p?.fullName) handleSelect(p.fullName);
+                }}
+                style={isInteractive ? { cursor: "pointer" } : undefined}
               >
                 {data.map((entry, index) => {
                   const isSelected = selectedValue === entry.fullName;
