@@ -107,7 +107,7 @@ export async function getFormConfigByTenantSlug(
 
   let query = supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, steps, branding, redirect_url")
+    .select("id, tenant_id, slug, steps, branding, redirect_url, attribution")
     .eq("tenant_id", tenant.id)
     .eq("is_active", true);
 

@@ -98,7 +98,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, steps")
+    .select("id, tenant_id, slug, steps, attribution")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -204,9 +204,15 @@ export async function POST(
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},
     entity_id: body.entity_id || null,
-    intake_source: body.intake_source || "api",
-    intake_medium: body.intake_medium || null,
-    intake_campaign: body.intake_campaign || null,
+    intake_source: body.intake_source
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_source : null)
+      || "api",
+    intake_medium: body.intake_medium
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_medium : null)
+      || null,
+    intake_campaign: body.intake_campaign
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_campaign : null)
+      || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
     ...(displayId && { display_id: displayId }),

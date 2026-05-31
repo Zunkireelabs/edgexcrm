@@ -200,6 +200,12 @@ export interface LeadNote {
   created_at: string;
 }
 
+export interface FormAttribution {
+  default_source?: string | null;
+  default_medium?: string | null;
+  default_campaign?: string | null;
+}
+
 export interface FormConfig {
   id: string;
   tenant_id: string;
@@ -209,6 +215,7 @@ export interface FormConfig {
   steps: FormStep[];
   branding: FormBranding;
   redirect_url: string | null;
+  attribution: FormAttribution | null;
   created_at: string;
   updated_at: string;
 }

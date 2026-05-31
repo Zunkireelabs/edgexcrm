@@ -255,9 +255,9 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       ...(leadId && { lead_id: leadId }),
       ...(entityId && { entity_id: entityId }),
       ...(isEducation && {
-        intake_source: utmSource || "form",
-        intake_medium: utmMedium || null,
-        intake_campaign: utmCampaign || null,
+        intake_source: utmSource || formConfig.attribution?.default_source || "form",
+        intake_medium: utmMedium || formConfig.attribution?.default_medium || null,
+        intake_campaign: utmCampaign || formConfig.attribution?.default_campaign || null,
       }),
     };
 
