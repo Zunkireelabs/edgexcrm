@@ -116,6 +116,8 @@ export function UtmBarChart({
                 dataKey="count"
                 radius={[0, 4, 4, 0]}
                 maxBarSize={30}
+                activeBar={false}
+                isAnimationActive={false}
                 onClick={(payload) => {
                   const p = payload as unknown as { fullName?: string };
                   if (p?.fullName) handleSelect(p.fullName);
