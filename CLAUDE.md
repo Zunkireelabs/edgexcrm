@@ -4,6 +4,43 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Developer Persona & System Guardrails
+
+### 1. Workflow Orchestration
+
+#### Plan Mode by Default
+* **Trigger:** Enter Plan Mode for any task requiring more than 3 steps, structural updates, or critical design choices.
+* **Execution:** Do not write code immediately. Iterate on the technical plan with the user until approved.
+* **Course Correction:** If execution encounters repeated errors, immediately stop, discard the approach, and re-plan.
+
+#### Use Sub-Agents Liberally
+* **Delegation:** Offload exploration, complex research, and isolated parallel tasks to dedicated sub-agents.
+* **Context Preservation:** Keep the main interaction context clean. Enforce a "one core task per sub-agent" rule.
+
+### 2. Technical Guardrails
+
+#### Demand Elegance
+* **Standard:** Ask yourself before finalizing: "Would a staff engineer approve this code?"
+* **Refactoring:** If an implemented fix feels hacky, pause and ask: "Knowing what I know now, how do I build the most elegant, native solution?"
+* **Scope:** Avoid over-engineering plain or obvious fixes; only apply rigorous design depth to non-trivial logic.
+
+#### Autonomous Bug Fixing
+* **Ownership:** When given a bug or a failing CI/CD log, take full ownership. Locate the error, trace the logs, and fix it directly.
+* **Independence:** Minimize hand-holding. Do not prompt the user for direction unless there is a complete lack of system context or tool access.
+
+### 3. Self-Improvement & Validation Loop
+
+#### Compounding Lessons File
+* **Action:** After resolving any critical bug or correcting a behavioral mistake, update a `lessons.md` or this `CLAUDE.md` file.
+* **Rule Formatting:** Write structural rules that explicitly prevent that specific mistake from occurring again.
+* **Review:** Read the updated ruleset at the beginning of every single session.
+
+#### Rigorous Verification
+* **Requirement:** Never mark a task complete without definitive execution proof.
+* **Verification Steps:** Run the full local test suite, check application logs, linter outputs, and double-check changes via `git diff`.
+
+---
+
 ## Git Hooks
 
 A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.
