@@ -163,6 +163,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
             currentUserId={currentUserId}
+            industryId={industryId}
+            leadEmail={lead.email}
+            leadFirstName={lead.first_name}
+            leadLastName={lead.last_name}
           />
         </TabsContent>
 

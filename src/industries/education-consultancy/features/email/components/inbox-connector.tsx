@@ -1,43 +1,18 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-interface ConnectedInbox {
-  id: string;
-  email: string;
-  display_name: string | null;
-  provider: string;
-  created_at: string;
-}
+import { useConnectedInboxes } from "../hooks/use-connected-inboxes";
 
 export function InboxConnector() {
-  const [inboxes, setInboxes] = useState<ConnectedInbox[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { inboxes, loading, refresh: fetchInboxes } = useConnectedInboxes();
   const [connecting, setConnecting] = useState(false);
   const [disconnecting, setDisconnecting] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const router = useRouter();
-
-  const fetchInboxes = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/v1/email/inboxes");
-      if (res.ok) {
-        const json = await res.json();
-        setInboxes(json.data ?? []);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchInboxes();
-  }, [fetchInboxes]);
 
   // Handle OAuth callback redirect params
   useEffect(() => {
@@ -80,7 +55,7 @@ export function InboxConnector() {
     try {
       const res = await fetch(`/api/v1/email/inboxes/${id}`, { method: "DELETE" });
       if (res.ok) {
-        setInboxes((prev) => prev.filter((i) => i.id !== id));
+        fetchInboxes();
         toast.success("Inbox disconnected");
       } else {
         toast.error("Could not disconnect inbox");

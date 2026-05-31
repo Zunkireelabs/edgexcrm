@@ -1,14 +1,35 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Phone, Mail, Calendar, Clock, FileText, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
+import { useSentEmails, type SentEmail } from "@/industries/education-consultancy/features/email/hooks/use-sent-emails";
+
+// Lazy-load compose dialog so TipTap only loads when the modal is opened
+const ComposeEmailDialog = dynamic(
+  () =>
+    import(
+      "@/industries/education-consultancy/features/email/components/compose-email-dialog"
+    ).then((m) => m.ComposeEmailDialog),
+  { ssr: false },
+);
+
+// Lazy-load sent-email card
+const SentEmailCard = dynamic(
+  () =>
+    import(
+      "@/industries/education-consultancy/features/email/components/sent-email-card"
+    ).then((m) => m.SentEmailCard),
+  { ssr: false },
+);
 
 type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings";
 
@@ -20,6 +41,10 @@ interface ActivitiesPanelProps {
   isAdmin: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
   currentUserId: string;
+  industryId?: string | null;
+  leadEmail?: string | null;
+  leadFirstName?: string | null;
+  leadLastName?: string | null;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -38,12 +63,25 @@ export function ActivitiesPanel({
   teamMemberEmails,
   isAdmin,
   currentUserId,
+  industryId,
+  leadEmail,
+  leadFirstName,
+  leadLastName,
 }: ActivitiesPanelProps) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
   const [loggedActivities, setLoggedActivities] = useState<LeadActivityRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<ActivityType>("call");
+  const [composeOpen, setComposeOpen] = useState(false);
+
+  const isEducation = industryId === "education_consultancy";
+
+  // Sent emails (education only — hook is a no-op for non-education since the Emails tab is always shown
+  // but the API will 403 for non-education tenants, so we gate rendering instead of the hook call)
+  const { emails: sentEmails, setEmails: setSentEmails, loading: sentLoading } = useSentEmails(
+    isEducation ? leadId : "",
+  );
 
   // Fetch logged activities
   const fetchActivities = useCallback(async () => {
@@ -90,6 +128,13 @@ export function ActivitiesPanel({
     }
   };
 
+  const handleSent = (
+    _result: { thread_id: string; email_id: string },
+    optimisticEmail: SentEmail,
+  ) => {
+    setSentEmails((prev) => [optimisticEmail, ...prev]);
+  };
+
   // Filter activities by type
   const filteredActivities = useMemo(() => {
     if (activeTab === "all") return loggedActivities;
@@ -102,8 +147,6 @@ export function ActivitiesPanel({
   // Group by date
   const groupedActivities = useMemo(() => {
     const groups: Record<string, LeadActivityRecord[]> = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     for (const activity of filteredActivities) {
       const date = new Date(activity.created_at);
@@ -117,6 +160,28 @@ export function ActivitiesPanel({
 
     return groups;
   }, [filteredActivities]);
+
+  // Combined + sorted email list for the Emails sub-tab
+  type EmailListItem =
+    | { kind: "sent"; data: SentEmail; sortKey: string }
+    | { kind: "logged"; data: LeadActivityRecord; sortKey: string };
+
+  const combinedEmailItems = useMemo((): EmailListItem[] => {
+    if (activeTab !== "emails") return [];
+    const sentItems: EmailListItem[] = sentEmails.map((e) => ({
+      kind: "sent",
+      data: e,
+      sortKey: e.sent_at,
+    }));
+    const loggedItems: EmailListItem[] = loggedActivities
+      .filter((a) => a.activity_type === "email")
+      .map((a) => ({
+        kind: "logged",
+        data: a,
+        sortKey: a.created_at,
+      }));
+    return [...sentItems, ...loggedItems].sort((a, b) => b.sortKey.localeCompare(a.sortKey));
+  }, [activeTab, sentEmails, loggedActivities]);
 
   // Get action buttons based on active tab
   const getActionButtons = () => {
@@ -135,8 +200,13 @@ export function ActivitiesPanel({
       case "emails":
         return (
           <div className="flex gap-2">
+            {isEducation && (
+              <Button size="sm" onClick={() => setComposeOpen(true)}>
+                Compose Email
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => handleLogActivity("email")}>
-              Log Email
+              Log past email
             </Button>
           </div>
         );
@@ -159,7 +229,9 @@ export function ActivitiesPanel({
       case "calls":
         return "Call a contact from this record. Or log a call activity to keep track of your discussion and notes.";
       case "emails":
-        return "Log emails to keep track of your communication with this lead.";
+        return isEducation
+          ? "Compose an email to this lead, or log a past email to track your communication history."
+          : "Log emails to keep track of your communication with this lead.";
       case "meetings":
         return "Schedule a meeting with a contact from this record. Or log a meeting activity to keep track of your meeting and notes.";
       case "notes":
@@ -172,6 +244,8 @@ export function ActivitiesPanel({
         return "No activities yet.";
     }
   };
+
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && sentLoading));
 
   return (
     <div className="space-y-4">
@@ -237,8 +311,47 @@ export function ActivitiesPanel({
         </Card>
       )}
 
-      {/* Activity list (all, calls, emails, meetings) */}
-      {(activeTab === "all" || activeTab === "calls" || activeTab === "emails" || activeTab === "meetings") && (
+      {/* Emails sub-tab — combined sent + logged list */}
+      {activeTab === "emails" && (
+        <>
+          {isEmailsTabLoading ? (
+            <Card className="shadow-none rounded-lg py-0">
+              <CardContent className="p-8 text-center">
+                <p className="text-muted-foreground">Loading emails...</p>
+              </CardContent>
+            </Card>
+          ) : combinedEmailItems.length === 0 ? (
+            <Card className="shadow-none rounded-lg py-0">
+              <CardContent className="p-8 text-center">
+                <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground">{getEmptyMessage()}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-2">
+              {combinedEmailItems.map((item) =>
+                item.kind === "sent" ? (
+                  <SentEmailCard key={`sent-${item.data.id}`} email={item.data} />
+                ) : (
+                  <div key={`logged-${item.data.id}`} className="relative">
+                    <div className="absolute top-3 right-10 z-10">
+                      <Badge variant="secondary" className="text-xs">📝 Logged</Badge>
+                    </div>
+                    <ActivityCard
+                      activity={item.data}
+                      onDelete={handleDeleteActivity}
+                      canDelete={isAdmin || item.data.user_id === currentUserId}
+                    />
+                  </div>
+                )
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Activity list (all, calls, meetings) */}
+      {(activeTab === "all" || activeTab === "calls" || activeTab === "meetings") && (
         <>
           {isLoading ? (
             <Card className="shadow-none rounded-lg py-0">
@@ -301,6 +414,20 @@ export function ActivitiesPanel({
         activityType={modalType}
         onActivityLogged={handleActivityLogged}
       />
+
+      {/* Compose Email Dialog — education_consultancy only */}
+      {isEducation && (
+        <ComposeEmailDialog
+          open={composeOpen}
+          onOpenChange={setComposeOpen}
+          defaultTo={leadEmail ?? ""}
+          leadId={leadId}
+          leadFirstName={leadFirstName}
+          leadLastName={leadLastName}
+          currentUserId={currentUserId}
+          onSent={handleSent}
+        />
+      )}
     </div>
   );
 }
