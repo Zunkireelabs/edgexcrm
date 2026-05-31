@@ -69,7 +69,7 @@ export function UtmAnalyticsSection({ leads }: UtmAnalyticsSectionProps) {
         <div>
           <h2 className="text-base font-semibold">UTM Attribution</h2>
           <p className="text-sm text-muted-foreground">
-            Click a bar to filter the other charts.
+            Click a legend entry below each chart to filter.
           </p>
         </div>
         <div className="flex flex-wrap gap-1.5 rounded-lg border border-border bg-background p-1">

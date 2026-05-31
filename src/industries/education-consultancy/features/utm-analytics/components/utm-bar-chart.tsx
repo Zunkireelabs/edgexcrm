@@ -76,7 +76,7 @@ export function UtmBarChart({
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-[220px] w-full [&_.recharts-bar-rectangle]:outline-none [&_.recharts-bar-rectangle_path]:outline-none [&_.recharts-rectangle]:outline-none [&_path]:focus:outline-none">
+        <div className="h-[220px] w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
               data={data}
@@ -101,11 +101,6 @@ export function UtmBarChart({
                       <div className="rounded-lg border border-border bg-background px-3 py-2">
                         <p className="font-medium">{p.fullName}</p>
                         <p className="text-sm text-muted-foreground">{p.count} leads</p>
-                        {isInteractive && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {selectedValue === p.fullName ? "Click to clear" : "Click to filter"}
-                          </p>
-                        )}
                       </div>
                     );
                   }
@@ -116,13 +111,7 @@ export function UtmBarChart({
                 dataKey="count"
                 radius={[0, 4, 4, 0]}
                 maxBarSize={30}
-                activeBar={false}
                 isAnimationActive={false}
-                onClick={(payload) => {
-                  const p = payload as unknown as { fullName?: string };
-                  if (p?.fullName) handleSelect(p.fullName);
-                }}
-                style={isInteractive ? { cursor: "pointer" } : undefined}
               >
                 {data.map((entry, index) => {
                   const isSelected = selectedValue === entry.fullName;
