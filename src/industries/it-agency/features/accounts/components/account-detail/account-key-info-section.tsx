@@ -4,12 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatBillableDelta, formatCurrency } from "@/lib/format-billable-delta";
 import type { ProjectStatus } from "@/types/database";
 
 interface AccountContact {
   id: string;
   first_name: string;
   last_name: string;
+}
+
+interface BillableSummary {
+  this_month: { billable_minutes: number; billable_amount: number };
+  last_month: { billable_minutes: number; billable_amount: number };
+  lifetime: { billable_minutes: number; billable_amount: number };
 }
 
 interface AccountKeyInfoSectionProps {
@@ -21,6 +28,8 @@ interface AccountKeyInfoSectionProps {
   createdAt: string;
   updatedAt: string;
   onJumpToTab: (tab: string) => void;
+  billableSummary?: BillableSummary | null;
+  role: string;
 }
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -40,6 +49,18 @@ function formatDate(dateString: string): string {
   });
 }
 
+function DeltaPill({ direction, text }: { direction: string; text: string }) {
+  const colorClass =
+    direction === "up"
+      ? "text-green-700"
+      : direction === "down"
+      ? "text-red-600"
+      : direction === "new"
+      ? "bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded"
+      : "text-muted-foreground";
+  return <span className={`text-xs font-medium ml-1 ${colorClass}`}>{text}</span>;
+}
+
 export function AccountKeyInfoSection({
   ownerEmail,
   primaryContact,
@@ -49,6 +70,8 @@ export function AccountKeyInfoSection({
   createdAt,
   updatedAt,
   onJumpToTab,
+  billableSummary,
+  role,
 }: AccountKeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
 
@@ -128,6 +151,53 @@ export function AccountKeyInfoSection({
             label="Open Leads"
             value={openLeadsCount}
           />
+          {/* Billable totals */}
+          {billableSummary !== undefined && (
+            <>
+              <InfoRow
+                label="Billable this month"
+                value={
+                  billableSummary ? (
+                    <span>
+                      {formatCurrency(billableSummary.this_month.billable_amount)}
+                      {(() => {
+                        const delta = formatBillableDelta(
+                          billableSummary.this_month.billable_amount,
+                          billableSummary.last_month.billable_amount
+                        );
+                        return delta ? <DeltaPill direction={delta.direction} text={delta.text} /> : null;
+                      })()}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+              />
+              <InfoRow
+                label="Billable hrs this month"
+                value={
+                  billableSummary ? (
+                    `${(billableSummary.this_month.billable_minutes / 60).toFixed(1)} hrs`
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+              />
+              <InfoRow
+                label="Lifetime billable"
+                value={
+                  billableSummary ? (
+                    formatCurrency(billableSummary.lifetime.billable_amount)
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )
+                }
+              />
+              {role === "counselor" && (
+                <p className="text-[11px] text-muted-foreground -mt-1">Your hours only</p>
+              )}
+            </>
+          )}
           <InfoRow label="Created" value={formatDate(createdAt)} />
           <InfoRow label="Last Updated" value={formatDate(updatedAt)} />
         </div>

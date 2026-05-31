@@ -48,14 +48,14 @@ export async function POST(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing, error: fetchError } = await db
     .from("time_entries")
-    .select("id, approval_status, user_id")
+    .select("id, approval_status, user_id, project_id, minutes")
     .eq("id", id)
     .maybeSingle();
 
   if (fetchError) return apiError("DB_ERROR", "Failed to fetch time entry", 500);
   if (!existing) return apiNotFound("Time entry");
 
-  const row = existing as unknown as { id: string; approval_status: string; user_id: string };
+  const row = existing as unknown as { id: string; approval_status: string; user_id: string; project_id: string; minutes: number };
   if (row.approval_status !== "pending") {
     return apiError("INVALID_STATE", "Only pending entries can be rejected", 409);
   }
@@ -100,6 +100,10 @@ export async function POST(request: NextRequest, { params }: Props) {
       entityType: "time_entry",
       entityId: id,
       requestId,
+      payload: (() => {
+        const u = updated as unknown as { projects: { account_id: string | null } | null };
+        return { user_id: row.user_id, project_id: row.project_id, minutes: row.minutes, account_id: u.projects?.account_id ?? null, rejection_reason: reason };
+      })(),
     }),
   ]);
 

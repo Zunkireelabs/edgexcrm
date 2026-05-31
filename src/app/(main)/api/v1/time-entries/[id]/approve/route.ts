@@ -118,6 +118,10 @@ export async function POST(_request: NextRequest, { params }: Props) {
       entityType: "time_entry",
       entityId: id,
       requestId,
+      payload: (() => {
+        const u = updated as unknown as { user_id: string; project_id: string; minutes: number; projects: { account_id: string | null } | null };
+        return { user_id: u.user_id, project_id: u.project_id, minutes: u.minutes, account_id: u.projects?.account_id ?? null, rate_snapshot: rateSnapshot };
+      })(),
     }),
   ]);
 

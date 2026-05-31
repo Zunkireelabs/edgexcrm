@@ -4,3 +4,8 @@ export { AccountTabs } from "./account-tabs";
 export { AccountRelatedPanel } from "./account-related-panel";
 export { HealthSnapshotCard } from "./health-snapshot-card";
 export { OpenLeadsCard } from "./open-leads-card";
+export { AccountTeamCard } from "./account-team-card";
+export type { AccountTeam, TeamOwner, TeamContributor } from "./account-team-card";
+export { ActivityTab } from "./activity-tab";
+export { ActivityRow } from "./activity-row";
+export type { ActivityItem } from "./activity-row";
