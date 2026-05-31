@@ -13,18 +13,13 @@ import { CopyButton } from "@/components/ui/copy-button";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
+import { getLeadFullName, getLeadInitials } from "./lead-name";
 
 interface ContactCardProps {
   lead: Lead;
   currentStage?: PipelineStage;
   onNoteClick?: () => void;
   onTaskClick?: () => void;
-}
-
-function getInitials(firstName: string | null, lastName: string | null): string {
-  const first = firstName?.charAt(0)?.toUpperCase() || "";
-  const last = lastName?.charAt(0)?.toUpperCase() || "";
-  return first + last || "?";
 }
 
 interface QuickActionButtonProps {
@@ -53,8 +48,8 @@ function QuickActionButton({ icon, label, onClick, disabled }: QuickActionButton
 }
 
 export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: ContactCardProps) {
-  const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown";
-  const initials = getInitials(lead.first_name, lead.last_name);
+  const fullName = getLeadFullName(lead);
+  const initials = getLeadInitials(lead);
   const stageColor = currentStage?.color || "#6b7280";
 
   const handleEmailClick = () => {
