@@ -5,9 +5,10 @@ import { useState, useEffect, useCallback } from "react";
 interface BadgeCounts {
   unread_notifications: number;
   unread_leads: number;
+  unread_lead_ids: string[];
 }
 
-const DEFAULT_COUNTS: BadgeCounts = { unread_notifications: 0, unread_leads: 0 };
+const DEFAULT_COUNTS: BadgeCounts = { unread_notifications: 0, unread_leads: 0, unread_lead_ids: [] };
 
 async function fetchCounts(): Promise<BadgeCounts | null> {
   try {
