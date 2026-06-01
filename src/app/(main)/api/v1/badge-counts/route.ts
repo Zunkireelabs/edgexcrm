@@ -6,8 +6,14 @@ export const dynamic = "force-dynamic";
 
 /**
  * GET /api/v1/badge-counts
- * Returns unread_notifications and new_leads counts for the sidebar badges.
- * Universal endpoint — email unread is derived client-side to keep this cheap.
+ * Returns sidebar badge counts for the current user:
+ *  - unread_notifications: all unread notifications (drives the bell count too)
+ *  - unread_leads: unread `lead.created` notifications — "new leads you haven't
+ *    opened yet", like unread messages. Routing already scopes these per-user
+ *    (assignee, or admins for unassigned leads), so no role special-casing and
+ *    no historical flood (only leads created since the feature shipped count).
+ *    Cleared when the user opens the lead (its lead.created notification is
+ *    marked read — see notifications/read-by-link).
  */
 export async function GET() {
   const auth = await authenticateRequest();
@@ -15,29 +21,21 @@ export async function GET() {
 
   const db = await scopedClient(auth);
 
-  // Unread notifications (always per-user)
   const { count: unreadNotifications } = await db
     .from("notifications")
     .select("*", { count: "exact", head: true })
     .eq("user_id", auth.userId)
     .is("read_at", null);
 
-  // New leads — counselors only see their assigned leads
-  let newLeadsQuery = db
-    .from("leads")
+  const { count: unreadLeads } = await db
+    .from("notifications")
     .select("*", { count: "exact", head: true })
-    .eq("status", "new")
-    .is("deleted_at", null)
-    .is("converted_at", null);
-
-  if (auth.role === "counselor") {
-    newLeadsQuery = newLeadsQuery.eq("assigned_to", auth.userId);
-  }
-
-  const { count: newLeads } = await newLeadsQuery;
+    .eq("user_id", auth.userId)
+    .eq("type", "lead.created")
+    .is("read_at", null);
 
   return apiSuccess({
     unread_notifications: unreadNotifications ?? 0,
-    new_leads: newLeads ?? 0,
+    unread_leads: unreadLeads ?? 0,
   });
 }

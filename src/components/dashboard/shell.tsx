@@ -297,7 +297,7 @@ export function DashboardShell({
             {UNIVERSAL_NAV_TOP.map((item) =>
               renderNavItem(
                 item.href === "/leads"
-                  ? { ...item, badge: counts.new_leads || undefined }
+                  ? { ...item, badge: counts.unread_leads || undefined }
                   : item
               )
             )}

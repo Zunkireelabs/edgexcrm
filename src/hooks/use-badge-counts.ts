@@ -4,34 +4,45 @@ import { useState, useEffect, useCallback } from "react";
 
 interface BadgeCounts {
   unread_notifications: number;
-  new_leads: number;
+  unread_leads: number;
 }
 
-const DEFAULT_COUNTS: BadgeCounts = { unread_notifications: 0, new_leads: 0 };
+const DEFAULT_COUNTS: BadgeCounts = { unread_notifications: 0, unread_leads: 0 };
+
+async function fetchCounts(): Promise<BadgeCounts | null> {
+  try {
+    const res = await fetch("/api/v1/badge-counts");
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.data ?? null;
+  } catch {
+    // Non-fatal — silently ignore network errors
+    return null;
+  }
+}
 
 export function useBadgeCounts() {
   const [counts, setCounts] = useState<BadgeCounts>(DEFAULT_COUNTS);
 
+  // Exposed for callers that want to force a refresh (e.g. after opening a lead).
   const refresh = useCallback(async () => {
-    try {
-      const res = await fetch("/api/v1/badge-counts");
-      if (!res.ok) return;
-      const json = await res.json();
-      setCounts(json.data ?? DEFAULT_COUNTS);
-    } catch {
-      // Non-fatal — silently ignore network errors
-    }
+    const data = await fetchCounts();
+    if (data) setCounts(data);
   }, []);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
-
-  // Poll every 30 seconds (same cadence as notifications dropdown)
-  useEffect(() => {
-    const interval = setInterval(refresh, 30000);
-    return () => clearInterval(interval);
-  }, [refresh]);
+    let cancelled = false;
+    const load = async () => {
+      const data = await fetchCounts();
+      if (!cancelled && data) setCounts(data);
+    };
+    load();
+    const interval = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   return { counts, refresh };
 }
