@@ -14,6 +14,11 @@ import { validate, required, isUUID } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
+import {
+  upsertThreadNotification,
+  getTenantAdminRecipients,
+  NotificationTypes,
+} from "@/lib/notifications";
 import type { Lead } from "@/types/database";
 
 const CORS_HEADERS = {
@@ -410,6 +415,41 @@ async function handlePost(request: NextRequest) {
       requestId,
     }),
   ]);
+
+  // Notify on final leads only (partial leads are in-progress form submissions)
+  if (lead.is_final) {
+    (async () => {
+      try {
+        const leadName = `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "A lead";
+        if (lead.assigned_to) {
+          await upsertThreadNotification({
+            tenantId,
+            userId: lead.assigned_to,
+            type: NotificationTypes.LEAD_CREATED,
+            title: "New lead assigned to you",
+            message: leadName,
+            link: `/leads/${lead.id}`,
+          });
+        } else {
+          const adminIds = await getTenantAdminRecipients(supabase, tenantId);
+          await Promise.all(
+            adminIds.map((adminId) =>
+              upsertThreadNotification({
+                tenantId,
+                userId: adminId,
+                type: NotificationTypes.LEAD_CREATED,
+                title: "New lead",
+                message: leadName,
+                link: `/leads/${lead.id}`,
+              })
+            )
+          );
+        }
+      } catch (err) {
+        log.error({ err }, "Failed to create lead.created notification");
+      }
+    })();
+  }
 
   return apiSuccess(lead, 201);
 }

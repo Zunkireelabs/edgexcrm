@@ -13,6 +13,7 @@ export interface Email {
   body_html: string;
   sent_at: string | null;
   received_at: string | null;
+  read_at: string | null;
   sender_user_id: string | null;
   in_reply_to: string | null;
   rfc_references: string[];

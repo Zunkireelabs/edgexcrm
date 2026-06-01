@@ -41,7 +41,7 @@ export async function GET(request: Request) {
   let query = db
     .from("email_threads")
     .select(
-      "id, connected_email_account_id, gmail_thread_id, lead_id, contact_id, subject, message_count, last_message_at, created_at, updated_at, emails(id, direction, from_email, from_name, to_emails, cc_emails, subject, body_html, sent_at, received_at, sender_user_id, in_reply_to, rfc_references, gmail_message_id, rfc_message_id)",
+      "id, connected_email_account_id, gmail_thread_id, lead_id, contact_id, subject, message_count, last_message_at, created_at, updated_at, emails(id, direction, from_email, from_name, to_emails, cc_emails, subject, body_html, sent_at, received_at, read_at, sender_user_id, in_reply_to, rfc_references, gmail_message_id, rfc_message_id)",
     )
     .order("last_message_at", { ascending: false });
 

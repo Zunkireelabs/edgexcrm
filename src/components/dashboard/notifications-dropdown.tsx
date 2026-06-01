@@ -129,6 +129,24 @@ export function NotificationsDropdown() {
             <span className="text-base">🎉</span>
           </div>
         );
+      case "lead.created":
+        return (
+          <div className="w-9 h-9 rounded-full bg-emerald-100 flex items-center justify-center">
+            <span className="text-base">✨</span>
+          </div>
+        );
+      case "lead.stage_changed":
+        return (
+          <div className="w-9 h-9 rounded-full bg-purple-100 flex items-center justify-center">
+            <span className="text-base">📊</span>
+          </div>
+        );
+      case "email.received":
+        return (
+          <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center">
+            <span className="text-base">✉️</span>
+          </div>
+        );
       default:
         return (
           <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">

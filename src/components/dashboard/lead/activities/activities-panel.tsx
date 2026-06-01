@@ -213,6 +213,26 @@ export function ActivitiesPanel({
     [loggedActivities],
   );
 
+  const unreadEmailCount = useMemo(
+    () =>
+      threads.reduce(
+        (n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length,
+        0
+      ),
+    [threads]
+  );
+
+  const handleThreadRead = (threadId: string) => {
+    const now = new Date().toISOString();
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? { ...t, emails: t.emails.map((e) => (e.direction === "inbound" ? { ...e, read_at: e.read_at ?? now } : e)) }
+          : t
+      )
+    );
+  };
+
   // Get action buttons based on active tab
   const getActionButtons = () => {
     switch (activeTab) {
@@ -287,13 +307,18 @@ export function ActivitiesPanel({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === tab.id
                   ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab.label}
+              {tab.id === "emails" && unreadEmailCount > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {unreadEmailCount > 9 ? "9+" : unreadEmailCount}
+                </Badge>
+              )}
             </button>
           ))}
         </div>
@@ -371,6 +396,7 @@ export function ActivitiesPanel({
                       teamMemberEmails={teamMemberEmails}
                       ownConnectedInboxes={ownConnectedInboxes}
                       onReply={handleReply}
+                      onThreadRead={handleThreadRead}
                     />
                   ))}
                 </div>

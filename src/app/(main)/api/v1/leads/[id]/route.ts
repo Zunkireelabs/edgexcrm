@@ -11,7 +11,11 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
-import { createNotification, NotificationTypes } from "@/lib/notifications";
+import {
+  createNotificationsExcept,
+  getTenantAdminRecipients,
+  NotificationTypes,
+} from "@/lib/notifications";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import type { Lead } from "@/types/database";
@@ -288,13 +292,14 @@ export async function PATCH(
     });
   }
 
-  // Create notifications for assignment changes
-  if (assignedChanged) {
-    const leadName = `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || "A lead";
+  const leadName = `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || "A lead";
 
-    // Notify new assignee
+  // Create notifications for assignment changes (self-suppressed)
+  if (assignedChanged) {
+    const assignNotifications = [];
+
     if (updated.assigned_to) {
-      createNotification({
+      assignNotifications.push({
         tenantId: auth.tenantId,
         userId: updated.assigned_to,
         type: NotificationTypes.LEAD_ASSIGNED,
@@ -332,9 +337,8 @@ export async function PATCH(
       })();
     }
 
-    // Notify previous assignee (if there was one)
     if (existingLead.assigned_to && existingLead.assigned_to !== updated.assigned_to) {
-      createNotification({
+      assignNotifications.push({
         tenantId: auth.tenantId,
         userId: existingLead.assigned_to,
         type: NotificationTypes.LEAD_UNASSIGNED,
@@ -343,6 +347,49 @@ export async function PATCH(
         link: `/leads/${id}`,
       });
     }
+
+    createNotificationsExcept(auth.userId, assignNotifications);
+  }
+
+  // Notify on stage change (assignee + admins on terminal stages)
+  if (stageChanged) {
+    const { data: newStage } = await supabase
+      .from("pipeline_stages")
+      .select("is_terminal")
+      .eq("id", updated.stage_id)
+      .eq("tenant_id", auth.tenantId)
+      .single();
+
+    const stageNotifications = [];
+    const stageName = updated.status ?? "a new stage";
+
+    if (updated.assigned_to) {
+      stageNotifications.push({
+        tenantId: auth.tenantId,
+        userId: updated.assigned_to,
+        type: NotificationTypes.LEAD_STAGE_CHANGED,
+        title: "Lead stage updated",
+        message: `${leadName} moved to ${stageName}`,
+        link: `/leads/${id}`,
+      });
+    }
+
+    // On terminal stage, also notify all admins
+    if (newStage?.is_terminal) {
+      const adminIds = await getTenantAdminRecipients(supabase, auth.tenantId);
+      for (const adminId of adminIds) {
+        stageNotifications.push({
+          tenantId: auth.tenantId,
+          userId: adminId,
+          type: NotificationTypes.LEAD_STAGE_CHANGED,
+          title: "Lead reached terminal stage",
+          message: `${leadName} moved to ${stageName}`,
+          link: `/leads/${id}`,
+        });
+      }
+    }
+
+    createNotificationsExcept(auth.userId, stageNotifications);
   }
 
   return apiSuccess(updated as Lead);

@@ -13,6 +13,7 @@ interface EmailThreadCardProps {
   teamMemberEmails: Record<string, string>;
   ownConnectedInboxes: Array<{ id: string; email: string }>;
   onReply: (thread: EmailThread, lastMessage: Email) => void;
+  onThreadRead?: (threadId: string) => void;
 }
 
 function formatRelativeTime(dateString: string | null): string {
@@ -114,10 +115,12 @@ export function EmailThreadCard({
   teamMemberEmails,
   ownConnectedInboxes,
   onReply,
+  onThreadRead,
 }: EmailThreadCardProps) {
   const [expanded, setExpanded] = useState(false);
 
   const hasInbound = thread.emails.some((e) => e.direction === "inbound");
+  const hasUnreadInbound = thread.emails.some((e) => e.direction === "inbound" && !e.read_at);
   const lastMessage = thread.emails[thread.emails.length - 1] ?? null;
   const ownEmailSet = new Set(ownConnectedInboxes.map((i) => i.email));
   const participants = getParticipants(thread, ownEmailSet);
@@ -128,16 +131,25 @@ export function EmailThreadCard({
     if (lastMessage) onReply(thread, lastMessage);
   };
 
+  const handleToggleExpand = () => {
+    const willExpand = !expanded;
+    setExpanded(willExpand);
+    if (willExpand && hasUnreadInbound && onThreadRead) {
+      fetch(`/api/v1/email/threads/${thread.id}/read`, { method: "PATCH" }).catch(() => {});
+      onThreadRead(thread.id);
+    }
+  };
+
   return (
     <Card className="shadow-none rounded-lg py-0">
       <CardContent className="p-3">
         {/* Collapsed header */}
         <div
           className="flex items-start gap-2 cursor-pointer"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={handleToggleExpand}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => e.key === "Enter" && setExpanded((v) => !v)}
+          onKeyDown={(e) => e.key === "Enter" && handleToggleExpand()}
         >
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">

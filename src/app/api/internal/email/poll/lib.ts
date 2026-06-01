@@ -2,6 +2,7 @@ import { google } from "googleapis";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
+import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
 import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/education-consultancy/features/email/lib/gmail-client";
 import type { ParsedMessage } from "@/industries/education-consultancy/features/email/lib/gmail-client";
 import type { ConnectedEmailAccount } from "@/types/database";
@@ -168,6 +169,8 @@ export async function pollOneAccount(
     }
 
     let newInboundCount = 0;
+    // Per-cycle dedup: avoid multiple notifications for the same thread in one poll run
+    const notifiedThreadIds = new Set<string>();
 
     for (const messageId of messageAddedIds) {
       try {
@@ -238,6 +241,43 @@ export async function pollOneAccount(
             from_account_id: account.id,
           },
         });
+
+        // Notify inbox owner and lead assignee (per-cycle dedup by thread)
+        if (!notifiedThreadIds.has(thread.id)) {
+          notifiedThreadIds.add(thread.id);
+          try {
+            const recipientIds = new Set<string>();
+            recipientIds.add(account.user_id);
+
+            if (thread.lead_id) {
+              const { data: leadRow } = await supabase
+                .from("leads")
+                .select("assigned_to")
+                .eq("id", thread.lead_id)
+                .maybeSingle();
+              if (leadRow?.assigned_to) recipientIds.add(leadRow.assigned_to);
+            }
+
+            const senderLabel = parsed.from_name || parsed.from_email;
+            const subjectLabel = parsed.subject || "(no subject)";
+            const link = thread.lead_id ? `/leads/${thread.lead_id}` : undefined;
+
+            await Promise.all(
+              Array.from(recipientIds).map((userId) =>
+                upsertThreadNotification({
+                  tenantId: account.tenant_id,
+                  userId,
+                  type: NotificationTypes.EMAIL_RECEIVED,
+                  title: "New email reply",
+                  message: `${senderLabel}: ${subjectLabel}`,
+                  link,
+                })
+              )
+            );
+          } catch (notifyErr) {
+            logger.warn({ err: notifyErr, thread_id: thread.id }, "Failed to create email.received notification (non-fatal)");
+          }
+        }
 
         newInboundCount += 1;
       } catch (msgErr) {

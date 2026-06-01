@@ -174,6 +174,7 @@ export function ComposeEmailDialog({
         body_html: bodyHtml,
         sent_at: now,
         received_at: null,
+        read_at: null,
         sender_user_id: currentUserId,
         in_reply_to: isReply ? replyContext.lastMessage.rfc_message_id : null,
         rfc_references: replyReferences,

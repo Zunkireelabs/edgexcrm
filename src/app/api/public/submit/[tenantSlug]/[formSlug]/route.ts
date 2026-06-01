@@ -14,6 +14,11 @@ import {
 import { checkRateLimit, INTEGRATION_LIMIT } from "@/lib/api/rate-limit";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import {
+  upsertThreadNotification,
+  getTenantAdminRecipients,
+  NotificationTypes,
+} from "@/lib/notifications";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -247,7 +252,10 @@ export async function POST(
 
   log.info({ leadId: lead.id }, "Lead created via public API");
 
-  // Fire-and-forget: audit + event
+  // Fire-and-forget: audit + event + notification (public submit is always final)
+  const leadId = lead.id;
+  const tenantForNotify = tenant;
+  const leadPayloadForNotify = leadPayload;
   Promise.all([
     createAuditLog({
       tenantId: tenant.id,
@@ -275,7 +283,30 @@ export async function POST(
       },
       requestId,
     }),
+    (async () => {
+      try {
+        const fn = leadPayloadForNotify.first_name as string | null;
+        const ln = leadPayloadForNotify.last_name as string | null;
+        const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+        // Public submit is always unassigned — route to tenant admins
+        const adminIds = await getTenantAdminRecipients(supabase, tenantForNotify.id);
+        await Promise.all(
+          adminIds.map((adminId) =>
+            upsertThreadNotification({
+              tenantId: tenantForNotify.id,
+              userId: adminId,
+              type: NotificationTypes.LEAD_CREATED,
+              title: "New lead",
+              message: leadName,
+              link: `/leads/${leadId}`,
+            })
+          )
+        );
+      } catch (err) {
+        log.error({ err }, "Failed to create lead.created notification");
+      }
+    })(),
   ]);
 
-  return withCors(apiSuccess({ lead_id: lead.id }, 201));
+  return withCors(apiSuccess({ lead_id: leadId }, 201));
 }
