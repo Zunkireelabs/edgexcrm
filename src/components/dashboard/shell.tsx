@@ -18,6 +18,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   LayoutGrid,
+  Library,
   Users,
   Settings,
   LogOut,
@@ -50,6 +51,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/knowledge-bases", label: "Knowledge Bases", icon: Library },
   { href: "/leads", label: "All Leads", icon: Users },
 ];
 
