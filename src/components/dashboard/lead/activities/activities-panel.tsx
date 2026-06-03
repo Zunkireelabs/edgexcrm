@@ -11,7 +11,7 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
-import { useEmailThreads, type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
@@ -46,6 +46,9 @@ interface ActivitiesPanelProps {
   leadEmail?: string | null;
   leadFirstName?: string | null;
   leadLastName?: string | null;
+  threads: EmailThread[];
+  setThreads: React.Dispatch<React.SetStateAction<EmailThread[]>>;
+  threadsLoading: boolean;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -68,6 +71,9 @@ export function ActivitiesPanel({
   leadEmail,
   leadFirstName,
   leadLastName,
+  threads,
+  setThreads,
+  threadsLoading,
 }: ActivitiesPanelProps) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
   const [loggedActivities, setLoggedActivities] = useState<LeadActivityRecord[]>([]);
@@ -78,11 +84,6 @@ export function ActivitiesPanel({
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
 
   const isEducation = industryId === "education_consultancy";
-
-  // Email threads (education only — API will 403 for non-education)
-  const { threads, setThreads, loading: threadsLoading } = useEmailThreads(
-    isEducation ? leadId : "",
-  );
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
