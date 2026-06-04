@@ -164,7 +164,7 @@ export function CompareContent() {
         <div>
           <p className="text-sm text-blue-800">
             <strong>Presentation Mode:</strong> Use this view to demonstrate the impact of AI orchestration
-            to stakeholders. Toggle between "People" (traditional) and "With agents" (AI-augmented) to see the difference.
+            to stakeholders. Toggle between &quot;People&quot; (traditional) and &quot;With agents&quot; (AI-augmented) to see the difference.
           </p>
         </div>
       </div>
