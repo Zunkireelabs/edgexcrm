@@ -1,10 +1,14 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole } from "@/types/database";
+import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
   role: string;
   userId: string;
+  positionId: string | null;
+  positionName: string | null;
+  permissions: ResolvedPermissions;
 } | null> {
   const supabase = await createClient();
   const {
@@ -14,7 +18,7 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role")
+    .select("tenant_id, role, position_id, positions(permissions, name)")
     .eq("user_id", user.id)
     .single();
 
@@ -28,12 +32,27 @@ export async function getCurrentUserTenant(): Promise<{
 
   if (!tenant) return null;
 
-  return { tenant: tenant as Tenant, role: membership.role, userId: user.id };
+  const positionEmbed = Array.isArray(membership.positions)
+    ? membership.positions[0] ?? null
+    : membership.positions;
+  const permissions = resolvePermissions(
+    membership.role as UserRole,
+    (positionEmbed?.permissions ?? null) as PositionPermissions | null,
+  );
+
+  return {
+    tenant: tenant as Tenant,
+    role: membership.role,
+    userId: user.id,
+    positionId: (membership.position_id as string | null) ?? null,
+    positionName: (positionEmbed?.name ?? null) as string | null,
+    permissions,
+  };
 }
 
 export async function getLeads(
   tenantId: string,
-  options?: { role?: string; userId?: string; limit?: number }
+  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; limit?: number }
 ): Promise<Lead[]> {
   const supabase = await createClient();
   let query = supabase
@@ -42,11 +61,10 @@ export async function getLeads(
     .eq("tenant_id", tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
-    .limit(options?.limit ?? 1000);
+    .limit(scope?.limit ?? 1000);
 
-  if (options?.role === "counselor" && options.userId) {
-    query = query.eq("assigned_to", options.userId);
-  }
+  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
+  if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
 
   const { data, error } = await query.order("created_at", { ascending: false });
 
@@ -57,7 +75,7 @@ export async function getLeads(
 export async function getLead(
   leadId: string,
   tenantId: string,
-  options?: { role?: string; userId?: string }
+  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null }
 ): Promise<Lead | null> {
   const supabase = await createClient();
   let query = supabase
@@ -67,13 +85,15 @@ export async function getLead(
     .eq("tenant_id", tenantId)
     .is("deleted_at", null);
 
-  if (options?.role === "counselor" && options.userId) {
-    query = query.eq("assigned_to", options.userId);
-  }
+  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
 
   const { data, error } = await query.single();
 
   if (error) return null;
+  // If pipeline access is restricted and this lead's pipeline isn't allowed, hide it.
+  if (scope?.pipelineIds && data?.pipeline_id && !scope.pipelineIds.includes(data.pipeline_id)) {
+    return null;
+  }
   return data as Lead;
 }
 
@@ -225,7 +245,7 @@ export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | n
 
 export async function getLeadsForPipeline(
   tenantId: string,
-  options?: { role?: string; userId?: string; pipelineId?: string }
+  options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string }
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
@@ -240,10 +260,14 @@ export async function getLeadsForPipeline(
     .limit(500);
 
   if (options?.pipelineId) {
+    // If this specific pipeline isn't in the allowed set, return empty immediately.
+    if (options.pipelineIds && !options.pipelineIds.includes(options.pipelineId)) return [];
     query = query.eq("pipeline_id", options.pipelineId);
+  } else if (options?.pipelineIds) {
+    query = query.in("pipeline_id", options.pipelineIds);
   }
 
-  if (options?.role === "counselor" && options.userId) {
+  if (options?.restrictToSelf && options.userId) {
     query = query.eq("assigned_to", options.userId);
   }
 

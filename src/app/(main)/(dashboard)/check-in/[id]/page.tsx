@@ -8,6 +8,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { CheckInDetailPage } from "@/industries/education-consultancy/features/check-in/detail-ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { TenantEntity, LeadNote, PipelineStage } from "@/types/database";
 
 export default async function CheckInDetailRoute({
@@ -19,11 +20,9 @@ export default async function CheckInDetailRoute({
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
-  const lead = await getLead(id, tenantData.tenant.id, {
-    role: tenantData.role,
-    userId: tenantData.userId,
-  });
+  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
   if (!lead) notFound();
 
   const serviceClient = await createServiceClient();

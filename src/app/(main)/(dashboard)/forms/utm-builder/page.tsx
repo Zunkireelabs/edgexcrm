@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { UtmBuilderPageClient } from "@/industries/education-consultancy/features/form-builder/components/utm-builder-page-client";
+import { canSeeNav } from "@/lib/api/permissions";
 import type { UtmLink } from "@/types/database";
 
 type UtmLinkRow = Omit<UtmLink, "form_name"> & {
@@ -14,6 +15,7 @@ export default async function UtmBuilderPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/forms")) redirect("/dashboard");
 
   const forms = await getFormConfigsForTenant(tenantData.tenant.id);
 

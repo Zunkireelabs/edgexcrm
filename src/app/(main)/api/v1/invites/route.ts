@@ -6,13 +6,17 @@ import {
   apiValidationError,
   apiUnauthorized,
   apiForbidden,
+  apiNotFound,
   apiConflict,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isEmail, isIn } from "@/lib/api/validation";
+import { validate, required, isEmail, isUUID } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 import { sendInviteEmail } from "@/lib/email/send-invite";
+import { scopedClient } from "@/lib/supabase/scoped";
+import { deriveRole } from "@/lib/api/permissions";
+import type { PositionPermissions } from "@/lib/api/permissions";
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function GET(_request: NextRequest) {
@@ -69,12 +73,35 @@ export async function POST(request: NextRequest) {
 
   const { valid, errors } = validate(body, {
     email: [required("email"), isEmail()],
-    role: [required("role"), isIn(["admin", "viewer", "counselor"])],
+    position_id: [required("position_id"), isUUID()],
   });
   if (!valid) return apiValidationError(errors);
 
   const email = (body.email as string).toLowerCase().trim();
-  const role = body.role as string;
+
+  // Resolve position + derive role
+  const auth2 = auth; // alias for clarity in nested scope
+  const db = await scopedClient(auth2);
+  const { data: positionData } = await db
+    .from("positions")
+    .select("*")
+    .eq("id", body.position_id as string)
+    .maybeSingle();
+
+  if (!positionData) return apiNotFound("Position");
+
+  const position = positionData as unknown as {
+    id: string;
+    name: string;
+    base_tier: "owner" | "admin" | "member";
+    permissions: PositionPermissions;
+  };
+
+  if (position.base_tier === "owner") {
+    return apiForbidden();
+  }
+
+  const role = deriveRole(position.base_tier, position.permissions.leadScope);
 
   const supabase = await createServiceClient();
 
@@ -121,6 +148,7 @@ export async function POST(request: NextRequest) {
       tenant_id: auth.tenantId,
       email,
       role,
+      position_id: body.position_id as string,
       token,
       expires_at: expiresAt,
       created_by: auth.userId,
@@ -149,7 +177,7 @@ export async function POST(request: NextRequest) {
       action: "invite.created",
       entityType: "invite",
       entityId: invite.id,
-      changes: { email: { old: null, new: email }, role: { old: null, new: role } },
+      changes: { email: { old: null, new: email }, role: { old: null, new: role }, position_id: { old: null, new: body.position_id } },
       ipAddress: ip,
       userAgent,
       requestId,
@@ -159,7 +187,7 @@ export async function POST(request: NextRequest) {
       type: "invite.created",
       entityType: "invite",
       entityId: invite.id,
-      payload: { email, role },
+      payload: { email, role, position_id: body.position_id },
       requestId,
     }),
   ]);

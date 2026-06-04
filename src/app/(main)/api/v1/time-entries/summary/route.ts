@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -108,7 +109,7 @@ export async function GET(request: NextRequest) {
   // Counselor safety net: dimension=member can only contain their own row
   const rows: SummaryRow[] = [];
   for (const [key, grp] of groups) {
-    if (dimension === "member" && auth.role === "counselor" && key !== auth.userId) {
+    if (dimension === "member" && shouldRestrictToSelf(auth.permissions) && key !== auth.userId) {
       continue;
     }
 

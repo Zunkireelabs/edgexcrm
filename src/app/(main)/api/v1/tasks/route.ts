@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiPaginated,
   apiUnauthorized,
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
 
   // Counselor defense-in-depth: force assignee_id to own userId
   let assigneeId = searchParams.get("assignee_id") ?? undefined;
-  if (auth.role === "counselor") {
+  if (shouldRestrictToSelf(auth.permissions)) {
     assigneeId = auth.userId;
   }
 

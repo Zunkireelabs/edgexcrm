@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -42,7 +43,7 @@ export async function GET(
   if (!lead) return apiNotFound("Lead");
 
   // Counselor scoping
-  if (auth.role === "counselor" && lead.assigned_to !== auth.userId) {
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) {
     return apiNotFound("Lead");
   }
 

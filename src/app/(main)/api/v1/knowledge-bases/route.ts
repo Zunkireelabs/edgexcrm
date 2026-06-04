@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { canSeeNav } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -15,6 +16,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!canSeeNav(auth.permissions, "/knowledge-bases")) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { data: kbs, error } = await db

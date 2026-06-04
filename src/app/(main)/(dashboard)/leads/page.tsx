@@ -2,19 +2,18 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
+import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { TenantEntity, Industry } from "@/types/database";
 
 export default async function LeadsPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
   const serviceClient = await createServiceClient();
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] = await Promise.all([
-    getLeads(tenantData.tenant.id, {
-      role: tenantData.role,
-      userId: tenantData.userId,
-    }),
+    getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId)),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),

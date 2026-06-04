@@ -25,6 +25,7 @@ interface TeamMember {
   id: string;
   user_id: string;
   role: string;
+  position_id: string | null;
   email: string;
   default_hourly_rate: number | null;
   created_at: string;
@@ -34,9 +35,17 @@ interface Invite {
   id: string;
   email: string;
   role: string;
+  position_id: string | null;
   token: string;
   expires_at: string;
   created_at: string;
+}
+
+interface Position {
+  id: string;
+  name: string;
+  base_tier: "owner" | "admin" | "member";
+  is_system: boolean;
 }
 
 interface TeamManagementProps {
@@ -56,10 +65,11 @@ const roleColors: Record<string, string> = {
 export function TeamManagement({ role, userId, industryId }: TeamManagementProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState("counselor");
+  const [invitePositionId, setInvitePositionId] = useState("");
   const [inviting, setInviting] = useState(false);
 
   // Rate editing state (IT agency only)
@@ -67,15 +77,24 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
   const [rateInput, setRateInput] = useState("");
   const [savingRate, setSavingRate] = useState(false);
 
+  // Position editing state
+  const [editingPositionFor, setEditingPositionFor] = useState<string | null>(null);
+  const [savingPosition, setSavingPosition] = useState(false);
+
   const isAdmin = role === "owner" || role === "admin";
   const showRates = industryId === "it_agency";
+
+  // Build position map for lookups
+  const positionMap = new Map(positions.map((p) => [p.id, p]));
+  const assignablePositions = positions.filter((p) => p.base_tier !== "owner");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, invitesRes] = await Promise.all([
+      const [membersRes, invitesRes, positionsRes] = await Promise.all([
         fetch("/api/v1/team"),
         isAdmin ? fetch("/api/v1/invites") : Promise.resolve(null),
+        fetch("/api/v1/positions"),
       ]);
 
       if (membersRes.ok) {
@@ -86,6 +105,11 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
       if (invitesRes?.ok) {
         const invitesJson = await invitesRes.json();
         setInvites(invitesJson.data || []);
+      }
+
+      if (positionsRes.ok) {
+        const posJson = await positionsRes.json();
+        setPositions(posJson.data || []);
       }
     } catch {
       toast.error("Failed to load team data");
@@ -99,13 +123,13 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
   }, [fetchData]);
 
   async function handleInvite() {
-    if (!inviteEmail.trim()) return;
+    if (!inviteEmail.trim() || !invitePositionId) return;
     setInviting(true);
     try {
       const res = await fetch("/api/v1/invites", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: inviteEmail.trim(), role: inviteRole }),
+        body: JSON.stringify({ email: inviteEmail.trim(), position_id: invitePositionId }),
       });
 
       if (!res.ok) {
@@ -120,6 +144,35 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
       toast.error(err instanceof Error ? err.message : "Failed to send invite");
     } finally {
       setInviting(false);
+    }
+  }
+
+  async function savePosition(memberUserId: string, positionId: string) {
+    setSavingPosition(true);
+    try {
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, position_id: positionId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || "Failed to update position");
+      }
+      const json = await res.json();
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === memberUserId
+            ? { ...m, position_id: positionId, role: json.data?.role ?? m.role }
+            : m
+        )
+      );
+      toast.success("Position updated");
+      setEditingPositionFor(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update position");
+    } finally {
+      setSavingPosition(false);
     }
   }
 
@@ -286,9 +339,56 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
                       </div>
                     )
                   )}
-                  <Badge variant="secondary" className={roleColors[member.role] || ""}>
-                    {member.role}
-                  </Badge>
+                  {/* Position badge + inline editor */}
+                  {isAdmin && member.role !== "owner" && editingPositionFor === member.user_id ? (
+                    <div className="flex items-center gap-1">
+                      <Select
+                        defaultValue={member.position_id ?? ""}
+                        onValueChange={(v) => {
+                          savePosition(member.user_id, v);
+                        }}
+                        disabled={savingPosition}
+                      >
+                        <SelectTrigger className="h-7 w-36 text-xs">
+                          <SelectValue placeholder="Pick position" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {assignablePositions.map((p) => (
+                            <SelectItem key={p.id} value={p.id}>
+                              {p.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => setEditingPositionFor(null)}
+                      >
+                        <X className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1">
+                      <Badge variant="secondary" className={roleColors[member.role] || ""}>
+                        {member.position_id
+                          ? (positionMap.get(member.position_id)?.name ?? member.role)
+                          : member.role}
+                      </Badge>
+                      {isAdmin && member.role !== "owner" && assignablePositions.length > 0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setEditingPositionFor(member.user_id)}
+                          title="Change position"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {isAdmin && member.user_id !== userId && member.role !== "owner" && (
                     <Button
                       variant="ghost"
@@ -327,17 +427,19 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
                 onChange={(e) => setInviteEmail(e.target.value)}
                 className="flex-1"
               />
-              <Select value={inviteRole} onValueChange={setInviteRole}>
-                <SelectTrigger className="w-full sm:w-[140px]">
-                  <SelectValue />
+              <Select value={invitePositionId} onValueChange={setInvitePositionId}>
+                <SelectTrigger className="w-full sm:w-[160px]">
+                  <SelectValue placeholder="Position" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="counselor">Counselor</SelectItem>
-                  <SelectItem value="viewer">Viewer</SelectItem>
+                  {assignablePositions.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim()}>
+              <Button onClick={handleInvite} disabled={inviting || !inviteEmail.trim() || !invitePositionId}>
                 <UserPlus className="h-4 w-4 mr-2" />
                 {inviting ? "Sending..." : "Invite"}
               </Button>
@@ -373,7 +475,9 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant="secondary" className={roleColors[invite.role] || ""}>
-                      {invite.role}
+                      {invite.position_id
+                        ? (positionMap.get(invite.position_id)?.name ?? invite.role)
+                        : invite.role}
                     </Badge>
                     <Button
                       variant="ghost"

@@ -5,11 +5,13 @@ import { ContactsPage } from "@/industries/education-consultancy/features/contac
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { ContactsListPage } from "@/industries/it-agency/features/crm-contacts/pages/contacts-list";
+import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { Industry, TenantEntity } from "@/types/database";
 
 export default async function ContactsRoutePage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!canSeeNav(tenantData.permissions, "/contacts")) redirect("/dashboard");
 
   const industry = tenantData.tenant.industry_id;
 
@@ -27,10 +29,7 @@ export default async function ContactsRoutePage() {
   if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.CONTACTS)) {
     const supabase = await createServiceClient();
 
-    const leads = await getLeads(tenantData.tenant.id, {
-      role: tenantData.role,
-      userId: tenantData.userId,
-    });
+    const leads = await getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
 
     const { data: teamData } = await supabase
       .from("tenant_users")

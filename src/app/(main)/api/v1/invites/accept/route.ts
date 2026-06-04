@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
       tenant_id: invite.tenant_id,
       user_id: user.userId,
       role: invite.role,
+      ...(invite.position_id ? { position_id: invite.position_id } : {}),
     })
     .select()
     .single();

@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { shouldRestrictToSelf, canAccessPipeline } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -75,9 +76,12 @@ export async function GET(
   }
 
   // Counselor scoping: can only view assigned leads
-  if (auth.role === "counselor" && lead.assigned_to !== auth.userId) {
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) {
     return apiNotFound("Lead");
   }
+
+  // Pipeline-access enforcement (dormant until Phase 3)
+  if (!canAccessPipeline(auth.permissions, lead.pipeline_id)) return apiNotFound("Lead");
 
   return apiSuccess(lead as Lead);
 }
@@ -123,13 +127,16 @@ export async function PATCH(
     return apiNotFound("Lead");
   }
 
+  // Pipeline-access enforcement (dormant until Phase 3)
+  if (!canAccessPipeline(auth.permissions, existingLead.pipeline_id)) return apiForbidden();
+
   // Access check: admin or counselor with assignment
   if (!requireLeadAccess(auth, existingLead)) {
     return apiForbidden();
   }
 
   // Counselor cannot update admin-only fields
-  if (auth.role === "counselor") {
+  if (auth.permissions.baseTier === "member") {
     for (const field of ADMIN_ONLY_FIELDS) {
       if (body[field] !== undefined) {
         return apiForbidden();

@@ -33,7 +33,15 @@ export default async function DashboardLayout({
   }
 
   const formConfigs = await getFormConfigsForTenant(tenantData.tenant.id);
-  const industrySidebarItems = getIndustrySidebarItems(tenantData.tenant.industry_id, tenantData.role);
+  const industrySidebarItems = getIndustrySidebarItems(
+    tenantData.tenant.industry_id,
+    tenantData.role,
+    tenantData.permissions,
+  );
+  const allowedNavKeys =
+    tenantData.permissions.allowedNavKeys === null
+      ? null
+      : [...tenantData.permissions.allowedNavKeys];
 
   return (
     <AIAssistantProvider>
@@ -41,8 +49,10 @@ export default async function DashboardLayout({
         user={user}
         tenant={tenantData.tenant}
         role={tenantData.role}
+        positionName={tenantData.positionName}
         formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
         industrySidebarItems={industrySidebarItems}
+        allowedNavKeys={allowedNavKeys}
       >
         {children}
       </DashboardShell>

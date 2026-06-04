@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       id,
       email,
       role,
+      position_id,
       expires_at,
       accepted_at,
       tenant:tenants (
@@ -87,11 +88,24 @@ export async function GET(request: NextRequest) {
     ? `${localPart.slice(0, 2)}***@${domain}`
     : `${localPart[0]}***@${domain}`;
 
+  // Look up position name if present
+  let position_name: string | null = null;
+  const inviteWithPosition = invite as typeof invite & { position_id?: string | null };
+  if (inviteWithPosition.position_id) {
+    const { data: pos } = await supabase
+      .from("positions")
+      .select("name")
+      .eq("id", inviteWithPosition.position_id)
+      .single();
+    position_name = (pos as { name?: string } | null)?.name ?? null;
+  }
+
   return apiSuccess({
     valid: true,
     email: invite.email,
     maskedEmail,
     role: invite.role,
+    position_name,
     tenant: invite.tenant,
     expires_at: invite.expires_at,
   });

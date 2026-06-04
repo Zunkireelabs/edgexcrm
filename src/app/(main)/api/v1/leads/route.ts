@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { shouldRestrictToSelf, canSeeNav } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiPaginated,
   apiValidationError,
   apiUnauthorized,
+  apiForbidden,
   apiNotFound,
   apiRateLimited,
   apiServiceUnavailable,
@@ -49,6 +51,7 @@ export async function GET(request: NextRequest) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!canSeeNav(auth.permissions, "/leads")) return apiForbidden();
 
   log.info({ tenantId: auth.tenantId }, "Fetching leads");
 
@@ -76,8 +79,13 @@ export async function GET(request: NextRequest) {
   }
 
   // Counselor scoping: force assigned_to filter
-  if (auth.role === "counselor") {
+  if (shouldRestrictToSelf(auth.permissions)) {
     assignedTo = auth.userId;
+  }
+
+  // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
+  if (auth.permissions.pipelineAccess !== "all") {
+    query = query.in("pipeline_id", [...auth.permissions.pipelineAccess.ids]);
   }
 
   if (assignedTo) {

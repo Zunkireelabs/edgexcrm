@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -70,7 +71,7 @@ export async function PATCH(
   const updatePayload: Record<string, unknown> = {};
 
   // Counselor can only toggle is_completed
-  if (auth.role === "counselor") {
+  if (shouldRestrictToSelf(auth.permissions)) {
     if (body.title !== undefined || body.position !== undefined) {
       return apiForbidden();
     }

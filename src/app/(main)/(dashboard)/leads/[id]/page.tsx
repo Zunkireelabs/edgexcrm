@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
+import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { TenantEntity, Industry } from "@/types/database";
 
 export default async function LeadDetailPage({
@@ -19,11 +20,9 @@ export default async function LeadDetailPage({
   const { id } = await params;
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const lead = await getLead(id, tenantData.tenant.id, {
-    role: tenantData.role,
-    userId: tenantData.userId,
-  });
+  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
   if (!lead) notFound();
 
   const serviceClient = await createServiceClient();

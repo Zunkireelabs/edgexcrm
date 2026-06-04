@@ -8,12 +8,14 @@ import { FormList } from "@/industries/education-consultancy/features/form-build
 import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { canSeeNav } from "@/lib/api/permissions";
 import type { FormConfig } from "@/types/database";
 
 export default async function FormsPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/forms")) redirect("/dashboard");
 
   if (tenantData.role !== "owner" && tenantData.role !== "admin") {
     return (
