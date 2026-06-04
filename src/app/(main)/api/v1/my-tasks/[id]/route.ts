@@ -17,6 +17,8 @@ const TASK_STATUSES = ["todo", "in_progress", "done"];
 const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+type TaskOwner = { id: string; assignee_id: string | null };
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -58,11 +60,13 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  const { data: existing } = await db
+  // scopedClient drops column inference — cast at call site per scoped.ts comment.
+  const fetchResult = await db
     .from("tasks")
     .select("id, assignee_id")
     .eq("id", id)
     .maybeSingle();
+  const existing = fetchResult.data as TaskOwner | null;
 
   if (!existing) return apiNotFound("Task");
   if (existing.assignee_id !== auth.userId) return apiForbidden();
@@ -111,11 +115,13 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  const { data: existing } = await db
+  // scopedClient drops column inference — cast at call site per scoped.ts comment.
+  const fetchResult = await db
     .from("tasks")
     .select("id, assignee_id")
     .eq("id", id)
     .maybeSingle();
+  const existing = fetchResult.data as TaskOwner | null;
 
   if (!existing) return apiNotFound("Task");
   if (existing.assignee_id !== auth.userId) return apiForbidden();

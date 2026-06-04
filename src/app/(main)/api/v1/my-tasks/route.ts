@@ -10,6 +10,27 @@ import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/ap
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import type { TaskStatus, TaskPriority } from "@/types/database";
+
+interface MyTask {
+  id: string;
+  status: TaskStatus;
+  priority: TaskPriority;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  assignee_id: string | null;
+  project_id: string | null;
+  lead_id: string | null;
+  tenant_id: string;
+  is_billable: boolean;
+  position: number;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  projects: { id: string; name: string } | null;
+  leads: { id: string; first_name: string | null; last_name: string | null } | null;
+}
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
 const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -38,16 +59,17 @@ export async function GET(request: NextRequest) {
 
   if (statuses.length > 0) query = query.in("status", statuses);
 
-  const { data, error } = await query
+  // scopedClient drops column inference — cast at call site per scoped.ts comment.
+  const queryResult = await query
     .order("due_date", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: false });
 
-  if (error) {
-    log.error({ error }, "Failed to fetch my tasks");
+  if (queryResult.error) {
+    log.error({ error: queryResult.error }, "Failed to fetch my tasks");
     return apiError("DB_ERROR", "Failed to fetch tasks", 500);
   }
 
-  const tasks = data ?? [];
+  const tasks = (queryResult.data ?? []) as unknown as MyTask[];
   const open = tasks.filter((t) => t.status !== "done");
   const completed = tasks.filter((t) => t.status === "done").slice(0, 10);
 

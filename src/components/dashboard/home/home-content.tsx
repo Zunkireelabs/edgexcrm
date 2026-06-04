@@ -9,7 +9,7 @@ import { MyLeadsCard } from "./my-leads-card";
 import { EmailSnapshotCard } from "./email-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, EmailSnapshot, RecentNotification } from "@/lib/supabase/queries";
-import type { Lead, TaskPriority } from "@/types/database";
+import type { Lead, TaskPriority, TaskStatus } from "@/types/database";
 
 interface HomeContentProps {
   userName: string;
@@ -44,7 +44,7 @@ export function HomeContent({
       const task = openTasks.find((t) => t.id === id);
       if (task) {
         setOpenTasks((prev) => prev.filter((t) => t.id !== id));
-        setDoneTasks((prev) => [{ ...task, status: "done" }, ...prev].slice(0, 10));
+        setDoneTasks((prev) => [{ ...task, status: "done" as TaskStatus }, ...prev].slice(0, 10));
       }
       router.refresh();
     }
