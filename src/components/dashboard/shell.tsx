@@ -34,6 +34,9 @@ import {
   Search,
   Sparkles,
   Stamp,
+  Network,
+  ListChecks,
+  GitCompare,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -62,6 +65,15 @@ const UNIVERSAL_NAV_MIDDLE = [
 const UNIVERSAL_NAV_BOTTOM = [
   { href: "/team", label: "Team", icon: UsersRound },
   { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const ORCA_NAV = [
+  { href: "/orca", label: "Overview", icon: LayoutDashboard },
+  { href: "/orca/structure", label: "Org Structure", icon: Network },
+  { href: "/orca/roles", label: "Roles", icon: Contact },
+  { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/orca/agents", label: "Agents", icon: Bot },
+  { href: "/orca/compare", label: "Compare", icon: GitCompare },
 ];
 
 // Icon registry for industry-contributed nav items. Manifests reference
@@ -180,9 +192,10 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const isOrcaRoute = pathname === "/orca" || pathname.startsWith("/orca/");
+  const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [navMode, setNavMode] = useState<"ops" | "orca">("ops");
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
@@ -196,16 +209,6 @@ export function DashboardShell({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    const stored = typeof window !== "undefined"
-      ? window.localStorage.getItem("dashboard-nav-mode")
-      : null;
-    if (stored === "orca" || stored === "ops") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setNavMode(stored);
-    }
-  }, []);
-
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -214,12 +217,9 @@ export function DashboardShell({
   }
 
   function handleNavModeChange(value: string) {
-    if (value === "ops" || value === "orca") {
-      setNavMode(value);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("dashboard-nav-mode", value);
-      }
-    }
+    setMobileOpen(false);
+    if (value === "orca") router.push("/orca");
+    else if (value === "ops") router.push("/dashboard");
   }
 
   const industryBefore = industrySidebarItems.filter(
@@ -232,7 +232,7 @@ export function DashboardShell({
   function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number }) {
     const isActive =
       pathname === item.href ||
-      (item.href !== "/dashboard" && pathname.startsWith(item.href));
+      (item.href !== "/dashboard" && item.href !== "/orca" && pathname.startsWith(item.href));
     return (
       <Link
         key={item.href}
@@ -365,13 +365,9 @@ export function DashboardShell({
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center px-4 py-12 gap-2">
-            <Bot className="w-6 h-6 text-muted-foreground/40" />
-            <p className="text-xs font-medium text-gray-700">Orca coming soon</p>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              AI agents and orchestrations will live here.
-            </p>
-          </div>
+          <>
+            {ORCA_NAV.map(renderNavItem)}
+          </>
         )}
       </nav>
     </div>
