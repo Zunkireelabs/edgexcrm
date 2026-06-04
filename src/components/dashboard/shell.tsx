@@ -16,6 +16,7 @@ import {
   Building2,
   Contact,
   FolderKanban,
+  House,
   LayoutDashboard,
   LayoutGrid,
   Library,
@@ -53,6 +54,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 // industry manifest via `industrySidebarItems` prop and are inserted
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
+  { href: "/home", label: "Home", icon: House },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/knowledge-bases", label: "Knowledge Bases", icon: Library },
   { href: "/leads", label: "All Leads", icon: Users },
@@ -201,7 +203,7 @@ export function DashboardShell({
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { counts } = useBadgeCounts();
 
-  const navAllowed = (href: string) => allowedNavKeys === null || allowedNavKeys.includes(href);
+  const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
@@ -219,7 +221,7 @@ export function DashboardShell({
   function handleNavModeChange(value: string) {
     setMobileOpen(false);
     if (value === "orca") router.push("/orca");
-    else if (value === "ops") router.push("/dashboard");
+    else if (value === "ops") router.push("/home");
   }
 
   const industryBefore = industrySidebarItems.filter(

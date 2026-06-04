@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 
 export async function getCurrentUserTenant(): Promise<{
@@ -373,4 +373,144 @@ export async function getLeadActivity(leadId: string, tenantId: string): Promise
 
   if (error) throw error;
   return (data as LeadActivity[]) || [];
+}
+
+// ── Home-view query helpers ──────────────────────────────────────────────────
+
+export interface ScheduleActivity {
+  id: string;
+  activity_type: string;
+  subject: string | null;
+  scheduled_at: string;
+  location: string | null;
+  lead_id: string;
+  leads: { id: string; first_name: string | null; last_name: string | null } | null;
+}
+
+export async function getMySchedule(tenantId: string, userId: string): Promise<ScheduleActivity[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("lead_activities")
+    .select("id, activity_type, subject, scheduled_at, location, lead_id, leads(id, first_name, last_name)")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .in("activity_type", ["meeting", "call"])
+    .not("scheduled_at", "is", null)
+    .is("completed_at", null)
+    .order("scheduled_at", { ascending: true })
+    .limit(20);
+
+  if (error) return [];
+  return (data ?? []) as unknown as ScheduleActivity[];
+}
+
+export interface PersonalTask {
+  id: string;
+  tenant_id: string;
+  title: string;
+  description: string | null;
+  status: TaskStatus;
+  priority: TaskPriority;
+  due_date: string | null;
+  assignee_id: string | null;
+  project_id: string | null;
+  lead_id: string | null;
+  is_billable: boolean;
+  position: number;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+  leads: { id: string; first_name: string | null; last_name: string | null } | null;
+}
+
+export interface MyTasksResult {
+  open: PersonalTask[];
+  done: PersonalTask[];
+}
+
+export async function getMyTasks(tenantId: string, userId: string): Promise<MyTasksResult> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*, leads(id, first_name, last_name)")
+    .eq("tenant_id", tenantId)
+    .eq("assignee_id", userId)
+    .order("due_date", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: false });
+
+  if (error) return { open: [], done: [] };
+
+  const tasks = (data ?? []) as unknown as PersonalTask[];
+  return {
+    open: tasks.filter((t) => t.status !== "done"),
+    done: tasks.filter((t) => t.status === "done").slice(0, 10),
+  };
+}
+
+export interface EmailSnapshotItem {
+  id: string;
+  from_email: string;
+  from_name: string | null;
+  subject: string | null;
+  received_at: string | null;
+  thread_id: string;
+}
+
+export interface EmailSnapshot {
+  items: EmailSnapshotItem[];
+  unreadCount: number;
+}
+
+export async function getMyEmailSnapshot(tenantId: string, userId: string): Promise<EmailSnapshot> {
+  const supabase = await createServiceClient();
+
+  const { data: accounts } = await supabase
+    .from("connected_email_accounts")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId);
+
+  const ids = (accounts ?? []).map((a) => a.id);
+  if (ids.length === 0) return { items: [], unreadCount: 0 };
+
+  const { data: emails, count } = await supabase
+    .from("emails")
+    .select("id, from_email, from_name, subject, received_at, thread_id", { count: "exact" })
+    .in("connected_email_account_id", ids)
+    .eq("direction", "inbound")
+    .is("read_at", null)
+    .order("received_at", { ascending: false })
+    .limit(5);
+
+  return {
+    items: (emails ?? []) as EmailSnapshotItem[],
+    unreadCount: count ?? 0,
+  };
+}
+
+export interface RecentNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+export async function getRecentNotifications(
+  tenantId: string,
+  userId: string,
+): Promise<RecentNotification[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("notifications")
+    .select("id, type, title, message, link, read_at, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (error) return [];
+  return (data ?? []) as RecentNotification[];
 }
