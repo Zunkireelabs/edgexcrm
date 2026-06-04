@@ -591,3 +591,15 @@ export interface ProjectContact {
   role: ProjectContactRole | null;
   created_at: string;
 }
+
+export interface Position {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  base_tier: "owner" | "admin" | "member";
+  is_system: boolean;
+  permissions: import("@/lib/api/permissions").PositionPermissions;
+  created_at: string;
+  updated_at: string;
+}

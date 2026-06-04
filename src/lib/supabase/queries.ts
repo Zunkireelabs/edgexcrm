@@ -1,10 +1,13 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole } from "@/types/database";
+import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
   role: string;
   userId: string;
+  positionId: string | null;
+  permissions: ResolvedPermissions;
 } | null> {
   const supabase = await createClient();
   const {
@@ -14,7 +17,7 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role")
+    .select("tenant_id, role, position_id, positions(permissions)")
     .eq("user_id", user.id)
     .single();
 
@@ -28,7 +31,21 @@ export async function getCurrentUserTenant(): Promise<{
 
   if (!tenant) return null;
 
-  return { tenant: tenant as Tenant, role: membership.role, userId: user.id };
+  const positionEmbed = Array.isArray(membership.positions)
+    ? membership.positions[0] ?? null
+    : membership.positions;
+  const permissions = resolvePermissions(
+    membership.role as UserRole,
+    (positionEmbed?.permissions ?? null) as PositionPermissions | null,
+  );
+
+  return {
+    tenant: tenant as Tenant,
+    role: membership.role,
+    userId: user.id,
+    positionId: (membership.position_id as string | null) ?? null,
+    permissions,
+  };
 }
 
 export async function getLeads(

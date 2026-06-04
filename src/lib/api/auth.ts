@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
+import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { cookies } from "next/headers";
 
 export interface AuthContext {
@@ -9,6 +10,8 @@ export interface AuthContext {
   tenantId: string;
   role: UserRole;
   industryId: string | null;
+  positionId: string | null;
+  permissions: ResolvedPermissions;
 }
 
 export async function authenticateRequest(): Promise<AuthContext | null> {
@@ -40,11 +43,12 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role, tenants(industry_id)")
+      .select("tenant_id, role, position_id, tenants(industry_id), positions(permissions)")
       .eq("user_id", user.id)
       .single<{
         tenant_id: string;
         role: string;
+        position_id: string | null;
         // PostgREST returns embedded FK relations as an object for
         // many-to-one (the case here: tenant_users.tenant_id ->
         // tenants.id), but may return an array if the schema cache is
@@ -52,6 +56,10 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
         tenants:
           | { industry_id: string | null }
           | { industry_id: string | null }[]
+          | null;
+        positions:
+          | { permissions: PositionPermissions }
+          | { permissions: PositionPermissions }[]
           | null;
       }>();
 
@@ -61,12 +69,19 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       ? membership.tenants[0] ?? null
       : membership.tenants;
 
+    const positionEmbed = Array.isArray(membership.positions)
+      ? membership.positions[0] ?? null
+      : membership.positions;
+    const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
+
     return {
       userId: user.id,
       email: user.email || "",
       tenantId: membership.tenant_id,
       role: membership.role as UserRole,
       industryId: tenantsEmbed?.industry_id ?? null,
+      positionId: membership.position_id ?? null,
+      permissions: resolvePermissions(membership.role as UserRole, positionPermissions),
     };
   } catch {
     return null;
