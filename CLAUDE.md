@@ -393,8 +393,8 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 
 ### Current Data
 
-- 2 tenants: "Zunkiree Labs" (slug: `zunkireelabs-crm`, industry: IT Agency), "Admizz Education" (slug: `admizz`, industry: Education Consultancy)
-- Roles: owner, admin, viewer, counselor
+- 3 tenants: "Zunkiree Labs" (slug: `zunkireelabs-crm`, industry: IT Agency), "Admizz Education" (slug: `admizz`, industry: Education Consultancy), "Mobilise" (slug: `mobilise`, industry: IT Agency, owner `kk@mobilise.agency`)
+- Roles: owner, admin, viewer, counselor. As of 2026-06-04 the **Positions/RBAC** feature layers configurable permission profiles on top of `role` (see the `positions` row in `docs/FEATURE-CATALOG.md`); `role` is still the base tier every legacy check reads.
 - Default pipeline stages: new / contacted / enrolled / rejected
 
 ---
