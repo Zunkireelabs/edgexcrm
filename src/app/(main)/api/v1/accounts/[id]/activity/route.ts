@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -51,12 +52,12 @@ export async function GET(request: NextRequest, { params }: Props) {
     db.from("projects").select("id, name").eq("account_id", id),
     (() => {
       let q = db.from("contacts").select("id, first_name, last_name").eq("account_id", id).is("deleted_at", null);
-      if (auth.role === "counselor") q = q.eq("assigned_to", auth.userId);
+      if (shouldRestrictToSelf(auth.permissions)) q = q.eq("assigned_to", auth.userId);
       return q;
     })(),
     (() => {
       let q = db.from("leads").select("id, first_name, last_name, email").eq("account_id", id).is("deleted_at", null);
-      if (auth.role === "counselor") q = q.eq("assigned_to", auth.userId);
+      if (shouldRestrictToSelf(auth.permissions)) q = q.eq("assigned_to", auth.userId);
       return q;
     })(),
   ]);
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest, { params }: Props) {
       .from("time_entries")
       .select("user_id, entry_date, project_id, minutes, created_at")
       .in("project_id", projectIds);
-    if (auth.role === "counselor") q = q.eq("user_id", auth.userId);
+    if (shouldRestrictToSelf(auth.permissions)) q = q.eq("user_id", auth.userId);
     return q.limit(500);
   })();
 
@@ -100,7 +101,7 @@ export async function GET(request: NextRequest, { params }: Props) {
       .contains("payload", { account_id: id })
       .order("created_at", { ascending: false })
       .limit(50);
-    if (auth.role === "counselor") tq = tq.filter("payload->>user_id", "eq", auth.userId);
+    if (shouldRestrictToSelf(auth.permissions)) tq = tq.filter("payload->>user_id", "eq", auth.userId);
     return tq;
   })();
 

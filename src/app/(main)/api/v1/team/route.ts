@@ -1,4 +1,5 @@
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { canSeeNav } from "@/lib/api/permissions";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
@@ -19,6 +20,7 @@ export async function GET() {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!canSeeNav(auth.permissions, "/team")) return apiForbidden();
 
   // Migrated to scopedClient — auto-injects `.eq("tenant_id", auth.tenantId)`.
   // See CLAUDE.md § Hardening discipline.

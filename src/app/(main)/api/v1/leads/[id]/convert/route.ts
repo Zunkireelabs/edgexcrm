@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -84,7 +85,7 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (leadRow.converted_at) return apiError("INVALID_STATE", "Lead already converted", 409);
 
   // Counselor can only convert their own lead
-  if (auth.role === "counselor" && leadRow.assigned_to !== auth.userId) {
+  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) {
     return apiForbidden();
   }
 

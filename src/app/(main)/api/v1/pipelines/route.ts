@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { canAccessPipeline, canSeeNav } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -23,6 +24,7 @@ export async function GET() {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  if (!canSeeNav(auth.permissions, "/pipeline")) return apiForbidden();
 
   log.info({ tenantId: auth.tenantId }, "Fetching pipelines");
 
@@ -75,8 +77,9 @@ export async function GET() {
     lead_count: leadCountMap.get(p.id) || 0,
   }));
 
-  log.info({ count: result.length }, "Pipelines fetched");
-  return apiSuccess(result);
+  const visible = result.filter((p) => canAccessPipeline(auth.permissions, p.id));
+  log.info({ count: visible.length }, "Pipelines fetched");
+  return apiSuccess(visible);
 }
 
 // POST /api/v1/pipelines - Create a new pipeline

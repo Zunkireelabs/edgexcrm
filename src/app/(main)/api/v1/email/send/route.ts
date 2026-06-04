@@ -1,4 +1,5 @@
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiUnauthorized,
   apiForbidden,
@@ -118,7 +119,7 @@ export async function POST(request: Request) {
       .eq("id", effectiveLeadId);
 
     // Counselor scoping: only interpolate from leads assigned to this user
-    if (auth.role === "counselor") {
+    if (shouldRestrictToSelf(auth.permissions)) {
       leadQuery = leadQuery.eq("assigned_to", auth.userId);
     }
 

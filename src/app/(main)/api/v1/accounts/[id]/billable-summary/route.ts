@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -59,7 +60,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
     });
   }
 
-  const isCounselor = auth.role === "counselor";
+  const isCounselor = shouldRestrictToSelf(auth.permissions);
   const authUserId = auth.userId;
 
   const now = new Date();

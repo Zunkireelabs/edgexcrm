@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -36,7 +37,7 @@ export async function PATCH(
   const db = await scopedClient(auth);
 
   // Counselor scope: verify thread belongs to one of their connected accounts
-  if (auth.role === "counselor") {
+  if (shouldRestrictToSelf(auth.permissions)) {
     const { data: ownAccounts } = await db
       .from("connected_email_accounts")
       .select("id")

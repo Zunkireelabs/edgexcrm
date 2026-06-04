@@ -1,4 +1,5 @@
 import { authenticateRequest } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiUnauthorized,
   apiForbidden,
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
 
   // Counselor scoping: pre-fetch own account IDs (2-query approach — cleaner than PostgREST inner join)
   let ownAccountIds: string[] | null = null;
-  if (auth.role === "counselor") {
+  if (shouldRestrictToSelf(auth.permissions)) {
     const { data: ownAccounts } = await db
       .from("connected_email_accounts")
       .select("id")
