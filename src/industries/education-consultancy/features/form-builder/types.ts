@@ -1,4 +1,4 @@
-import type { FormStep, FormBranding } from "@/types/database";
+import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
 
 export interface TemplateDefinition {
   id: string;
@@ -18,6 +18,7 @@ export interface BuilderState {
   steps: FormStep[];
   branding: FormBranding;
   redirectUrl: string | null;
+  attribution: FormAttribution;
   isDirty: boolean;
   saving: boolean;
 }
@@ -38,5 +39,6 @@ export type BuilderAction =
   | { type: "MOVE_FIELD_UP"; payload: { stepIndex: number; fieldIndex: number } }
   | { type: "MOVE_FIELD_DOWN"; payload: { stepIndex: number; fieldIndex: number } }
   | { type: "SET_BRANDING"; payload: Partial<FormBranding> }
+  | { type: "SET_ATTRIBUTION"; payload: Partial<FormAttribution> }
   | { type: "SET_SAVING"; payload: boolean }
   | { type: "MARK_SAVED" };

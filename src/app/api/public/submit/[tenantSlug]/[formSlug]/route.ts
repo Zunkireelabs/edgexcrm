@@ -14,6 +14,11 @@ import {
 import { checkRateLimit, INTEGRATION_LIMIT } from "@/lib/api/rate-limit";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import {
+  upsertThreadNotification,
+  getTenantAdminRecipients,
+  NotificationTypes,
+} from "@/lib/notifications";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -98,7 +103,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, steps")
+    .select("id, tenant_id, slug, steps, attribution")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -204,9 +209,15 @@ export async function POST(
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},
     entity_id: body.entity_id || null,
-    intake_source: body.intake_source || "api",
-    intake_medium: body.intake_medium || null,
-    intake_campaign: body.intake_campaign || null,
+    intake_source: body.intake_source
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_source : null)
+      || "api",
+    intake_medium: body.intake_medium
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_medium : null)
+      || null,
+    intake_campaign: body.intake_campaign
+      || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_campaign : null)
+      || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
     ...(displayId && { display_id: displayId }),
@@ -241,7 +252,10 @@ export async function POST(
 
   log.info({ leadId: lead.id }, "Lead created via public API");
 
-  // Fire-and-forget: audit + event
+  // Fire-and-forget: audit + event + notification (public submit is always final)
+  const leadId = lead.id;
+  const tenantForNotify = tenant;
+  const leadPayloadForNotify = leadPayload;
   Promise.all([
     createAuditLog({
       tenantId: tenant.id,
@@ -269,7 +283,30 @@ export async function POST(
       },
       requestId,
     }),
+    (async () => {
+      try {
+        const fn = leadPayloadForNotify.first_name as string | null;
+        const ln = leadPayloadForNotify.last_name as string | null;
+        const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+        // Public submit is always unassigned — route to tenant admins
+        const adminIds = await getTenantAdminRecipients(supabase, tenantForNotify.id);
+        await Promise.all(
+          adminIds.map((adminId) =>
+            upsertThreadNotification({
+              tenantId: tenantForNotify.id,
+              userId: adminId,
+              type: NotificationTypes.LEAD_CREATED,
+              title: "New lead",
+              message: leadName,
+              link: `/leads/${leadId}`,
+            })
+          )
+        );
+      } catch (err) {
+        log.error({ err }, "Failed to create lead.created notification");
+      }
+    })(),
   ]);
 
-  return withCors(apiSuccess({ lead_id: lead.id }, 201));
+  return withCors(apiSuccess({ lead_id: leadId }, 201));
 }

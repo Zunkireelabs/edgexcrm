@@ -2,7 +2,7 @@
 
 import { useReducer, useCallback } from "react";
 import { toast } from "sonner";
-import type { FormStep, FormBranding } from "@/types/database";
+import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
 import type { BuilderState, BuilderAction } from "../types";
 
 function builderReducer(state: BuilderState, action: BuilderAction): BuilderState {
@@ -113,6 +113,9 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
     case "SET_BRANDING":
       return { ...state, branding: { ...state.branding, ...action.payload }, isDirty: true };
 
+    case "SET_ATTRIBUTION":
+      return { ...state, attribution: { ...state.attribution, ...action.payload }, isDirty: true };
+
     case "SET_SAVING":
       return { ...state, saving: action.payload };
 
@@ -132,6 +135,7 @@ function buildInitialState(formConfig: {
   steps: FormStep[];
   branding: FormBranding;
   redirect_url: string | null;
+  attribution?: FormAttribution | null;
 }): BuilderState {
   return {
     id: formConfig.id,
@@ -141,6 +145,7 @@ function buildInitialState(formConfig: {
     steps: formConfig.steps,
     branding: formConfig.branding,
     redirectUrl: formConfig.redirect_url,
+    attribution: formConfig.attribution ?? {},
     isDirty: false,
     saving: false,
   };
@@ -162,6 +167,7 @@ export function useFormBuilder(initialConfig: Parameters<typeof buildInitialStat
           steps: state.steps,
           branding: state.branding,
           redirect_url: state.redirectUrl,
+          attribution: state.attribution,
         }),
       });
 

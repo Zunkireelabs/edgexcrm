@@ -10,7 +10,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
-import { createNotification, NotificationTypes } from "@/lib/notifications";
+import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -153,9 +153,11 @@ export async function PATCH(request: NextRequest) {
     ])
   );
 
-  // Create notification for new assignee (single notification for bulk)
+  const bulkNotifications = [];
+
+  // Notify new assignee (single notification for bulk, self-suppressed)
   if (body.assigned_to) {
-    createNotification({
+    bulkNotifications.push({
       tenantId: auth.tenantId,
       userId: body.assigned_to,
       type: NotificationTypes.LEAD_ASSIGNED,
@@ -191,7 +193,7 @@ export async function PATCH(request: NextRequest) {
     })();
   }
 
-  // Notify previous assignees who lost their leads (group by previous assignee)
+  // Notify previous assignees who lost their leads (group by previous assignee, self-suppressed)
   const previousAssignees = new Map<string, number>();
   for (const id of idsToUpdate) {
     const prevAssignee = existingMap.get(id);
@@ -201,7 +203,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   for (const [prevUserId, count] of previousAssignees) {
-    createNotification({
+    bulkNotifications.push({
       tenantId: auth.tenantId,
       userId: prevUserId,
       type: NotificationTypes.LEAD_UNASSIGNED,
@@ -210,6 +212,8 @@ export async function PATCH(request: NextRequest) {
       link: "/leads",
     });
   }
+
+  createNotificationsExcept(auth.userId, bulkNotifications);
 
   return apiSuccess({
     updated: idsToUpdate.length,

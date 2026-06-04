@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
+import { authenticateRequest } from "@/lib/api/auth";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -54,6 +55,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(getSettingsUrl("gmail=error&reason=invalid_state"));
   }
 
+  // Authenticate to get userId for the NOT NULL user_id column.
+  // The OAuth redirect preserves session cookies, so this succeeds.
+  const auth = await authenticateRequest();
+  if (!auth) {
+    log.error("No authenticated session in legacy Gmail callback");
+    return NextResponse.redirect(getSettingsUrl("gmail=error&reason=unauthenticated"));
+  }
+
   try {
     // Exchange code for tokens
     const tokenRes = await fetch(GOOGLE_TOKEN_URL, {
@@ -103,6 +112,7 @@ export async function GET(request: NextRequest) {
       await supabase
         .from("connected_email_accounts")
         .update({
+          user_id: auth.userId,
           refresh_token: tokenData.refresh_token,
           access_token: tokenData.access_token,
           token_expiry: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
@@ -114,6 +124,7 @@ export async function GET(request: NextRequest) {
       // Create new connected account
       await supabase.from("connected_email_accounts").insert({
         tenant_id: tenantId,
+        user_id: auth.userId,
         provider: "gmail",
         email,
         refresh_token: tokenData.refresh_token,

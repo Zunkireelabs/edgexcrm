@@ -13,7 +13,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { validateFormConfig } from "@/industries/education-consultancy/features/form-builder/lib/validation";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import type { FormStep, FormBranding } from "@/types/database";
+import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -117,6 +117,17 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (body.steps !== undefined) updatePayload.steps = body.steps;
   if (body.branding !== undefined) updatePayload.branding = body.branding as FormBranding;
   if (body.redirect_url !== undefined) updatePayload.redirect_url = body.redirect_url ?? null;
+  if (body.attribution !== undefined) {
+    // Normalize: only persist the 3 known keys, coerce to string|null, skip empties
+    const raw = (body.attribution ?? {}) as Record<string, unknown>;
+    const normalized: FormAttribution = {};
+    for (const key of ["default_source", "default_medium", "default_campaign"] as const) {
+      const v = raw[key];
+      if (typeof v === "string" && v.trim()) normalized[key] = v.trim();
+      else if (v === null || v === undefined || v === "") normalized[key] = null;
+    }
+    updatePayload.attribution = normalized;
+  }
 
   const { data: updated, error } = await supabase
     .from("form_configs")

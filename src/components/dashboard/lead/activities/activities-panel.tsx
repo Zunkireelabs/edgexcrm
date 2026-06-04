@@ -1,14 +1,36 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { Phone, Mail, Calendar, Clock, FileText, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
+import { type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
+
+// Lazy-load compose dialog so TipTap only loads when the modal is opened
+const ComposeEmailDialog = dynamic(
+  () =>
+    import(
+      "@/industries/education-consultancy/features/email/components/compose-email-dialog"
+    ).then((m) => m.ComposeEmailDialog),
+  { ssr: false },
+);
+
+// Lazy-load thread card
+const EmailThreadCard = dynamic(
+  () =>
+    import(
+      "@/industries/education-consultancy/features/email/components/email-thread-card"
+    ).then((m) => m.EmailThreadCard),
+  { ssr: false },
+);
 
 type SubTab = "all" | "notes" | "emails" | "calls" | "tasks" | "meetings";
 
@@ -20,6 +42,13 @@ interface ActivitiesPanelProps {
   isAdmin: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
   currentUserId: string;
+  industryId?: string | null;
+  leadEmail?: string | null;
+  leadFirstName?: string | null;
+  leadLastName?: string | null;
+  threads: EmailThread[];
+  setThreads: React.Dispatch<React.SetStateAction<EmailThread[]>>;
+  threadsLoading: boolean;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -38,12 +67,26 @@ export function ActivitiesPanel({
   teamMemberEmails,
   isAdmin,
   currentUserId,
+  industryId,
+  leadEmail,
+  leadFirstName,
+  leadLastName,
+  threads,
+  setThreads,
+  threadsLoading,
 }: ActivitiesPanelProps) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
   const [loggedActivities, setLoggedActivities] = useState<LeadActivityRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<ActivityType>("call");
+  const [composeOpen, setComposeOpen] = useState(false);
+  const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
+
+  const isEducation = industryId === "education_consultancy";
+
+  // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
+  const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
 
   // Fetch logged activities
   const fetchActivities = useCallback(async () => {
@@ -90,6 +133,56 @@ export function ActivitiesPanel({
     }
   };
 
+  const handleReply = (thread: EmailThread, lastMessage: Email) => {
+    setReplyContext({ thread, lastMessage });
+    setComposeOpen(true);
+  };
+
+  const handleSent = (
+    result: { thread_id: string; email_id: string },
+    optimisticEmail: Email,
+  ) => {
+    if (replyContext) {
+      // Reply: find existing thread and append the new message in-place
+      setThreads((prev) =>
+        prev.map((t) =>
+          t.id === replyContext.thread.id
+            ? {
+                ...t,
+                emails: [...t.emails, optimisticEmail],
+                message_count: t.message_count + 1,
+                last_message_at: optimisticEmail.sent_at ?? t.last_message_at,
+              }
+            : t,
+        ),
+      );
+    } else {
+      // Fresh compose: prepend a new thread
+      const now = new Date().toISOString();
+      const matchingInbox = ownConnectedInboxes.find((i) => i.email === optimisticEmail.from_email);
+      const newThread: EmailThread = {
+        id: result.thread_id,
+        connected_email_account_id: matchingInbox?.id ?? "",
+        gmail_thread_id: "",
+        lead_id: leadId,
+        contact_id: null,
+        subject: optimisticEmail.subject,
+        last_message_at: optimisticEmail.sent_at ?? now,
+        message_count: 1,
+        emails: [optimisticEmail],
+        created_at: now,
+        updated_at: now,
+      };
+      setThreads((prev) => [newThread, ...prev]);
+    }
+    setReplyContext(null);
+  };
+
+  const handleComposeClose = (open: boolean) => {
+    setComposeOpen(open);
+    if (!open) setReplyContext(null);
+  };
+
   // Filter activities by type
   const filteredActivities = useMemo(() => {
     if (activeTab === "all") return loggedActivities;
@@ -102,8 +195,6 @@ export function ActivitiesPanel({
   // Group by date
   const groupedActivities = useMemo(() => {
     const groups: Record<string, LeadActivityRecord[]> = {};
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
 
     for (const activity of filteredActivities) {
       const date = new Date(activity.created_at);
@@ -117,6 +208,31 @@ export function ActivitiesPanel({
 
     return groups;
   }, [filteredActivities]);
+
+  const loggedEmailActivities = useMemo(
+    () => loggedActivities.filter((a) => a.activity_type === "email"),
+    [loggedActivities],
+  );
+
+  const unreadEmailCount = useMemo(
+    () =>
+      threads.reduce(
+        (n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length,
+        0
+      ),
+    [threads]
+  );
+
+  const handleThreadRead = (threadId: string) => {
+    const now = new Date().toISOString();
+    setThreads((prev) =>
+      prev.map((t) =>
+        t.id === threadId
+          ? { ...t, emails: t.emails.map((e) => (e.direction === "inbound" ? { ...e, read_at: e.read_at ?? now } : e)) }
+          : t
+      )
+    );
+  };
 
   // Get action buttons based on active tab
   const getActionButtons = () => {
@@ -135,8 +251,13 @@ export function ActivitiesPanel({
       case "emails":
         return (
           <div className="flex gap-2">
+            {isEducation && (
+              <Button size="sm" onClick={() => { setReplyContext(null); setComposeOpen(true); }}>
+                Compose Email
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => handleLogActivity("email")}>
-              Log Email
+              Log past email
             </Button>
           </div>
         );
@@ -159,7 +280,9 @@ export function ActivitiesPanel({
       case "calls":
         return "Call a contact from this record. Or log a call activity to keep track of your discussion and notes.";
       case "emails":
-        return "Log emails to keep track of your communication with this lead.";
+        return isEducation
+          ? "Compose an email to this lead, or log a past email to track your communication history."
+          : "Log emails to keep track of your communication with this lead.";
       case "meetings":
         return "Schedule a meeting with a contact from this record. Or log a meeting activity to keep track of your meeting and notes.";
       case "notes":
@@ -173,6 +296,9 @@ export function ActivitiesPanel({
     }
   };
 
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && threadsLoading));
+  const hasEmailContent = threads.length > 0 || loggedEmailActivities.length > 0;
+
   return (
     <div className="space-y-4">
       {/* Sub-tabs */}
@@ -182,13 +308,18 @@ export function ActivitiesPanel({
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                 activeTab === tab.id
                   ? "border-foreground text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground"
               }`}
             >
               {tab.label}
+              {tab.id === "emails" && unreadEmailCount > 0 && (
+                <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {unreadEmailCount > 9 ? "9+" : unreadEmailCount}
+                </Badge>
+              )}
             </button>
           ))}
         </div>
@@ -201,7 +332,7 @@ export function ActivitiesPanel({
         </div>
       )}
 
-      {/* Notes tab - show existing notes functionality */}
+      {/* Notes tab */}
       {activeTab === "notes" && (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-4">
@@ -225,7 +356,7 @@ export function ActivitiesPanel({
         </Card>
       )}
 
-      {/* Tasks tab - point to checklist */}
+      {/* Tasks tab */}
       {activeTab === "tasks" && (
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-8 text-center">
@@ -237,8 +368,70 @@ export function ActivitiesPanel({
         </Card>
       )}
 
-      {/* Activity list (all, calls, emails, meetings) */}
-      {(activeTab === "all" || activeTab === "calls" || activeTab === "emails" || activeTab === "meetings") && (
+      {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
+      {activeTab === "emails" && (
+        <>
+          {isEmailsTabLoading ? (
+            <Card className="shadow-none rounded-lg py-0">
+              <CardContent className="p-8 text-center">
+                <p className="text-muted-foreground">Loading emails...</p>
+              </CardContent>
+            </Card>
+          ) : !hasEmailContent ? (
+            <Card className="shadow-none rounded-lg py-0">
+              <CardContent className="p-8 text-center">
+                <Mail className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                <p className="text-muted-foreground">{getEmptyMessage()}</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {/* Thread cards */}
+              {threads.length > 0 && (
+                <div className="space-y-2">
+                  {threads.map((thread) => (
+                    <EmailThreadCard
+                      key={thread.id}
+                      thread={thread}
+                      currentUserId={currentUserId}
+                      teamMemberEmails={teamMemberEmails}
+                      ownConnectedInboxes={ownConnectedInboxes}
+                      onReply={handleReply}
+                      onThreadRead={handleThreadRead}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Logged emails — "Past activity" subheader */}
+              {loggedEmailActivities.length > 0 && (
+                <div className="mt-2">
+                  <h3 className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
+                    Past activity
+                  </h3>
+                  <div className="space-y-2">
+                    {loggedEmailActivities.map((activity) => (
+                      <div key={`logged-${activity.id}`} className="relative">
+                        <div className="absolute top-3 right-10 z-10">
+                          <Badge variant="secondary" className="text-xs">📝 Logged</Badge>
+                        </div>
+                        <ActivityCard
+                          activity={activity}
+                          onDelete={handleDeleteActivity}
+                          canDelete={isAdmin || activity.user_id === currentUserId}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Activity list (all, calls, meetings) */}
+      {(activeTab === "all" || activeTab === "calls" || activeTab === "meetings") && (
         <>
           {isLoading ? (
             <Card className="shadow-none rounded-lg py-0">
@@ -275,7 +468,7 @@ export function ActivitiesPanel({
             </div>
           )}
 
-          {/* Also show system activities on "all" tab */}
+          {/* System activities on "all" tab */}
           {activeTab === "all" && systemActivities.length > 0 && (
             <div className="mt-6 pt-4 border-t">
               <h3 className="text-sm font-medium text-muted-foreground mb-3">System Activity</h3>
@@ -301,6 +494,21 @@ export function ActivitiesPanel({
         activityType={modalType}
         onActivityLogged={handleActivityLogged}
       />
+
+      {/* Compose Email Dialog — education_consultancy only */}
+      {isEducation && (
+        <ComposeEmailDialog
+          open={composeOpen}
+          onOpenChange={handleComposeClose}
+          defaultTo={leadEmail ?? ""}
+          leadId={leadId}
+          leadFirstName={leadFirstName}
+          leadLastName={leadLastName}
+          currentUserId={currentUserId}
+          replyContext={replyContext ?? undefined}
+          onSent={handleSent}
+        />
+      )}
     </div>
   );
 }

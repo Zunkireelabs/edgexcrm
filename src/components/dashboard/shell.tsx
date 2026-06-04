@@ -18,6 +18,7 @@ import {
   FolderKanban,
   LayoutDashboard,
   LayoutGrid,
+  Library,
   Users,
   Settings,
   LogOut,
@@ -39,6 +40,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
+import { useBadgeCounts } from "@/hooks/use-badge-counts";
+import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
 import { TruncatedText } from "@/components/ui/truncated-text";
 
@@ -48,6 +51,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/knowledge-bases", label: "Knowledge Bases", icon: Library },
   { href: "/leads", label: "All Leads", icon: Users },
 ];
 
@@ -178,6 +182,7 @@ export function DashboardShell({
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
+  const { counts } = useBadgeCounts();
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
@@ -218,7 +223,7 @@ export function DashboardShell({
     (e) => e.position === "after-pipeline",
   );
 
-  function renderNavItem(item: { href: string; label: string; icon: LucideIcon }) {
+  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number }) {
     const isActive =
       pathname === item.href ||
       (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -235,6 +240,11 @@ export function DashboardShell({
       >
         <item.icon className="w-[18px] h-[18px]" />
         {item.label}
+        {item.badge ? (
+          <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
+            {item.badge > 9 ? "9+" : item.badge}
+          </Badge>
+        ) : null}
       </Link>
     );
   }
@@ -286,7 +296,13 @@ export function DashboardShell({
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
           <>
-            {UNIVERSAL_NAV_TOP.map(renderNavItem)}
+            {UNIVERSAL_NAV_TOP.map((item) =>
+              renderNavItem(
+                item.href === "/leads"
+                  ? { ...item, badge: counts.unread_leads || undefined }
+                  : item
+              )
+            )}
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}

@@ -413,9 +413,12 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 - **Keys**: in `.env.local`
 
 ### Server
+- **The ONLY Zunkiree Labs VPS is `root@94.136.189.213`.** There is no other zunkireelabs server.
+- **Always connect with `ssh vps`** (alias in `~/.ssh/config`), never the raw IP. The raw IP `ssh root@94.136.189.213` does NOT match the `vps` Host block, so it skips the `~/.ssh/vps_zunkireelabs` identity file and falls back to password auth — which fails non-interactively (e.g. via Claude's `!` prefix).
 - IP: `94.136.189.213`
 - Domain: `lead-crm.zunkireelabs.com`
 - Container: `leads-crm` (Docker + Traefik + Let's Encrypt)
+- Paths: prod app at `/home/zunkireelabs/devprojects/lead-gen-crm/`, dev app at `/home/zunkireelabs/devprojects/lead-gen-crm-dev/`
 
 ---
 

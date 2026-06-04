@@ -14,6 +14,7 @@ import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
+import { getLeadFullName } from "./lead-name";
 
 interface TeamMember {
   id: string;
@@ -110,6 +111,17 @@ export function LeadDetailV2({
       .catch(() => {});
   }, [lead.converted_contact_id, isItAgency]);
 
+  // Opening a lead clears its notifications (e.g. "New lead"), like reading a
+  // message thread clears its unread count. The sidebar/bell badges pick up the
+  // change on their next poll.
+  useEffect(() => {
+    fetch("/api/v1/notifications/read-by-link", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ link: `/leads/${lead.id}` }),
+    }).catch(() => {});
+  }, [lead.id]);
+
   // Handlers
   const handleNoteClick = () => {
     setActiveTab("notes");
@@ -204,7 +216,7 @@ export function LeadDetailV2({
           </Link>
           <div>
             <h1 className="text-2xl font-bold">
-              {lead.first_name} {lead.last_name}
+              {getLeadFullName(lead)}
             </h1>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}

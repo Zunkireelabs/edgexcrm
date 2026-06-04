@@ -48,6 +48,7 @@ import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
+import { useBadgeCounts } from "@/hooks/use-badge-counts";
 
 type SortField = "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -188,6 +189,9 @@ export function LeadsTable({
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
+
+  const { counts } = useBadgeCounts();
+  const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
 
   const isAdmin = role === "admin" || role === "owner";
   const canCreateLead = role !== "viewer";
@@ -824,6 +828,12 @@ export function LeadsTable({
                     <td className="px-3 py-1.5">
                       {/* Fixed width container for consistent Preview button alignment */}
                       <div className="group/name relative" style={{ width: NAME_COLUMN_WIDTH }}>
+                        {unreadLeadIds.has(lead.id) && (
+                          <span
+                            className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-red-500"
+                            aria-label="Unread notification"
+                          />
+                        )}
                         {/* Name link - padding increases on hover to make room for Preview button */}
                         <Link
                           href={`/leads/${lead.id}`}

@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +12,8 @@ import { NotesTab } from "./notes-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
 import { ActivitiesPanel } from "./activities/activities-panel";
+import { useEmailThreads } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { getLeadFullName } from "./lead-name";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -45,6 +47,16 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
     }));
 
+    const isEducation = industryId === "education_consultancy";
+    const { threads, setThreads, loading: threadsLoading } = useEmailThreads(isEducation ? lead.id : "");
+    const unreadEmailCount = useMemo(
+      () => threads.reduce((n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length, 0),
+      [threads]
+    );
+    // Roll-up of inner Activity sub-tab notification counts. Today only Emails contributes;
+    // add future inner counts (unread calls/tasks/meetings) into this sum.
+    const activityUnreadCount = unreadEmailCount;
+
     const location = [lead.city, lead.country].filter(Boolean).join(", ");
 
     return (
@@ -61,11 +73,13 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-2">
             Activity
-            {activities.length > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                {activities.length}
+            {activityUnreadCount > 0 ? (
+              <Badge variant="destructive" className="h-5 min-w-5 px-1.5 text-xs">
+                {activityUnreadCount > 9 ? "9+" : activityUnreadCount}
               </Badge>
-            )}
+            ) : activities.length > 0 ? (
+              <Badge variant="secondary" className="h-5 px-1.5 text-xs">{activities.length}</Badge>
+            ) : null}
           </TabsTrigger>
           <TabsTrigger value="ai-insights" className="gap-1.5">
             <AISparkleIcon className="size-4" />
@@ -83,7 +97,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               <CardTitle className="text-base">Personal Information</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 pb-4">
-              <InfoGridRow label="Full Name" value={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"} />
+              <InfoGridRow label="Full Name" value={getLeadFullName(lead, "—")} />
               {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
               {industryId === "education_consultancy" && (
                 <InfoGridRow
@@ -163,6 +177,13 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
             currentUserId={currentUserId}
+            industryId={industryId}
+            leadEmail={lead.email}
+            leadFirstName={lead.first_name}
+            leadLastName={lead.last_name}
+            threads={threads}
+            setThreads={setThreads}
+            threadsLoading={threadsLoading}
           />
         </TabsContent>
 
