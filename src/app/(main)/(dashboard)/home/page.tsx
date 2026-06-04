@@ -8,7 +8,6 @@ import {
   getMyEmailSnapshot,
   getRecentNotifications,
 } from "@/lib/supabase/queries";
-import { leadQueryScope } from "@/lib/api/permissions";
 import { HomeContent } from "@/components/dashboard/home/home-content";
 
 export default async function HomePage() {
@@ -21,13 +20,13 @@ export default async function HomePage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  const { tenant, userId, permissions } = tenantData;
+  const { tenant, userId } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
 
   const [schedule, tasks, myLeads, notifications, emailSnapshot] = await Promise.all([
     getMySchedule(tenant.id, userId),
     getMyTasks(tenant.id, userId),
-    getLeads(tenant.id, leadQueryScope(permissions, userId)),
+    getLeads(tenant.id, { restrictToSelf: true, userId, limit: 50 }),
     getRecentNotifications(tenant.id, userId),
     isEducation ? getMyEmailSnapshot(tenant.id, userId) : Promise.resolve(null),
   ]);
