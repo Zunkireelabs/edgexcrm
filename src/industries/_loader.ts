@@ -9,6 +9,7 @@
 
 import { INDUSTRIES, type FeatureId, type IndustryId } from "./_registry";
 import type { IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
+import { canSeeNav, type ResolvedPermissions } from "@/lib/api/permissions";
 
 import { manifest as educationConsultancyManifest } from "./education-consultancy/manifest";
 import { manifest as itAgencyManifest } from "./it-agency/manifest";
@@ -78,6 +79,7 @@ export function getFeatureAccess(
 export function getIndustrySidebarItems(
   industryId: string | null | undefined,
   role?: string,
+  permissions?: ResolvedPermissions,
 ): readonly SidebarEntry[] {
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
@@ -85,6 +87,7 @@ export function getIndustrySidebarItems(
   function isItemAllowed(item: SidebarItem): boolean {
     if (!registeredFeatureIds.has(item.featureId)) return false;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
+    if (permissions && !canSeeNav(permissions, item.href)) return false;
     return true;
   }
 

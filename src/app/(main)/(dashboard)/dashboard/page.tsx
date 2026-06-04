@@ -3,16 +3,16 @@ import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getF
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
 import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
+import { canSeeWidget, leadQueryScope } from "@/lib/api/permissions";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
+  const { permissions } = tenantData;
+
   const [leads, teamMembers, stages, formConfigs] = await Promise.all([
-    getLeads(tenantData.tenant.id, {
-      role: tenantData.role,
-      userId: tenantData.userId,
-    }),
+    getLeads(tenantData.tenant.id, leadQueryScope(permissions, tenantData.userId)),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),
@@ -26,28 +26,29 @@ export default async function DashboardPage() {
     formConfigs.map((f) => [f.id, f.name])
   );
 
-  // Check if user is admin/owner (can see team workload)
-  const canSeeTeamStats = tenantData.role === "owner" || tenantData.role === "admin";
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <h1 className="text-lg font-bold">Dashboard</h1>
 
       {/* Stats Cards */}
-      <StatsCards leads={leads} />
+      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} />}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        <LeadsByStageChart leads={leads} stages={stages} />
-        <LeadsBySourceChart leads={leads} formMap={formMap} />
-        {canSeeTeamStats && (
+        {canSeeWidget(permissions, "leads-by-stage") && (
+          <LeadsByStageChart leads={leads} stages={stages} />
+        )}
+        {canSeeWidget(permissions, "leads-by-source") && (
+          <LeadsBySourceChart leads={leads} formMap={formMap} />
+        )}
+        {canSeeWidget(permissions, "leads-by-counselor") && (
           <LeadsByCounselorChart leads={leads} memberMap={memberMap} />
         )}
       </div>
 
       {/* UTM Attribution (education_consultancy only) */}
-      {tenantData.tenant.industry_id === "education_consultancy" && (
+      {tenantData.tenant.industry_id === "education_consultancy" && canSeeWidget(permissions, "utm") && (
         <UtmAnalyticsSection leads={leads} />
       )}
     </div>

@@ -7,8 +7,9 @@ import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
 import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-card";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
+import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
 import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
-import { getFeatureAccess } from "@/industries/_loader";
+import { getFeatureAccess, getIndustrySidebarItems } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { FormConfig, Industry, TenantEntity } from "@/types/database";
 
@@ -63,6 +64,33 @@ export default async function SettingsPage() {
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
+  // Nav catalog: universal items + industry module items
+  const UNIVERSAL_NAV = [
+    { key: "/dashboard", label: "Dashboard" },
+    { key: "/leads", label: "All Leads" },
+    { key: "/pipeline", label: "Pipeline" },
+    { key: "/knowledge-bases", label: "Knowledge Bases" },
+    { key: "/team", label: "Team" },
+    { key: "/settings", label: "Settings" },
+  ];
+  const industryNav = getIndustrySidebarItems(tenantData.tenant.industry_id, "owner").flatMap(
+    (entry) => {
+      if ("children" in entry) {
+        return entry.children.map((child) => ({ key: child.href, label: child.label }));
+      }
+      return [{ key: entry.href, label: entry.label }];
+    }
+  );
+  const navCatalog = [...UNIVERSAL_NAV, ...industryNav];
+
+  const widgetCatalog = [
+    { key: "stats", label: "Stats cards" },
+    { key: "leads-by-stage", label: "Leads by stage" },
+    { key: "leads-by-source", label: "Leads by source" },
+    { key: "leads-by-counselor", label: "Leads by counselor" },
+    { key: "utm", label: "UTM attribution" },
+  ];
+
   return (
     <div className="space-y-6">
       <h1 className="text-lg font-bold">Settings</h1>
@@ -77,6 +105,7 @@ export default async function SettingsPage() {
           initialEntities={entities}
         />
       )}
+      <PositionsManager navCatalog={navCatalog} widgetCatalog={widgetCatalog} />
       <EmailRulesManager tenantId={tenantData.tenant.id} />
       {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.EMAIL) && (
         <Suspense>

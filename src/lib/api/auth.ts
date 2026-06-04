@@ -130,9 +130,11 @@ export async function authenticateUser(): Promise<UserContext | null> {
 }
 
 export function requireLeadAccess(auth: AuthContext, lead: { assigned_to: string | null }): boolean {
-  if (auth.permissions.baseTier === "owner" || auth.permissions.baseTier === "admin") return true;
-  if (auth.permissions.leadScope === "own") return lead.assigned_to === auth.userId;
-  return false; // member with leadScope all/team (e.g. viewer) → no mutation
+  const p = auth.permissions;
+  if (p.baseTier === "owner" || p.baseTier === "admin") return true;
+  if (!p.canEditLeads) return false;                              // read-only member (viewer)
+  if (p.leadScope === "own") return lead.assigned_to === auth.userId; // counselor: own only
+  return true;                                                    // branch manager: edit all visible leads
 }
 
 export function isCounselorOrAbove(auth: AuthContext): boolean {

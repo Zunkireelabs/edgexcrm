@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { TeamManagement } from "@/components/dashboard/team-management";
+import { canSeeNav } from "@/lib/api/permissions";
 
 export default async function TeamPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!canSeeNav(tenantData.permissions, "/team")) redirect("/dashboard");
 
   return (
     <div className="space-y-4">

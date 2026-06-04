@@ -3,11 +3,13 @@ import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { FormCreationWizard } from "@/industries/education-consultancy/features/form-builder/components/form-creation-wizard";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { canSeeNav } from "@/lib/api/permissions";
 
 export default async function NewFormPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/forms")) redirect("/dashboard");
 
   if (tenantData.role !== "owner" && tenantData.role !== "admin") {
     return (

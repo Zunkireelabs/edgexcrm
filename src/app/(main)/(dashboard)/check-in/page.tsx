@@ -4,12 +4,14 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { CheckInPage } from "@/industries/education-consultancy/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { canSeeNav } from "@/lib/api/permissions";
 import type { PipelineStage } from "@/types/database";
 
 export default async function CheckInRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
   const serviceClient = await createServiceClient();
 

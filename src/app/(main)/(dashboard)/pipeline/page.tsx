@@ -9,6 +9,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineSelector } from "@/components/pipeline/PipelineSelector";
+import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { UserRole, TenantEntity, Industry } from "@/types/database";
 
 interface PipelinePageProps {
@@ -18,6 +19,7 @@ interface PipelinePageProps {
 export default async function PipelinePage({ searchParams }: PipelinePageProps) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+  if (!canSeeNav(tenantData.permissions, "/pipeline")) redirect("/dashboard");
 
   const params = await searchParams;
   const serviceClient = await createServiceClient();
@@ -51,8 +53,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
   const [stages, leads, teamMembers, industryResult, entitiesResult] = await Promise.all([
     getPipelineStages(tenantData.tenant.id, selectedPipelineId),
     getLeadsForPipeline(tenantData.tenant.id, {
-      role: tenantData.role,
-      userId: tenantData.userId,
+      ...leadQueryScope(tenantData.permissions, tenantData.userId),
       pipelineId: selectedPipelineId,
     }),
     getTeamMembers(tenantData.tenant.id),

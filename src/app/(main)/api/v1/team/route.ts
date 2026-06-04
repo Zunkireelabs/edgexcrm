@@ -1,13 +1,16 @@
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { canSeeNav } from "@/lib/api/permissions";
+import { canSeeNav, deriveRole } from "@/lib/api/permissions";
+import type { PositionPermissions } from "@/lib/api/permissions";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
   apiUnauthorized,
   apiForbidden,
+  apiValidationError,
   apiServiceUnavailable,
   apiNotFound,
 } from "@/lib/api/response";
+import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
 export async function GET() {
@@ -28,7 +31,7 @@ export async function GET() {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, default_hourly_rate, created_at")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -41,6 +44,7 @@ export async function GET() {
     id: string;
     user_id: string;
     role: string;
+    position_id: string | null;
     default_hourly_rate: number | null;
     created_at: string;
   }>;
@@ -57,6 +61,7 @@ export async function GET() {
     id: m.id,
     user_id: m.user_id,
     role: m.role,
+    position_id: m.position_id,
     email: userMap.get(m.user_id) || "Unknown",
     default_hourly_rate: m.default_hourly_rate,
     created_at: m.created_at,
@@ -124,7 +129,7 @@ export async function PATCH(request: Request) {
   if (!auth) return apiUnauthorized();
   if (!requireAdmin(auth)) return apiForbidden();
 
-  let body: { user_id: string; default_hourly_rate?: number | null };
+  let body: { user_id: string; default_hourly_rate?: number | null; position_id?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -145,29 +150,111 @@ export async function PATCH(request: Request) {
 
   const db = await scopedClient(auth);
 
-  const { data: existing } = await db
+  const { data: existingMember } = await db
     .from("tenant_users")
-    .select("id")
+    .select("id, role")
     .eq("user_id", body.user_id)
     .maybeSingle();
 
-  if (!existing) return apiNotFound("Team member");
+  if (!existingMember) return apiNotFound("Team member");
+
+  const currentMember = existingMember as unknown as { id: string; role: string };
 
   const patch: Record<string, unknown> = {};
+
   if (body.default_hourly_rate !== undefined) {
     patch.default_hourly_rate = body.default_hourly_rate;
+  }
+
+  if (body.position_id !== undefined) {
+    if (body.position_id === null) {
+      // Clearing a position is a future Phase 4 concern; reject for now
+      return apiValidationError({ position_id: ["position_id cannot be set to null via this endpoint"] });
+    }
+
+    // Fetch the position (must belong to same tenant)
+    const { data: positionData } = await db
+      .from("positions")
+      .select("*")
+      .eq("id", body.position_id)
+      .maybeSingle();
+
+    if (!positionData) return apiNotFound("Position");
+
+    const position = positionData as unknown as {
+      id: string;
+      base_tier: "owner" | "admin" | "member";
+      permissions: PositionPermissions;
+    };
+
+    // Owner tier is never assignable
+    if (position.base_tier === "owner") {
+      return apiForbidden();
+    }
+
+    const newRole = deriveRole(position.base_tier, position.permissions.leadScope);
+
+    // Self-lockout guard: can't change own access below admin
+    if (body.user_id === auth.userId && newRole !== "owner" && newRole !== "admin") {
+      return apiForbidden();
+    }
+
+    // Last-owner guard: can't demote the last owner
+    if (currentMember.role === "owner" && newRole !== "owner") {
+      const { data: owners } = await db
+        .raw()
+        .from("tenant_users")
+        .select("id")
+        .eq("tenant_id", auth.tenantId)
+        .eq("role", "owner");
+      if ((owners ?? []).length <= 1) {
+        return apiForbidden();
+      }
+    }
+
+    patch.position_id = body.position_id;
+    patch.role = newRole;
+  }
+
+  if (Object.keys(patch).length === 0) {
+    return apiNotFound("Team member"); // nothing to update
   }
 
   const { data: updated, error } = await db
     .from("tenant_users")
     .update(patch)
     .eq("user_id", body.user_id)
-    .select("id, user_id, role, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, default_hourly_rate, created_at")
     .single();
 
   if (error) {
     log.error({ err: error }, "Failed to update team member");
     return apiServiceUnavailable("Failed to update team member");
+  }
+
+  if (body.position_id !== undefined) {
+    Promise.all([
+      createAuditLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: "team.position_changed",
+        entityType: "team_member",
+        entityId: body.user_id,
+        changes: {
+          position_id: { old: currentMember.id, new: body.position_id },
+          role: { old: currentMember.role, new: patch.role },
+        },
+        requestId,
+      }),
+      emitEvent({
+        tenantId: auth.tenantId,
+        type: "team.position_changed",
+        entityType: "team_member",
+        entityId: body.user_id,
+        payload: { position_id: body.position_id, role: patch.role },
+        requestId,
+      }),
+    ]);
   }
 
   log.info({ userId: body.user_id }, "Team member updated");

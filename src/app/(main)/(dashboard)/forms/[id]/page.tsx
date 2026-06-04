@@ -4,6 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { FormBuilderPage } from "@/industries/education-consultancy/features/form-builder/components/form-builder-page";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { canSeeNav } from "@/lib/api/permissions";
 import type { FormConfig } from "@/types/database";
 
 export default async function EditFormPage({
@@ -16,6 +17,7 @@ export default async function EditFormPage({
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.FORM_BUILDER)) notFound();
+  if (!canSeeNav(tenantData.permissions, "/forms")) redirect("/dashboard");
 
   if (tenantData.role !== "owner" && tenantData.role !== "admin") {
     return (
