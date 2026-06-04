@@ -77,6 +77,21 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     patch.permissions = body.permissions;
   }
 
+  // layer_id is org placement (not identity/permissions) — allowed for system positions too
+  if (body.layer_id !== undefined) {
+    if (body.layer_id === null) {
+      patch.layer_id = null;
+    } else {
+      const { data: layer } = await db
+        .from("org_layers")
+        .select("id")
+        .eq("id", body.layer_id)
+        .maybeSingle();
+      if (!layer) return apiValidationError({ layer_id: ["Layer not found in this tenant"] });
+      patch.layer_id = body.layer_id;
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return apiValidationError({ body: ["No valid fields to update"] });
   }

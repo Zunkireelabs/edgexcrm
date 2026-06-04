@@ -16,6 +16,7 @@ import {
   Building2,
   Contact,
   FolderKanban,
+  House,
   LayoutDashboard,
   LayoutGrid,
   Library,
@@ -34,6 +35,9 @@ import {
   Search,
   Sparkles,
   Stamp,
+  Network,
+  ListChecks,
+  GitCompare,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,6 +54,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 // industry manifest via `industrySidebarItems` prop and are inserted
 // between the "top" and "bottom" universal sections.
 const UNIVERSAL_NAV_TOP = [
+  { href: "/home", label: "Home", icon: House },
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/knowledge-bases", label: "Knowledge Bases", icon: Library },
   { href: "/leads", label: "All Leads", icon: Users },
@@ -60,8 +65,17 @@ const UNIVERSAL_NAV_MIDDLE = [
 ];
 
 const UNIVERSAL_NAV_BOTTOM = [
-  { href: "/team", label: "Team", icon: UsersRound },
+  { href: "/team", label: "Org Structure", icon: Network },
   { href: "/settings", label: "Settings", icon: Settings },
+];
+
+const ORCA_NAV = [
+  { href: "/orca", label: "Overview", icon: LayoutDashboard },
+  { href: "/orca/structure", label: "Org Structure", icon: Network },
+  { href: "/orca/roles", label: "Roles", icon: Contact },
+  { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
+  { href: "/orca/agents", label: "Agents", icon: Bot },
+  { href: "/orca/compare", label: "Compare", icon: GitCompare },
 ];
 
 // Icon registry for industry-contributed nav items. Manifests reference
@@ -180,30 +194,21 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const isOrcaRoute = pathname === "/orca" || pathname.startsWith("/orca/");
+  const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [navMode, setNavMode] = useState<"ops" | "orca">("ops");
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { counts } = useBadgeCounts();
 
-  const navAllowed = (href: string) => allowedNavKeys === null || allowedNavKeys.includes(href);
+  const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
-  }, []);
-
-  useEffect(() => {
-    const stored = typeof window !== "undefined"
-      ? window.localStorage.getItem("dashboard-nav-mode")
-      : null;
-    if (stored === "orca" || stored === "ops") {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setNavMode(stored);
-    }
   }, []);
 
   async function handleLogout() {
@@ -214,12 +219,9 @@ export function DashboardShell({
   }
 
   function handleNavModeChange(value: string) {
-    if (value === "ops" || value === "orca") {
-      setNavMode(value);
-      if (typeof window !== "undefined") {
-        window.localStorage.setItem("dashboard-nav-mode", value);
-      }
-    }
+    setMobileOpen(false);
+    if (value === "orca") router.push("/orca");
+    else if (value === "ops") router.push("/home");
   }
 
   const industryBefore = industrySidebarItems.filter(
@@ -232,7 +234,7 @@ export function DashboardShell({
   function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number }) {
     const isActive =
       pathname === item.href ||
-      (item.href !== "/dashboard" && pathname.startsWith(item.href));
+      (item.href !== "/dashboard" && item.href !== "/orca" && pathname.startsWith(item.href));
     return (
       <Link
         key={item.href}
@@ -365,13 +367,9 @@ export function DashboardShell({
             )}
           </>
         ) : (
-          <div className="flex flex-col items-center justify-center text-center px-4 py-12 gap-2">
-            <Bot className="w-6 h-6 text-muted-foreground/40" />
-            <p className="text-xs font-medium text-gray-700">Orca coming soon</p>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              AI agents and orchestrations will live here.
-            </p>
-          </div>
+          <>
+            {ORCA_NAV.map(renderNavItem)}
+          </>
         )}
       </nav>
     </div>

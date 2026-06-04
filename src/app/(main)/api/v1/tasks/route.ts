@@ -73,6 +73,8 @@ export async function GET(request: NextRequest) {
     .from("tasks")
     .select("*, projects(id, name, account_id, accounts(id, name))", { count: "exact" });
 
+  query = query.not("project_id", "is", null);
+
   if (projectId) query = query.eq("project_id", projectId);
   if (accountProjectIds) query = query.in("project_id", accountProjectIds);
   if (assigneeId) query = query.eq("assignee_id", assigneeId);
