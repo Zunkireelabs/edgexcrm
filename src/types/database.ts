@@ -599,7 +599,18 @@ export interface Position {
   slug: string;
   base_tier: "owner" | "admin" | "member";
   is_system: boolean;
+  layer_id: string | null;
   permissions: import("@/lib/api/permissions").PositionPermissions;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OrgLayer {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }

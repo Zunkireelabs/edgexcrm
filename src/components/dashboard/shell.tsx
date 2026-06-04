@@ -63,7 +63,7 @@ const UNIVERSAL_NAV_MIDDLE = [
 ];
 
 const UNIVERSAL_NAV_BOTTOM = [
-  { href: "/team", label: "Team", icon: UsersRound },
+  { href: "/team", label: "Org Structure", icon: Network },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

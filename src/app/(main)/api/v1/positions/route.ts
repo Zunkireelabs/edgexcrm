@@ -110,6 +110,18 @@ export async function POST(request: NextRequest) {
     slug = uniqueSlug;
   }
 
+  // Optional layer_id: validate it belongs to this tenant if provided
+  let layerId: string | null = null;
+  if (body.layer_id && typeof body.layer_id === "string") {
+    const { data: layer } = await db
+      .from("org_layers")
+      .select("id")
+      .eq("id", body.layer_id)
+      .maybeSingle();
+    if (!layer) return apiValidationError({ layer_id: ["Layer not found in this tenant"] });
+    layerId = body.layer_id;
+  }
+
   const { data: created, error } = await db
     .from("positions")
     .insert({
@@ -118,6 +130,7 @@ export async function POST(request: NextRequest) {
       base_tier: body.base_tier as string,
       permissions: body.permissions,
       is_system: false,
+      ...(layerId !== null ? { layer_id: layerId } : {}),
     })
     .select()
     .single();
