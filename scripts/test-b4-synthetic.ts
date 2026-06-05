@@ -39,8 +39,8 @@ async function assertNotAdmizz(leadId: string) {
   }
 }
 
-let createdLeadIds: string[] = [];
-let createdAuditIds: string[] = [];
+const createdLeadIds: string[] = [];
+const createdAuditIds: string[] = [];
 
 async function cleanup() {
   console.log("\n🧹 Cleanup — deleting synthetic rows…");
