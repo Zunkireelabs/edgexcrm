@@ -737,15 +737,18 @@ async function handlePost(request: NextRequest) {
   }
 
   Promise.all([
-    createAuditLog({
-      tenantId,
-      action: "lead.created",
-      entityType: "lead",
-      entityId: lead.id,
-      ipAddress: ip,
-      userAgent,
-      requestId,
-    }),
+    // lead.created audit suppressed when lead.submission was recorded (A4: combined display)
+    newSubmissionId
+      ? Promise.resolve()
+      : createAuditLog({
+          tenantId,
+          action: "lead.created",
+          entityType: "lead",
+          entityId: lead.id,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        }),
     emitEvent({
       tenantId,
       type: "lead.created",

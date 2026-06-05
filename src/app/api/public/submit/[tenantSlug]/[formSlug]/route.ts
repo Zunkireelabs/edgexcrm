@@ -466,20 +466,23 @@ export async function POST(
   }
 
   Promise.all([
-    createAuditLog({
-      tenantId: tenant.id,
-      userId: null,
-      action: "lead.created",
-      entityType: "lead",
-      entityId: leadId,
-      changes: {
-        source: { old: null, new: "public_api" },
-        integration_key: { old: null, new: authResult.context.integrationKeyId },
-      },
-      ipAddress: ip,
-      userAgent,
-      requestId,
-    }),
+    // lead.created audit suppressed when lead.submission was recorded (A4: combined display)
+    submissionId
+      ? Promise.resolve()
+      : createAuditLog({
+          tenantId: tenant.id,
+          userId: null,
+          action: "lead.created",
+          entityType: "lead",
+          entityId: leadId,
+          changes: {
+            source: { old: null, new: "public_api" },
+            integration_key: { old: null, new: authResult.context.integrationKeyId },
+          },
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        }),
     emitEvent({
       tenantId: tenant.id,
       type: "lead.created",

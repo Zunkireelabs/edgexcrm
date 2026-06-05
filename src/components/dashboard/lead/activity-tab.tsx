@@ -111,8 +111,9 @@ function ChangesDisplay({
   changes: Record<string, { old: unknown; new: unknown }>;
 }) {
   const displayableChanges = Object.entries(changes).filter(([key]) => {
-    // Skip internal fields
-    return !["updated_at", "id", "tenant_id", "session_id"].includes(key);
+    // Skip internal and submission-metadata fields (displayed via collapsible instead)
+    return !["updated_at", "id", "tenant_id", "session_id",
+             "submission_id", "form_name", "is_first", "matched_existing", "draft_id"].includes(key);
   });
 
   if (displayableChanges.length === 0) return null;
@@ -179,6 +180,19 @@ function getActivityDisplay(
         description: "Unassigned",
       };
     }
+  }
+
+  // Submission (dedup-aware: first = created, subsequent = resubmission)
+  if (action === "lead.submission") {
+    const isFirst = changes.is_first?.new === true;
+    const formName = changes.form_name?.new as string | null;
+    return {
+      icon: <FileText className="h-4 w-4" />,
+      color: "bg-emerald-100 text-emerald-600",
+      description: isFirst
+        ? `Lead created${formName ? ` · Filled ${formName}` : ""}`
+        : `Filled ${formName || "form"}`,
+    };
   }
 
   // Lead created

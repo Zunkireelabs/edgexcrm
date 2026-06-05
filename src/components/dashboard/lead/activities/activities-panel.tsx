@@ -2,10 +2,16 @@
 
 import { useState, useEffect, useMemo, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { Phone, Mail, Calendar, Clock, FileText, CheckSquare } from "lucide-react";
+import { Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleTrigger,
+  CollapsibleContent,
+} from "@/components/ui/collapsible";
+import type { LeadSubmission } from "@/types/database";
 import { toast } from "sonner";
 import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -478,6 +484,7 @@ export function ActivitiesPanel({
                     key={activity.id}
                     activity={activity}
                     teamMemberEmails={teamMemberEmails}
+                    leadId={leadId}
                   />
                 ))}
               </div>
@@ -513,13 +520,15 @@ export function ActivitiesPanel({
   );
 }
 
-// System activity item (for stage changes, etc.)
+// System activity item — collapsible for lead.submission entries, plain for all others
 function SystemActivityItem({
   activity,
   teamMemberEmails,
+  leadId,
 }: {
   activity: LeadActivity;
   teamMemberEmails: Record<string, string>;
+  leadId: string;
 }) {
   const time = new Date(activity.created_at).toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -527,13 +536,126 @@ function SystemActivityItem({
   });
   const userEmail = activity.user_id ? teamMemberEmails[activity.user_id] : null;
   const description = getSystemActivityDescription(activity, teamMemberEmails);
+  const isSubmission = activity.action === "lead.submission";
+
+  // Collapsible state for submission entries
+  const [open, setOpen] = useState(false);
+  const [submissionData, setSubmissionData] = useState<LeadSubmission | null>(null);
+  const [submissionLoading, setSubmissionLoading] = useState(false);
+
+  async function loadSubmission() {
+    const submissionId = activity.changes?.submission_id?.new as string | null | undefined;
+    if (!submissionId || submissionData || submissionLoading) return;
+    setSubmissionLoading(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/submissions/${submissionId}`);
+      if (res.ok) {
+        const json = await res.json();
+        setSubmissionData(json.data as LeadSubmission);
+      }
+    } catch {
+      // non-fatal — collapse stays empty
+    } finally {
+      setSubmissionLoading(false);
+    }
+  }
+
+  const dotColor = isSubmission ? "bg-emerald-400" : "bg-gray-300";
+
+  if (isSubmission) {
+    return (
+      <Collapsible
+        open={open}
+        onOpenChange={(o) => {
+          setOpen(o);
+          if (o) loadSubmission();
+        }}
+      >
+        <div className="flex items-center gap-2 text-sm py-1">
+          <div className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
+          <CollapsibleTrigger className="flex items-center gap-1 text-foreground hover:underline underline-offset-2 cursor-pointer">
+            <span>{description}</span>
+            <ChevronDown
+              className={`h-3 w-3 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+            />
+          </CollapsibleTrigger>
+          <span className="text-muted-foreground shrink-0">· {time}</span>
+          {userEmail && (
+            <span className="text-muted-foreground truncate">· {userEmail}</span>
+          )}
+        </div>
+        <CollapsibleContent className="pl-4 pt-1 pb-2">
+          {submissionLoading ? (
+            <p className="text-xs text-muted-foreground">Loading…</p>
+          ) : submissionData ? (
+            <SubmissionDetail submission={submissionData} />
+          ) : (
+            <p className="text-xs text-muted-foreground">No submission data available.</p>
+          )}
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
 
   return (
     <div className="flex items-center gap-2 text-sm py-1">
-      <div className="h-2 w-2 rounded-full bg-gray-300" />
+      <div className={`h-2 w-2 rounded-full ${dotColor}`} />
       <span className="text-foreground">{description}</span>
       <span className="text-muted-foreground">· {time}</span>
       {userEmail && <span className="text-muted-foreground">· {userEmail}</span>}
+    </div>
+  );
+}
+
+function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
+  const customFields = submission.custom_fields as Record<string, unknown>;
+  const fileUrls = submission.file_urls as Record<string, unknown>;
+  const hasCustomFields = Object.keys(customFields).length > 0;
+  const hasFiles = Object.keys(fileUrls).length > 0;
+
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex items-center gap-2">
+        <Badge variant="secondary" className="text-xs capitalize">
+          {submission.created_via.replace("_", " ")}
+        </Badge>
+        {submission.matched_existing && (
+          <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
+            Resubmission
+          </Badge>
+        )}
+      </div>
+
+      {hasCustomFields && (
+        <div className="space-y-1 mt-1">
+          {Object.entries(customFields).map(([key, val]) => (
+            <div key={key} className="flex gap-2 text-muted-foreground">
+              <span className="capitalize shrink-0">
+                {key.replace(/_/g, " ")}:
+              </span>
+              <span className="text-foreground truncate">
+                {Array.isArray(val) ? val.join(", ") : String(val ?? "—")}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {hasFiles && (
+        <div className="space-y-1 mt-1">
+          <span className="text-muted-foreground">Files:</span>
+          {Object.keys(fileUrls).map((key) => (
+            <div key={key} className="flex items-center gap-1 text-foreground">
+              <FileText className="h-3 w-3 shrink-0" />
+              <span className="truncate">{key}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {!hasCustomFields && !hasFiles && (
+        <p className="text-muted-foreground">No field data recorded.</p>
+      )}
     </div>
   );
 }
@@ -543,6 +665,15 @@ function getSystemActivityDescription(
   teamMemberEmails: Record<string, string>
 ): string {
   const changes = activity.changes || {};
+
+  // Submission (dedup-aware)
+  if (activity.action === "lead.submission") {
+    const isFirst = changes.is_first?.new === true;
+    const formName = changes.form_name?.new as string | null;
+    return isFirst
+      ? `Lead created${formName ? ` · Filled ${formName}` : ""}`
+      : `Filled ${formName || "form"}`;
+  }
 
   if (changes.status || changes.stage_id) {
     const newStatus = changes.status?.new || changes.stage_id?.new;

@@ -334,7 +334,10 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
   const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, ctx.auth.tenantId);
 
   await Promise.all([
-    logIntegrationAudit(ctx, "integration.lead.created", "lead", (lead as Lead).id),
+    // integration.lead.created audit suppressed when lead.submission was recorded (A4: combined display)
+    submissionId
+      ? Promise.resolve()
+      : logIntegrationAudit(ctx, "integration.lead.created", "lead", (lead as Lead).id),
     emitIntegrationEvent(ctx, "lead.created", "lead", (lead as Lead).id, {
       email: (lead as Lead).email,
       stage_id: (lead as Lead).stage_id,
