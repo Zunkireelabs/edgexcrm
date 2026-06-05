@@ -63,6 +63,10 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("utm_campaign");
   });
+  const [refCode] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("ref_code");
+  });
 
   // Auto-select the first option for country fields linked to a phone field,
   // so the displayed dial code matches the actual form state.
@@ -259,6 +263,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         intake_medium: utmMedium || formConfig.attribution?.default_medium || null,
         intake_campaign: utmCampaign || formConfig.attribution?.default_campaign || null,
       }),
+      ...(refCode && { ref_code: refCode }),
     };
 
     try {
@@ -367,6 +372,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
           intake_medium: utmMedium || null,
           intake_campaign: utmCampaign || null,
         }),
+        ...(refCode && { ref_code: refCode }),
       };
 
       const res = await fetch("/api/v1/leads", {

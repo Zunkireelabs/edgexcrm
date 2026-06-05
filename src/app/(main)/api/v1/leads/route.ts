@@ -311,6 +311,7 @@ async function handlePost(request: NextRequest) {
     intake_source: body.intake_source || null,
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
+    ref_code: (body.ref_code as string) || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
     ...(displayId && { display_id: displayId }),
@@ -370,6 +371,31 @@ async function handlePost(request: NextRequest) {
         requestId,
       }),
     ]);
+
+    if (updated.is_final && updated.ref_code && tenant.slug === "admizz") {
+      try {
+        const { admizzAdminClient } = await import("@/lib/supabase/admizz-client");
+        const { data: rpcData, error: rpcError } = await admizzAdminClient.rpc("record_affiliate_conversion", {
+          p_ref_code: updated.ref_code,
+          p_full_name: `${updated.first_name || ""} ${updated.last_name || ""}`.trim() || null,
+          p_email: updated.email,
+          p_phone: updated.phone,
+          p_form_slug: null,
+          p_countries: updated.country,
+          p_utm_source: updated.intake_source,
+          p_utm_medium: updated.intake_medium,
+          p_utm_campaign: updated.intake_campaign,
+          p_crm_lead_id: updated.id,
+        });
+        if (rpcError) {
+          log.error({ rpcError, leadId, refCode: updated.ref_code }, "Admizz affiliate RPC returned error");
+        } else {
+          log.info({ leadId, refCode: updated.ref_code, rpcData }, "Admizz affiliate conversion recorded");
+        }
+      } catch (err) {
+        log.error({ err, leadId }, "Admizz affiliate RPC threw (lead still saved)");
+      }
+    }
 
     return apiSuccess(updated, 200);
   }
@@ -457,6 +483,31 @@ async function handlePost(request: NextRequest) {
         log.error({ err }, "Failed to create lead.created notification");
       }
     })();
+  }
+
+  if (lead.is_final && lead.ref_code && tenant.slug === "admizz") {
+    try {
+      const { admizzAdminClient } = await import("@/lib/supabase/admizz-client");
+      const { data: rpcData, error: rpcError } = await admizzAdminClient.rpc("record_affiliate_conversion", {
+        p_ref_code: lead.ref_code,
+        p_full_name: `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || null,
+        p_email: lead.email,
+        p_phone: lead.phone,
+        p_form_slug: null,
+        p_countries: lead.country,
+        p_utm_source: lead.intake_source,
+        p_utm_medium: lead.intake_medium,
+        p_utm_campaign: lead.intake_campaign,
+        p_crm_lead_id: lead.id,
+      });
+      if (rpcError) {
+        log.error({ rpcError, leadId: lead.id, refCode: lead.ref_code }, "Admizz affiliate RPC returned error");
+      } else {
+        log.info({ leadId: lead.id, refCode: lead.ref_code, rpcData }, "Admizz affiliate conversion recorded");
+      }
+    } catch (err) {
+      log.error({ err, leadId: lead.id }, "Admizz affiliate RPC threw (lead still saved)");
+    }
   }
 
   return apiSuccess(lead, 201);
