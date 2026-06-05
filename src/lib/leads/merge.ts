@@ -5,8 +5,13 @@
  *   • No data loss: absorbed lead's field values are preserved in a synthesized
  *     lead_submissions row before the lead is soft-deleted.
  *   • Full reversibility: every re-pointed FK row ID is stored in lead_merges.repointed_ids,
- *     and field changes in lead_merges.field_patch, so undo() can reverse precisely.
+ *     field changes stored as {old, new} in lead_merges.field_patch, so undo() reverses precisely.
  *   • Never merges converted leads (converted_at IS NOT NULL).
+ *
+ * TODO(atomicity): consider plpgsql RPC — see B1 fixup brief #4.
+ * Currently: lead_merges row is inserted first (empty) so a partial failure always leaves an
+ * inspectable record; finalized via UPDATE after all FK re-pointing + field merge + soft-delete.
+ * True atomicity requires a Postgres function — decision reserved for Opus/Sadin.
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
@@ -47,6 +52,9 @@ async function loadLead(supabase: SupabaseServiceClient, id: string): Promise<Le
   return data as Lead | null;
 }
 
+const rowIds = (data: unknown[] | null): string[] =>
+  ((data ?? []) as { id: string }[]).map((r) => r.id);
+
 // ── mergeLeads ─────────────────────────────────────────────────────────────
 
 export async function mergeLeads(
@@ -83,9 +91,32 @@ export async function mergeLeads(
     throw new Error("mergeLeads: cannot merge a converted lead (absorbed)");
   }
 
-  // ── 2. Synthesize a lead_submissions row for the absorbed lead ─────────
-  // This is the no-data-loss guarantee: absorbed's exact field values are
-  // captured verbatim before the lead is soft-deleted.
+  // ── 2. Insert lead_merges row first (empty) — pragmatic atomicity fallback ──
+  // A partial failure during re-pointing always leaves a durable, inspectable record.
+  // TODO(atomicity): consider plpgsql RPC — see B1 fixup brief #4.
+  const { data: mergeRowInit, error: mergeInitErr } = await supabase
+    .from("lead_merges")
+    .insert({
+      tenant_id: tenantId,
+      canonical_id: canonicalId,
+      absorbed_id: absorbedId,
+      merged_by: mergedBy ?? null,
+      source,
+      repointed_counts: {},
+      repointed_ids: {},
+      field_patch: {},
+    })
+    .select("id")
+    .single();
+
+  if (mergeInitErr || !mergeRowInit) {
+    throw new Error(`mergeLeads: failed to create lead_merges row: ${mergeInitErr?.message ?? "no data"}`);
+  }
+
+  const mergeId = (mergeRowInit as { id: string }).id;
+
+  // ── 3. Synthesize a lead_submissions row for the absorbed lead ─────────
+  // No-data-loss guarantee: absorbed's exact field values captured verbatim.
   const synthesizedSubmissionId = await recordSubmission(supabase, {
     tenantId,
     leadId: canonicalId,
@@ -109,16 +140,18 @@ export async function mergeLeads(
     matchedExisting: true,
   });
 
-  // ── 3. Re-point every lead_id FK absorbed → canonical ─────────────────
-  // IDs are stored per table so undo can reverse precisely (without over-moving
+  // ── 4. Re-point every lead_id FK absorbed → canonical ─────────────────
+  // Store row IDs per table so undo can reverse precisely (without over-moving
   // the canonical lead's own original children).
   const repointedIds: Record<string, string[]> = {};
   const repointedCounts: Record<string, number> = {};
 
-  const ids = (data: unknown[] | null) =>
-    ((data ?? []) as { id: string }[]).map((r) => r.id);
+  const track = (table: string, moved: string[]) => {
+    repointedIds[table] = moved;
+    repointedCounts[table] = moved.length;
+  };
 
-  // lead_submissions (exclude the just-synthesized row — it was created directly on canonical)
+  // lead_submissions: skip the just-synthesized row (already on canonical)
   {
     const { data } = await supabase
       .from("lead_submissions")
@@ -126,9 +159,7 @@ export async function mergeLeads(
       .eq("lead_id", absorbedId)
       .neq("id", synthesizedSubmissionId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.lead_submissions = moved;
-    repointedCounts.lead_submissions = moved.length;
+    track("lead_submissions", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -136,9 +167,7 @@ export async function mergeLeads(
       .update({ lead_id: canonicalId })
       .eq("lead_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.lead_notes = moved;
-    repointedCounts.lead_notes = moved.length;
+    track("lead_notes", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -146,9 +175,7 @@ export async function mergeLeads(
       .update({ lead_id: canonicalId })
       .eq("lead_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.lead_checklists = moved;
-    repointedCounts.lead_checklists = moved.length;
+    track("lead_checklists", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -156,9 +183,7 @@ export async function mergeLeads(
       .update({ lead_id: canonicalId })
       .eq("lead_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.lead_activities = moved;
-    repointedCounts.lead_activities = moved.length;
+    track("lead_activities", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -166,9 +191,7 @@ export async function mergeLeads(
       .update({ lead_id: canonicalId })
       .eq("lead_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.tasks = moved;
-    repointedCounts.tasks = moved.length;
+    track("tasks", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -176,9 +199,7 @@ export async function mergeLeads(
       .update({ lead_id: canonicalId })
       .eq("lead_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.email_threads = moved;
-    repointedCounts.email_threads = moved.length;
+    track("email_threads", rowIds(data));
   }
 
   // audit_logs + events use entity_id, not lead_id
@@ -189,9 +210,7 @@ export async function mergeLeads(
       .eq("entity_type", "lead")
       .eq("entity_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.audit_logs = moved;
-    repointedCounts.audit_logs = moved.length;
+    track("audit_logs", rowIds(data));
   }
   {
     const { data } = await supabase
@@ -200,46 +219,43 @@ export async function mergeLeads(
       .eq("entity_type", "lead")
       .eq("entity_id", absorbedId)
       .select("id");
-    const moved = ids(data);
-    repointedIds.events = moved;
-    repointedCounts.events = moved.length;
+    track("events", rowIds(data));
   }
 
   // lead_insights — UNIQUE(lead_id): delete absorbed's row if canonical already has one,
-  // otherwise re-point.  AI insights are regenerable so deletion is acceptable.
+  // otherwise re-point. AI insights are regenerable so deletion is acceptable.
   {
-    const { data: canonicalInsight } = await supabase
-      .from("lead_insights")
-      .select("id")
-      .eq("lead_id", canonicalId)
-      .maybeSingle();
-
-    const { data: absorbedInsight } = await supabase
-      .from("lead_insights")
-      .select("id")
-      .eq("lead_id", absorbedId)
-      .maybeSingle();
+    const [{ data: canonicalInsight }, { data: absorbedInsight }] = await Promise.all([
+      supabase.from("lead_insights").select("id").eq("lead_id", canonicalId).maybeSingle(),
+      supabase.from("lead_insights").select("id").eq("lead_id", absorbedId).maybeSingle(),
+    ]);
 
     if (absorbedInsight) {
       const insightId = (absorbedInsight as { id: string }).id;
       if (canonicalInsight) {
-        // Canonical already has insight — delete absorbed's to avoid UNIQUE violation
         await supabase.from("lead_insights").delete().eq("id", insightId);
         repointedIds.lead_insights_deleted = [insightId];
         repointedCounts.lead_insights_deleted = 1;
       } else {
-        await supabase
-          .from("lead_insights")
-          .update({ lead_id: canonicalId })
-          .eq("id", insightId);
-        repointedIds.lead_insights = [insightId];
-        repointedCounts.lead_insights = 1;
+        await supabase.from("lead_insights").update({ lead_id: canonicalId }).eq("id", insightId);
+        track("lead_insights", [insightId]);
       }
     }
   }
 
-  // ── 4. Merge fields into canonical (fill-empty; JSONB merge; tags union) ─
-  const fieldPatch = applyCanonicalUpdate(canonical, {
+  // lead_duplicate_suggestions — delete rows referencing the absorbed lead in either column.
+  // These are phone-match candidates (regenerable); not restored on undo.
+  {
+    const { data } = await supabase
+      .from("lead_duplicate_suggestions")
+      .delete()
+      .or(`lead_id.eq.${absorbedId},suggested_lead_id.eq.${absorbedId}`)
+      .select("id");
+    repointedCounts.lead_duplicate_suggestions_deleted = rowIds(data).length;
+  }
+
+  // ── 5. Merge fields into canonical (fill-empty; JSONB merge; tags union) ─
+  const fieldPatchFlat = applyCanonicalUpdate(canonical, {
     first_name: absorbed.first_name,
     last_name: absorbed.last_name,
     email: absorbed.email,
@@ -252,45 +268,45 @@ export async function mergeLeads(
     tags: absorbed.tags,
   });
 
-  if (Object.keys(fieldPatch).length > 0) {
+  // Store {old, new} per key so undo can restore old values rather than nulling them out.
+  // Critical for JSONB/array fields where applyCanonicalUpdate produces a merged superset:
+  // without old values, undo would null canonical's custom_fields/file_urls/tags.
+  const fieldPatchDetailed: Record<string, { old: unknown; new: unknown }> = {};
+  const canonicalMap = canonical as unknown as Record<string, unknown>;
+  for (const key of Object.keys(fieldPatchFlat)) {
+    fieldPatchDetailed[key] = {
+      old: canonicalMap[key] ?? null,
+      new: fieldPatchFlat[key],
+    };
+  }
+
+  if (Object.keys(fieldPatchFlat).length > 0) {
     await supabase
       .from("leads")
-      .update(fieldPatch)
+      .update(fieldPatchFlat)
       .eq("id", canonicalId)
       .eq("tenant_id", tenantId);
   }
 
-  // ── 5. Soft-delete absorbed lead ───────────────────────────────────────
+  // ── 6. Soft-delete absorbed lead ───────────────────────────────────────
   await supabase
     .from("leads")
     .update({ deleted_at: new Date().toISOString(), merged_into: canonicalId })
     .eq("id", absorbedId)
     .eq("tenant_id", tenantId);
 
-  // ── 6. Write lead_merges row ────────────────────────────────────────────
-  const { data: mergeRow, error: mergeErr } = await supabase
+  // ── 7. Finalize lead_merges row with all collected data ────────────────
+  await supabase
     .from("lead_merges")
-    .insert({
-      tenant_id: tenantId,
-      canonical_id: canonicalId,
-      absorbed_id: absorbedId,
-      merged_by: mergedBy ?? null,
-      source,
+    .update({
       repointed_counts: repointedCounts,
       repointed_ids: repointedIds,
-      field_patch: fieldPatch,
+      field_patch: fieldPatchDetailed,
       synthesized_submission_id: synthesizedSubmissionId,
     })
-    .select("id")
-    .single();
+    .eq("id", mergeId);
 
-  if (mergeErr || !mergeRow) {
-    throw new Error(`mergeLeads: failed to write lead_merges row: ${mergeErr?.message ?? "no data"}`);
-  }
-
-  const mergeId = (mergeRow as { id: string }).id;
-
-  // ── 7. Audit + event + notification ────────────────────────────────────
+  // ── 8. Audit + event + notification ────────────────────────────────────
   await Promise.all([
     createAuditLog({
       tenantId,
@@ -358,7 +374,7 @@ export async function mergeLeads(
   return { canonicalId, mergeId, repointedCounts };
 }
 
-// ── undo ───────────────────────────────────────────────────────────────────
+// ── undoMerge ──────────────────────────────────────────────────────────────
 
 export interface UndoMergeResult {
   restoredAbsorbedId: string;
@@ -368,24 +384,27 @@ export interface UndoMergeResult {
 export async function undoMerge(
   supabase: SupabaseServiceClient,
   mergeId: string,
+  tenantId: string,              // required — mismatch treated as not-found
   undoneBy?: string | null,
   requestId?: string
 ): Promise<UndoMergeResult> {
-  // Load merge record
   const { data: merge } = await supabase
     .from("lead_merges")
     .select("*")
     .eq("id", mergeId)
     .maybeSingle();
 
-  if (!merge) throw new Error(`undoMerge: merge record ${mergeId} not found`);
+  // Treat tenant mismatch as not-found to avoid leaking existence across tenants
+  if (!merge || (merge as { tenant_id: string }).tenant_id !== tenantId) {
+    throw new Error(`undoMerge: merge record ${mergeId} not found`);
+  }
 
   const m = merge as {
     id: string;
     tenant_id: string;
     canonical_id: string;
     absorbed_id: string;
-    field_patch: Record<string, unknown>;
+    field_patch: Record<string, { old: unknown; new: unknown }>;
     repointed_ids: Record<string, string[]>;
     synthesized_submission_id: string | null;
     undone_at: string | null;
@@ -395,80 +414,51 @@ export async function undoMerge(
     throw new Error(`undoMerge: merge ${mergeId} has already been undone`);
   }
 
-  const { tenant_id: tenantId, canonical_id: canonicalId, absorbed_id: absorbedId } = m;
-  const ids = m.repointed_ids ?? {};
+  const { canonical_id: canonicalId, absorbed_id: absorbedId } = m;
+  const rids = m.repointed_ids ?? {};
 
   // ── 1. Re-point FK children back to absorbed using stored IDs ──────────
   // Precise: only moves rows that were originally on the absorbed lead.
-
-  if (ids.lead_submissions?.length) {
-    await supabase
-      .from("lead_submissions")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.lead_submissions);
+  if (rids.lead_submissions?.length) {
+    await supabase.from("lead_submissions").update({ lead_id: absorbedId }).in("id", rids.lead_submissions);
   }
-  if (ids.lead_notes?.length) {
-    await supabase
-      .from("lead_notes")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.lead_notes);
+  if (rids.lead_notes?.length) {
+    await supabase.from("lead_notes").update({ lead_id: absorbedId }).in("id", rids.lead_notes);
   }
-  if (ids.lead_checklists?.length) {
-    await supabase
-      .from("lead_checklists")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.lead_checklists);
+  if (rids.lead_checklists?.length) {
+    await supabase.from("lead_checklists").update({ lead_id: absorbedId }).in("id", rids.lead_checklists);
   }
-  if (ids.lead_activities?.length) {
-    await supabase
-      .from("lead_activities")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.lead_activities);
+  if (rids.lead_activities?.length) {
+    await supabase.from("lead_activities").update({ lead_id: absorbedId }).in("id", rids.lead_activities);
   }
-  if (ids.tasks?.length) {
-    await supabase
-      .from("tasks")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.tasks);
+  if (rids.tasks?.length) {
+    await supabase.from("tasks").update({ lead_id: absorbedId }).in("id", rids.tasks);
   }
-  if (ids.email_threads?.length) {
-    await supabase
-      .from("email_threads")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.email_threads);
+  if (rids.email_threads?.length) {
+    await supabase.from("email_threads").update({ lead_id: absorbedId }).in("id", rids.email_threads);
   }
-  if (ids.audit_logs?.length) {
-    await supabase
-      .from("audit_logs")
-      .update({ entity_id: absorbedId })
-      .in("id", ids.audit_logs);
+  if (rids.audit_logs?.length) {
+    await supabase.from("audit_logs").update({ entity_id: absorbedId }).in("id", rids.audit_logs);
   }
-  if (ids.events?.length) {
-    await supabase
-      .from("events")
-      .update({ entity_id: absorbedId })
-      .in("id", ids.events);
+  if (rids.events?.length) {
+    await supabase.from("events").update({ entity_id: absorbedId }).in("id", rids.events);
   }
-  // lead_insights: if it was re-pointed (not deleted), move it back
-  if (ids.lead_insights?.length) {
-    await supabase
-      .from("lead_insights")
-      .update({ lead_id: absorbedId })
-      .in("id", ids.lead_insights);
+  // lead_insights: re-pointed (not deleted) — move back to absorbed
+  if (rids.lead_insights?.length) {
+    await supabase.from("lead_insights").update({ lead_id: absorbedId }).in("id", rids.lead_insights);
   }
-  // lead_insights_deleted: these were deleted during merge and cannot be restored
+  // lead_insights_deleted: deleted during merge and cannot be restored (AI-regenerable)
+  // lead_duplicate_suggestions_deleted: deleted during merge and not restored (regenerable)
 
   // ── 2. Delete the synthesized submission ───────────────────────────────
   if (m.synthesized_submission_id) {
-    await supabase
-      .from("lead_submissions")
-      .delete()
-      .eq("id", m.synthesized_submission_id);
+    await supabase.from("lead_submissions").delete().eq("id", m.synthesized_submission_id);
   }
 
   // ── 3. Revert field_patch on canonical ─────────────────────────────────
-  // For each key in field_patch, clear it on canonical if the value still
-  // matches what we set (avoids overwriting manual edits made after the merge).
+  // field_patch is stored as {old, new} per key. Restore old value only if
+  // the current value still matches what we set during merge — avoids
+  // overwriting post-merge manual edits on the canonical lead.
   const { data: currentCanonical } = await supabase
     .from("leads")
     .select("*")
@@ -476,12 +466,13 @@ export async function undoMerge(
     .maybeSingle();
 
   if (currentCanonical && Object.keys(m.field_patch).length > 0) {
-    const revert: Record<string, null> = {};
-    for (const key of Object.keys(m.field_patch)) {
-      const current = (currentCanonical as Record<string, unknown>)[key];
-      const patched = m.field_patch[key];
-      if (JSON.stringify(current) === JSON.stringify(patched)) {
-        revert[key] = null;
+    const fp = m.field_patch;
+    const revert: Record<string, unknown> = {};
+    const currentMap = currentCanonical as unknown as Record<string, unknown>;
+    for (const key of Object.keys(fp)) {
+      const current = currentMap[key];
+      if (JSON.stringify(current) === JSON.stringify(fp[key].new)) {
+        revert[key] = fp[key].old;   // restore original, NOT null
       }
     }
     if (Object.keys(revert).length > 0) {

@@ -31,7 +31,7 @@ export async function POST(
 
   try {
     const supabase = await createServiceClient();
-    const result = await undoMerge(supabase, mergeId, auth.userId, requestId);
+    const result = await undoMerge(supabase, mergeId, auth.tenantId, auth.userId, requestId);
 
     log.info(
       { restoredAbsorbedId: result.restoredAbsorbedId, canonicalId: result.canonicalId },
