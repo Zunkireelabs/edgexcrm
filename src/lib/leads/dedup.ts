@@ -240,3 +240,26 @@ export async function recordSubmission(
 
   return (data as { id: string }).id;
 }
+
+// ── Record duplicate suggestions ───────────────────────────────────────────
+
+// Upserts open phone-duplicate suggestions. Non-fatal; caller wraps in try/catch.
+// onConflict DO NOTHING so a previously dismissed pair never resurfaces.
+export async function recordDuplicateSuggestions(
+  supabase: SupabaseServiceClient,
+  params: { tenantId: string; leadId: string; suggestedLeadIds: string[]; reason: "phone" | "name" }
+): Promise<void> {
+  const rows = params.suggestedLeadIds
+    .filter((sid) => sid !== params.leadId)
+    .map((sid) => ({
+      tenant_id: params.tenantId,
+      lead_id: params.leadId,
+      suggested_lead_id: sid,
+      reason: params.reason,
+      status: "open",
+    }));
+  if (rows.length === 0) return;
+  await supabase
+    .from("lead_duplicate_suggestions")
+    .upsert(rows, { onConflict: "tenant_id,lead_id,suggested_lead_id", ignoreDuplicates: true });
+}

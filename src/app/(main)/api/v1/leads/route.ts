@@ -28,6 +28,7 @@ import {
   resolveLeadIdentity,
   applyCanonicalUpdate,
   recordSubmission,
+  recordDuplicateSuggestions,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -528,12 +529,14 @@ async function handlePost(request: NextRequest) {
   }
 
   // Create path — run dedup when is_final (single-step form submissions)
+  let createPhoneMatchIds: string[] = [];
   if (leadPayload.is_final === true) {
     const createIdentity = await resolveLeadIdentity(supabase, {
       tenantId,
       normalizedEmail,
       normalizedPhone,
     });
+    createPhoneMatchIds = createIdentity.phoneMatchLeadIds;
 
     if (createIdentity.match === "email" && createIdentity.existingLead) {
       const canonical = createIdentity.existingLead;
@@ -702,6 +705,18 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Phone duplicate suggestions — non-fatal, never blocks ingestion
+  if (createPhoneMatchIds.length > 0) {
+    try {
+      await recordDuplicateSuggestions(supabase, {
+        tenantId,
+        leadId: lead.id,
+        suggestedLeadIds: createPhoneMatchIds,
+        reason: "phone",
+      });
+    } catch { /* non-fatal */ }
+  }
 
   // Record submission for final leads
   let newSubmissionId: string | undefined;

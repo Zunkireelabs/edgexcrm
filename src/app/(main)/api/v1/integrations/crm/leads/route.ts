@@ -13,6 +13,7 @@ import {
   resolveLeadIdentity,
   applyCanonicalUpdate,
   recordSubmission,
+  recordDuplicateSuggestions,
 } from "@/lib/leads/dedup";
 import {
   apiSuccess,
@@ -330,6 +331,18 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       matchedExisting: false,
     });
   } catch { /* non-fatal — lead created, submission not logged */ }
+
+  // Phone duplicate suggestions — non-fatal, never blocks ingestion
+  if (identity.phoneMatchLeadIds.length > 0) {
+    try {
+      await recordDuplicateSuggestions(ctx.supabase, {
+        tenantId,
+        leadId: (lead as Lead).id,
+        suggestedLeadIds: identity.phoneMatchLeadIds,
+        reason: "phone",
+      });
+    } catch { /* non-fatal */ }
+  }
 
   const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, ctx.auth.tenantId);
 

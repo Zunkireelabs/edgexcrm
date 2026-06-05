@@ -42,10 +42,12 @@ import {
   Plus,
   UserPlus,
   Tag,
+  GitMerge,
 } from "lucide-react";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
+import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
@@ -181,6 +183,7 @@ export function LeadsTable({
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignTo, setAssignTo] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
@@ -741,6 +744,15 @@ export function LeadsTable({
                 Assign
               </button>
             )}
+            {isAdmin && selectedCount === 2 && (
+              <button
+                onClick={() => setMergeDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
+              >
+                <GitMerge className="h-4 w-4" />
+                Merge
+              </button>
+            )}
             <button
               onClick={() => setDeleteDialogOpen(true)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
@@ -1115,6 +1127,26 @@ export function LeadsTable({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Merge Dialog — shown when exactly 2 leads are selected */}
+      {isAdmin && mergeDialogOpen && selectedCount === 2 && (() => {
+        const [idA, idB] = Array.from(selectedIds);
+        const leadA = localLeads.find((l) => l.id === idA);
+        const leadB = localLeads.find((l) => l.id === idB);
+        if (!leadA || !leadB) return null;
+        return (
+          <MergeDialog
+            leadA={leadA}
+            leadB={leadB}
+            open={mergeDialogOpen}
+            onOpenChange={setMergeDialogOpen}
+            onMerged={() => {
+              setSelectedIds(new Set());
+              setMergeDialogOpen(false);
+            }}
+          />
+        );
+      })()}
 
       {/* Add Lead Sheet */}
       {canCreateLead && tenantId && (

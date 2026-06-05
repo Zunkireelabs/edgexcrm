@@ -25,6 +25,7 @@ import {
   resolveLeadIdentity,
   applyCanonicalUpdate,
   recordSubmission,
+  recordDuplicateSuggestions,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -447,22 +448,16 @@ export async function POST(
     log.error({ err }, "Failed to record submission");
   }
 
-  // Phone-match suggestions (fire-and-forget — not auto-merged)
+  // Phone duplicate suggestions — non-fatal, never blocks ingestion
   if (identity.phoneMatchLeadIds.length > 0) {
-    void Promise.all(
-      identity.phoneMatchLeadIds.map((suggestedId) =>
-        Promise.resolve(
-          supabase
-            .from("lead_duplicate_suggestions")
-            .insert({
-              tenant_id: tenant.id,
-              lead_id: leadId,
-              suggested_lead_id: suggestedId,
-              reason: "phone",
-            })
-        ).catch(() => {})
-      )
-    );
+    try {
+      await recordDuplicateSuggestions(supabase, {
+        tenantId: tenant.id,
+        leadId,
+        suggestedLeadIds: identity.phoneMatchLeadIds,
+        reason: "phone",
+      });
+    } catch { /* non-fatal */ }
   }
 
   Promise.all([

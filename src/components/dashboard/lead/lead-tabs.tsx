@@ -1,10 +1,13 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { GitMerge, X } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { AISparkleIcon } from "@/components/ui/ai-sparkle";
 import type { Lead, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -12,6 +15,7 @@ import { NotesTab } from "./notes-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
 import { ActivitiesPanel } from "./activities/activities-panel";
+import { MergeDialog } from "./merge-dialog";
 import { useEmailThreads } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
 import { getLeadFullName } from "./lead-name";
 
@@ -40,6 +44,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
+    const router = useRouter();
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
@@ -157,6 +162,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               </CardContent>
             </Card>
           )}
+          {/* Possible Duplicates — admin-only */}
+          {isAdmin && <PossibleDuplicatesCard lead={lead} onMerged={() => router.refresh()} />}
         </TabsContent>
 
         <TabsContent value="notes" className="mt-0">
@@ -195,7 +202,175 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   }
 );
 
-// Helper components
+// ── Possible Duplicates Card ────────────────────────────────────────────────
+
+interface DuplicateSuggestion {
+  id: string;
+  reason: string;
+  status: string;
+  created_at: string;
+  other_lead: {
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    phone: string | null;
+    created_at: string;
+  };
+}
+
+function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () => void }) {
+  const [suggestions, setSuggestions] = useState<DuplicateSuggestion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dismissing, setDismissing] = useState<string | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<Lead | null>(null);
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
+
+  const fetchSuggestions = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}/duplicates`);
+      if (res.ok) {
+        const json = await res.json();
+        setSuggestions(json.data ?? []);
+      }
+    } catch { /* silently fail */ }
+    finally { setLoading(false); }
+  }, [lead.id]);
+
+  useEffect(() => { fetchSuggestions(); }, [fetchSuggestions]);
+
+  async function handleDismiss(suggestionId: string) {
+    setDismissing(suggestionId);
+    try {
+      const res = await fetch(`/api/v1/leads/duplicates/${suggestionId}`, { method: "PATCH" });
+      if (res.ok) {
+        setSuggestions((prev) => prev.filter((s) => s.id !== suggestionId));
+        toast.success("Suggestion dismissed");
+      } else {
+        toast.error("Failed to dismiss");
+      }
+    } catch { toast.error("Failed to dismiss"); }
+    finally { setDismissing(null); }
+  }
+
+  function handleMergeClick(otherLead: DuplicateSuggestion["other_lead"]) {
+    // Build a minimal Lead-shaped object for the merge dialog
+    const partial: Lead = {
+      id: otherLead.id,
+      first_name: otherLead.first_name,
+      last_name: otherLead.last_name,
+      email: otherLead.email,
+      phone: otherLead.phone,
+      created_at: otherLead.created_at,
+      // required fields with safe defaults
+      tenant_id: lead.tenant_id,
+      pipeline_id: lead.pipeline_id,
+      session_id: null,
+      step: 1,
+      is_final: true,
+      status: lead.status,
+      city: null,
+      country: null,
+      custom_fields: {},
+      file_urls: {},
+      stage_id: lead.stage_id,
+      assigned_to: null,
+      entity_id: null,
+      intake_source: null,
+      intake_medium: null,
+      intake_campaign: null,
+      preferred_contact_method: null,
+      tags: [],
+      lead_type: "lead",
+      display_id: null,
+      account_id: null,
+      form_config_id: null,
+      deleted_at: null,
+      converted_at: null,
+      converted_contact_id: null,
+      idempotency_key: null,
+      ai_score: null,
+      ai_priority: null,
+      ai_score_updated_at: null,
+      normalized_email: null,
+      merged_into: null,
+      updated_at: otherLead.created_at,
+    };
+    setMergeTarget(partial);
+    setMergeDialogOpen(true);
+  }
+
+  if (loading || suggestions.length === 0) return null;
+
+  return (
+    <>
+      <Card className="shadow-none rounded-lg py-0 border-amber-200 bg-amber-50/30">
+        <CardHeader className="pt-4 pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <GitMerge className="h-4 w-4 text-amber-600" />
+            Possible duplicates
+            <Badge variant="secondary" className="h-5 px-1.5 text-xs bg-amber-100 text-amber-700">
+              {suggestions.length}
+            </Badge>
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 pb-4">
+          {suggestions.map((s) => (
+            <div key={s.id} className="flex items-center justify-between gap-3 rounded-md border border-amber-100 bg-white px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium truncate">
+                  {`${s.other_lead.first_name ?? ""} ${s.other_lead.last_name ?? ""}`.trim() || "—"}
+                </p>
+                <p className="text-xs text-muted-foreground truncate">
+                  {s.other_lead.email ?? s.other_lead.phone ?? "—"}
+                  {" · "}
+                  <span className="capitalize">{s.reason} match</span>
+                </p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-7 px-2 text-xs"
+                  onClick={() => handleMergeClick(s.other_lead)}
+                >
+                  <GitMerge className="h-3 w-3 mr-1" />
+                  Merge
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-muted-foreground"
+                  disabled={dismissing === s.id}
+                  onClick={() => handleDismiss(s.id)}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
+
+      {mergeTarget && (
+        <MergeDialog
+          leadA={lead}
+          leadB={mergeTarget}
+          open={mergeDialogOpen}
+          onOpenChange={setMergeDialogOpen}
+          onMerged={() => {
+            setSuggestions([]);
+            onMerged?.();
+          }}
+        />
+      )}
+    </>
+  );
+}
+
+// ── Helper components ────────────────────────────────────────────────────────
+
 interface InfoGridRowProps {
   label: string;
   value: React.ReactNode | string | null | undefined;
