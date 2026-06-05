@@ -22,6 +22,13 @@ import {
   NotificationTypes,
 } from "@/lib/notifications";
 import type { Lead } from "@/types/database";
+import {
+  normalizeEmail,
+  normalizePhone,
+  resolveLeadIdentity,
+  applyCanonicalUpdate,
+  recordSubmission,
+} from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -317,6 +324,10 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
+  // Normalised fields for identity resolution (used in both update + create paths)
+  const normalizedEmail = normalizeEmail(leadPayload.email as string | null | undefined);
+  const normalizedPhone = normalizePhone(leadPayload.phone as string | null | undefined);
+
   // Update path: lead_id + session_id provided
   if (leadId && sessionId) {
     const { data: existingLead } = await supabase
@@ -332,7 +343,111 @@ async function handlePost(request: NextRequest) {
       return apiNotFound("Lead");
     }
 
-    // Remove tenant_id from update payload
+    // ── Dedup fold on finalisation ──
+    // Only runs when this step flips is_final to true (multi-step form completion).
+    // Resolves identity BEFORE the update so the partial-unique index is never
+    // hit by the draft itself.
+    if (leadPayload.is_final === true) {
+      const updateIdentity = await resolveLeadIdentity(supabase, {
+        tenantId,
+        normalizedEmail,
+        normalizedPhone,
+      });
+
+      // Fold: draft email matches a DIFFERENT canonical lead
+      if (
+        updateIdentity.match === "email" &&
+        updateIdentity.existingLead &&
+        updateIdentity.existingLead.id !== leadId
+      ) {
+        const canonical = updateIdentity.existingLead;
+        const draftLead = existingLead as Lead;
+
+        // Record submission against canonical (raw payload = assembled draft fields)
+        let submissionId: string | undefined;
+        try {
+          submissionId = await recordSubmission(supabase, {
+            tenantId,
+            leadId: canonical.id,
+            formConfigId: (draftLead.form_config_id as string | null) ?? null,
+            sessionId,
+            createdVia: "public_form",
+            idempotencyKey: idempotencyKey ?? null,
+            firstName: draftLead.first_name,
+            lastName: draftLead.last_name,
+            email: draftLead.email,
+            phone: draftLead.phone,
+            city: draftLead.city,
+            country: draftLead.country,
+            normalizedEmail,
+            normalizedPhone,
+            customFields: draftLead.custom_fields as Record<string, unknown>,
+            fileUrls: draftLead.file_urls as Record<string, unknown>,
+            intakeSource: draftLead.intake_source,
+            intakeMedium: draftLead.intake_medium,
+            intakeCampaign: draftLead.intake_campaign,
+            entityId: draftLead.entity_id,
+            rawPayload: leadPayload,
+            matchedExisting: true,
+          });
+        } catch { /* non-fatal */ }
+
+        // Fill-empty patch on canonical
+        const patch = applyCanonicalUpdate(canonical, {
+          first_name: draftLead.first_name,
+          last_name: draftLead.last_name,
+          email: draftLead.email,
+          phone: draftLead.phone,
+          city: draftLead.city,
+          country: draftLead.country,
+          entity_id: draftLead.entity_id,
+          custom_fields: draftLead.custom_fields as Record<string, unknown>,
+          file_urls: draftLead.file_urls as Record<string, unknown>,
+          tags: draftLead.tags,
+        });
+        if (Object.keys(patch).length > 0) {
+          await supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
+        }
+
+        // Soft-delete draft: merged_into=canonical, stays is_final=false (no index collision)
+        await supabase
+          .from("leads")
+          .update({ deleted_at: new Date().toISOString(), merged_into: canonical.id })
+          .eq("id", leadId)
+          .eq("tenant_id", tenantId);
+
+        Promise.all([
+          createAuditLog({
+            tenantId,
+            action: "lead.submission",
+            entityType: "lead",
+            entityId: canonical.id,
+            changes: {
+              submission_id: { old: null, new: submissionId ?? null },
+              is_first: { old: null, new: false },
+              matched_existing: { old: null, new: true },
+              draft_id: { old: null, new: leadId },
+            },
+            ipAddress: ip,
+            userAgent,
+            requestId,
+          }),
+          emitEvent({
+            tenantId,
+            type: "lead.submission",
+            entityType: "lead",
+            entityId: canonical.id,
+            payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
+            requestId,
+          }),
+        ]);
+
+        log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
+        return apiSuccess({ ...canonical, id: canonical.id }, 200);
+      }
+    }
+
+    // Normal update (no fold)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { tenant_id: _tenantId, ...updatePayload } = leadPayload;
 
@@ -351,6 +466,44 @@ async function handlePost(request: NextRequest) {
 
     log.info({ leadId }, "Lead updated");
 
+    // Record submission on finalisation
+    if (leadPayload.is_final === true) {
+      try {
+        const submissionId = await recordSubmission(supabase, {
+          tenantId,
+          leadId,
+          formConfigId: (updated as Lead).form_config_id ?? null,
+          sessionId,
+          createdVia: "public_form",
+          idempotencyKey: idempotencyKey ?? null,
+          firstName: (updated as Lead).first_name,
+          lastName: (updated as Lead).last_name,
+          email: (updated as Lead).email,
+          phone: (updated as Lead).phone,
+          city: (updated as Lead).city,
+          country: (updated as Lead).country,
+          normalizedEmail,
+          normalizedPhone,
+          customFields: (updated as Lead).custom_fields as Record<string, unknown>,
+          fileUrls: (updated as Lead).file_urls as Record<string, unknown>,
+          intakeSource: (updated as Lead).intake_source,
+          intakeMedium: (updated as Lead).intake_medium,
+          intakeCampaign: (updated as Lead).intake_campaign,
+          entityId: (updated as Lead).entity_id,
+          rawPayload: leadPayload,
+          matchedExisting: false,
+        });
+        void emitEvent({
+          tenantId,
+          type: "lead.submission",
+          entityType: "lead",
+          entityId: leadId,
+          payload: { submission_id: submissionId, is_first: true, matched_existing: false },
+          requestId,
+        });
+      } catch { /* non-fatal */ }
+    }
+
     Promise.all([
       createAuditLog({
         tenantId,
@@ -366,7 +519,7 @@ async function handlePost(request: NextRequest) {
         type: "lead.updated",
         entityType: "lead",
         entityId: leadId,
-        payload: { step: updated.step, is_final: updated.is_final },
+        payload: { step: (updated as Lead).step, is_final: (updated as Lead).is_final },
         requestId,
       }),
     ]);
@@ -374,7 +527,123 @@ async function handlePost(request: NextRequest) {
     return apiSuccess(updated, 200);
   }
 
-  // Create path
+  // Create path — run dedup when is_final (single-step form submissions)
+  if (leadPayload.is_final === true) {
+    const createIdentity = await resolveLeadIdentity(supabase, {
+      tenantId,
+      normalizedEmail,
+      normalizedPhone,
+    });
+
+    if (createIdentity.match === "email" && createIdentity.existingLead) {
+      const canonical = createIdentity.existingLead;
+      let submissionId: string | undefined;
+      try {
+        submissionId = await recordSubmission(supabase, {
+          tenantId,
+          leadId: canonical.id,
+          formConfigId: leadPayload.form_config_id as string | null,
+          sessionId: leadPayload.session_id as string | null,
+          createdVia: "public_form",
+          idempotencyKey: idempotencyKey ?? null,
+          firstName: leadPayload.first_name as string | null,
+          lastName: leadPayload.last_name as string | null,
+          email: leadPayload.email as string | null,
+          phone: leadPayload.phone as string | null,
+          city: leadPayload.city as string | null,
+          country: leadPayload.country as string | null,
+          normalizedEmail,
+          normalizedPhone,
+          customFields: leadPayload.custom_fields as Record<string, unknown>,
+          fileUrls: leadPayload.file_urls as Record<string, unknown>,
+          intakeSource: leadPayload.intake_source as string | null,
+          intakeMedium: leadPayload.intake_medium as string | null,
+          intakeCampaign: leadPayload.intake_campaign as string | null,
+          entityId: leadPayload.entity_id as string | null,
+          rawPayload: leadPayload,
+          matchedExisting: true,
+        });
+      } catch { /* non-fatal */ }
+
+      const patch = applyCanonicalUpdate(canonical, {
+        first_name: leadPayload.first_name as string | null,
+        last_name: leadPayload.last_name as string | null,
+        email: leadPayload.email as string | null,
+        phone: leadPayload.phone as string | null,
+        city: leadPayload.city as string | null,
+        country: leadPayload.country as string | null,
+        entity_id: leadPayload.entity_id as string | null,
+        custom_fields: leadPayload.custom_fields as Record<string, unknown>,
+        file_urls: leadPayload.file_urls as Record<string, unknown>,
+        tags: leadPayload.tags as string[],
+      });
+      if (Object.keys(patch).length > 0) {
+        await supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
+      }
+
+      Promise.all([
+        createAuditLog({
+          tenantId,
+          action: "lead.submission",
+          entityType: "lead",
+          entityId: canonical.id,
+          changes: {
+            submission_id: { old: null, new: submissionId ?? null },
+            is_first: { old: null, new: false },
+            matched_existing: { old: null, new: true },
+          },
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        }),
+        emitEvent({
+          tenantId,
+          type: "lead.submission",
+          entityType: "lead",
+          entityId: canonical.id,
+          payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
+          requestId,
+        }),
+        (async () => {
+          try {
+            const fn = (canonical.first_name as string | null) || null;
+            const ln = (canonical.last_name as string | null) || null;
+            const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+            if (canonical.assigned_to) {
+              await upsertThreadNotification({
+                tenantId,
+                userId: canonical.assigned_to,
+                type: NotificationTypes.LEAD_CREATED,
+                title: "Resubmission from existing lead",
+                message: leadName,
+                link: `/leads/${canonical.id}`,
+              });
+            } else {
+              const adminIds = await getTenantAdminRecipients(supabase, tenantId);
+              await Promise.all(
+                adminIds.map((adminId) =>
+                  upsertThreadNotification({
+                    tenantId,
+                    userId: adminId,
+                    type: NotificationTypes.LEAD_CREATED,
+                    title: "Resubmission from existing lead",
+                    message: leadName,
+                    link: `/leads/${canonical.id}`,
+                  })
+                )
+              );
+            }
+          } catch (err) {
+            log.error({ err }, "Failed to send resubmission notification");
+          }
+        })(),
+      ]);
+
+      log.info({ canonicalId: canonical.id }, "Incoming lead deduped into existing canonical");
+      return apiSuccess(canonical, 200);
+    }
+  }
+
   const { data: lead, error } = await supabase
     .from("leads")
     .insert(leadPayload)
@@ -382,27 +651,90 @@ async function handlePost(request: NextRequest) {
     .single();
 
   if (error) {
-    // Check for idempotency constraint violation (race condition)
-    if (error.code === "23505" && idempotencyKey) {
-      const { data: existing } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("idempotency_key", idempotencyKey)
-        .is("deleted_at", null)
-        .single();
-
-      if (existing) {
-        log.info({ leadId: existing.id }, "Race condition — returning existing lead");
-        return apiSuccess(existing, 200);
+    if (error.code === "23505") {
+      // Idempotency key race
+      if (idempotencyKey) {
+        const { data: existing } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("idempotency_key", idempotencyKey)
+          .is("deleted_at", null)
+          .single();
+        if (existing) {
+          log.info({ leadId: existing.id }, "Race condition — returning existing lead");
+          return apiSuccess(existing, 200);
+        }
+      }
+      // Email unique-index race — fold into winner
+      if (normalizedEmail) {
+        const { data: raceMatch } = await supabase
+          .from("leads")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("normalized_email", normalizedEmail)
+          .is("deleted_at", null)
+          .eq("is_final", true)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (raceMatch) {
+          try {
+            await recordSubmission(supabase, {
+              tenantId,
+              leadId: (raceMatch as Lead).id,
+              createdVia: "public_form",
+              idempotencyKey: idempotencyKey ?? null,
+              email: leadPayload.email as string | null,
+              normalizedEmail,
+              normalizedPhone,
+              rawPayload: leadPayload,
+              matchedExisting: true,
+            });
+          } catch { /* non-fatal */ }
+          log.info({ leadId: (raceMatch as Lead).id }, "Email unique-index race — folded into existing lead");
+          return apiSuccess(raceMatch, 200);
+        }
       }
     }
-
     log.error({ err: error }, "Failed to create lead");
     return apiServiceUnavailable("Failed to create lead");
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Record submission for final leads
+  let newSubmissionId: string | undefined;
+  if (lead.is_final) {
+    try {
+      newSubmissionId = await recordSubmission(supabase, {
+        tenantId,
+        leadId: lead.id,
+        formConfigId: (lead as Lead).form_config_id ?? null,
+        sessionId: (lead as Lead).session_id ?? null,
+        createdVia: "public_form",
+        idempotencyKey: idempotencyKey ?? null,
+        firstName: (lead as Lead).first_name,
+        lastName: (lead as Lead).last_name,
+        email: (lead as Lead).email,
+        phone: (lead as Lead).phone,
+        city: (lead as Lead).city,
+        country: (lead as Lead).country,
+        normalizedEmail,
+        normalizedPhone,
+        customFields: (lead as Lead).custom_fields as Record<string, unknown>,
+        fileUrls: (lead as Lead).file_urls as Record<string, unknown>,
+        intakeSource: (lead as Lead).intake_source,
+        intakeMedium: (lead as Lead).intake_medium,
+        intakeCampaign: (lead as Lead).intake_campaign,
+        entityId: (lead as Lead).entity_id,
+        rawPayload: leadPayload,
+        matchedExisting: false,
+      });
+    } catch (err) {
+      log.error({ err }, "Failed to record submission");
+    }
+  }
 
   Promise.all([
     createAuditLog({
@@ -422,6 +754,16 @@ async function handlePost(request: NextRequest) {
       payload: { session_id: lead.session_id, is_final: lead.is_final },
       requestId,
     }),
+    newSubmissionId
+      ? emitEvent({
+          tenantId,
+          type: "lead.submission",
+          entityType: "lead",
+          entityId: lead.id,
+          payload: { submission_id: newSubmissionId, is_first: true, matched_existing: false },
+          requestId,
+        })
+      : Promise.resolve(),
   ]);
 
   // Notify on final leads only (partial leads are in-progress form submissions)
