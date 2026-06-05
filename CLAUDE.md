@@ -191,6 +191,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 5. `docs/reference/` — stable docs:
    - `00-PRODUCT-VISION.md` — what we're building and why.
    - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
+   - **`02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` — target architecture for the AI-native knowledge layer (Orca-ready KB): storage seam → ingestion → pgvector retrieval → agent tools, with tool picks + privacy stance + "when to switch tools" thresholds. Read before building any KB/RAG/Orca-retrieval work; Phase 1/2/3 build briefs reference it.**
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.

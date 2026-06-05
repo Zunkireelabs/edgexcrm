@@ -45,6 +45,18 @@ When closing a session, push this block's content into a new dated session entry
 
 ---
 
+## AI-Native Knowledge Layer blueprint written — 2026-06-05
+
+Doc-only deliverable (no code/schema/config changed). Sadin's KB question — *"do doc/link/note uploads bloat the Supabase DB?"* — opened into the bigger vision: build the KB as the foundation of a **RAG stack for Orca's AI agents** (retrieve → read → later write/generate). Answered the bloat question (**no** — file bytes already live in Supabase **Storage**, only metadata/notes/links in Postgres) and wrote a target-architecture decision record at **`docs/reference/02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md`** (added to CLAUDE.md "Read first" list).
+
+**The blueprint (four layers):** (1) **Storage** — stay on Supabase Storage now, behind a `StorageProvider` seam on AWS SDK v3 `S3Client`; target **Cloudflare R2 + CDN** (zero egress); agents fetch server-side, signed URLs hour-rounded for users only. (2) **Ingestion** — `officeparser` (digital) + Claude/GPT-4o vision OCR (scanned), recursive 512-token chunks, run on a `document_jobs` table + VPS cron worker (mirrors email-poll). (3) **Vectors** — **pgvector in the existing Supabase Postgres** (new `knowledge_chunks` table, HNSW, same tenant_id+RLS pattern → free tenant isolation on search; 0.8+ iterative scans + tenant prefilter); a thin `retrieve()` module, **no LangChain/LlamaIndex**; graduate to Turbopuffer only at millions of vectors. (4) **Agent access** — `search_knowledge`/`read_document`/(later)`create_item` tools, built standalone first, wired to Orca when its agent framework is real.
+
+**Vendor strategy** (reuse what we have → zero new sub-processors): embeddings = **OpenAI `text-embedding-3-large` @1024d** (Voyage `voyage-3-large` as a swap behind the seam); OCR = **Claude/GPT-4o vision** (Mistral OCR only at volume); generation = **Claude**. **Privacy:** hosted-with-existing-vendors at small scale, no-train/zero-retention + DPA + sub-processor disclosure; **flagged the Admizz education tenant's student PII** for compliance sign-off. Cost now ≈ **$0 incremental**.
+
+**Phasing (separate briefs to follow, each referencing the blueprint):** Phase 1 = StorageProvider seam (consolidate the duplicated KB + `lead-documents` signed-URL logic, R2-ready; cheap/safe). Phase 2 = ingestion + vectors + `retrieve()`. Phase 3 = Orca agent tools (gated on Orca being real). **Open decisions for Sadin** logged in the doc: confirm embedding vendor (OpenAI vs Voyage), OCR approach (vision-reuse vs Mistral vs defer), and DPA/PII sign-off owner. Approved plan: `~/.claude/plans/what-i-want-to-floofy-shore.md`.
+
+---
+
 ## Personal Home landing view shipped + promoted to prod — 2026-06-04 PM
 
 Merged to stage at `e5446f3` (`feat/home-view`, 5 commits) + fixback `e8cbf65` (`feat/home-fixback`, FF); promoted to prod in the `886f541` bundle. Briefs archived: `docs/archive/features/HOME-VIEW-BRIEF.md` + `HOME-VIEW-FIXBACK-BRIEF.md`. Workflow: Opus planned (`/crm-expert` + 3 Explore agents) → wrote brief → Sonnet implemented → Opus full-diff review + CI + merge.
