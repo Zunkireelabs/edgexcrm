@@ -19,6 +19,13 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
+import {
+  normalizeEmail,
+  normalizePhone,
+  resolveLeadIdentity,
+  applyCanonicalUpdate,
+  recordSubmission,
+} from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -103,7 +110,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, steps, attribution")
+    .select("id, tenant_id, slug, name, steps, attribution")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -175,7 +182,131 @@ export async function POST(
     } catch { /* fall through to raw phone */ }
   }
 
-  // ── 10. Generate display_id for education_consultancy ──
+  // ── 10. Dedup: resolve identity ──
+  const normalizedEmail = normalizeEmail(body.email as string | undefined);
+  const normalizedPhone = normalizePhone(phone);
+  const identity = await resolveLeadIdentity(supabase, {
+    tenantId: tenant.id,
+    normalizedEmail,
+    normalizedPhone,
+  });
+
+  if (identity.match === "email" && identity.existingLead) {
+    const canonical = identity.existingLead;
+    let submissionId: string | undefined;
+    try {
+      submissionId = await recordSubmission(supabase, {
+        tenantId: tenant.id,
+        leadId: canonical.id,
+        formConfigId: formConfig.id,
+        createdVia: "public_form",
+        idempotencyKey: idempotencyKey ?? null,
+        firstName: (body.first_name as string) || null,
+        lastName: (body.last_name as string) || null,
+        email: (body.email as string) || null,
+        phone,
+        city: (body.city as string) || null,
+        country: (body.country as string) || null,
+        normalizedEmail,
+        normalizedPhone,
+        customFields: (body.custom_fields as Record<string, unknown>) ?? {},
+        fileUrls: (body.file_urls as Record<string, unknown>) ?? {},
+        intakeSource: (body.intake_source as string) || (formConfig.attribution?.default_source ?? null),
+        intakeMedium: (body.intake_medium as string) || (formConfig.attribution?.default_medium ?? null),
+        intakeCampaign: (body.intake_campaign as string) || (formConfig.attribution?.default_campaign ?? null),
+        entityId: (body.entity_id as string) || null,
+        rawPayload: body,
+        matchedExisting: true,
+      });
+    } catch { /* non-fatal — canonical lead exists, submission not logged */ }
+
+    const patch = applyCanonicalUpdate(canonical, {
+      first_name: (body.first_name as string) || null,
+      last_name: (body.last_name as string) || null,
+      email: (body.email as string) || null,
+      phone,
+      city: (body.city as string) || null,
+      country: (body.country as string) || null,
+      entity_id: (body.entity_id as string) || null,
+      custom_fields: (body.custom_fields as Record<string, unknown>) ?? {},
+      file_urls: (body.file_urls as Record<string, unknown>) ?? {},
+      tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
+    });
+    if (Object.keys(patch).length > 0) {
+      await supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenant.id);
+    }
+
+    const canonicalId = canonical.id;
+    Promise.all([
+      createAuditLog({
+        tenantId: tenant.id,
+        userId: null,
+        action: "lead.submission",
+        entityType: "lead",
+        entityId: canonicalId,
+        changes: {
+          submission_id: { old: null, new: submissionId ?? null },
+          form_name: { old: null, new: (formConfig as { name?: string }).name ?? null },
+          is_first: { old: null, new: false },
+          matched_existing: { old: null, new: true },
+        },
+        ipAddress: ip,
+        userAgent,
+        requestId,
+      }),
+      emitEvent({
+        tenantId: tenant.id,
+        type: "lead.submission",
+        entityType: "lead",
+        entityId: canonicalId,
+        payload: {
+          submission_id: submissionId ?? null,
+          form_slug: formSlug,
+          form_name: (formConfig as { name?: string }).name ?? null,
+          is_first: false,
+          matched_existing: true,
+        },
+        requestId,
+      }),
+      (async () => {
+        try {
+          const fn = (body.first_name as string | null) || null;
+          const ln = (body.last_name as string | null) || null;
+          const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+          if (canonical.assigned_to) {
+            await upsertThreadNotification({
+              tenantId: tenant.id,
+              userId: canonical.assigned_to,
+              type: NotificationTypes.LEAD_CREATED,
+              title: "Resubmission from existing lead",
+              message: leadName,
+              link: `/leads/${canonicalId}`,
+            });
+          } else {
+            const adminIds = await getTenantAdminRecipients(supabase, tenant.id);
+            await Promise.all(
+              adminIds.map((adminId) =>
+                upsertThreadNotification({
+                  tenantId: tenant.id,
+                  userId: adminId,
+                  type: NotificationTypes.LEAD_CREATED,
+                  title: "Resubmission from existing lead",
+                  message: leadName,
+                  link: `/leads/${canonicalId}`,
+                })
+              )
+            );
+          }
+        } catch (err) {
+          log.error({ err }, "Failed to send resubmission notification");
+        }
+      })(),
+    ]);
+
+    return withCors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
+  }
+
+  // ── 11. Generate display_id for education_consultancy ──
   let displayId: string | null = null;
   if (tenant.industry_id === "education_consultancy") {
     const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
@@ -231,51 +362,132 @@ export async function POST(
     .single();
 
   if (error) {
-    // Race condition on idempotency key
-    if (error.code === "23505" && idempotencyKey) {
-      const { data: existing } = await supabase
-        .from("leads")
-        .select("id")
-        .eq("tenant_id", tenant.id)
-        .eq("idempotency_key", idempotencyKey)
-        .is("deleted_at", null)
-        .single();
-
-      if (existing) {
-        return withCors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
+    if (error.code === "23505") {
+      // Idempotency key race
+      if (idempotencyKey) {
+        const { data: existing } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("tenant_id", tenant.id)
+          .eq("idempotency_key", idempotencyKey)
+          .is("deleted_at", null)
+          .single();
+        if (existing) {
+          return withCors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
+        }
+      }
+      // Email unique-index race — concurrent insert won; fold into winner
+      if (normalizedEmail) {
+        const { data: raceMatch } = await supabase
+          .from("leads")
+          .select("id")
+          .eq("tenant_id", tenant.id)
+          .eq("normalized_email", normalizedEmail)
+          .is("deleted_at", null)
+          .eq("is_final", true)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (raceMatch) {
+          try {
+            await recordSubmission(supabase, {
+              tenantId: tenant.id,
+              leadId: (raceMatch as { id: string }).id,
+              formConfigId: formConfig.id,
+              createdVia: "public_form",
+              idempotencyKey: idempotencyKey ?? null,
+              email: (body.email as string) || null,
+              normalizedEmail,
+              normalizedPhone,
+              rawPayload: body,
+              matchedExisting: true,
+            });
+          } catch { /* non-fatal */ }
+          return withCors(apiSuccess({ lead_id: (raceMatch as { id: string }).id, deduped: true }, 200));
+        }
       }
     }
-
     log.error({ err: error }, "Failed to create lead");
     return withCors(apiServiceUnavailable("Failed to create lead"));
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
 
-  // Fire-and-forget: audit + event + notification (public submit is always final)
+  // Record submission + fire-and-forget: audit + event + notifications
   const leadId = lead.id;
   const tenantForNotify = tenant;
   const leadPayloadForNotify = leadPayload;
-  Promise.all([
-    createAuditLog({
+
+  let submissionId: string | undefined;
+  try {
+    submissionId = await recordSubmission(supabase, {
       tenantId: tenant.id,
-      userId: null,
-      action: "lead.created",
-      entityType: "lead",
-      entityId: lead.id,
-      changes: {
-        source: { old: null, new: "public_api" },
-        integration_key: { old: null, new: authResult.context.integrationKeyId },
-      },
-      ipAddress: ip,
-      userAgent,
-      requestId,
-    }),
+      leadId,
+      formConfigId: formConfig.id,
+      createdVia: "public_form",
+      idempotencyKey: idempotencyKey ?? null,
+      firstName: leadPayload.first_name as string | null,
+      lastName: leadPayload.last_name as string | null,
+      email: leadPayload.email as string | null,
+      phone: leadPayload.phone as string | null,
+      city: leadPayload.city as string | null,
+      country: leadPayload.country as string | null,
+      normalizedEmail,
+      normalizedPhone,
+      customFields: leadPayload.custom_fields as Record<string, unknown>,
+      fileUrls: leadPayload.file_urls as Record<string, unknown>,
+      intakeSource: leadPayload.intake_source as string | null,
+      intakeMedium: leadPayload.intake_medium as string | null,
+      intakeCampaign: leadPayload.intake_campaign as string | null,
+      entityId: leadPayload.entity_id as string | null,
+      rawPayload: body,
+      matchedExisting: false,
+    });
+  } catch (err) {
+    log.error({ err }, "Failed to record submission");
+  }
+
+  // Phone-match suggestions (fire-and-forget — not auto-merged)
+  if (identity.phoneMatchLeadIds.length > 0) {
+    void Promise.all(
+      identity.phoneMatchLeadIds.map((suggestedId) =>
+        Promise.resolve(
+          supabase
+            .from("lead_duplicate_suggestions")
+            .insert({
+              tenant_id: tenant.id,
+              lead_id: leadId,
+              suggested_lead_id: suggestedId,
+              reason: "phone",
+            })
+        ).catch(() => {})
+      )
+    );
+  }
+
+  Promise.all([
+    // lead.created audit suppressed when lead.submission was recorded (A4: combined display)
+    submissionId
+      ? Promise.resolve()
+      : createAuditLog({
+          tenantId: tenant.id,
+          userId: null,
+          action: "lead.created",
+          entityType: "lead",
+          entityId: leadId,
+          changes: {
+            source: { old: null, new: "public_api" },
+            integration_key: { old: null, new: authResult.context.integrationKeyId },
+          },
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        }),
     emitEvent({
       tenantId: tenant.id,
       type: "lead.created",
       entityType: "lead",
-      entityId: lead.id,
+      entityId: leadId,
       payload: {
         source: "public_api",
         form_slug: formSlug,
@@ -283,12 +495,27 @@ export async function POST(
       },
       requestId,
     }),
+    submissionId
+      ? emitEvent({
+          tenantId: tenant.id,
+          type: "lead.submission",
+          entityType: "lead",
+          entityId: leadId,
+          payload: {
+            submission_id: submissionId,
+            form_slug: formSlug,
+            form_name: (formConfig as { name?: string }).name ?? null,
+            is_first: true,
+            matched_existing: false,
+          },
+          requestId,
+        })
+      : Promise.resolve(),
     (async () => {
       try {
         const fn = leadPayloadForNotify.first_name as string | null;
         const ln = leadPayloadForNotify.last_name as string | null;
         const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
-        // Public submit is always unassigned — route to tenant admins
         const adminIds = await getTenantAdminRecipients(supabase, tenantForNotify.id);
         await Promise.all(
           adminIds.map((adminId) =>

@@ -8,6 +8,13 @@ import {
   withIntegrationErrorBoundary,
 } from "@/lib/api/integration-helpers";
 import {
+  normalizeEmail,
+  normalizePhone,
+  resolveLeadIdentity,
+  applyCanonicalUpdate,
+  recordSubmission,
+} from "@/lib/leads/dedup";
+import {
   apiSuccess,
   apiValidationError,
   apiServiceUnavailable,
@@ -97,6 +104,8 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
   if (!valid) return apiValidationError(errors);
 
   const tenantId = ctx.auth.tenantId;
+  const normalizedEmail = normalizeEmail(body.email as string);
+  const normalizedPhone = normalizePhone((body.phone as string | undefined) ?? null);
 
   // Idempotency check via header
   const idempotencyKey = request.headers.get("idempotency-key");
@@ -113,6 +122,65 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
       return apiSuccess(normalizeLead(existing as Lead, stageMap, userMap), 200);
     }
+  }
+
+  // ── Dedup: identity resolution ──
+  const identity = await resolveLeadIdentity(ctx.supabase, {
+    tenantId,
+    normalizedEmail,
+    normalizedPhone,
+  });
+
+  if (identity.match === "email" && identity.existingLead) {
+    const canonical = identity.existingLead;
+    let submissionId: string | undefined;
+    try {
+      submissionId = await recordSubmission(ctx.supabase, {
+        tenantId,
+        leadId: canonical.id,
+        createdVia: "integration",
+        idempotencyKey: idempotencyKey ?? null,
+        firstName: (body.first_name as string) || null,
+        lastName: (body.last_name as string) || null,
+        email: (body.email as string) || null,
+        phone: (body.phone as string) || null,
+        city: (body.city as string) || null,
+        country: (body.country as string) || null,
+        normalizedEmail,
+        normalizedPhone,
+        customFields: (body.custom_fields as Record<string, unknown>) ?? {},
+        fileUrls: (body.file_urls as Record<string, unknown>) ?? {},
+        intakeSource: (body.intake_source as string) || null,
+        intakeMedium: (body.intake_medium as string) || null,
+        intakeCampaign: (body.intake_campaign as string) || null,
+        rawPayload: body,
+        matchedExisting: true,
+      });
+    } catch { /* non-fatal — canonical lead exists, submission not logged */ }
+
+    const patch = applyCanonicalUpdate(canonical, {
+      first_name: (body.first_name as string) || null,
+      last_name: (body.last_name as string) || null,
+      email: (body.email as string) || null,
+      phone: (body.phone as string) || null,
+      city: (body.city as string) || null,
+      country: (body.country as string) || null,
+      custom_fields: body.custom_fields as Record<string, unknown> | undefined,
+      file_urls: body.file_urls as Record<string, unknown> | undefined,
+    });
+    if (Object.keys(patch).length > 0) {
+      await ctx.supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
+    }
+
+    void logIntegrationAudit(ctx, "integration.lead.submission", "lead", canonical.id);
+    void emitIntegrationEvent(ctx, "lead.submission", "lead", canonical.id, {
+      submission_id: submissionId ?? null,
+      is_first: false,
+      matched_existing: true,
+    });
+
+    const { stageMap: sm, userMap: um } = await buildLookupMaps(ctx.supabase, tenantId);
+    return apiSuccess(normalizeLead(canonical, sm, um), 200);
   }
 
   // Resolve stage: use provided stage_id, or status slug, or default
@@ -188,32 +256,99 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     .single();
 
   if (error) {
-    // Handle idempotency race condition
-    if (error.code === "23505" && idempotencyKey) {
-      const { data: existing } = await ctx.supabase
-        .from("leads")
-        .select("*")
-        .eq("tenant_id", tenantId)
-        .eq("idempotency_key", idempotencyKey)
-        .is("deleted_at", null)
-        .single();
-
-      if (existing) {
-        const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
-        return apiSuccess(normalizeLead(existing as Lead, stageMap, userMap), 200);
+    if (error.code === "23505") {
+      // Idempotency key race
+      if (idempotencyKey) {
+        const { data: existing } = await ctx.supabase
+          .from("leads")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("idempotency_key", idempotencyKey)
+          .is("deleted_at", null)
+          .single();
+        if (existing) {
+          const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
+          return apiSuccess(normalizeLead(existing as Lead, stageMap, userMap), 200);
+        }
+      }
+      // Email unique-index race — concurrent insert won; re-lookup and fold
+      if (normalizedEmail) {
+        const { data: raceMatch } = await ctx.supabase
+          .from("leads")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("normalized_email", normalizedEmail)
+          .is("deleted_at", null)
+          .eq("is_final", true)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (raceMatch) {
+          try {
+            await recordSubmission(ctx.supabase, {
+              tenantId,
+              leadId: (raceMatch as Lead).id,
+              createdVia: "integration",
+              idempotencyKey: idempotencyKey ?? null,
+              email: (body.email as string) || null,
+              normalizedEmail,
+              normalizedPhone,
+              rawPayload: body,
+              matchedExisting: true,
+            });
+          } catch { /* non-fatal */ }
+          const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
+          return apiSuccess(normalizeLead(raceMatch as Lead, stageMap, userMap), 200);
+        }
       }
     }
     return apiServiceUnavailable("Failed to create lead");
   }
 
+  // New lead — record submission
+  let submissionId: string | undefined;
+  try {
+    submissionId = await recordSubmission(ctx.supabase, {
+      tenantId,
+      leadId: (lead as Lead).id,
+      createdVia: "integration",
+      idempotencyKey: idempotencyKey ?? null,
+      firstName: (lead as Lead).first_name,
+      lastName: (lead as Lead).last_name,
+      email: (lead as Lead).email,
+      phone: (lead as Lead).phone,
+      city: (lead as Lead).city,
+      country: (lead as Lead).country,
+      normalizedEmail,
+      normalizedPhone,
+      customFields: (lead as Lead).custom_fields as Record<string, unknown>,
+      fileUrls: (lead as Lead).file_urls as Record<string, unknown>,
+      intakeSource: (lead as Lead).intake_source,
+      intakeMedium: (lead as Lead).intake_medium,
+      intakeCampaign: (lead as Lead).intake_campaign,
+      rawPayload: body,
+      matchedExisting: false,
+    });
+  } catch { /* non-fatal — lead created, submission not logged */ }
+
   const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, ctx.auth.tenantId);
 
   await Promise.all([
-    logIntegrationAudit(ctx, "integration.lead.created", "lead", lead.id),
-    emitIntegrationEvent(ctx, "lead.created", "lead", lead.id, {
-      email: lead.email,
-      stage_id: lead.stage_id,
+    // integration.lead.created audit suppressed when lead.submission was recorded (A4: combined display)
+    submissionId
+      ? Promise.resolve()
+      : logIntegrationAudit(ctx, "integration.lead.created", "lead", (lead as Lead).id),
+    emitIntegrationEvent(ctx, "lead.created", "lead", (lead as Lead).id, {
+      email: (lead as Lead).email,
+      stage_id: (lead as Lead).stage_id,
     }),
+    submissionId
+      ? emitIntegrationEvent(ctx, "lead.submission", "lead", (lead as Lead).id, {
+          submission_id: submissionId,
+          is_first: true,
+          matched_existing: false,
+        })
+      : Promise.resolve(),
   ]);
 
   return apiSuccess(normalizeLead(lead as Lead, stageMap, userMap), 201);

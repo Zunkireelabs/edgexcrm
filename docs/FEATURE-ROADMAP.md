@@ -7,7 +7,7 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-05-27 (Project board brief reframed and renamed to "Project Workspace" after scope review with Sadin; 5-phase plan replaces the 3-phase brief)
+Last updated: 2026-06-05 (AI-Native Knowledge Layer blueprint written — see Planned)
 
 ---
 
@@ -45,6 +45,12 @@ _(no approved features yet)_
 ## 📋 Planned / next up (brief written, top of queue)
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
+
+- **AI-Native Knowledge Layer** (universal; Orca-ready RAG over the KB)
+  - **Blueprint / decision record**: `docs/reference/02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` (written 2026-06-05, approved). Four layers: StorageProvider seam → ingestion pipeline → pgvector retrieval → Orca agent tools. Tool picks (OpenAI embeddings, Claude/GPT vision OCR, pgvector, R2 as the storage target), privacy stance, and "when to switch tools" thresholds all captured there.
+  - **Phasing** (each gets its own brief referencing the blueprint): **Phase 1** = StorageProvider seam (consolidate the duplicated KB + `lead-documents` signed-URL logic onto one `S3Client`-based interface; R2-ready; no new vendors — cheap/safe, the natural next build). **Phase 2** = ingestion + `knowledge_chunks` pgvector + `retrieve()` module (new table, parser, embeddings, cron worker, new secrets). **Phase 3** = Orca agent tools (gated on Orca's agent framework being real).
+  - **Open decisions** (in the blueprint): confirm embedding vendor (OpenAI vs Voyage), OCR approach (vision-reuse vs Mistral vs defer), DPA/student-PII sign-off owner.
+  - **Status**: blueprint approved; Phase 1 brief is the next Opus deliverable when Sadin picks it up.
 
 - **Project Workspace** (`project-board` feature ID, industry-scoped to `it_agency`)
   - **Brief**: `docs/PROJECT-WORKSPACE-BRIEF.md` (renamed from PROJECT-BOARD-BRIEF — Notion-style unified workspace with 4 views: Board / Table / Tasks / Members; lifted filters; URL-encoded state; ~550 lines)

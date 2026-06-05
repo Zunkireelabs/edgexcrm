@@ -142,6 +142,9 @@ export interface Lead {
   ai_score: number | null;
   ai_priority: AIPriorityTier | null;
   ai_score_updated_at: string | null;
+  // Dedup fields (Phase A1+)
+  normalized_email: string | null;
+  merged_into: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -613,4 +616,57 @@ export interface OrgLayer {
   sort_order: number;
   created_at: string;
   updated_at: string;
+}
+
+// ============================================================
+// Lead Dedup — Phase A1
+// ============================================================
+
+export interface LeadSubmission {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  form_config_id: string | null;
+  session_id: string | null;
+  created_via: "public_form" | "public_api" | "integration" | "manual" | "backfill";
+  idempotency_key: string | null;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  phone: string | null;
+  city: string | null;
+  country: string | null;
+  normalized_email: string | null;
+  normalized_phone: string | null;
+  custom_fields: Record<string, unknown>;
+  file_urls: Record<string, unknown>;
+  intake_source: string | null;
+  intake_medium: string | null;
+  intake_campaign: string | null;
+  entity_id: string | null;
+  raw_payload: Record<string, unknown>;
+  matched_existing: boolean;
+  created_at: string;
+}
+
+export interface LeadMerge {
+  id: string;
+  tenant_id: string;
+  canonical_id: string;
+  absorbed_id: string;
+  merged_by: string | null;
+  source: "manual" | "backfill";
+  repointed_counts: Record<string, unknown>;
+  field_patch: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface LeadDuplicateSuggestion {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  suggested_lead_id: string;
+  reason: "phone" | "name";
+  status: "open" | "dismissed" | "merged";
+  created_at: string;
 }
