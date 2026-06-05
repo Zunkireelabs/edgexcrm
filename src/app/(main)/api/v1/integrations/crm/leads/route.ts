@@ -14,6 +14,7 @@ import {
   applyCanonicalUpdate,
   recordSubmission,
   recordDuplicateSuggestions,
+  emitSubmissionAudit,
 } from "@/lib/leads/dedup";
 import {
   apiSuccess,
@@ -173,11 +174,16 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       await ctx.supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
     }
 
-    void logIntegrationAudit(ctx, "integration.lead.submission", "lead", canonical.id);
-    void emitIntegrationEvent(ctx, "lead.submission", "lead", canonical.id, {
-      submission_id: submissionId ?? null,
-      is_first: false,
-      matched_existing: true,
+    void emitSubmissionAudit(ctx.supabase, {
+      tenantId,
+      leadId: canonical.id,
+      submissionId: submissionId ?? null,
+      isFirst: false,
+      matchedExisting: true,
+      formName: null,
+      ipAddress: ctx.ip,
+      userAgent: ctx.userAgent,
+      requestId: ctx.requestId,
     });
 
     const { stageMap: sm, userMap: um } = await buildLookupMaps(ctx.supabase, tenantId);
@@ -285,8 +291,9 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
           .limit(1)
           .maybeSingle();
         if (raceMatch) {
+          let raceSubmissionId: string | undefined;
           try {
-            await recordSubmission(ctx.supabase, {
+            raceSubmissionId = await recordSubmission(ctx.supabase, {
               tenantId,
               leadId: (raceMatch as Lead).id,
               createdVia: "integration",
@@ -298,6 +305,17 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
               matchedExisting: true,
             });
           } catch { /* non-fatal */ }
+          void emitSubmissionAudit(ctx.supabase, {
+            tenantId,
+            leadId: (raceMatch as Lead).id,
+            submissionId: raceSubmissionId ?? null,
+            isFirst: false,
+            matchedExisting: true,
+            formName: null,
+            ipAddress: ctx.ip,
+            userAgent: ctx.userAgent,
+            requestId: ctx.requestId,
+          });
           const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
           return apiSuccess(normalizeLead(raceMatch as Lead, stageMap, userMap), 200);
         }
@@ -346,6 +364,20 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
 
   const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, ctx.auth.tenantId);
 
+  if (submissionId) {
+    void emitSubmissionAudit(ctx.supabase, {
+      tenantId,
+      leadId: (lead as Lead).id,
+      submissionId,
+      isFirst: true,
+      matchedExisting: false,
+      formName: null,
+      ipAddress: ctx.ip,
+      userAgent: ctx.userAgent,
+      requestId: ctx.requestId,
+    });
+  }
+
   await Promise.all([
     // integration.lead.created audit suppressed when lead.submission was recorded (A4: combined display)
     submissionId
@@ -355,13 +387,6 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       email: (lead as Lead).email,
       stage_id: (lead as Lead).stage_id,
     }),
-    submissionId
-      ? emitIntegrationEvent(ctx, "lead.submission", "lead", (lead as Lead).id, {
-          submission_id: submissionId,
-          is_first: true,
-          matched_existing: false,
-        })
-      : Promise.resolve(),
   ]);
 
   return apiSuccess(normalizeLead(lead as Lead, stageMap, userMap), 201);

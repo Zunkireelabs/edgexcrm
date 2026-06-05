@@ -18,6 +18,7 @@
 import { config } from "dotenv";
 import { createClient } from "@supabase/supabase-js";
 import { runBackfill, undoBackfill } from "../src/lib/leads/backfill";
+import { normalizeEmail } from "../src/lib/leads/dedup";
 import type { BackfillGroup, BackfillReport, BackfillApplyResult } from "../src/lib/leads/backfill";
 
 config({ path: ".env.local" });
@@ -44,6 +45,10 @@ const REVIEWED = args.includes("--yes-i-reviewed-the-dry-run");
 
 const tenantIdx = args.indexOf("--tenant");
 const TENANT_ID: string | undefined = tenantIdx !== -1 ? args[tenantIdx + 1] : undefined;
+
+const emailIdx = args.indexOf("--email");
+const EMAIL_RAW: string | undefined = emailIdx !== -1 ? args[emailIdx + 1] : undefined;
+const NORMALIZED_EMAIL: string | null = EMAIL_RAW ? normalizeEmail(EMAIL_RAW) : null;
 
 if (APPLY && UNDO) {
   console.error("Cannot use --apply and --undo together.");
@@ -126,7 +131,8 @@ function printReport(report: BackfillReport): void {
 // ── main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
-  const scope = TENANT_ID ? `tenant ${TENANT_ID}` : "all tenants";
+  const emailScope = NORMALIZED_EMAIL ? ` / email ${NORMALIZED_EMAIL}` : "";
+  const scope = (TENANT_ID ? `tenant ${TENANT_ID}` : "all tenants") + emailScope;
 
   if (UNDO) {
     console.log(`\n↩  Undoing backfill merges for ${scope}…`);
@@ -148,7 +154,7 @@ async function main() {
     console.log(`\n🔍  Dry-run for ${scope}…`);
     const result = await runBackfill(
       supabase as Parameters<typeof runBackfill>[0],
-      { apply: false, tenantId: TENANT_ID }
+      { apply: false, tenantId: TENANT_ID, normalizedEmail: NORMALIZED_EMAIL ?? undefined }
     );
     printReport(result as BackfillReport);
     return;
@@ -158,7 +164,7 @@ async function main() {
   console.log(`\n🔀  Applying backfill for ${scope}…`);
   const result = await runBackfill(
     supabase as Parameters<typeof runBackfill>[0],
-    { apply: true, tenantId: TENANT_ID }
+    { apply: true, tenantId: TENANT_ID, normalizedEmail: NORMALIZED_EMAIL ?? undefined }
   ) as BackfillApplyResult;
 
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

@@ -100,7 +100,7 @@ function computeFieldDelta(canonical: Lead, absorbeds: Lead[]): Record<string, u
  */
 export async function planBackfill(
   supabase: SupabaseServiceClient,
-  opts: { tenantId?: string } = {}
+  opts: { tenantId?: string; normalizedEmail?: string } = {}
 ): Promise<BackfillGroup[]> {
   // Fetch all live, final, unmerged leads with a normalized_email
   let query = supabase
@@ -114,6 +114,10 @@ export async function planBackfill(
 
   if (opts.tenantId) {
     query = query.eq("tenant_id", opts.tenantId);
+  }
+
+  if (opts.normalizedEmail) {
+    query = query.eq("normalized_email", opts.normalizedEmail);
   }
 
   const { data, error } = await query.order("created_at", { ascending: true });
@@ -186,11 +190,11 @@ export async function planBackfill(
  */
 export async function runBackfill(
   supabase: SupabaseServiceClient,
-  opts: { apply?: boolean; tenantId?: string } = {}
+  opts: { apply?: boolean; tenantId?: string; normalizedEmail?: string } = {}
 ): Promise<BackfillReport | BackfillApplyResult> {
-  const { apply = false, tenantId } = opts;
+  const { apply = false, tenantId, normalizedEmail } = opts;
 
-  const groups = await planBackfill(supabase, { tenantId });
+  const groups = await planBackfill(supabase, { tenantId, normalizedEmail });
 
   if (!apply) {
     // Dry-run: return report, write nothing

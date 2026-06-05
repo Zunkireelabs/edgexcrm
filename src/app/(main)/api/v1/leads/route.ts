@@ -29,6 +29,8 @@ import {
   applyCanonicalUpdate,
   recordSubmission,
   recordDuplicateSuggestions,
+  resolveFormName,
+  emitSubmissionAudit,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -417,31 +419,18 @@ async function handlePost(request: NextRequest) {
           .eq("id", leadId)
           .eq("tenant_id", tenantId);
 
-        Promise.all([
-          createAuditLog({
-            tenantId,
-            action: "lead.submission",
-            entityType: "lead",
-            entityId: canonical.id,
-            changes: {
-              submission_id: { old: null, new: submissionId ?? null },
-              is_first: { old: null, new: false },
-              matched_existing: { old: null, new: true },
-              draft_id: { old: null, new: leadId },
-            },
-            ipAddress: ip,
-            userAgent,
-            requestId,
-          }),
-          emitEvent({
-            tenantId,
-            type: "lead.submission",
-            entityType: "lead",
-            entityId: canonical.id,
-            payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
-            requestId,
-          }),
-        ]);
+        const foldFormName = await resolveFormName(supabase, (draftLead.form_config_id as string | null) ?? null);
+        void emitSubmissionAudit(supabase, {
+          tenantId,
+          leadId: canonical.id,
+          submissionId: submissionId ?? null,
+          isFirst: false,
+          matchedExisting: true,
+          formName: foldFormName,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
@@ -494,12 +483,16 @@ async function handlePost(request: NextRequest) {
           rawPayload: leadPayload,
           matchedExisting: false,
         });
-        void emitEvent({
+        const updateFormName = await resolveFormName(supabase, (updated as Lead).form_config_id ?? null);
+        void emitSubmissionAudit(supabase, {
           tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: leadId,
-          payload: { submission_id: submissionId, is_first: true, matched_existing: false },
+          leadId,
+          submissionId,
+          isFirst: true,
+          matchedExisting: false,
+          formName: updateFormName,
+          ipAddress: ip,
+          userAgent,
           requestId,
         });
       } catch { /* non-fatal */ }
@@ -584,63 +577,51 @@ async function handlePost(request: NextRequest) {
         await supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
       }
 
-      Promise.all([
-        createAuditLog({
-          tenantId,
-          action: "lead.submission",
-          entityType: "lead",
-          entityId: canonical.id,
-          changes: {
-            submission_id: { old: null, new: submissionId ?? null },
-            is_first: { old: null, new: false },
-            matched_existing: { old: null, new: true },
-          },
-          ipAddress: ip,
-          userAgent,
-          requestId,
-        }),
-        emitEvent({
-          tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: canonical.id,
-          payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
-          requestId,
-        }),
-        (async () => {
-          try {
-            const fn = (canonical.first_name as string | null) || null;
-            const ln = (canonical.last_name as string | null) || null;
-            const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
-            if (canonical.assigned_to) {
-              await upsertThreadNotification({
-                tenantId,
-                userId: canonical.assigned_to,
-                type: NotificationTypes.LEAD_CREATED,
-                title: "Resubmission from existing lead",
-                message: leadName,
-                link: `/leads/${canonical.id}`,
-              });
-            } else {
-              const adminIds = await getTenantAdminRecipients(supabase, tenantId);
-              await Promise.all(
-                adminIds.map((adminId) =>
-                  upsertThreadNotification({
-                    tenantId,
-                    userId: adminId,
-                    type: NotificationTypes.LEAD_CREATED,
-                    title: "Resubmission from existing lead",
-                    message: leadName,
-                    link: `/leads/${canonical.id}`,
-                  })
-                )
-              );
-            }
-          } catch (err) {
-            log.error({ err }, "Failed to send resubmission notification");
+      const createFoldFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
+      void emitSubmissionAudit(supabase, {
+        tenantId,
+        leadId: canonical.id,
+        submissionId: submissionId ?? null,
+        isFirst: false,
+        matchedExisting: true,
+        formName: createFoldFormName,
+        ipAddress: ip,
+        userAgent,
+        requestId,
+      });
+      (async () => {
+        try {
+          const fn = (canonical.first_name as string | null) || null;
+          const ln = (canonical.last_name as string | null) || null;
+          const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+          if (canonical.assigned_to) {
+            await upsertThreadNotification({
+              tenantId,
+              userId: canonical.assigned_to,
+              type: NotificationTypes.LEAD_CREATED,
+              title: "Resubmission from existing lead",
+              message: leadName,
+              link: `/leads/${canonical.id}`,
+            });
+          } else {
+            const adminIds = await getTenantAdminRecipients(supabase, tenantId);
+            await Promise.all(
+              adminIds.map((adminId) =>
+                upsertThreadNotification({
+                  tenantId,
+                  userId: adminId,
+                  type: NotificationTypes.LEAD_CREATED,
+                  title: "Resubmission from existing lead",
+                  message: leadName,
+                  link: `/leads/${canonical.id}`,
+                })
+              )
+            );
           }
-        })(),
-      ]);
+        } catch (err) {
+          log.error({ err }, "Failed to send resubmission notification");
+        }
+      })();
 
       log.info({ canonicalId: canonical.id }, "Incoming lead deduped into existing canonical");
       return apiSuccess(canonical, 200);
@@ -682,8 +663,9 @@ async function handlePost(request: NextRequest) {
           .limit(1)
           .maybeSingle();
         if (raceMatch) {
+          let raceSubmissionId: string | undefined;
           try {
-            await recordSubmission(supabase, {
+            raceSubmissionId = await recordSubmission(supabase, {
               tenantId,
               leadId: (raceMatch as Lead).id,
               createdVia: "public_form",
@@ -695,6 +677,18 @@ async function handlePost(request: NextRequest) {
               matchedExisting: true,
             });
           } catch { /* non-fatal */ }
+          const raceFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
+          void emitSubmissionAudit(supabase, {
+            tenantId,
+            leadId: (raceMatch as Lead).id,
+            submissionId: raceSubmissionId ?? null,
+            isFirst: false,
+            matchedExisting: true,
+            formName: raceFormName,
+            ipAddress: ip,
+            userAgent,
+            requestId,
+          });
           log.info({ leadId: (raceMatch as Lead).id }, "Email unique-index race — folded into existing lead");
           return apiSuccess(raceMatch, 200);
         }
@@ -751,6 +745,23 @@ async function handlePost(request: NextRequest) {
     }
   }
 
+  if (newSubmissionId) {
+    void (async () => {
+      const newLeadFormName = await resolveFormName(supabase, (lead as Lead).form_config_id ?? null);
+      await emitSubmissionAudit(supabase, {
+        tenantId,
+        leadId: lead.id,
+        submissionId: newSubmissionId,
+        isFirst: true,
+        matchedExisting: false,
+        formName: newLeadFormName,
+        ipAddress: ip,
+        userAgent,
+        requestId,
+      });
+    })().catch(() => { /* non-fatal */ });
+  }
+
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)
     newSubmissionId
@@ -772,16 +783,6 @@ async function handlePost(request: NextRequest) {
       payload: { session_id: lead.session_id, is_final: lead.is_final },
       requestId,
     }),
-    newSubmissionId
-      ? emitEvent({
-          tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: lead.id,
-          payload: { submission_id: newSubmissionId, is_first: true, matched_existing: false },
-          requestId,
-        })
-      : Promise.resolve(),
   ]);
 
   // Notify on final leads only (partial leads are in-progress form submissions)

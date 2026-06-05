@@ -479,14 +479,20 @@ export function ActivitiesPanel({
             <div className="mt-6 pt-4 border-t">
               <h3 className="text-sm font-medium text-muted-foreground mb-3">System Activity</h3>
               <div className="space-y-2">
-                {systemActivities.slice(0, 5).map((activity) => (
-                  <SystemActivityItem
-                    key={activity.id}
-                    activity={activity}
-                    teamMemberEmails={teamMemberEmails}
-                    leadId={leadId}
-                  />
-                ))}
+                {(() => {
+                  const submissions = systemActivities.filter((a) => a.action === "lead.submission");
+                  const others = systemActivities.filter((a) => a.action !== "lead.submission").slice(0, 10);
+                  return [...submissions, ...others]
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((activity) => (
+                      <SystemActivityItem
+                        key={activity.id}
+                        activity={activity}
+                        teamMemberEmails={teamMemberEmails}
+                        leadId={leadId}
+                      />
+                    ));
+                })()}
               </div>
             </div>
           )}

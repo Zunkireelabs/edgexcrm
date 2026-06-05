@@ -15,7 +15,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
-import { applyCanonicalUpdate, recordSubmission } from "./dedup";
+import { applyCanonicalUpdate, recordSubmission, resolveFormName, emitSubmissionAudit } from "./dedup";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import {
   upsertThreadNotification,
@@ -306,7 +306,19 @@ export async function mergeLeads(
     })
     .eq("id", mergeId);
 
-  // ── 8. Audit + event + notification ────────────────────────────────────
+  // ── 8. Emit submission audit for absorbed lead's data (shows on canonical's timeline) ──
+  const formName = await resolveFormName(supabase, absorbed.form_config_id ?? null);
+  await emitSubmissionAudit(supabase, {
+    tenantId,
+    leadId: canonicalId,
+    submissionId: synthesizedSubmissionId,
+    isFirst: false,
+    matchedExisting: true,
+    formName,
+    requestId,
+  });
+
+  // ── 9. Audit + event + notification ────────────────────────────────────
   await Promise.all([
     createAuditLog({
       tenantId,

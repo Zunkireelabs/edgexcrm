@@ -1,5 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/server";
 import type { Lead } from "@/types/database";
+import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
 type SupabaseServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -239,6 +240,66 @@ export async function recordSubmission(
   }
 
   return (data as { id: string }).id;
+}
+
+// ── Form name resolution + submission audit ────────────────────────────────
+
+// Resolves a form's display name (null-safe) for timeline labels.
+export async function resolveFormName(
+  supabase: SupabaseServiceClient,
+  formConfigId: string | null | undefined
+): Promise<string | null> {
+  if (!formConfigId) return null;
+  const { data } = await supabase.from("form_configs").select("name").eq("id", formConfigId).maybeSingle();
+  return (data as { name: string } | null)?.name ?? null;
+}
+
+// Emits the lead.submission AUDIT (what the timeline reads) + event, consistently.
+// formName must already be resolved by the caller (so we don't double-query).
+export async function emitSubmissionAudit(
+  _supabase: SupabaseServiceClient,
+  params: {
+    tenantId: string;
+    leadId: string;
+    submissionId: string | null;
+    isFirst: boolean;
+    matchedExisting: boolean;
+    formName: string | null;
+    requestId?: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+  }
+): Promise<void> {
+  await Promise.all([
+    createAuditLog({
+      tenantId: params.tenantId,
+      action: "lead.submission",
+      entityType: "lead",
+      entityId: params.leadId,
+      changes: {
+        submission_id: { old: null, new: params.submissionId },
+        is_first: { old: null, new: params.isFirst },
+        matched_existing: { old: null, new: params.matchedExisting },
+        form_name: { old: null, new: params.formName },
+      },
+      ipAddress: params.ipAddress ?? undefined,
+      userAgent: params.userAgent ?? undefined,
+      requestId: params.requestId,
+    }),
+    emitEvent({
+      tenantId: params.tenantId,
+      type: "lead.submission",
+      entityType: "lead",
+      entityId: params.leadId,
+      payload: {
+        submission_id: params.submissionId,
+        is_first: params.isFirst,
+        matched_existing: params.matchedExisting,
+        form_name: params.formName,
+      },
+      requestId: params.requestId,
+    }),
+  ]);
 }
 
 // ── Record duplicate suggestions ───────────────────────────────────────────
