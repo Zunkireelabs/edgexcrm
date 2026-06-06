@@ -12,6 +12,7 @@ interface AuditLogInput {
   ipAddress?: string | null;
   userAgent?: string | null;
   requestId?: string;
+  createdAt?: string;
 }
 
 export async function createAuditLog(input: AuditLogInput): Promise<void> {
@@ -26,6 +27,7 @@ export async function createAuditLog(input: AuditLogInput): Promise<void> {
       changes: input.changes || {},
       ip_address: input.ipAddress || null,
       user_agent: input.userAgent || null,
+      ...(input.createdAt && { created_at: input.createdAt }),
     });
 
     if (error) {

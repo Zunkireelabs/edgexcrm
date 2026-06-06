@@ -145,6 +145,7 @@ export interface Lead {
   // Dedup fields (Phase A1+)
   normalized_email: string | null;
   merged_into: string | null;
+  last_activity_at: string;
   created_at: string;
   updated_at: string;
 }

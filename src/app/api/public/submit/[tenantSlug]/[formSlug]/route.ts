@@ -27,6 +27,7 @@ import {
   recordSubmission,
   recordDuplicateSuggestions,
   emitSubmissionAudit,
+  touchLastActivity,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -250,6 +251,7 @@ export async function POST(
       userAgent,
       requestId,
     });
+    void touchLastActivity(supabase, { leadId: canonicalId, tenantId: tenant.id });
     (async () => {
       try {
         const fn = (body.first_name as string | null) || null;
@@ -396,6 +398,7 @@ export async function POST(
             userAgent,
             requestId,
           });
+          void touchLastActivity(supabase, { leadId: (raceMatch as { id: string }).id, tenantId: tenant.id });
           return withCors(apiSuccess({ lead_id: (raceMatch as { id: string }).id, deduped: true }, 200));
         }
       }
@@ -453,6 +456,7 @@ export async function POST(
   }
 
   if (submissionId) {
+    void touchLastActivity(supabase, { leadId, tenantId: tenant.id });
     void emitSubmissionAudit(supabase, {
       tenantId: tenant.id,
       leadId,

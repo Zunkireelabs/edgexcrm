@@ -66,7 +66,7 @@ export async function getLeads(
   if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
   if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
 
-  const { data, error } = await query.order("created_at", { ascending: false });
+  const { data, error } = await query.order("last_activity_at", { ascending: false });
 
   if (error) throw error;
   return (data as Lead[]) || [];

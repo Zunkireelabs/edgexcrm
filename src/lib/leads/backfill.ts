@@ -257,11 +257,11 @@ export async function runBackfill(
  */
 export async function undoBackfill(
   supabase: SupabaseServiceClient,
-  opts: { tenantId?: string } = {}
+  opts: { tenantId?: string; normalizedEmail?: string } = {}
 ): Promise<UndoBackfillResult> {
   let query = supabase
     .from("lead_merges")
-    .select("id, tenant_id")
+    .select("id, tenant_id, canonical_id")
     .eq("source", "backfill")
     .is("undone_at", null)
     .order("created_at", { ascending: false });
@@ -273,7 +273,19 @@ export async function undoBackfill(
   const { data, error } = await query;
   if (error) throw new Error(`undoBackfill: query failed — ${error.message}`);
 
-  const rows = (data ?? []) as { id: string; tenant_id: string }[];
+  let rows = (data ?? []) as { id: string; tenant_id: string; canonical_id: string }[];
+
+  // Scope to a specific email by filtering whose canonical lead has that normalized_email.
+  if (opts.normalizedEmail) {
+    const { data: matchingLeads } = await supabase
+      .from("leads")
+      .select("id")
+      .eq("normalized_email", opts.normalizedEmail)
+      .not("id", "is", null);
+    const matchingIds = new Set(((matchingLeads ?? []) as { id: string }[]).map((r) => r.id));
+    rows = rows.filter((r) => matchingIds.has(r.canonical_id));
+  }
+
   let undone = 0;
   const errors: UndoBackfillResult["errors"] = [];
 

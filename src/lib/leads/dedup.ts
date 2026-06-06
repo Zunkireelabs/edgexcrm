@@ -197,6 +197,7 @@ export interface RecordSubmissionParams {
   entityId?: string | null;
   rawPayload: Record<string, unknown>;
   matchedExisting: boolean;
+  createdAt?: string;
 }
 
 // Writes one immutable row to lead_submissions and returns its id.
@@ -231,6 +232,7 @@ export async function recordSubmission(
       entity_id: params.entityId ?? null,
       raw_payload: params.rawPayload,
       matched_existing: params.matchedExisting,
+      ...(params.createdAt && { created_at: params.createdAt }),
     })
     .select("id")
     .single();
@@ -268,6 +270,7 @@ export async function emitSubmissionAudit(
     requestId?: string;
     ipAddress?: string | null;
     userAgent?: string | null;
+    createdAt?: string;
   }
 ): Promise<void> {
   await Promise.all([
@@ -285,6 +288,7 @@ export async function emitSubmissionAudit(
       ipAddress: params.ipAddress ?? undefined,
       userAgent: params.userAgent ?? undefined,
       requestId: params.requestId,
+      createdAt: params.createdAt,
     }),
     emitEvent({
       tenantId: params.tenantId,
@@ -300,6 +304,23 @@ export async function emitSubmissionAudit(
       requestId: params.requestId,
     }),
   ]);
+}
+
+// ── Touch last_activity_at ─────────────────────────────────────────────────
+
+// Forward-only bump: only updates if the stored value is older than `at` (or now()).
+// Called at every form-submission site — never for edits, status changes, or logged calls.
+export async function touchLastActivity(
+  supabase: SupabaseServiceClient,
+  { leadId, tenantId, at }: { leadId: string; tenantId: string; at?: string }
+): Promise<void> {
+  const ts = at ?? new Date().toISOString();
+  await supabase
+    .from("leads")
+    .update({ last_activity_at: ts })
+    .eq("id", leadId)
+    .eq("tenant_id", tenantId)
+    .lt("last_activity_at", ts);
 }
 
 // ── Record duplicate suggestions ───────────────────────────────────────────

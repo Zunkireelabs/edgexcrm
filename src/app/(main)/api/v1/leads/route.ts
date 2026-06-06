@@ -31,6 +31,7 @@ import {
   recordDuplicateSuggestions,
   resolveFormName,
   emitSubmissionAudit,
+  touchLastActivity,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -120,7 +121,7 @@ export async function GET(request: NextRequest) {
   const to = from + pageSize - 1;
 
   const { data, error, count } = await query
-    .order("created_at", { ascending: false })
+    .order("last_activity_at", { ascending: false })
     .range(from, to);
 
   if (error) {
@@ -431,6 +432,7 @@ async function handlePost(request: NextRequest) {
           userAgent,
           requestId,
         });
+        void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
@@ -495,6 +497,7 @@ async function handlePost(request: NextRequest) {
           userAgent,
           requestId,
         });
+        void touchLastActivity(supabase, { leadId, tenantId });
       } catch { /* non-fatal */ }
     }
 
@@ -589,6 +592,7 @@ async function handlePost(request: NextRequest) {
         userAgent,
         requestId,
       });
+      void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
       (async () => {
         try {
           const fn = (canonical.first_name as string | null) || null;
@@ -689,6 +693,7 @@ async function handlePost(request: NextRequest) {
             userAgent,
             requestId,
           });
+          void touchLastActivity(supabase, { leadId: (raceMatch as Lead).id, tenantId });
           log.info({ leadId: (raceMatch as Lead).id }, "Email unique-index race — folded into existing lead");
           return apiSuccess(raceMatch, 200);
         }
@@ -746,6 +751,7 @@ async function handlePost(request: NextRequest) {
   }
 
   if (newSubmissionId) {
+    void touchLastActivity(supabase, { leadId: lead.id, tenantId });
     void (async () => {
       const newLeadFormName = await resolveFormName(supabase, (lead as Lead).form_config_id ?? null);
       await emitSubmissionAudit(supabase, {

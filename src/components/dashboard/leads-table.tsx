@@ -52,7 +52,7 @@ import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/databa
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 
-type SortField = "created" | "updated" | "name" | "email";
+type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
 
 // Column width constants for consistent sizing
@@ -177,7 +177,7 @@ export function LeadsTable({
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
-  const [sortField, setSortField] = useState<SortField>("created");
+  const [sortField, setSortField] = useState<SortField>("activity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -272,22 +272,27 @@ export function LeadsTable({
     result = [...result].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
+        case "activity":
+          comparison = new Date(a.last_activity_at).getTime() - new Date(b.last_activity_at).getTime();
+          break;
         case "updated":
           comparison = new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime();
           break;
         case "created":
           comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
-        case "name":
+        case "name": {
           const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
           const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
           comparison = nameA.localeCompare(nameB);
           break;
-        case "email":
+        }
+        case "email": {
           const emailA = (a.email || "").toLowerCase();
           const emailB = (b.email || "").toLowerCase();
           comparison = emailA.localeCompare(emailB);
           break;
+        }
         default:
           comparison = 0;
       }
@@ -528,6 +533,7 @@ export function LeadsTable({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="activity">Last activity</SelectItem>
                       <SelectItem value="created">Date created</SelectItem>
                       <SelectItem value="updated">Last updated</SelectItem>
                       <SelectItem value="name">Name</SelectItem>
@@ -794,7 +800,7 @@ export function LeadsTable({
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
               <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Source</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Date</th>
+              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Last activity</th>
               <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
             </tr>
           </thead>
@@ -950,7 +956,7 @@ export function LeadsTable({
                       })()}
                     </td>
                     <td className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-                      {new Date(lead.created_at).toLocaleDateString()}
+                      {new Date(lead.last_activity_at).toLocaleDateString()}
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       <div className="flex items-center justify-end gap-1">

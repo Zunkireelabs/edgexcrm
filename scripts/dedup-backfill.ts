@@ -138,7 +138,7 @@ async function main() {
     console.log(`\n↩  Undoing backfill merges for ${scope}…`);
     const result = await undoBackfill(
       supabase as Parameters<typeof undoBackfill>[0],
-      { tenantId: TENANT_ID }
+      { tenantId: TENANT_ID, normalizedEmail: NORMALIZED_EMAIL ?? undefined }
     );
     console.log(`\n  Undone  : ${result.undone}`);
     if (result.errors.length) {

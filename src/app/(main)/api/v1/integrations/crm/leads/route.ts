@@ -15,6 +15,7 @@ import {
   recordSubmission,
   recordDuplicateSuggestions,
   emitSubmissionAudit,
+  touchLastActivity,
 } from "@/lib/leads/dedup";
 import {
   apiSuccess,
@@ -185,6 +186,7 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
       userAgent: ctx.userAgent,
       requestId: ctx.requestId,
     });
+    void touchLastActivity(ctx.supabase, { leadId: canonical.id, tenantId });
 
     const { stageMap: sm, userMap: um } = await buildLookupMaps(ctx.supabase, tenantId);
     return apiSuccess(normalizeLead(canonical, sm, um), 200);
@@ -316,6 +318,7 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
             userAgent: ctx.userAgent,
             requestId: ctx.requestId,
           });
+          void touchLastActivity(ctx.supabase, { leadId: (raceMatch as Lead).id, tenantId });
           const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, tenantId);
           return apiSuccess(normalizeLead(raceMatch as Lead, stageMap, userMap), 200);
         }
@@ -365,6 +368,7 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
   const { stageMap, userMap } = await buildLookupMaps(ctx.supabase, ctx.auth.tenantId);
 
   if (submissionId) {
+    void touchLastActivity(ctx.supabase, { leadId: (lead as Lead).id, tenantId });
     void emitSubmissionAudit(ctx.supabase, {
       tenantId,
       leadId: (lead as Lead).id,

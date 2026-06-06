@@ -15,7 +15,7 @@
  */
 
 import { createServiceClient } from "@/lib/supabase/server";
-import { applyCanonicalUpdate, recordSubmission, resolveFormName, emitSubmissionAudit } from "./dedup";
+import { applyCanonicalUpdate, recordSubmission, resolveFormName, emitSubmissionAudit, touchLastActivity } from "./dedup";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import {
   upsertThreadNotification,
@@ -138,6 +138,7 @@ export async function mergeLeads(
     entityId: absorbed.entity_id,
     rawPayload: absorbed as unknown as Record<string, unknown>,
     matchedExisting: true,
+    createdAt: absorbed.created_at,
   });
 
   // ── 4. Re-point every lead_id FK absorbed → canonical ─────────────────
@@ -316,7 +317,10 @@ export async function mergeLeads(
     matchedExisting: true,
     formName,
     requestId,
+    createdAt: absorbed.created_at,
   });
+  // Forward-only: canonical's last_activity_at advances only if absorbed's date is newer.
+  await touchLastActivity(supabase, { leadId: canonicalId, tenantId, at: absorbed.created_at });
 
   // ── 9. Audit + event + notification ────────────────────────────────────
   await Promise.all([
@@ -462,9 +466,17 @@ export async function undoMerge(
   // lead_insights_deleted: deleted during merge and cannot be restored (AI-regenerable)
   // lead_duplicate_suggestions_deleted: deleted during merge and not restored (regenerable)
 
-  // ── 2. Delete the synthesized submission ───────────────────────────────
+  // ── 2. Delete the synthesized submission and its audit ────────────────
   if (m.synthesized_submission_id) {
     await supabase.from("lead_submissions").delete().eq("id", m.synthesized_submission_id);
+    // Also delete the lead.submission audit emitted for this synthesized row.
+    // Without this, re-collapsing leaves stale duplicate timeline entries.
+    await supabase
+      .from("audit_logs")
+      .delete()
+      .eq("entity_id", canonicalId)
+      .eq("action", "lead.submission")
+      .filter("changes->submission_id->>new", "eq", m.synthesized_submission_id);
   }
 
   // ── 3. Revert field_patch on canonical ─────────────────────────────────
