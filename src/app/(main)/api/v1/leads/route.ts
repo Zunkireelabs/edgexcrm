@@ -347,6 +347,11 @@ async function handlePost(request: NextRequest) {
       return apiNotFound("Lead");
     }
 
+    // Fall back to the draft's stored email/phone when the finalize payload omits them.
+    // Without this, resolveLeadIdentity gets null and creates a standalone duplicate.
+    const effectiveEmail = normalizedEmail ?? normalizeEmail((existingLead as Lead).email);
+    const effectivePhone = normalizedPhone ?? normalizePhone((existingLead as Lead).phone);
+
     // ── Dedup fold on finalisation ──
     // Only runs when this step flips is_final to true (multi-step form completion).
     // Resolves identity BEFORE the update so the partial-unique index is never
@@ -354,8 +359,8 @@ async function handlePost(request: NextRequest) {
     if (leadPayload.is_final === true) {
       const updateIdentity = await resolveLeadIdentity(supabase, {
         tenantId,
-        normalizedEmail,
-        normalizedPhone,
+        normalizedEmail: effectiveEmail,
+        normalizedPhone: effectivePhone,
       });
 
       // Fold: draft email matches a DIFFERENT canonical lead
@@ -383,8 +388,8 @@ async function handlePost(request: NextRequest) {
             phone: draftLead.phone,
             city: draftLead.city,
             country: draftLead.country,
-            normalizedEmail,
-            normalizedPhone,
+            normalizedEmail: effectiveEmail,
+            normalizedPhone: effectivePhone,
             customFields: draftLead.custom_fields as Record<string, unknown>,
             fileUrls: draftLead.file_urls as Record<string, unknown>,
             intakeSource: draftLead.intake_source,
@@ -474,8 +479,8 @@ async function handlePost(request: NextRequest) {
           phone: (updated as Lead).phone,
           city: (updated as Lead).city,
           country: (updated as Lead).country,
-          normalizedEmail,
-          normalizedPhone,
+          normalizedEmail: effectiveEmail,
+          normalizedPhone: effectivePhone,
           customFields: (updated as Lead).custom_fields as Record<string, unknown>,
           fileUrls: (updated as Lead).file_urls as Record<string, unknown>,
           intakeSource: (updated as Lead).intake_source,
