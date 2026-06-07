@@ -1,7 +1,7 @@
 import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
 import { checkInMeta } from "./features/check-in/meta";
-import { formBuilderMeta } from "./features/form-builder/meta";
+import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
 import { emailMeta } from "./features/email/meta";
 import { aiConfig } from "./ai/agent";

@@ -1,11 +1,12 @@
-import { INDUSTRIES } from "../_registry";
+import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
+import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 
-// No tenants today. Stub kept so the loader can resolve the manifest
-// when a construction tenant is created.
 export const manifest: IndustryManifest = {
   id: INDUSTRIES.CONSTRUCTION,
-  features: [],
-  sidebar: [],
+  features: [{ meta: formBuilderMeta }],
+  sidebar: [
+    { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
+  ],
   ai: {},
 };

@@ -4,7 +4,7 @@ import { Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { FormList } from "@/industries/education-consultancy/features/form-builder/components/form-list";
+import { FormList } from "@/industries/_shared/features/form-builder/components/form-list";
 import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
