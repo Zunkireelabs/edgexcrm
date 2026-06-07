@@ -479,14 +479,20 @@ export function ActivitiesPanel({
             <div className="mt-6 pt-4 border-t">
               <h3 className="text-sm font-medium text-muted-foreground mb-3">System Activity</h3>
               <div className="space-y-2">
-                {systemActivities.slice(0, 5).map((activity) => (
-                  <SystemActivityItem
-                    key={activity.id}
-                    activity={activity}
-                    teamMemberEmails={teamMemberEmails}
-                    leadId={leadId}
-                  />
-                ))}
+                {(() => {
+                  const submissions = systemActivities.filter((a) => a.action === "lead.submission");
+                  const others = systemActivities.filter((a) => a.action !== "lead.submission").slice(0, 10);
+                  return [...submissions, ...others]
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((activity) => (
+                      <SystemActivityItem
+                        key={activity.id}
+                        activity={activity}
+                        teamMemberEmails={teamMemberEmails}
+                        leadId={leadId}
+                      />
+                    ));
+                })()}
               </div>
             </div>
           )}
@@ -530,9 +536,14 @@ function SystemActivityItem({
   teamMemberEmails: Record<string, string>;
   leadId: string;
 }) {
-  const time = new Date(activity.created_at).toLocaleTimeString("en-US", {
+  const activityDate = new Date(activity.created_at);
+  const isCurrentYear = activityDate.getFullYear() === new Date().getFullYear();
+  const time = activityDate.toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    ...(isCurrentYear ? {} : { year: "numeric" }),
   });
   const userEmail = activity.user_id ? teamMemberEmails[activity.user_id] : null;
   const description = getSystemActivityDescription(activity, teamMemberEmails);
@@ -613,15 +624,25 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
   const hasCustomFields = Object.keys(customFields).length > 0;
   const hasFiles = Object.keys(fileUrls).length > 0;
 
+  const SOURCE_LABELS: Record<string, string> = {
+    public_form: "Public form",
+    public_api: "Public API",
+    integration: "Integration",
+    manual: "Manual",
+  };
+  const sourceLabel = SOURCE_LABELS[submission.created_via];
+
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center gap-2">
-        <Badge variant="secondary" className="text-xs capitalize">
-          {submission.created_via.replace("_", " ")}
-        </Badge>
+        {sourceLabel && (
+          <Badge variant="secondary" className="text-xs">
+            {sourceLabel}
+          </Badge>
+        )}
         {submission.matched_existing && (
           <Badge variant="outline" className="text-xs text-amber-600 border-amber-300">
-            Resubmission
+            Repeat
           </Badge>
         )}
       </div>
@@ -673,6 +694,10 @@ function getSystemActivityDescription(
     return isFirst
       ? `Lead created${formName ? ` · Filled ${formName}` : ""}`
       : `Filled ${formName || "form"}`;
+  }
+
+  if (activity.action === "lead.merged") {
+    return "Duplicate record merged";
   }
 
   if (changes.status || changes.stage_id) {

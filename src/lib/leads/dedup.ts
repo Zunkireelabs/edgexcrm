@@ -1,5 +1,6 @@
 import type { createServiceClient } from "@/lib/supabase/server";
 import type { Lead } from "@/types/database";
+import { createAuditLog, emitEvent } from "@/lib/api/audit";
 
 type SupabaseServiceClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -196,6 +197,7 @@ export interface RecordSubmissionParams {
   entityId?: string | null;
   rawPayload: Record<string, unknown>;
   matchedExisting: boolean;
+  createdAt?: string;
 }
 
 // Writes one immutable row to lead_submissions and returns its id.
@@ -230,6 +232,7 @@ export async function recordSubmission(
       entity_id: params.entityId ?? null,
       raw_payload: params.rawPayload,
       matched_existing: params.matchedExisting,
+      ...(params.createdAt && { created_at: params.createdAt }),
     })
     .select("id")
     .single();
@@ -239,4 +242,106 @@ export async function recordSubmission(
   }
 
   return (data as { id: string }).id;
+}
+
+// ── Form name resolution + submission audit ────────────────────────────────
+
+// Resolves a form's display name (null-safe) for timeline labels.
+export async function resolveFormName(
+  supabase: SupabaseServiceClient,
+  formConfigId: string | null | undefined
+): Promise<string | null> {
+  if (!formConfigId) return null;
+  const { data } = await supabase.from("form_configs").select("name").eq("id", formConfigId).maybeSingle();
+  return (data as { name: string } | null)?.name ?? null;
+}
+
+// Emits the lead.submission AUDIT (what the timeline reads) + event, consistently.
+// formName must already be resolved by the caller (so we don't double-query).
+export async function emitSubmissionAudit(
+  _supabase: SupabaseServiceClient,
+  params: {
+    tenantId: string;
+    leadId: string;
+    submissionId: string | null;
+    isFirst: boolean;
+    matchedExisting: boolean;
+    formName: string | null;
+    requestId?: string;
+    ipAddress?: string | null;
+    userAgent?: string | null;
+    createdAt?: string;
+  }
+): Promise<void> {
+  await Promise.all([
+    createAuditLog({
+      tenantId: params.tenantId,
+      action: "lead.submission",
+      entityType: "lead",
+      entityId: params.leadId,
+      changes: {
+        submission_id: { old: null, new: params.submissionId },
+        is_first: { old: null, new: params.isFirst },
+        matched_existing: { old: null, new: params.matchedExisting },
+        form_name: { old: null, new: params.formName },
+      },
+      ipAddress: params.ipAddress ?? undefined,
+      userAgent: params.userAgent ?? undefined,
+      requestId: params.requestId,
+      createdAt: params.createdAt,
+    }),
+    emitEvent({
+      tenantId: params.tenantId,
+      type: "lead.submission",
+      entityType: "lead",
+      entityId: params.leadId,
+      payload: {
+        submission_id: params.submissionId,
+        is_first: params.isFirst,
+        matched_existing: params.matchedExisting,
+        form_name: params.formName,
+      },
+      requestId: params.requestId,
+    }),
+  ]);
+}
+
+// ── Touch last_activity_at ─────────────────────────────────────────────────
+
+// Forward-only bump: only updates if the stored value is older than `at` (or now()).
+// Called at every form-submission site — never for edits, status changes, or logged calls.
+export async function touchLastActivity(
+  supabase: SupabaseServiceClient,
+  { leadId, tenantId, at }: { leadId: string; tenantId: string; at?: string }
+): Promise<void> {
+  const ts = at ?? new Date().toISOString();
+  await supabase
+    .from("leads")
+    .update({ last_activity_at: ts })
+    .eq("id", leadId)
+    .eq("tenant_id", tenantId)
+    .lt("last_activity_at", ts);
+}
+
+// ── Record duplicate suggestions ───────────────────────────────────────────
+
+// Upserts open phone-duplicate suggestions. Non-fatal; caller wraps in try/catch.
+// onConflict DO NOTHING so a previously dismissed pair never resurfaces.
+export async function recordDuplicateSuggestions(
+  supabase: SupabaseServiceClient,
+  params: { tenantId: string; leadId: string; suggestedLeadIds: string[]; reason: "phone" | "name" }
+): Promise<void> {
+  const rows = params.suggestedLeadIds
+    .filter((sid) => sid !== params.leadId)
+    .map((sid) => ({
+      tenant_id: params.tenantId,
+      lead_id: params.leadId,
+      suggested_lead_id: sid,
+      reason: params.reason,
+      status: "open",
+    }));
+  if (rows.length === 0) return;
+  await supabase
+    .from("lead_duplicate_suggestions")
+    .upsert(rows, { onConflict: "tenant_id,lead_id,suggested_lead_id", ignoreDuplicates: true });
 }

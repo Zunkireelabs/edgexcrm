@@ -28,6 +28,10 @@ import {
   resolveLeadIdentity,
   applyCanonicalUpdate,
   recordSubmission,
+  recordDuplicateSuggestions,
+  resolveFormName,
+  emitSubmissionAudit,
+  touchLastActivity,
 } from "@/lib/leads/dedup";
 
 const CORS_HEADERS = {
@@ -117,7 +121,7 @@ export async function GET(request: NextRequest) {
   const to = from + pageSize - 1;
 
   const { data, error, count } = await query
-    .order("created_at", { ascending: false })
+    .order("last_activity_at", { ascending: false })
     .range(from, to);
 
   if (error) {
@@ -343,6 +347,11 @@ async function handlePost(request: NextRequest) {
       return apiNotFound("Lead");
     }
 
+    // Fall back to the draft's stored email/phone when the finalize payload omits them.
+    // Without this, resolveLeadIdentity gets null and creates a standalone duplicate.
+    const effectiveEmail = normalizedEmail ?? normalizeEmail((existingLead as Lead).email);
+    const effectivePhone = normalizedPhone ?? normalizePhone((existingLead as Lead).phone);
+
     // ── Dedup fold on finalisation ──
     // Only runs when this step flips is_final to true (multi-step form completion).
     // Resolves identity BEFORE the update so the partial-unique index is never
@@ -350,8 +359,8 @@ async function handlePost(request: NextRequest) {
     if (leadPayload.is_final === true) {
       const updateIdentity = await resolveLeadIdentity(supabase, {
         tenantId,
-        normalizedEmail,
-        normalizedPhone,
+        normalizedEmail: effectiveEmail,
+        normalizedPhone: effectivePhone,
       });
 
       // Fold: draft email matches a DIFFERENT canonical lead
@@ -379,8 +388,8 @@ async function handlePost(request: NextRequest) {
             phone: draftLead.phone,
             city: draftLead.city,
             country: draftLead.country,
-            normalizedEmail,
-            normalizedPhone,
+            normalizedEmail: effectiveEmail,
+            normalizedPhone: effectivePhone,
             customFields: draftLead.custom_fields as Record<string, unknown>,
             fileUrls: draftLead.file_urls as Record<string, unknown>,
             intakeSource: draftLead.intake_source,
@@ -416,31 +425,19 @@ async function handlePost(request: NextRequest) {
           .eq("id", leadId)
           .eq("tenant_id", tenantId);
 
-        Promise.all([
-          createAuditLog({
-            tenantId,
-            action: "lead.submission",
-            entityType: "lead",
-            entityId: canonical.id,
-            changes: {
-              submission_id: { old: null, new: submissionId ?? null },
-              is_first: { old: null, new: false },
-              matched_existing: { old: null, new: true },
-              draft_id: { old: null, new: leadId },
-            },
-            ipAddress: ip,
-            userAgent,
-            requestId,
-          }),
-          emitEvent({
-            tenantId,
-            type: "lead.submission",
-            entityType: "lead",
-            entityId: canonical.id,
-            payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
-            requestId,
-          }),
-        ]);
+        const foldFormName = await resolveFormName(supabase, (draftLead.form_config_id as string | null) ?? null);
+        void emitSubmissionAudit(supabase, {
+          tenantId,
+          leadId: canonical.id,
+          submissionId: submissionId ?? null,
+          isFirst: false,
+          matchedExisting: true,
+          formName: foldFormName,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        });
+        void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
 
         log.info({ draftId: leadId, canonicalId: canonical.id }, "Draft folded into canonical lead");
         return apiSuccess({ ...canonical, id: canonical.id }, 200);
@@ -482,8 +479,8 @@ async function handlePost(request: NextRequest) {
           phone: (updated as Lead).phone,
           city: (updated as Lead).city,
           country: (updated as Lead).country,
-          normalizedEmail,
-          normalizedPhone,
+          normalizedEmail: effectiveEmail,
+          normalizedPhone: effectivePhone,
           customFields: (updated as Lead).custom_fields as Record<string, unknown>,
           fileUrls: (updated as Lead).file_urls as Record<string, unknown>,
           intakeSource: (updated as Lead).intake_source,
@@ -493,14 +490,19 @@ async function handlePost(request: NextRequest) {
           rawPayload: leadPayload,
           matchedExisting: false,
         });
-        void emitEvent({
+        const updateFormName = await resolveFormName(supabase, (updated as Lead).form_config_id ?? null);
+        void emitSubmissionAudit(supabase, {
           tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: leadId,
-          payload: { submission_id: submissionId, is_first: true, matched_existing: false },
+          leadId,
+          submissionId,
+          isFirst: true,
+          matchedExisting: false,
+          formName: updateFormName,
+          ipAddress: ip,
+          userAgent,
           requestId,
         });
+        void touchLastActivity(supabase, { leadId, tenantId });
       } catch { /* non-fatal */ }
     }
 
@@ -528,12 +530,14 @@ async function handlePost(request: NextRequest) {
   }
 
   // Create path — run dedup when is_final (single-step form submissions)
+  let createPhoneMatchIds: string[] = [];
   if (leadPayload.is_final === true) {
     const createIdentity = await resolveLeadIdentity(supabase, {
       tenantId,
       normalizedEmail,
       normalizedPhone,
     });
+    createPhoneMatchIds = createIdentity.phoneMatchLeadIds;
 
     if (createIdentity.match === "email" && createIdentity.existingLead) {
       const canonical = createIdentity.existingLead;
@@ -581,63 +585,52 @@ async function handlePost(request: NextRequest) {
         await supabase.from("leads").update(patch).eq("id", canonical.id).eq("tenant_id", tenantId);
       }
 
-      Promise.all([
-        createAuditLog({
-          tenantId,
-          action: "lead.submission",
-          entityType: "lead",
-          entityId: canonical.id,
-          changes: {
-            submission_id: { old: null, new: submissionId ?? null },
-            is_first: { old: null, new: false },
-            matched_existing: { old: null, new: true },
-          },
-          ipAddress: ip,
-          userAgent,
-          requestId,
-        }),
-        emitEvent({
-          tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: canonical.id,
-          payload: { submission_id: submissionId ?? null, is_first: false, matched_existing: true },
-          requestId,
-        }),
-        (async () => {
-          try {
-            const fn = (canonical.first_name as string | null) || null;
-            const ln = (canonical.last_name as string | null) || null;
-            const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
-            if (canonical.assigned_to) {
-              await upsertThreadNotification({
-                tenantId,
-                userId: canonical.assigned_to,
-                type: NotificationTypes.LEAD_CREATED,
-                title: "Resubmission from existing lead",
-                message: leadName,
-                link: `/leads/${canonical.id}`,
-              });
-            } else {
-              const adminIds = await getTenantAdminRecipients(supabase, tenantId);
-              await Promise.all(
-                adminIds.map((adminId) =>
-                  upsertThreadNotification({
-                    tenantId,
-                    userId: adminId,
-                    type: NotificationTypes.LEAD_CREATED,
-                    title: "Resubmission from existing lead",
-                    message: leadName,
-                    link: `/leads/${canonical.id}`,
-                  })
-                )
-              );
-            }
-          } catch (err) {
-            log.error({ err }, "Failed to send resubmission notification");
+      const createFoldFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
+      void emitSubmissionAudit(supabase, {
+        tenantId,
+        leadId: canonical.id,
+        submissionId: submissionId ?? null,
+        isFirst: false,
+        matchedExisting: true,
+        formName: createFoldFormName,
+        ipAddress: ip,
+        userAgent,
+        requestId,
+      });
+      void touchLastActivity(supabase, { leadId: canonical.id, tenantId });
+      (async () => {
+        try {
+          const fn = (canonical.first_name as string | null) || null;
+          const ln = (canonical.last_name as string | null) || null;
+          const leadName = `${fn || ""} ${ln || ""}`.trim() || "A lead";
+          if (canonical.assigned_to) {
+            await upsertThreadNotification({
+              tenantId,
+              userId: canonical.assigned_to,
+              type: NotificationTypes.LEAD_CREATED,
+              title: "Resubmission from existing lead",
+              message: leadName,
+              link: `/leads/${canonical.id}`,
+            });
+          } else {
+            const adminIds = await getTenantAdminRecipients(supabase, tenantId);
+            await Promise.all(
+              adminIds.map((adminId) =>
+                upsertThreadNotification({
+                  tenantId,
+                  userId: adminId,
+                  type: NotificationTypes.LEAD_CREATED,
+                  title: "Resubmission from existing lead",
+                  message: leadName,
+                  link: `/leads/${canonical.id}`,
+                })
+              )
+            );
           }
-        })(),
-      ]);
+        } catch (err) {
+          log.error({ err }, "Failed to send resubmission notification");
+        }
+      })();
 
       log.info({ canonicalId: canonical.id }, "Incoming lead deduped into existing canonical");
       return apiSuccess(canonical, 200);
@@ -679,8 +672,9 @@ async function handlePost(request: NextRequest) {
           .limit(1)
           .maybeSingle();
         if (raceMatch) {
+          let raceSubmissionId: string | undefined;
           try {
-            await recordSubmission(supabase, {
+            raceSubmissionId = await recordSubmission(supabase, {
               tenantId,
               leadId: (raceMatch as Lead).id,
               createdVia: "public_form",
@@ -692,6 +686,19 @@ async function handlePost(request: NextRequest) {
               matchedExisting: true,
             });
           } catch { /* non-fatal */ }
+          const raceFormName = await resolveFormName(supabase, leadPayload.form_config_id as string | null);
+          void emitSubmissionAudit(supabase, {
+            tenantId,
+            leadId: (raceMatch as Lead).id,
+            submissionId: raceSubmissionId ?? null,
+            isFirst: false,
+            matchedExisting: true,
+            formName: raceFormName,
+            ipAddress: ip,
+            userAgent,
+            requestId,
+          });
+          void touchLastActivity(supabase, { leadId: (raceMatch as Lead).id, tenantId });
           log.info({ leadId: (raceMatch as Lead).id }, "Email unique-index race — folded into existing lead");
           return apiSuccess(raceMatch, 200);
         }
@@ -702,6 +709,18 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Phone duplicate suggestions — non-fatal, never blocks ingestion
+  if (createPhoneMatchIds.length > 0) {
+    try {
+      await recordDuplicateSuggestions(supabase, {
+        tenantId,
+        leadId: lead.id,
+        suggestedLeadIds: createPhoneMatchIds,
+        reason: "phone",
+      });
+    } catch { /* non-fatal */ }
+  }
 
   // Record submission for final leads
   let newSubmissionId: string | undefined;
@@ -736,6 +755,24 @@ async function handlePost(request: NextRequest) {
     }
   }
 
+  if (newSubmissionId) {
+    void touchLastActivity(supabase, { leadId: lead.id, tenantId });
+    void (async () => {
+      const newLeadFormName = await resolveFormName(supabase, (lead as Lead).form_config_id ?? null);
+      await emitSubmissionAudit(supabase, {
+        tenantId,
+        leadId: lead.id,
+        submissionId: newSubmissionId,
+        isFirst: true,
+        matchedExisting: false,
+        formName: newLeadFormName,
+        ipAddress: ip,
+        userAgent,
+        requestId,
+      });
+    })().catch(() => { /* non-fatal */ });
+  }
+
   Promise.all([
     // lead.created audit suppressed when lead.submission was recorded (A4: combined display)
     newSubmissionId
@@ -757,16 +794,6 @@ async function handlePost(request: NextRequest) {
       payload: { session_id: lead.session_id, is_final: lead.is_final },
       requestId,
     }),
-    newSubmissionId
-      ? emitEvent({
-          tenantId,
-          type: "lead.submission",
-          entityType: "lead",
-          entityId: lead.id,
-          payload: { submission_id: newSubmissionId, is_first: true, matched_existing: false },
-          requestId,
-        })
-      : Promise.resolve(),
   ]);
 
   // Notify on final leads only (partial leads are in-progress form submissions)
