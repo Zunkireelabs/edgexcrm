@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { EDUCATION_CONSULTANCY_TEMPLATES, BLANK_TEMPLATE } from "../templates";
+import { getTemplatesForIndustry } from "../templates";
 import type { TemplateDefinition } from "../types";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -33,9 +33,10 @@ function TemplateIcon({ name }: { name: string }) {
 interface TemplatePickerProps {
   onSelect?: (template: TemplateDefinition) => void;
   selectedId?: string | null;
+  industryId?: string | null;
 }
 
-export function TemplatePicker({ onSelect, selectedId }: TemplatePickerProps = {}) {
+export function TemplatePicker({ onSelect, selectedId, industryId }: TemplatePickerProps = {}) {
   const router = useRouter();
   const [creating, setCreating] = useState<string | null>(null);
 
@@ -73,7 +74,7 @@ export function TemplatePicker({ onSelect, selectedId }: TemplatePickerProps = {
     }
   }
 
-  const allTemplates = [...EDUCATION_CONSULTANCY_TEMPLATES, BLANK_TEMPLATE];
+  const allTemplates = getTemplatesForIndustry(industryId);
 
   return (
     <div className="space-y-6">

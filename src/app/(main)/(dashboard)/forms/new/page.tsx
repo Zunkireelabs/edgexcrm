@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { FormCreationWizard } from "@/industries/education-consultancy/features/form-builder/components/form-creation-wizard";
+import { FormCreationWizard } from "@/industries/_shared/features/form-builder/components/form-creation-wizard";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
@@ -23,6 +23,7 @@ export default async function NewFormPage() {
     <FormCreationWizard
       tenantPrimaryColor={tenantData.tenant.primary_color || "#6366f1"}
       tenantSlug={tenantData.tenant.slug}
+      industryId={tenantData.tenant.industry_id}
     />
   );
 }

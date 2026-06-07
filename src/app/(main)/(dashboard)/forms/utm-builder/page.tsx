@@ -3,7 +3,7 @@ import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/qu
 import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { UtmBuilderPageClient } from "@/industries/education-consultancy/features/form-builder/components/utm-builder-page-client";
+import { UtmBuilderPageClient } from "@/industries/_shared/features/form-builder/components/utm-builder-page-client";
 import { canSeeNav } from "@/lib/api/permissions";
 import type { UtmLink } from "@/types/database";
 

@@ -11,8 +11,8 @@ import {
 import { validate, required, maxLength } from "@/lib/api/validation";
 import { requireAdmin } from "@/lib/api/auth";
 import { createRequestLogger } from "@/lib/logger";
-import { slugify, validateFormConfig } from "@/industries/education-consultancy/features/form-builder/lib/validation";
-import { getTemplateById } from "@/industries/education-consultancy/features/form-builder/templates";
+import { slugify, validateFormConfig } from "@/industries/_shared/features/form-builder/lib/validation";
+import { getTemplateById } from "@/industries/_shared/features/form-builder/templates";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { FormBranding } from "@/types/database";

@@ -14,9 +14,10 @@ import type { TemplateDefinition } from "../types";
 interface FormCreationWizardProps {
   tenantPrimaryColor: string;
   tenantSlug: string;
+  industryId?: string | null;
 }
 
-export function FormCreationWizard({ tenantPrimaryColor, tenantSlug }: FormCreationWizardProps) {
+export function FormCreationWizard({ tenantPrimaryColor, tenantSlug, industryId }: FormCreationWizardProps) {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [selectedTemplate, setSelectedTemplate] = useState<TemplateDefinition | null>(null);
@@ -113,6 +114,7 @@ export function FormCreationWizard({ tenantPrimaryColor, tenantSlug }: FormCreat
         <TemplatePicker
           onSelect={handleTemplateSelect}
           selectedId={selectedTemplate?.id ?? null}
+          industryId={industryId}
         />
       )}
 
