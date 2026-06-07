@@ -37,6 +37,17 @@ export function getTemplateById(id: string): TemplateDefinition | undefined {
   return EDUCATION_CONSULTANCY_TEMPLATES.find((t) => t.id === id);
 }
 
+export function getTemplatesForIndustry(industryId: string | null | undefined): TemplateDefinition[] {
+  switch (industryId) {
+    case "education_consultancy":
+      return [...EDUCATION_CONSULTANCY_TEMPLATES, BLANK_TEMPLATE];
+    case "construction":
+      return [generalContactTemplate, BLANK_TEMPLATE];
+    default:
+      return [generalContactTemplate, BLANK_TEMPLATE];
+  }
+}
+
 export {
   scholarshipApplicationTemplate,
   admissionInquiryTemplate,

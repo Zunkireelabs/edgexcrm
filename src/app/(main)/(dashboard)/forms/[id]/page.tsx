@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { FormBuilderPage } from "@/industries/education-consultancy/features/form-builder/components/form-builder-page";
+import { FormBuilderPage } from "@/industries/_shared/features/form-builder/components/form-builder-page";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";

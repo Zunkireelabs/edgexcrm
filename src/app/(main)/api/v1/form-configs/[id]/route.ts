@@ -10,7 +10,7 @@ import {
   apiValidationError,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
-import { validateFormConfig } from "@/industries/education-consultancy/features/form-builder/lib/validation";
+import { validateFormConfig } from "@/industries/_shared/features/form-builder/lib/validation";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
