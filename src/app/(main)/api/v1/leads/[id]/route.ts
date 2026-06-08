@@ -45,6 +45,9 @@ const UPDATABLE_FIELDS = [
   "company_name",
   "designation",
   "prospect_industry",
+  "owner_id",
+  "salutation",
+  "company_email",
 ] as const;
 
 const ADMIN_ONLY_FIELDS = ["assigned_to"];
@@ -200,6 +203,22 @@ export async function PATCH(
     if (!memberCheck) {
       return apiValidationError({
         assigned_to: ["Assigned user is not a member of this tenant"],
+      });
+    }
+  }
+
+  // Validate owner_id: must be a tenant member if provided
+  if (body.owner_id !== undefined && body.owner_id !== null) {
+    const { data: ownerCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("user_id", body.owner_id as string)
+      .single();
+
+    if (!ownerCheck) {
+      return apiValidationError({
+        owner_id: ["Owner is not a member of this tenant"],
       });
     }
   }

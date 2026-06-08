@@ -12,8 +12,9 @@ import {
   apiRateLimited,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isUUID, optionalMaxLength, isIn } from "@/lib/api/validation";
+import { validate, required, isUUID, optionalMaxLength, isIn, isEmail } from "@/lib/api/validation";
 import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-industries";
+import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
@@ -178,6 +179,8 @@ async function handlePost(request: NextRequest) {
     company_name: [optionalMaxLength(255)],
     designation: [optionalMaxLength(255)],
     prospect_industry: [isIn([...PROSPECT_INDUSTRY_VALUES])],
+    salutation: [isIn([...SALUTATION_VALUES])],
+    company_email: [optionalMaxLength(255), isEmail()],
   });
   if (!validExtra) return apiValidationError(extraErrors);
 
@@ -205,6 +208,20 @@ async function handlePost(request: NextRequest) {
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // Validate owner_id: must belong to this tenant if provided
+  if (body.owner_id !== undefined && body.owner_id !== null && body.owner_id !== "") {
+    const { data: ownerCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.owner_id as string)
+      .single();
+
+    if (!ownerCheck) {
+      return apiValidationError({ owner_id: ["Owner is not a member of this tenant"] });
+    }
+  }
 
   // Generate display_id for education_consultancy tenants
   let displayId: string | null = null;
@@ -341,6 +358,9 @@ async function handlePost(request: NextRequest) {
     company_name: body.company_name || null,
     designation: body.designation || null,
     prospect_industry: body.prospect_industry || null,
+    owner_id: body.owner_id || null,
+    salutation: body.salutation || null,
+    company_email: body.company_email || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
