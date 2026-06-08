@@ -1,6 +1,6 @@
 # Email feature — Phase 2 (compose + send + log on lead detail)
 
-> Phase 2 of the 4-phase Email feature plan. Builds on Phase 1's foundation (schema + OAuth + connected_email_accounts). Adds the **first user-facing send capability**: counselor opens a lead → composes → sends from their connected Gmail → email arrives at the recipient → row appears in the Emails sub-tab. No replies, no inbound sync, no threading continuation (those are Phase 3). Phase 2 closes when an Admizz counselor can send a real Gmail email from `/leads/[id]` to a test recipient (e.g. `daniel@theagencytool.com`) and see it in the activity feed within 1 second.
+> Phase 2 of the 4-phase Email feature plan. Builds on Phase 1's foundation (schema + OAuth + connected_email_accounts). Adds the **first user-facing send capability**: counselor opens a lead → composes → sends from their connected Gmail → email arrives at the recipient → row appears in the Emails sub-tab. No replies, no inbound sync, no threading continuation (those are Phase 3). Phase 2 closes when an Admizz counselor can send a real Gmail email from `/leads/[id]` to a test recipient (e.g. `<your-test-email>`) and see it in the activity feed within 1 second.
 
 Phase 1 verified live on dev as of 2026-05-31 evening (commits `cd8110a` brief + `c9db7c2` squash + `2952a3f` Docker heap fix; OAuth roundtrip completed; `connected_email_accounts.user_id` populated for `shrestha.sadin007@gmail.com`). Full 4-phase plan: `~/.claude/plans/today-what-feature-i-wobbly-russell.md`.
 
@@ -534,7 +534,7 @@ Before pushing for review:
   - On Send: toast success, modal closes, new row appears immediately in the EmailsSubTab list
   - On Send failure: toast error, modal stays open with form intact
 - [ ] **`POST /api/v1/email/send` end-to-end**:
-  - Login as Admizz admin → open a lead with email `daniel@theagencytool.com` (or other test addr) → compose → send
+  - Login as Admizz admin → open a lead with email `<your-test-email>` (or other test addr) → compose → send
   - Recipient receives a real Gmail email FROM `shrestha.sadin007@gmail.com` (the connected inbox)
   - DB: `email_threads` has one new row with `lead_id` set, `connected_email_account_id` set, `gmail_thread_id` populated
   - DB: `emails` has one new row, `direction='outbound'`, `gmail_message_id` populated, `rfc_message_id` populated (matches the `Message-ID` header in the sent email)

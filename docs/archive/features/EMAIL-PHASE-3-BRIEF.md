@@ -13,7 +13,7 @@ Counselor sends email from CRM (Phase 2 already does this) → recipient replies
 ### Vertical slice
 > Admizz counselor opens lead → Emails sub-tab → sees a thread with one sent message ✉ → recipient replies from their Gmail → ~5 min later counselor refreshes (or navigates back) → thread now shows the inbound reply ⬅ in the same `<EmailThreadCard>` → counselor clicks "Reply" on the thread → `<ComposeEmailDialog>` opens with From locked to the thread's account, To pre-filled with the reply sender, subject "Re: ..." → counselor writes a fresh body → Send → recipient receives the reply in the same Gmail thread → CRM thread grows by one outbound message.
 
-Phase 3 closes when this end-to-end loop runs cleanly on dev for an Admizz counselor with a real test recipient (e.g. `daniel@theagencytool.com`).
+Phase 3 closes when this end-to-end loop runs cleanly on dev for an Admizz counselor with a real test recipient (e.g. `<your-test-email>`).
 
 ---
 
@@ -967,7 +967,7 @@ Response (200): see the threaded shape above (threads with embedded `emails[]` s
 - [ ] `npx eslint --max-warnings 50 .` stays at 17 baseline.
 
 ### End-to-end Phase 3 loop (the closing test)
-- [ ] As Admizz admin, send an email from a lead to a test recipient (e.g. `daniel@theagencytool.com`). Confirm Phase 2 still works.
+- [ ] As Admizz admin, send an email from a lead to a test recipient (e.g. `<your-test-email>`). Confirm Phase 2 still works.
 - [ ] Recipient replies from their email client.
 - [ ] Within 5–10 min, the inbound reply appears in the lead's Emails sub-tab in the same thread (`<EmailThreadCard>` expanded shows both messages, sorted oldest→newest, inbound visually distinct).
 - [ ] DB checks:
