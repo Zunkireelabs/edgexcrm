@@ -42,6 +42,9 @@ const UPDATABLE_FIELDS = [
   "preferred_contact_method",
   "tags",
   "lead_type",
+  "company_name",
+  "designation",
+  "prospect_industry",
 ] as const;
 
 const ADMIN_ONLY_FIELDS = ["assigned_to"];

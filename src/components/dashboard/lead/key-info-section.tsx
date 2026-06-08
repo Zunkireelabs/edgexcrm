@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { ChevronDown, UserCircle, Building } from "lucide-react";
+import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -215,6 +216,28 @@ export function KeyInfoSection({
                 </p>
               )}
             </div>
+          )}
+
+          {/* Company Information — it_agency only */}
+          {industryId === "it_agency" && (lead.company_name || lead.designation || lead.prospect_industry) && (
+            <>
+              <div className="border-t border-border" />
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Company
+              </p>
+              {lead.company_name && (
+                <InfoRow label="Company Name" value={lead.company_name} />
+              )}
+              {lead.designation && (
+                <InfoRow label="Designation" value={lead.designation} />
+              )}
+              {lead.prospect_industry && (
+                <InfoRow
+                  label="Industry"
+                  value={prospectIndustryLabel(lead.prospect_industry) ?? lead.prospect_industry}
+                />
+              )}
+            </>
           )}
 
           {/* Divider */}

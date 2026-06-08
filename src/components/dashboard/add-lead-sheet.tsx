@@ -29,6 +29,9 @@ import {
 import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { PipelineStage, TenantEntity, UserRole } from "@/types/database";
+import {
+  PROSPECT_INDUSTRIES,
+} from "@/industries/it-agency/leads/prospect-industries";
 
 interface TeamMember {
   user_id: string;
@@ -66,6 +69,9 @@ interface FormData {
   preferredContact: string;
   initialNotes: string;
   tag: string;
+  companyName: string;
+  designation: string;
+  prospectIndustry: string;
 }
 
 interface FormErrors {
@@ -125,6 +131,9 @@ const initialFormData: FormData = {
   preferredContact: "",
   initialNotes: "",
   tag: "student",
+  companyName: "",
+  designation: "",
+  prospectIndustry: "",
 };
 
 export function AddLeadSheet({
@@ -232,12 +241,15 @@ export function AddLeadSheet({
         entity_id: formData.entityId || null,
         intake_source: formData.intakeSource || "manual_entry",
         intake_medium: "dashboard",
-        tags: [formData.tag || "student"],
+        tags: industryId === "education_consultancy" ? [formData.tag || "student"] : [],
         intake_campaign: formData.intakeCampaign || null,
         preferred_contact_method: formData.preferredContact || null,
         custom_fields: formData.initialNotes
           ? { initial_notes: formData.initialNotes }
           : {},
+        company_name: industryId === "it_agency" ? (formData.companyName || null) : undefined,
+        designation: industryId === "it_agency" ? (formData.designation || null) : undefined,
+        prospect_industry: industryId === "it_agency" ? (formData.prospectIndustry || null) : undefined,
         is_final: true,
         step: 1,
       };
@@ -446,6 +458,63 @@ export function AddLeadSheet({
               </div>
             </div>
           </div>
+
+          {/* Company Information — it_agency only */}
+          {industryId === "it_agency" && (
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900">Company Information</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="companyName" className="text-xs text-gray-600">
+                    Company Name
+                  </Label>
+                  <Input
+                    id="companyName"
+                    value={formData.companyName}
+                    onChange={(e) => updateField("companyName", e.target.value)}
+                    placeholder="Acme Corp"
+                    disabled={isSubmitting}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="designation" className="text-xs text-gray-600">
+                    Designation
+                  </Label>
+                  <Input
+                    id="designation"
+                    value={formData.designation}
+                    onChange={(e) => updateField("designation", e.target.value)}
+                    placeholder="CEO, CTO, Manager..."
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="prospectIndustry" className="text-xs text-gray-600">
+                  Industry
+                </Label>
+                <Select
+                  value={formData.prospectIndustry || "__none__"}
+                  onValueChange={(v) => updateField("prospectIndustry", v === "__none__" ? "" : v)}
+                  disabled={isSubmitting}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select industry</SelectItem>
+                    {PROSPECT_INDUSTRIES.map((ind) => (
+                      <SelectItem key={ind.value} value={ind.value}>
+                        {ind.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
 
           {/* Assignment Section */}
           <div className="space-y-4">

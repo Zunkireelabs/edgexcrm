@@ -12,7 +12,8 @@ import {
   apiRateLimited,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isUUID } from "@/lib/api/validation";
+import { validate, required, isUUID, optionalMaxLength, isIn } from "@/lib/api/validation";
+import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-industries";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
@@ -172,6 +173,14 @@ async function handlePost(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  // Validate optional IT-agency fields
+  const { valid: validExtra, errors: extraErrors } = validate(body, {
+    company_name: [optionalMaxLength(255)],
+    designation: [optionalMaxLength(255)],
+    prospect_industry: [isIn([...PROSPECT_INDUSTRY_VALUES])],
+  });
+  if (!validExtra) return apiValidationError(extraErrors);
+
   const tenantId = body.tenant_id as string;
 
   // Rate limit by tenant + IP
@@ -329,6 +338,9 @@ async function handlePost(request: NextRequest) {
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
+    company_name: body.company_name || null,
+    designation: body.designation || null,
+    prospect_industry: body.prospect_industry || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
