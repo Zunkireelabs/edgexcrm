@@ -19,6 +19,7 @@ export interface BuilderState {
   branding: FormBranding;
   redirectUrl: string | null;
   attribution: FormAttribution;
+  targetPipelineId: string | null;
   isDirty: boolean;
   saving: boolean;
 }
@@ -40,5 +41,6 @@ export type BuilderAction =
   | { type: "MOVE_FIELD_DOWN"; payload: { stepIndex: number; fieldIndex: number } }
   | { type: "SET_BRANDING"; payload: Partial<FormBranding> }
   | { type: "SET_ATTRIBUTION"; payload: Partial<FormAttribution> }
+  | { type: "SET_TARGET_PIPELINE_ID"; payload: string | null }
   | { type: "SET_SAVING"; payload: boolean }
   | { type: "MARK_SAVED" };

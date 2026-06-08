@@ -17,6 +17,7 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import {
   apiSuccess,
   apiValidationError,
@@ -192,61 +193,38 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     return apiSuccess(normalizeLead(canonical, sm, um), 200);
   }
 
-  // Resolve stage: use provided stage_id, or status slug, or default
-  let stageId: string | null = null;
-  let statusSlug: string | null = null;
+  // Resolve pipeline + stage
+  const resolved = await resolveLeadPipelineAndStage(ctx.supabase, {
+    tenantId,
+    explicitStageId: typeof body.stage_id === "string" ? body.stage_id : null,
+    statusSlug: typeof body.status === "string" ? body.status : null,
+    strictStatus: typeof body.status === "string",
+  });
 
-  if (body.stage_id && typeof body.stage_id === "string") {
-    const { data: stage } = await ctx.supabase
-      .from("pipeline_stages")
-      .select("id, slug")
-      .eq("id", body.stage_id)
-      .eq("tenant_id", tenantId)
-      .single();
-
-    if (!stage) {
+  if (!resolved.ok) {
+    if (resolved.reason === "invalid_stage") {
       return apiValidationError({ stage_id: ["Invalid stage_id for this tenant"] });
     }
-    stageId = stage.id;
-    statusSlug = stage.slug;
-  } else if (body.status && typeof body.status === "string") {
-    const { data: stage } = await ctx.supabase
-      .from("pipeline_stages")
-      .select("id, slug")
-      .eq("tenant_id", tenantId)
-      .eq("slug", body.status)
-      .single();
-
-    if (!stage) {
+    if (resolved.reason === "invalid_status") {
       return apiValidationError({ status: [`No matching pipeline stage for "${body.status}"`] });
     }
-    stageId = stage.id;
-    statusSlug = stage.slug;
-  } else {
-    const { data: defaultStage } = await ctx.supabase
-      .from("pipeline_stages")
-      .select("id, slug")
-      .eq("tenant_id", tenantId)
-      .eq("is_default", true)
-      .single();
-
-    if (!defaultStage) {
-      return apiValidationError({ stage: ["No default pipeline stage configured for this tenant"] });
+    if (resolved.reason === "no_pipeline") {
+      return apiValidationError({ pipeline: ["No default pipeline configured for this tenant"] });
     }
-    stageId = defaultStage.id;
-    statusSlug = defaultStage.slug;
+    return apiValidationError({ stage: ["No default pipeline stage configured for this tenant"] });
   }
 
   const leadPayload: Record<string, unknown> = {
     tenant_id: tenantId,
+    pipeline_id: resolved.pipelineId,
     first_name: body.first_name as string,
     last_name: (body.last_name as string) || null,
     email: body.email as string,
     phone: (body.phone as string) || null,
     city: (body.city as string) || null,
     country: (body.country as string) || null,
-    status: statusSlug,
-    stage_id: stageId,
+    status: resolved.statusSlug,
+    stage_id: resolved.stageId,
     is_final: true,
     step: 1,
     custom_fields: (body.custom_fields as Record<string, unknown>) || {},

@@ -116,6 +116,9 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
     case "SET_ATTRIBUTION":
       return { ...state, attribution: { ...state.attribution, ...action.payload }, isDirty: true };
 
+    case "SET_TARGET_PIPELINE_ID":
+      return { ...state, targetPipelineId: action.payload, isDirty: true };
+
     case "SET_SAVING":
       return { ...state, saving: action.payload };
 
@@ -136,6 +139,7 @@ function buildInitialState(formConfig: {
   branding: FormBranding;
   redirect_url: string | null;
   attribution?: FormAttribution | null;
+  target_pipeline_id?: string | null;
 }): BuilderState {
   return {
     id: formConfig.id,
@@ -146,6 +150,7 @@ function buildInitialState(formConfig: {
     branding: formConfig.branding,
     redirectUrl: formConfig.redirect_url,
     attribution: formConfig.attribution ?? {},
+    targetPipelineId: formConfig.target_pipeline_id ?? null,
     isDirty: false,
     saving: false,
   };
@@ -168,6 +173,7 @@ export function useFormBuilder(initialConfig: Parameters<typeof buildInitialStat
           branding: state.branding,
           redirect_url: state.redirectUrl,
           attribution: state.attribution,
+          target_pipeline_id: state.targetPipelineId,
         }),
       });
 

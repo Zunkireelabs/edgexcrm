@@ -29,6 +29,7 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -113,7 +114,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, name, steps, attribution")
+    .select("id, tenant_id, slug, name, steps, attribution, target_pipeline_id")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -140,28 +141,13 @@ export async function POST(
     }
   }
 
-  // ── 8. Get default pipeline + stage ──
-  const { data: defaultPipeline } = await supabase
-    .from("pipelines")
-    .select("id")
-    .eq("tenant_id", tenant.id)
-    .eq("is_default", true)
-    .single();
+  // ── 8. Resolve pipeline + entry stage ──
+  const resolved = await resolveLeadPipelineAndStage(supabase, { tenantId: tenant.id, formConfig, log });
 
-  if (!defaultPipeline) {
-    log.error({ tenantId: tenant.id }, "No default pipeline");
-    return withCors(apiServiceUnavailable("Tenant pipeline not configured"));
-  }
-
-  const { data: defaultStage } = await supabase
-    .from("pipeline_stages")
-    .select("id, slug")
-    .eq("pipeline_id", defaultPipeline.id)
-    .eq("is_default", true)
-    .single();
-
-  if (!defaultStage) {
-    log.error({ pipelineId: defaultPipeline.id }, "No default stage");
+  if (!resolved.ok) {
+    if (resolved.reason === "no_pipeline") {
+      return withCors(apiServiceUnavailable("Tenant pipeline not configured"));
+    }
     return withCors(apiServiceUnavailable("Pipeline stage not configured"));
   }
 
@@ -308,9 +294,9 @@ export async function POST(
   // ── 11. Insert lead ──
   const leadPayload = {
     tenant_id: tenant.id,
-    pipeline_id: defaultPipeline.id,
-    stage_id: defaultStage.id,
-    status: defaultStage.slug,
+    pipeline_id: resolved.pipelineId,
+    stage_id: resolved.stageId,
+    status: resolved.statusSlug,
     form_config_id: formConfig.id,
     is_final: true,
     step: 1,

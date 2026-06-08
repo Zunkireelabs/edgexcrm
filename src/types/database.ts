@@ -240,6 +240,7 @@ export interface FormConfig {
   branding: FormBranding;
   redirect_url: string | null;
   attribution: FormAttribution | null;
+  target_pipeline_id: string | null;
   created_at: string;
   updated_at: string;
 }
