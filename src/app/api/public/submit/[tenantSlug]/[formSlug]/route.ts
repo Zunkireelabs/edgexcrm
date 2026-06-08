@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { requirePermission } from "@/lib/api/integration-permissions";
 import type { FormStep } from "@/types/database";
 import {
   apiSuccess,
@@ -113,6 +114,10 @@ export async function POST(
     );
   }
 
+  // ── 6a. Enforce write permission ──
+  const denied = requirePermission(authResult.context, "write");
+  if (denied) return withCors(denied as NextResponse);
+
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
@@ -124,6 +129,11 @@ export async function POST(
 
   if (!formConfig) {
     return withCors(apiNotFound("Form"));
+  }
+
+  // ── 6b. Per-form key binding check ──
+  if (authResult.context.formId && authResult.context.formId !== formConfig.id) {
+    return withCors(apiError("FORBIDDEN", "API key is not authorized for this form", 403));
   }
 
   // ── 7. Idempotency check ──

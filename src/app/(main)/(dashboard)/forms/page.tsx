@@ -35,15 +35,18 @@ export default async function FormsPage() {
       .order("created_at", { ascending: false }),
     supabase
       .from("integration_keys")
-      .select("id, name, permissions, permissions_detail, created_at, last_used_at, revoked_at")
+      .select("id, name, permissions, permissions_detail, form_id, created_at, last_used_at, revoked_at")
       .eq("tenant_id", tenantData.tenant.id)
       .order("created_at", { ascending: false }),
   ]);
 
   const apiKeys = (apiKeysResult.data || []).map((k) => ({
     ...k,
+    form_id: (k.form_id as string | null) ?? null,
     status: (k.revoked_at ? "revoked" : "active") as "active" | "revoked",
   }));
+
+  const formList = (formConfigsResult.data ?? []).map((f) => ({ id: f.id, name: f.name }));
 
   return (
     <div className="space-y-8">
@@ -69,6 +72,7 @@ export default async function FormsPage() {
         tenantId={tenantData.tenant.id}
         initialKeys={apiKeys}
         category="form"
+        forms={formList}
       />
     </div>
   );

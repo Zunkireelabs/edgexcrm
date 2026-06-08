@@ -37,7 +37,7 @@ export async function GET() {
     const supabase = await createServiceClient();
     const { data: keys, error } = await supabase
       .from("integration_keys")
-      .select("id, name, permissions, permissions_detail, created_at, last_used_at, revoked_at")
+      .select("id, name, permissions, permissions_detail, form_id, created_at, last_used_at, revoked_at")
       .eq("tenant_id", auth.tenantId)
       .order("created_at", { ascending: false });
 
@@ -51,6 +51,7 @@ export async function GET() {
       name: k.name,
       permissions: k.permissions,
       permissions_detail: k.permissions_detail,
+      form_id: (k.form_id as string | null) ?? null,
       created_at: k.created_at,
       last_used_at: k.last_used_at,
       revoked_at: k.revoked_at,
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
     return apiRateLimited(rateResult.retryAfterSeconds);
   }
 
-  let body: { name?: string; scope?: string; category?: string };
+  let body: { name?: string; scope?: string; category?: string; form_id?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -148,6 +149,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate form_id if provided
+    const rawFormId = body.form_id ?? null;
+    let formId: string | null = null;
+    if (rawFormId) {
+      const { data: formCheck } = await supabase
+        .from("form_configs")
+        .select("id")
+        .eq("id", rawFormId)
+        .eq("tenant_id", auth.tenantId)
+        .single();
+      if (!formCheck) {
+        return apiValidationError({ form_id: ["Form not found for this tenant"] });
+      }
+      formId = rawFormId;
+    }
+
     // Generate key
     const { rawKey, hashedKey } = generateApiKey();
 
@@ -161,6 +178,7 @@ export async function POST(request: NextRequest) {
         hashed_key: hashedKey,
         permissions: [scope],
         permissions_detail: { category: keyCategory },
+        ...(formId && { form_id: formId }),
       })
       .select("id, name, permissions, created_at")
       .single();
