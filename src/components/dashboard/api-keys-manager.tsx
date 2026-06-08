@@ -37,7 +37,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Copy, Check, Key, AlertTriangle, Shield, FlaskConical, Loader2 } from "lucide-react";
+import { Plus, Copy, Check, Key, AlertTriangle, Shield, FlaskConical, Loader2, Globe } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 type ApiKeyScope = "read" | "write" | "admin";
 
@@ -46,6 +47,8 @@ interface ApiKeyRow {
   name: string;
   permissions: string[];
   permissions_detail?: Record<string, unknown>;
+  form_id?: string | null;
+  allowed_origins?: string[] | null;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
@@ -64,13 +67,17 @@ interface ApiKeysManagerProps {
   tenantId: string;
   initialKeys: ApiKeyRow[];
   category?: "form" | "integration";
+  forms?: { id: string; name: string }[];
 }
 
-export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
+export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerProps) {
   const [keys, setKeys] = useState<ApiKeyRow[]>(initialKeys);
   const [createOpen, setCreateOpen] = useState(false);
   const [keyName, setKeyName] = useState("");
-  const [keyScope, setKeyScope] = useState<ApiKeyScope>("read");
+  // form keys default to "write" — read-only form keys would 403 on every submission
+  const [keyScope, setKeyScope] = useState<ApiKeyScope>(category === "form" ? "write" : "read");
+  const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [allowedOriginsText, setAllowedOriginsText] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<CreatedKeyResponse | null>(null);
   const [copied, setCopied] = useState(false);
@@ -105,10 +112,23 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
 
     setCreating(true);
     try {
+      const parsedOrigins = allowedOriginsText
+        .split(/[\n,]+/)
+        .map((o) => o.trim())
+        .filter(Boolean);
+
       const res = await fetch("/api/v1/settings/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: keyName.trim(), scope: keyScope, category: category || "integration" }),
+        body: JSON.stringify({
+          name: keyName.trim(),
+          scope: keyScope,
+          category: category || "integration",
+          ...(category === "form" && { form_id: selectedFormId }),
+          ...(category === "form" && {
+            allowed_origins: parsedOrigins.length > 0 ? parsedOrigins : null,
+          }),
+        }),
       });
 
       const json = await res.json();
@@ -200,7 +220,9 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
   function handleCloseCreate() {
     setCreateOpen(false);
     setKeyName("");
-    setKeyScope("read");
+    setKeyScope(category === "form" ? "write" : "read");
+    setSelectedFormId(null);
+    setAllowedOriginsText("");
     setCreatedKey(null);
     setCopied(false);
     setConfirmed(false);
@@ -242,7 +264,7 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
             </CardTitle>
             <CardDescription>
               {category === "form"
-                ? "API keys for developers to submit form data from external websites."
+                ? "API keys for developers to submit form data from external websites. Keys require write scope — read-only keys cannot submit leads. Optionally bind a key to a single form for tighter access control."
                 : "Manage integration keys for external services like Orca."}
               {activeCount > 0 && (
                 <span className="ml-1">
@@ -303,6 +325,46 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
                         </SelectContent>
                       </Select>
                     </div>
+                    {category === "form" && forms && forms.length > 0 && (
+                      <div className="space-y-2">
+                        <Label htmlFor="form-binding">Authorized Form</Label>
+                        <Select
+                          value={selectedFormId ?? "all"}
+                          onValueChange={(v) => setSelectedFormId(v === "all" ? null : v)}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All forms</SelectItem>
+                            {forms.map((f) => (
+                              <SelectItem key={f.id} value={f.id}>
+                                {f.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <p className="text-xs text-muted-foreground">
+                          Restrict this key to one form, or leave as &quot;All forms&quot; to allow submission to any form in this tenant.
+                        </p>
+                      </div>
+                    )}
+                    {category === "form" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="allowed-origins">Allowed Origins</Label>
+                        <Textarea
+                          id="allowed-origins"
+                          placeholder={"https://yoursite.com\nhttps://app.yoursite.com"}
+                          value={allowedOriginsText}
+                          onChange={(e) => setAllowedOriginsText(e.target.value)}
+                          rows={3}
+                          className="font-mono text-xs resize-none"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Restrict browser submissions to these origins (one per line or comma-separated). Leave blank to allow any origin — use the key server-side only.
+                        </p>
+                      </div>
+                    )}
                     <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950">
                       <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
                       <p className="text-sm text-amber-800 dark:text-amber-200">
@@ -450,7 +512,18 @@ export function ApiKeysManager({ initialKeys, category }: ApiKeysManagerProps) {
                       className={isRevoked ? "opacity-50" : ""}
                     >
                       <TableCell className="font-medium">
-                        {key.name}
+                        <span>{key.name}</span>
+                        {key.form_id && forms && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            ({forms.find((f) => f.id === key.form_id)?.name ?? "Specific form"})
+                          </span>
+                        )}
+                        {key.allowed_origins && key.allowed_origins.length > 0 && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 text-xs text-muted-foreground" title={`Origin-restricted: ${key.allowed_origins.join(", ")}`}>
+                            <Globe className="h-3 w-3" />
+                            {key.allowed_origins.length === 1 ? "1 origin" : `${key.allowed_origins.length} origins`}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge variant={getScopeBadgeVariant(key.permissions)}>

@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { requirePermission } from "@/lib/api/integration-permissions";
 import type { FormStep } from "@/types/database";
 import {
   apiSuccess,
@@ -33,22 +34,38 @@ import {
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
+const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-function withCors(response: NextResponse): NextResponse {
-  for (const [key, value] of Object.entries(CORS_HEADERS)) {
+// corsOrigin meanings:
+//   "*"    → wildcard (pre-auth fallback, and keys with no allowlist)
+//   string → specific origin to reflect (+ Vary: Origin)
+//   null   → omit ACAO entirely (hard-blocked origin path)
+function withCors(response: NextResponse, corsOrigin: string | null = "*"): NextResponse {
+  if (corsOrigin !== null) {
+    response.headers.set("Access-Control-Allow-Origin", corsOrigin);
+  }
+  if (corsOrigin && corsOrigin !== "*") {
+    response.headers.set("Vary", "Origin");
+  }
+  for (const [key, value] of Object.entries(CORS_STATIC_HEADERS)) {
     response.headers.set(key, value);
   }
   return response;
 }
 
-// CORS preflight
+// CORS preflight — permissive because we don't know the key at OPTIONS time
+// (Authorization header is absent on preflight); enforcement happens on POST.
 export function OPTIONS() {
-  return new NextResponse(null, { status: 200, headers: CORS_HEADERS });
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+      ...CORS_STATIC_HEADERS,
+    },
+  });
 }
 
 export async function POST(
@@ -69,7 +86,7 @@ export async function POST(
   // ── 1. Authenticate with API key ──
   const authResult = await authenticateIntegrationRequest(request);
   if (!authResult.success) {
-    return withCors(apiUnauthorized());
+    return withCors(apiUnauthorized()); // pre-auth: permissive wildcard
   }
 
   // ── 2. Rate limit by integration key ──
@@ -78,15 +95,40 @@ export async function POST(
     INTEGRATION_LIMIT
   );
   if (!rateResult.allowed) {
-    return withCors(apiRateLimited(rateResult.retryAfterSeconds));
+    return withCors(apiRateLimited(rateResult.retryAfterSeconds)); // pre-origin-check: wildcard
   }
+
+  // ── 2a. Per-key origin enforcement ──
+  // CORS preflights arrive without Authorization, so enforcement must happen here on the actual POST.
+  const reqOrigin = request.headers.get("origin");
+  const allow = authResult.context.allowedOrigins;
+  let corsOrigin: string | null = "*"; // default: wildcard (no allowlist on this key)
+  if (allow && allow.length > 0) {
+    if (reqOrigin) {
+      if (allow.includes(reqOrigin)) {
+        corsOrigin = reqOrigin; // reflect allowed origin
+      } else {
+        // Hard block — disallowed browser origin; no lead will be created
+        return withCors(
+          apiError("FORBIDDEN", "Origin not allowed for this API key", 403),
+          null
+        );
+      }
+    } else {
+      // No Origin header → server-side caller (curl, backend); CORS N/A, allow through
+      corsOrigin = null;
+    }
+  }
+
+  // Convenience wrapper so all post-auth returns carry the resolved CORS origin
+  const cors = (r: NextResponse) => withCors(r, corsOrigin);
 
   // ── 3. Parse body ──
   let body: Record<string, unknown>;
   try {
     body = await request.json();
   } catch {
-    return withCors(apiValidationError({ body: ["Invalid JSON body"] }));
+    return cors(apiValidationError({ body: ["Invalid JSON body"] }));
   }
 
   const supabase = await createServiceClient();
@@ -99,7 +141,7 @@ export async function POST(
     .single();
 
   if (!tenant) {
-    return withCors(apiNotFound("Tenant"));
+    return cors(apiNotFound("Tenant"));
   }
 
   // ── 5. Verify API key belongs to this tenant ──
@@ -108,10 +150,14 @@ export async function POST(
       { keyTenant: authResult.context.tenantId, urlTenant: tenant.id },
       "API key tenant mismatch"
     );
-    return withCors(
+    return cors(
       apiError("FORBIDDEN", "API key does not belong to this tenant", 403)
     );
   }
+
+  // ── 6a. Enforce write permission ──
+  const denied = requirePermission(authResult.context, "write");
+  if (denied) return cors(denied as NextResponse);
 
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
@@ -123,7 +169,12 @@ export async function POST(
     .single();
 
   if (!formConfig) {
-    return withCors(apiNotFound("Form"));
+    return cors(apiNotFound("Form"));
+  }
+
+  // ── 6b. Per-form key binding check ──
+  if (authResult.context.formId && authResult.context.formId !== formConfig.id) {
+    return cors(apiError("FORBIDDEN", "API key is not authorized for this form", 403));
   }
 
   // ── 7. Idempotency check ──
@@ -139,7 +190,7 @@ export async function POST(
 
     if (existing) {
       log.info({ leadId: existing.id }, "Idempotent duplicate — returning existing");
-      return withCors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
+      return cors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
     }
   }
 
@@ -148,9 +199,9 @@ export async function POST(
 
   if (!resolved.ok) {
     if (resolved.reason === "no_pipeline") {
-      return withCors(apiServiceUnavailable("Tenant pipeline not configured"));
+      return cors(apiServiceUnavailable("Tenant pipeline not configured"));
     }
-    return withCors(apiServiceUnavailable("Pipeline stage not configured"));
+    return cors(apiServiceUnavailable("Pipeline stage not configured"));
   }
 
   // ── 9. Build phone with country code ──
@@ -297,7 +348,7 @@ export async function POST(
       }
     })();
 
-    return withCors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
+    return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
 
   // ── 11. Generate display_id for education_consultancy ──
@@ -367,7 +418,7 @@ export async function POST(
           .is("deleted_at", null)
           .single();
         if (existing) {
-          return withCors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
+          return cors(apiSuccess({ lead_id: existing.id, duplicate: true }, 200));
         }
       }
       // Email unique-index race — concurrent insert won; fold into winner
@@ -410,12 +461,12 @@ export async function POST(
             requestId,
           });
           void touchLastActivity(supabase, { leadId: (raceMatch as { id: string }).id, tenantId: tenant.id });
-          return withCors(apiSuccess({ lead_id: (raceMatch as { id: string }).id, deduped: true }, 200));
+          return cors(apiSuccess({ lead_id: (raceMatch as { id: string }).id, deduped: true }, 200));
         }
       }
     }
     log.error({ err: error }, "Failed to create lead");
-    return withCors(apiServiceUnavailable("Failed to create lead"));
+    return cors(apiServiceUnavailable("Failed to create lead"));
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
@@ -535,5 +586,5 @@ export async function POST(
     })(),
   ]);
 
-  return withCors(apiSuccess({ lead_id: leadId }, 201));
+  return cors(apiSuccess({ lead_id: leadId }, 201));
 }

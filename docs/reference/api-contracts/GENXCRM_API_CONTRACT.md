@@ -120,6 +120,20 @@ Default permissions for new keys: `["read", "write"]`.
 | Hash mismatch | 401 | `UNAUTHORIZED` |
 | Internal auth error | 401 | `UNAUTHORIZED` |
 | Valid key, insufficient scope | 403 | `FORBIDDEN` |
+| Browser `Origin` not in key's allowlist | 403 | `FORBIDDEN` |
+
+### Form API Keys — Origin Allowlist (F4)
+
+Form keys (`permissions_detail.category = "form"`) can carry an optional `allowed_origins text[]` column.
+
+**Security model:**
+
+- **Server-side use (recommended):** Leave the allowlist empty. The key is callable from any origin, but because it's used only in backend code it can never leak to a browser.
+- **Browser-side use:** Set one or more allowed origins (e.g. `https://yoursite.com`). The submit endpoint hard-enforces this on the real POST — a request with a disallowed `Origin` header receives `403 FORBIDDEN` and no lead is created.
+- **Why enforcement is on POST, not preflight:** CORS OPTIONS requests arrive without the `Authorization` header, so the server cannot know the key at preflight time. Enforcement must happen on the authenticated POST. CORS itself doesn't prevent a request from *executing*, only from its response being read by JS — so server-side rejection is the only real protection.
+- **No Origin header (server-to-server callers):** Requests without an `Origin` header are always allowed through regardless of the allowlist. Only browsers send `Origin`.
+
+**Best practice:** Use the key server-side. If you must call from the browser, set an origin allowlist **and** bind the key to one form. A leaked key with no allowlist is callable from any origin.
 
 ### Audit Logging
 
