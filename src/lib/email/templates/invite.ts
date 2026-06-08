@@ -55,7 +55,7 @@ export function getInviteEmailTemplate({
               </p>
 
               <p style="margin: 0 0 32px 0; font-size: 16px; line-height: 24px; color: #555;">
-                <strong>${inviterEmail}</strong> invited you to join as <strong style="text-transform: capitalize;">${role}</strong> on the Lead Gen CRM platform.
+                <strong>${inviterEmail}</strong> invited you to join as <strong style="text-transform: capitalize;">${role}</strong> on the EdgeX platform.
               </p>
 
               <!-- CTA Button -->
@@ -87,7 +87,7 @@ export function getInviteEmailTemplate({
                 If you didn't expect this invitation, you can safely ignore this email.
               </p>
               <p style="margin: 0; font-size: 12px; color: #aaa;">
-                &copy; ${new Date().getFullYear()} Lead Gen CRM by Zunkiree Labs
+                &copy; ${new Date().getFullYear()} EdgeX by Zunkiree Labs
               </p>
             </td>
           </tr>

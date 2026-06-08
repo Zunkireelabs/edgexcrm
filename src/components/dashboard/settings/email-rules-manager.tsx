@@ -360,7 +360,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
                 <span className="text-muted-foreground font-normal">(optional)</span>
               </Label>
               <Input
-                placeholder='e.g., "Admizz Education" (defaults to Lead Gen CRM)'
+                placeholder='e.g., "Admizz Education" (defaults to EdgeX)'
                 value={form.from_name}
                 onChange={(e) =>
                   setForm((f) => ({ ...f, from_name: e.target.value }))

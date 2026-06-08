@@ -95,7 +95,7 @@ export function getLeadAssignedEmailTemplate({
           <tr>
             <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #eee;">
               <p style="margin: 0; font-size: 12px; color: #aaa;">
-                &copy; ${new Date().getFullYear()} Lead Gen CRM by Zunkiree Labs
+                &copy; ${new Date().getFullYear()} EdgeX by Zunkiree Labs
               </p>
             </td>
           </tr>
@@ -201,7 +201,7 @@ export function getBulkAssignedEmailTemplate({
           <tr>
             <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #eee;">
               <p style="margin: 0; font-size: 12px; color: #aaa;">
-                &copy; ${new Date().getFullYear()} Lead Gen CRM by Zunkiree Labs
+                &copy; ${new Date().getFullYear()} EdgeX by Zunkiree Labs
               </p>
             </td>
           </tr>

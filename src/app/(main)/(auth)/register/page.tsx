@@ -432,7 +432,7 @@ function RegisterHeader() {
           <path d="M7 13.5C7 12.6716 7.67157 12 8.5 12H10.5C11.3284 12 12 12.6716 12 13.5V15.5C12 16.3284 11.3284 17 10.5 17H8.5C7.67157 17 7 16.3284 7 15.5V13.5Z" fill="white" fillOpacity="0.5"/>
           <path d="M12 8.5C12 7.67157 12.6716 7 13.5 7H15.5C16.3284 7 17 7.67157 17 8.5V10.5C17 11.3284 16.3284 12 15.5 12H13.5C12.6716 12 12 11.3284 12 10.5V8.5Z" fill="white" fillOpacity="0.5"/>
         </svg>
-        <span>Lead Gen CRM</span>
+        <span>EdgeX</span>
       </div>
     </div>
   );
