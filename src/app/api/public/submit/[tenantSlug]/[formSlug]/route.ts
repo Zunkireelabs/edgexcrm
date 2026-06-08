@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
+import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import type { FormStep } from "@/types/database";
 import {
   apiSuccess,
   apiError,
@@ -169,6 +171,29 @@ export async function POST(
         }
       }
     } catch { /* fall through to raw phone */ }
+  }
+
+  // ── Mode B schema validation — log-only, never rejects ──
+  if (formConfig.steps && (formConfig.steps as unknown[]).length > 0) {
+    const schemaValues = {
+      ...((body.custom_fields as Record<string, unknown>) || {}),
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone: body.phone,
+      city: body.city,
+      country: body.country,
+    };
+    const schemaResult = validateSubmissionAgainstForm(
+      formConfig.steps as FormStep[],
+      schemaValues
+    );
+    if (!schemaResult.valid) {
+      log.warn(
+        { formId: formConfig.id, formSlug, errors: schemaResult.errors },
+        "Mode B submission failed schema validation (log-only, not rejected)"
+      );
+    }
   }
 
   // ── 10. Dedup: resolve identity ──

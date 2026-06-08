@@ -21,7 +21,8 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import type { Lead } from "@/types/database";
+import type { Lead, FormStep } from "@/types/database";
+import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import {
   normalizeEmail,
   normalizePhone,
@@ -235,12 +236,12 @@ async function handlePost(request: NextRequest) {
   // Resolve status
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
-  // Fetch form config for routing (id + target_pipeline_id only; phone-parsing IIFE fetches steps separately)
-  let formConfig: { id: string; target_pipeline_id?: string | null } | null = null;
+  // Fetch form config for routing + schema validation (phone-parsing IIFE fetches steps separately)
+  let formConfig: { id: string; target_pipeline_id?: string | null; steps?: FormStep[] | null } | null = null;
   if (body.form_config_id) {
     const { data: fc } = await supabase
       .from("form_configs")
-      .select("id, target_pipeline_id")
+      .select("id, target_pipeline_id, steps")
       .eq("id", body.form_config_id as string)
       .maybeSingle();
     formConfig = fc ?? null;
@@ -260,6 +261,21 @@ async function handlePost(request: NextRequest) {
       return apiValidationError({ tenant_id: ["Tenant has no default pipeline configured"] });
     }
     return apiValidationError({ status: [`No matching pipeline stage for status "${resolvedStatus}"`] });
+  }
+
+  // Mode A schema validation — enforce on final submissions only
+  if (body.is_final === true && formConfig?.steps && formConfig.steps.length > 0) {
+    const schemaValues = {
+      ...((body.custom_fields as Record<string, unknown>) || {}),
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone: body.phone,
+      city: body.city,
+      country: body.country,
+    };
+    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, schemaValues);
+    if (!schemaResult.valid) return apiValidationError(schemaResult.errors);
   }
 
   // Build payload from body
