@@ -575,30 +575,32 @@ export function AddLeadSheet({
       {/* 1. Lead Information */}
       <div className="space-y-4">
         <h3 className="text-sm font-medium text-gray-900">Lead Information</h3>
-        <div className="space-y-1.5">
-          <Label htmlFor="ownerId" className="text-xs text-gray-600">
-            Lead Owner
-            {!isAdmin && (
-              <span className="ml-1 text-gray-400">(auto)</span>
-            )}
-          </Label>
-          <Select
-            value={formData.ownerId || currentUserId}
-            onValueChange={(v) => updateField("ownerId", v)}
-            disabled={isSubmitting || !isAdmin}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select owner" />
-            </SelectTrigger>
-            <SelectContent>
-              {assignableMembers.map((member) => (
-                <SelectItem key={member.user_id} value={member.user_id}>
-                  {member.email.split("@")[0]}
-                  {member.user_id === currentUserId && " (You)"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="ownerId" className="text-xs text-gray-600">
+              Lead Owner
+              {!isAdmin && (
+                <span className="ml-1 text-gray-400">(auto)</span>
+              )}
+            </Label>
+            <Select
+              value={formData.ownerId || currentUserId}
+              onValueChange={(v) => updateField("ownerId", v)}
+              disabled={isSubmitting || !isAdmin}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select owner" />
+              </SelectTrigger>
+              <SelectContent>
+                {assignableMembers.map((member) => (
+                  <SelectItem key={member.user_id} value={member.user_id}>
+                    {member.email.split("@")[0]}
+                    {member.user_id === currentUserId && " (You)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 

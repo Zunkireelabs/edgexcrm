@@ -50,7 +50,7 @@ const UPDATABLE_FIELDS = [
   "company_email",
 ] as const;
 
-const ADMIN_ONLY_FIELDS = ["assigned_to"];
+const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id"];
 
 export async function GET(
   _request: NextRequest,

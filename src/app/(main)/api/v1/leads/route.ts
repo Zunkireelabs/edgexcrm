@@ -209,6 +209,20 @@ async function handlePost(request: NextRequest) {
 
   if (!tenant) return apiNotFound("Tenant");
 
+  // Validate assigned_to: must belong to this tenant if provided
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.assigned_to !== "") {
+    const { data: assigneeCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.assigned_to as string)
+      .single();
+
+    if (!assigneeCheck) {
+      return apiValidationError({ assigned_to: ["Assignee is not a member of this tenant"] });
+    }
+  }
+
   // Validate owner_id: must belong to this tenant if provided
   if (body.owner_id !== undefined && body.owner_id !== null && body.owner_id !== "") {
     const { data: ownerCheck } = await supabase
@@ -355,6 +369,7 @@ async function handlePost(request: NextRequest) {
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
+    assigned_to: body.assigned_to || null,
     company_name: body.company_name || null,
     designation: body.designation || null,
     prospect_industry: body.prospect_industry || null,
