@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
+import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import type { FormStep } from "@/types/database";
 import {
   apiSuccess,
   apiError,
@@ -29,6 +31,7 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -113,7 +116,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, name, steps, attribution")
+    .select("id, tenant_id, slug, name, steps, attribution, target_pipeline_id")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -140,28 +143,13 @@ export async function POST(
     }
   }
 
-  // ── 8. Get default pipeline + stage ──
-  const { data: defaultPipeline } = await supabase
-    .from("pipelines")
-    .select("id")
-    .eq("tenant_id", tenant.id)
-    .eq("is_default", true)
-    .single();
+  // ── 8. Resolve pipeline + entry stage ──
+  const resolved = await resolveLeadPipelineAndStage(supabase, { tenantId: tenant.id, formConfig, log });
 
-  if (!defaultPipeline) {
-    log.error({ tenantId: tenant.id }, "No default pipeline");
-    return withCors(apiServiceUnavailable("Tenant pipeline not configured"));
-  }
-
-  const { data: defaultStage } = await supabase
-    .from("pipeline_stages")
-    .select("id, slug")
-    .eq("pipeline_id", defaultPipeline.id)
-    .eq("is_default", true)
-    .single();
-
-  if (!defaultStage) {
-    log.error({ pipelineId: defaultPipeline.id }, "No default stage");
+  if (!resolved.ok) {
+    if (resolved.reason === "no_pipeline") {
+      return withCors(apiServiceUnavailable("Tenant pipeline not configured"));
+    }
     return withCors(apiServiceUnavailable("Pipeline stage not configured"));
   }
 
@@ -183,6 +171,29 @@ export async function POST(
         }
       }
     } catch { /* fall through to raw phone */ }
+  }
+
+  // ── Mode B schema validation — log-only, never rejects ──
+  if (formConfig.steps && (formConfig.steps as unknown[]).length > 0) {
+    const schemaValues = {
+      ...((body.custom_fields as Record<string, unknown>) || {}),
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone: body.phone,
+      city: body.city,
+      country: body.country,
+    };
+    const schemaResult = validateSubmissionAgainstForm(
+      formConfig.steps as FormStep[],
+      schemaValues
+    );
+    if (!schemaResult.valid) {
+      log.warn(
+        { formId: formConfig.id, formSlug, errors: schemaResult.errors },
+        "Mode B submission failed schema validation (log-only, not rejected)"
+      );
+    }
   }
 
   // ── 10. Dedup: resolve identity ──
@@ -308,9 +319,9 @@ export async function POST(
   // ── 11. Insert lead ──
   const leadPayload = {
     tenant_id: tenant.id,
-    pipeline_id: defaultPipeline.id,
-    stage_id: defaultStage.id,
-    status: defaultStage.slug,
+    pipeline_id: resolved.pipelineId,
+    stage_id: resolved.stageId,
+    status: resolved.statusSlug,
     form_config_id: formConfig.id,
     is_final: true,
     step: 1,

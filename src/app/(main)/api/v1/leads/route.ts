@@ -21,7 +21,8 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import type { Lead } from "@/types/database";
+import type { Lead, FormStep } from "@/types/database";
+import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import {
   normalizeEmail,
   normalizePhone,
@@ -33,6 +34,7 @@ import {
   emitSubmissionAudit,
   touchLastActivity,
 } from "@/lib/leads/dedup";
+import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -234,55 +236,57 @@ async function handlePost(request: NextRequest) {
   // Resolve status
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
-  // Get the default pipeline for this tenant
-  const { data: defaultPipeline } = await supabase
-    .from("pipelines")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("is_default", true)
-    .single();
-
-  if (!defaultPipeline) {
-    return apiValidationError({
-      tenant_id: ["Tenant has no default pipeline configured"],
-    });
+  // Fetch form config for routing + schema validation (phone-parsing IIFE fetches steps separately)
+  let formConfig: { id: string; target_pipeline_id?: string | null; steps?: FormStep[] | null } | null = null;
+  if (body.form_config_id) {
+    const { data: fc } = await supabase
+      .from("form_configs")
+      .select("id, target_pipeline_id, steps")
+      .eq("id", body.form_config_id as string)
+      .maybeSingle();
+    formConfig = fc ?? null;
   }
 
-  const pipelineId = (body.pipeline_id as string) || defaultPipeline.id;
+  const resolved = await resolveLeadPipelineAndStage(supabase, {
+    tenantId,
+    formConfig,
+    explicitPipelineId: (body.pipeline_id as string | undefined) ?? null,
+    statusSlug: resolvedStatus,
+    strictStatus: false,
+    log,
+  });
 
-  // Resolve stage_id from status slug, fall back to pipeline's default stage
-  let { data: stage } = await supabase
-    .from("pipeline_stages")
-    .select("id, slug")
-    .eq("pipeline_id", pipelineId)
-    .eq("slug", resolvedStatus)
-    .single();
-
-  if (!stage) {
-    const { data: defaultStage } = await supabase
-      .from("pipeline_stages")
-      .select("id, slug")
-      .eq("pipeline_id", pipelineId)
-      .eq("is_default", true)
-      .single();
-    stage = defaultStage;
+  if (!resolved.ok) {
+    if (resolved.reason === "no_pipeline") {
+      return apiValidationError({ tenant_id: ["Tenant has no default pipeline configured"] });
+    }
+    return apiValidationError({ status: [`No matching pipeline stage for status "${resolvedStatus}"`] });
   }
 
-  if (!stage) {
-    return apiValidationError({
-      status: [`No matching pipeline stage for status "${resolvedStatus}"`],
-    });
+  // Mode A schema validation — enforce on final submissions only
+  if (body.is_final === true && formConfig?.steps && formConfig.steps.length > 0) {
+    const schemaValues = {
+      ...((body.custom_fields as Record<string, unknown>) || {}),
+      first_name: body.first_name,
+      last_name: body.last_name,
+      email: body.email,
+      phone: body.phone,
+      city: body.city,
+      country: body.country,
+    };
+    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, schemaValues);
+    if (!schemaResult.valid) return apiValidationError(schemaResult.errors);
   }
 
   // Build payload from body
   const leadPayload: Record<string, unknown> = {
     tenant_id: tenantId,
-    pipeline_id: pipelineId,
+    pipeline_id: resolved.pipelineId,
     session_id: sessionId || body.session_id || null,
     step: body.step ?? 1,
     is_final: body.is_final ?? false,
-    status: stage.slug,
-    stage_id: stage.id,
+    status: resolved.statusSlug,
+    stage_id: resolved.stageId,
     first_name: body.first_name || null,
     last_name: body.last_name || null,
     email: body.email || null,

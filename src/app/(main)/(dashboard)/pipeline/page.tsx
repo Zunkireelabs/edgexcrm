@@ -90,8 +90,10 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         />
       </div>
 
-      {/* Pipeline Board */}
+      {/* Pipeline Board — keyed on pipeline so switching pipelines remounts and
+          re-seeds the board's columns from the correct leads (fixes stale-view F8) */}
       <PipelineBoard
+        key={selectedPipelineId}
         stages={stages}
         leads={leads}
         role={tenantData.role as UserRole}

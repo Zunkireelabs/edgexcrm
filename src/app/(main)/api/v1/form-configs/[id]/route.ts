@@ -129,6 +129,22 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     updatePayload.attribution = normalized;
   }
 
+  if (body.target_pipeline_id !== undefined) {
+    const pid = body.target_pipeline_id;
+    if (pid === null || pid === "") {
+      updatePayload.target_pipeline_id = null;
+    } else {
+      const { data: p } = await supabase
+        .from("pipelines")
+        .select("id")
+        .eq("id", String(pid))
+        .eq("tenant_id", auth.tenantId)
+        .maybeSingle();
+      if (!p) return apiValidationError({ target_pipeline_id: ["Pipeline not found for this tenant"] });
+      updatePayload.target_pipeline_id = String(pid);
+    }
+  }
+
   const { data: updated, error } = await supabase
     .from("form_configs")
     .update(updatePayload)
