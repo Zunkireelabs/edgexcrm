@@ -9,6 +9,7 @@ export interface IntegrationAuthContext {
   integrationKeyId: string;
   permissions: string[];
   formId: string | null;
+  allowedOrigins: string[] | null;
 }
 
 export type IntegrationAuthResult =
@@ -59,7 +60,7 @@ export async function authenticateIntegrationRequest(
     // Lookup by hashed key — service role bypasses RLS
     const { data: keyRecord, error } = await supabase
       .from("integration_keys")
-      .select("id, tenant_id, hashed_key, permissions, revoked_at, last_used_at, form_id")
+      .select("id, tenant_id, hashed_key, permissions, revoked_at, last_used_at, form_id, allowed_origins")
       .eq("hashed_key", candidateHash)
       .is("revoked_at", null)
       .single();
@@ -88,6 +89,7 @@ export async function authenticateIntegrationRequest(
       integrationKeyId: keyRecord.id,
       permissions: (keyRecord.permissions as string[]) || ["read"],
       formId: (keyRecord.form_id as string | null) ?? null,
+      allowedOrigins: (keyRecord.allowed_origins as string[] | null) ?? null,
     };
 
     // Log successful auth

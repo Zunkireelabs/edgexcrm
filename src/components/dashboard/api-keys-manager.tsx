@@ -37,7 +37,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { toast } from "sonner";
-import { Plus, Copy, Check, Key, AlertTriangle, Shield, FlaskConical, Loader2 } from "lucide-react";
+import { Plus, Copy, Check, Key, AlertTriangle, Shield, FlaskConical, Loader2, Globe } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 type ApiKeyScope = "read" | "write" | "admin";
 
@@ -47,6 +48,7 @@ interface ApiKeyRow {
   permissions: string[];
   permissions_detail?: Record<string, unknown>;
   form_id?: string | null;
+  allowed_origins?: string[] | null;
   created_at: string;
   last_used_at: string | null;
   revoked_at: string | null;
@@ -75,6 +77,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
   // form keys default to "write" — read-only form keys would 403 on every submission
   const [keyScope, setKeyScope] = useState<ApiKeyScope>(category === "form" ? "write" : "read");
   const [selectedFormId, setSelectedFormId] = useState<string | null>(null);
+  const [allowedOriginsText, setAllowedOriginsText] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<CreatedKeyResponse | null>(null);
   const [copied, setCopied] = useState(false);
@@ -109,6 +112,11 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
 
     setCreating(true);
     try {
+      const parsedOrigins = allowedOriginsText
+        .split(/[\n,]+/)
+        .map((o) => o.trim())
+        .filter(Boolean);
+
       const res = await fetch("/api/v1/settings/api-keys", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -117,6 +125,9 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
           scope: keyScope,
           category: category || "integration",
           ...(category === "form" && { form_id: selectedFormId }),
+          ...(category === "form" && {
+            allowed_origins: parsedOrigins.length > 0 ? parsedOrigins : null,
+          }),
         }),
       });
 
@@ -211,6 +222,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
     setKeyName("");
     setKeyScope(category === "form" ? "write" : "read");
     setSelectedFormId(null);
+    setAllowedOriginsText("");
     setCreatedKey(null);
     setCopied(false);
     setConfirmed(false);
@@ -334,6 +346,22 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                         </Select>
                         <p className="text-xs text-muted-foreground">
                           Restrict this key to one form, or leave as &quot;All forms&quot; to allow submission to any form in this tenant.
+                        </p>
+                      </div>
+                    )}
+                    {category === "form" && (
+                      <div className="space-y-2">
+                        <Label htmlFor="allowed-origins">Allowed Origins</Label>
+                        <Textarea
+                          id="allowed-origins"
+                          placeholder={"https://yoursite.com\nhttps://app.yoursite.com"}
+                          value={allowedOriginsText}
+                          onChange={(e) => setAllowedOriginsText(e.target.value)}
+                          rows={3}
+                          className="font-mono text-xs resize-none"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          Restrict browser submissions to these origins (one per line or comma-separated). Leave blank to allow any origin — use the key server-side only.
                         </p>
                       </div>
                     )}
@@ -488,6 +516,12 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                         {key.form_id && forms && (
                           <span className="ml-2 text-xs text-muted-foreground">
                             ({forms.find((f) => f.id === key.form_id)?.name ?? "Specific form"})
+                          </span>
+                        )}
+                        {key.allowed_origins && key.allowed_origins.length > 0 && (
+                          <span className="ml-2 inline-flex items-center gap-0.5 text-xs text-muted-foreground" title={`Origin-restricted: ${key.allowed_origins.join(", ")}`}>
+                            <Globe className="h-3 w-3" />
+                            {key.allowed_origins.length === 1 ? "1 origin" : `${key.allowed_origins.length} origins`}
                           </span>
                         )}
                       </TableCell>
