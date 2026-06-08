@@ -4,7 +4,7 @@ import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import { requirePermission } from "@/lib/api/integration-permissions";
-import type { FormStep } from "@/types/database";
+import type { FormStep, Lead } from "@/types/database";
 import {
   apiSuccess,
   apiError,
@@ -33,6 +33,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { processEmailForwardRules } from "@/lib/email/email-forward";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -348,6 +349,12 @@ export async function POST(
       }
     })();
 
+    void processEmailForwardRules({
+      tenantId: tenant.id,
+      lead: canonical as Lead,
+      newStageId: resolved.stageId,
+    }).catch((err) => log.error({ err }, "Email rule on resubmit failed"));
+
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
 
@@ -585,6 +592,18 @@ export async function POST(
       }
     })(),
   ]);
+
+  void processEmailForwardRules({
+    tenantId: tenant.id,
+    lead: {
+      id: leadId,
+      first_name: leadPayload.first_name as string | null,
+      last_name: leadPayload.last_name as string | null,
+      email: leadPayload.email as string | null,
+      phone: leadPayload.phone as string | null,
+    } as Lead,
+    newStageId: resolved.stageId,
+  }).catch((err) => log.error({ err }, "Email rule on create failed"));
 
   return cors(apiSuccess({ lead_id: leadId }, 201));
 }

@@ -35,6 +35,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { processEmailForwardRules } from "@/lib/email/email-forward";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -530,6 +531,14 @@ async function handlePost(request: NextRequest) {
       }),
     ]);
 
+    if (leadPayload.is_final === true) {
+      void processEmailForwardRules({
+        tenantId,
+        lead: updated as Lead,
+        newStageId: resolved.stageId,
+      }).catch((err) => log.error({ err }, "Email rule on finalize failed"));
+    }
+
     return apiSuccess(updated, 200);
   }
 
@@ -833,6 +842,14 @@ async function handlePost(request: NextRequest) {
         log.error({ err }, "Failed to create lead.created notification");
       }
     })();
+  }
+
+  if (lead.is_final) {
+    void processEmailForwardRules({
+      tenantId,
+      lead: lead as Lead,
+      newStageId: resolved.stageId,
+    }).catch((err) => log.error({ err }, "Email rule on create failed"));
   }
 
   return apiSuccess(lead, 201);
