@@ -15,7 +15,7 @@ export function getResendClient(): Resend | null {
 }
 
 // Email sender address - using verified domain
-export const EMAIL_FROM = "Lead Gen CRM <noreply@lead-crm.zunkireelabs.com>";
+export const EMAIL_FROM = "EdgeX <noreply@lead-crm.zunkireelabs.com>";
 
 // App URL for email links
 export const APP_URL =

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lead Gen CRM",
+  title: "EdgeX",
   description: "Multi-tenant lead generation CRM by Zunkiree Labs",
 };
 
