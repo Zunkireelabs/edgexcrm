@@ -134,8 +134,9 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
     const normalized: FormConfig["autoresponder"] = {
       enabled: Boolean(raw.enabled ?? false),
       fire_mode: raw.fire_mode === "first" ? "first" : "every",
-      subject: typeof raw.subject === "string" ? raw.subject : "",
-      body_html: typeof raw.body_html === "string" ? raw.body_html : "",
+      // Cap lengths — this JSONB is re-read on every public form submission.
+      subject: typeof raw.subject === "string" ? raw.subject.slice(0, 998) : "",
+      body_html: typeof raw.body_html === "string" ? raw.body_html.slice(0, 100_000) : "",
     };
     updatePayload.autoresponder = normalized;
   }

@@ -290,6 +290,7 @@ async function handlePost(request: NextRequest) {
       .from("form_configs")
       .select("id, target_pipeline_id, steps, autoresponder")
       .eq("id", body.form_config_id as string)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     formConfig = fc ?? null;
   }
@@ -349,6 +350,7 @@ async function handlePost(request: NextRequest) {
             .from("form_configs")
             .select("steps")
             .eq("id", body.form_config_id)
+            .eq("tenant_id", tenantId)
             .single();
           if (fc?.steps) {
             for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
@@ -711,7 +713,7 @@ async function handlePost(request: NextRequest) {
       if (formConfig) {
         void processFormAutoresponder(
           formConfig as FormConfig,
-          canonical as Lead,
+          { ...canonical, ...patch } as Lead,
           { isResubmission: true, tenant: { name: tenant.name } }
         ).catch(() => {});
       }

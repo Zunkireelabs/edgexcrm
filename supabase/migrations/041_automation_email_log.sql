@@ -1,4 +1,4 @@
-create table automation_email_log (
+create table if not exists automation_email_log (
   id uuid primary key default gen_random_uuid(),
   tenant_id uuid not null references tenants(id) on delete cascade,
   lead_id uuid references leads(id) on delete set null,

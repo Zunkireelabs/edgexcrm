@@ -4,6 +4,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import type { FormStep } from "@/types/database";
 import type { AutoresponderConfig, BuilderAction } from "../types";
 
@@ -40,7 +41,11 @@ export function AutoresponderEditor({
   const allTokens = [...STANDARD_TOKENS, ...formFieldTokens];
 
   function copyToken(token: string) {
-    navigator.clipboard.writeText(`{{${token}}}`).catch(() => {});
+    if (!navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(`{{${token}}}`)
+      .then(() => toast.success(`Copied {{${token}}}`))
+      .catch(() => {});
   }
 
   return (

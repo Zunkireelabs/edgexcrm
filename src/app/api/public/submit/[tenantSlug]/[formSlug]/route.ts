@@ -358,7 +358,7 @@ export async function POST(
 
     void processFormAutoresponder(
       formConfig as FormConfig,
-      canonical as Lead,
+      { ...canonical, ...patch } as Lead,
       { isResubmission: true, tenant: { name: tenant.name } }
     ).catch(() => {});
 
