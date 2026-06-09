@@ -128,17 +128,17 @@ export function AutoresponderEditor({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="ar-body">Body (HTML)</Label>
+                <Label htmlFor="ar-body">Body</Label>
                 <textarea
                   id="ar-body"
                   value={autoresponder.body_html}
                   onChange={(e) => update({ body_html: e.target.value })}
-                  placeholder={"<p>Hi {{first_name}},</p>\n<p>We received your enquiry and will be in touch shortly.</p>"}
+                  placeholder={"Hi {{first_name}},\n\nWe received your enquiry and will be in touch shortly."}
                   rows={8}
                   className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Plain HTML. Field values are HTML-escaped automatically.
+                  Line breaks are preserved automatically. Field values are inserted safely (HTML-escaped).
                 </p>
               </div>
 
