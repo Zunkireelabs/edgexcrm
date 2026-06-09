@@ -4,7 +4,6 @@ import React from "react";
 import Link from "next/link";
 import { Eye } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
-import { Checkbox } from "@/components/ui/checkbox";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import type { Lead, PipelineStage } from "@/types/database";
 
