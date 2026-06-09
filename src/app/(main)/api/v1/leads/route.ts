@@ -12,7 +12,9 @@ import {
   apiRateLimited,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isUUID } from "@/lib/api/validation";
+import { validate, required, isUUID, optionalMaxLength, isIn, isEmail } from "@/lib/api/validation";
+import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-industries";
+import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
@@ -172,6 +174,16 @@ async function handlePost(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  // Validate optional IT-agency fields
+  const { valid: validExtra, errors: extraErrors } = validate(body, {
+    company_name: [optionalMaxLength(255)],
+    designation: [optionalMaxLength(255)],
+    prospect_industry: [isIn([...PROSPECT_INDUSTRY_VALUES])],
+    salutation: [isIn([...SALUTATION_VALUES])],
+    company_email: [optionalMaxLength(255), isEmail()],
+  });
+  if (!validExtra) return apiValidationError(extraErrors);
+
   const tenantId = body.tenant_id as string;
 
   // Rate limit by tenant + IP
@@ -196,6 +208,34 @@ async function handlePost(request: NextRequest) {
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // Validate assigned_to: must belong to this tenant if provided
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.assigned_to !== "") {
+    const { data: assigneeCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.assigned_to as string)
+      .single();
+
+    if (!assigneeCheck) {
+      return apiValidationError({ assigned_to: ["Assignee is not a member of this tenant"] });
+    }
+  }
+
+  // Validate owner_id: must belong to this tenant if provided
+  if (body.owner_id !== undefined && body.owner_id !== null && body.owner_id !== "") {
+    const { data: ownerCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.owner_id as string)
+      .single();
+
+    if (!ownerCheck) {
+      return apiValidationError({ owner_id: ["Owner is not a member of this tenant"] });
+    }
+  }
 
   // Generate display_id for education_consultancy tenants
   let displayId: string | null = null;
@@ -329,6 +369,13 @@ async function handlePost(request: NextRequest) {
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
+    assigned_to: body.assigned_to || null,
+    company_name: body.company_name || null,
+    designation: body.designation || null,
+    prospect_industry: body.prospect_industry || null,
+    owner_id: body.owner_id || null,
+    salutation: body.salutation || null,
+    company_email: body.company_email || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };

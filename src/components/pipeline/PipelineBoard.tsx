@@ -34,7 +34,9 @@ import {
   Download,
   Calendar,
   Plus,
+  Briefcase,
 } from "lucide-react";
+import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -152,6 +154,7 @@ export function PipelineBoard({
   const [counselorFilter, setCounselorFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
+  const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("updated");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
@@ -292,6 +295,9 @@ export function PipelineBoard({
           (counselorFilter === "unassigned" ? !l.assigned_to : l.assigned_to === counselorFilter);
         const matchesSource = sourceFilter === "all" || l.intake_source === sourceFilter;
 
+        const matchesIndustry = industryFilter === "all" ||
+          (industryFilter === "__none__" ? !l.prospect_industry : l.prospect_industry === industryFilter);
+
         // Created date filter
         let matchesCreated = true;
         if (createdFilter !== "all") {
@@ -310,27 +316,29 @@ export function PipelineBoard({
           }
         }
 
-        return matchesSearch && matchesCounselor && matchesSource && matchesCreated;
+        return matchesSearch && matchesCounselor && matchesSource && matchesIndustry && matchesCreated;
       });
 
       // Apply sorting
       filtered[stageId] = sortLeads(filteredLeads, sortField, sortDirection);
     });
     return filtered;
-  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, sortField, sortDirection]);
+  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, industryFilter, sortField, sortDirection]);
 
   const clearFilters = () => {
     setSearchQuery("");
     setCounselorFilter("all");
     setSourceFilter("all");
     setCreatedFilter("all");
+    setIndustryFilter("all");
   };
 
   const activeFiltersCount = [
     searchQuery !== "",
     counselorFilter !== "all",
     sourceFilter !== "all",
-    createdFilter !== "all"
+    createdFilter !== "all",
+    industryFilter !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -681,6 +689,25 @@ export function PipelineBoard({
                   label: s,
                   description: `Leads from ${s}`,
                 })),
+              ]}
+            />
+          )}
+
+          {/* Industry Filter — it_agency only */}
+          {industryId === "it_agency" && (
+            <FilterDropdown
+              label="All Industries"
+              value={industryFilter}
+              onChange={setIndustryFilter}
+              icon={<Briefcase className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Industries", description: "Show all leads" },
+                ...PROSPECT_INDUSTRIES.map((ind) => ({
+                  value: ind.value,
+                  label: ind.label,
+                  description: `${ind.label} leads`,
+                })),
+                { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
               ]}
             />
           )}

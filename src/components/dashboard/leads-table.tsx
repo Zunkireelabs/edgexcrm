@@ -43,7 +43,9 @@ import {
   UserPlus,
   Tag,
   GitMerge,
+  Briefcase,
 } from "lucide-react";
+import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
@@ -177,6 +179,7 @@ export function LeadsTable({
   const [sourceFilter, setSourceFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
+  const [prospectIndustryFilter, setProspectIndustryFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("activity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -198,6 +201,7 @@ export function LeadsTable({
 
   const isAdmin = role === "admin" || role === "owner";
   const canCreateLead = role !== "viewer";
+  const showItAgencyFields = industryId === "it_agency";
 
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
@@ -237,6 +241,12 @@ export function LeadsTable({
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
 
+      const matchesProspectIndustry =
+        prospectIndustryFilter === "all" ||
+        (prospectIndustryFilter === "__none__"
+          ? !lead.prospect_industry
+          : lead.prospect_industry === prospectIndustryFilter);
+
       // Created date filter
       let matchesCreated = true;
       if (createdFilter !== "all") {
@@ -265,7 +275,7 @@ export function LeadsTable({
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesTag && matchesCreated;
+      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesTag && matchesCreated && matchesProspectIndustry;
     });
 
     // Apply sorting
@@ -300,7 +310,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -310,6 +320,7 @@ export function LeadsTable({
     setSourceFilter("all");
     setTagFilter("all");
     setCreatedFilter("all");
+    setProspectIndustryFilter("all");
     setCurrentPage(1);
   };
 
@@ -320,7 +331,8 @@ export function LeadsTable({
     counselorFilter !== "all",
     sourceFilter !== "all",
     tagFilter !== "all",
-    createdFilter !== "all"
+    createdFilter !== "all",
+    prospectIndustryFilter !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -647,6 +659,28 @@ export function LeadsTable({
                 { value: "all", label: "All Tags", description: "Show all leads" },
                 { value: "student", label: "Student", description: "Student leads only" },
                 { value: "parent", label: "Parent", description: "Parent leads only" },
+              ]}
+            />
+          )}
+
+          {/* Prospect Industry Filter — it_agency only */}
+          {showItAgencyFields && (
+            <FilterDropdown
+              label="All Industries"
+              value={prospectIndustryFilter}
+              onChange={(val) => {
+                setProspectIndustryFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Briefcase className="h-3 w-3" />}
+              options={[
+                { value: "all", label: "All Industries", description: "Show all leads" },
+                ...PROSPECT_INDUSTRIES.map((ind) => ({
+                  value: ind.value,
+                  label: ind.label,
+                  description: `${ind.label} leads`,
+                })),
+                { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
               ]}
             />
           )}

@@ -145,6 +145,13 @@ export interface Lead {
   // Dedup fields (Phase A1+)
   normalized_email: string | null;
   merged_into: string | null;
+  // IT Agency fields
+  company_name: string | null;
+  designation: string | null;
+  prospect_industry: string | null;
+  owner_id: string | null;
+  salutation: string | null;
+  company_email: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;
