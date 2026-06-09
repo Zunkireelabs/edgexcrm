@@ -30,7 +30,13 @@ A native v0 automation already exists and **is set up**, but is unconfigured + w
 
 - **Engine = native.** Reject n8n as the automation platform — it can't be owned by Orca and lives outside the repo. Build a native engine on the existing event substrate.
 - **n8n = optional outbound connector**, not the engine. Native automations get a `webhook` action; via the existing webhook dispatcher, an automation can fire an n8n flow for channels we don't build natively (WhatsApp, Slack, SMS, external sync). Demoted from brain to one delivery arm.
-- **Sender identity = Gmail connected inbox (primary, threaded) + Resend (fallback).** Promote the email/inbox-connect feature from **education-only → universal**. Tenants connect a sending inbox; automation emails thread into the lead + come from the real address. Resend (key + sending domain) for tenants with no inbox.
+- **Sender identity — SUPERSEDED 2026-06-08 night → two lanes by *purpose*, not one inbox-primary path.** (Original decision was "Gmail connected inbox primary + Resend fallback"; reversed after realizing a Gmail-routed automation sends *literally as* the connected person's address, e.g. `shrestha.sadin007@gmail.com` — can't appear as `no-reply@`, clutters their Sent, hits Gmail send limits, breaks if they disconnect.) The model:
+  - **System / automation lane → Resend** (verified domain, `no-reply@…` + tenant `from_name`). For transactional/automated mail: "form received," "here's your catalogue," welcome, stage-entered notifications. Recipients expect a no-reply; brand-consistent; ESP-grade deliverability; no per-inbox dependency or rate limit.
+  - **Human / conversational lane → Gmail OAuth** (threaded into `email_threads`/`emails`, real sender). For a counselor/rep emailing a lead 1:1 — already built (`api/v1/email/send`).
+  - **Don't cross the lanes.** This *removes* risk (no fragile per-tenant inbox dependency for automations, no Sent-folder noise, no Gmail volume limits). For CRM visibility, an automation send is **mirrored into the lead's email timeline as a system/outbound record** without sending via Gmail.
+  - **Orca-ready:** the Phase 2 `send_email` action carries a `channel` field — AI-triggered *system* notice → Resend lane; AI-drafted *personal* outreach → Gmail lane. Two lanes now maps straight onto the action registry later; no lock-in.
+  - **Residual (later, not now):** true white-label = each tenant sends automations from *their* domain (`no-reply@primeceramics.com.np`) → per-tenant Resend domain verification. For now: shared verified domain + tenant `from_name`.
+  - **Promoting email/inbox-connect education-only → universal** is therefore **decoupled from automations** — it's about giving non-education tenants the *conversational* email feature, NOT a prerequisite for the automation pilot (Prime's catalogue automation already works on Resend).
 - **Supersede `email_forward_rules`** with the new model; migrate the 2 existing rules; retire the Resend-only processor.
 
 ---
@@ -71,7 +77,11 @@ Because **automations are data** and **actions are typed tools**, Orca plugs in 
 
 ## 5. Phasing
 
-- **Phase 1 — make it work, natively & robustly (MVP).** Stage→email via the **connected inbox (threaded)** + Resend fallback; a **delivery/status log** (kill silent fire-and-forget); promote inbox-connect to universal (so non-education tenants can send); set `RESEND_API_KEY` on prod for fallback. Keep the existing rules UI for now. **Outcome:** Prime/Admizz get real, threaded automation emails, with visibility.
+- **Phase 1 — make it work, natively & robustly (MVP).**
+  - **1.1 ✅ done (2026-06-08):** `RESEND_API_KEY` live on prod+dev; `EMAIL_FROM` rebranded to EdgeX.
+  - **1.1b ✅ done (2026-06-08 night):** email-forward rules fire on lead **creation** (not just stage-change) — form submit auto-triggers the rule. Shipped to prod (`main` @ `4773655`).
+  - **1.2 — PARKED in backlog (2026-06-08 night; NOT a blocker — Prime's catalogue automation already works on Resend).** Scope, *reduced* by the two-lane decision in §2 (automations = Resend; NO Gmail-routed automation; NO interactive-route refactor): **(a)** `automation_email_log` table (migration 039, tenant_id FK + RLS) — one row per send attempt incl. failures/skips, kills the silent fire-and-forget; **(b)** mirror each automation send into the lead's email timeline as a **system/outbound** record (CRM visibility) without sending via Gmail; **(c)** Resend stays the automation sender (`no-reply@` + `from_name`). Backend-only, no UI. Log = **visibility-only** (no re-fire guard — that would break catalogue re-download; real run-dedup → Phase 2).
+  - **1.3 — reframed & decoupled:** promote email/inbox-connect education-only → universal = give non-education tenants the **conversational** email feature (humans emailing leads 1:1). No longer tied to automations.
 - **Phase 2 — the engine.** `automations` + `scheduled_actions` + `automation_runs` tables; the event-queue worker (wire events→consumer); the **scheduler** (waits/sequences); more triggers (lead.created, etc.) + actions (task/notify/move_stage/webhook); a builder UI superseding `email-rules-manager`. Migrate the 2 v0 rules.
 - **Phase 3 — Orca-ready.** Formalize the action **tool registry** + an AI-draft-email action; Orca reads/authors automations + invokes actions; the `webhook` action covers n8n channels.
 

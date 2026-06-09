@@ -52,6 +52,12 @@ Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance 
   - **Open decisions** (in the blueprint): confirm embedding vendor (OpenAI vs Voyage), OCR approach (vision-reuse vs Mistral vs defer), DPA/student-PII sign-off owner.
   - **Status**: blueprint approved; Phase 1 brief is the next Opus deliverable when Sadin picks it up.
 
+- **Email Automation — Phase 1.2** (universal; spec'd 2026-06-08 night, **PARKED — not a blocker**)
+  - **Spine**: `docs/EMAIL-AUTOMATION-ARCHITECTURE-BRIEF.md` (§2 sender decision + §5 Phase 1.2). Phase 1.1 + 1.1b already shipped to prod (RESEND key live; rules fire on lead creation).
+  - **Key decision (don't re-litigate)**: **two lanes by purpose** — automations/notifications → **Resend** (`no-reply@` + tenant `from_name`); human 1:1 conversation → **Gmail OAuth** (threaded). Automations are NOT routed through Gmail (a Gmail send goes out *as the connected person's address*, can't be `no-reply@`, clutters their Sent, hits send limits). Maps onto the Phase 2 `send_email` action `channel` field for Orca.
+  - **Scope (backend-only, reduced)**: (a) `automation_email_log` table (migration 039, tenant_id FK + RLS) — one row per send attempt incl. failures/skips, kills silent fire-and-forget; (b) mirror each automation send into the lead's email timeline as a system/outbound record (CRM visibility, no Gmail); (c) Resend stays the sender. Log = visibility-only (no re-fire guard — would break catalogue re-download).
+  - **Status**: spec + decision locked; Sonnet brief NOT yet written (deferred — working it_agency first). Pick up by writing the handoff brief from the brief's §5 Phase 1.2 bullet.
+
 - **Project Workspace** (`project-board` feature ID, industry-scoped to `it_agency`)
   - **Brief**: `docs/PROJECT-WORKSPACE-BRIEF.md` (renamed from PROJECT-BOARD-BRIEF — Notion-style unified workspace with 4 views: Board / Table / Tasks / Members; lifted filters; URL-encoded state; ~550 lines)
   - **Scope**: unified `/projects` workspace with view toggle + lifted filters. Migration 024 adds `tasks.assignee_id + due_date + priority + tags` and `projects.owner_id + accounts.owner_id`. Board view (drag-drop, card metrics), Table view (sortable rows, inline edits), Tasks view (cross-project, log-time-from-row), Members view (group by owner/assignee).

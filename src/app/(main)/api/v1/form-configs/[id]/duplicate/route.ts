@@ -54,6 +54,9 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       steps: source.steps,
       branding: source.branding,
       redirect_url: source.redirect_url,
+      attribution: source.attribution,
+      target_pipeline_id: source.target_pipeline_id,
+      autoresponder: source.autoresponder,
     })
     .select()
     .single();

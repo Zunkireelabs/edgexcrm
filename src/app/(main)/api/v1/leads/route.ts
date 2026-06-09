@@ -12,7 +12,9 @@ import {
   apiRateLimited,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isUUID } from "@/lib/api/validation";
+import { validate, required, isUUID, optionalMaxLength, isIn, isEmail } from "@/lib/api/validation";
+import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-industries";
+import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
@@ -21,7 +23,7 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import type { Lead, FormStep } from "@/types/database";
+import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import {
   normalizeEmail,
@@ -36,6 +38,7 @@ import {
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -172,6 +175,16 @@ async function handlePost(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  // Validate optional IT-agency fields
+  const { valid: validExtra, errors: extraErrors } = validate(body, {
+    company_name: [optionalMaxLength(255)],
+    designation: [optionalMaxLength(255)],
+    prospect_industry: [isIn([...PROSPECT_INDUSTRY_VALUES])],
+    salutation: [isIn([...SALUTATION_VALUES])],
+    company_email: [optionalMaxLength(255), isEmail()],
+  });
+  if (!validExtra) return apiValidationError(extraErrors);
+
   const tenantId = body.tenant_id as string;
 
   // Rate limit by tenant + IP
@@ -191,11 +204,39 @@ async function handlePost(request: NextRequest) {
   // Verify tenant exists
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, slug, industry_id")
+    .select("id, slug, industry_id, name")
     .eq("id", tenantId)
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // Validate assigned_to: must belong to this tenant if provided
+  if (body.assigned_to !== undefined && body.assigned_to !== null && body.assigned_to !== "") {
+    const { data: assigneeCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.assigned_to as string)
+      .single();
+
+    if (!assigneeCheck) {
+      return apiValidationError({ assigned_to: ["Assignee is not a member of this tenant"] });
+    }
+  }
+
+  // Validate owner_id: must belong to this tenant if provided
+  if (body.owner_id !== undefined && body.owner_id !== null && body.owner_id !== "") {
+    const { data: ownerCheck } = await supabase
+      .from("tenant_users")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("user_id", body.owner_id as string)
+      .single();
+
+    if (!ownerCheck) {
+      return apiValidationError({ owner_id: ["Owner is not a member of this tenant"] });
+    }
+  }
 
   // Generate display_id for education_consultancy tenants
   let displayId: string | null = null;
@@ -238,12 +279,18 @@ async function handlePost(request: NextRequest) {
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
   // Fetch form config for routing + schema validation (phone-parsing IIFE fetches steps separately)
-  let formConfig: { id: string; target_pipeline_id?: string | null; steps?: FormStep[] | null } | null = null;
+  let formConfig: {
+    id: string;
+    target_pipeline_id?: string | null;
+    steps?: FormStep[] | null;
+    autoresponder?: FormConfig["autoresponder"];
+  } | null = null;
   if (body.form_config_id) {
     const { data: fc } = await supabase
       .from("form_configs")
-      .select("id, target_pipeline_id, steps")
+      .select("id, target_pipeline_id, steps, autoresponder")
       .eq("id", body.form_config_id as string)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     formConfig = fc ?? null;
   }
@@ -303,6 +350,7 @@ async function handlePost(request: NextRequest) {
             .from("form_configs")
             .select("steps")
             .eq("id", body.form_config_id)
+            .eq("tenant_id", tenantId)
             .single();
           if (fc?.steps) {
             for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
@@ -329,6 +377,13 @@ async function handlePost(request: NextRequest) {
     intake_campaign: body.intake_campaign || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
+    assigned_to: body.assigned_to || null,
+    company_name: body.company_name || null,
+    designation: body.designation || null,
+    prospect_industry: body.prospect_industry || null,
+    owner_id: body.owner_id || null,
+    salutation: body.salutation || null,
+    company_email: body.company_email || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
@@ -537,6 +592,14 @@ async function handlePost(request: NextRequest) {
         lead: updated as Lead,
         newStageId: resolved.stageId,
       }).catch((err) => log.error({ err }, "Email rule on finalize failed"));
+
+      if (formConfig) {
+        void processFormAutoresponder(
+          formConfig as FormConfig,
+          updated as Lead,
+          { isResubmission: false, tenant: { name: tenant.name } }
+        ).catch(() => {});
+      }
     }
 
     return apiSuccess(updated, 200);
@@ -644,6 +707,16 @@ async function handlePost(request: NextRequest) {
           log.error({ err }, "Failed to send resubmission notification");
         }
       })();
+
+      // Re-fire the form autoresponder on resubmission (e.g. catalogue re-download).
+      // fire_mode:"every" → sends again; fire_mode:"first" → skipped via isResubmission.
+      if (formConfig) {
+        void processFormAutoresponder(
+          formConfig as FormConfig,
+          { ...canonical, ...patch } as Lead,
+          { isResubmission: true, tenant: { name: tenant.name } }
+        ).catch(() => {});
+      }
 
       log.info({ canonicalId: canonical.id }, "Incoming lead deduped into existing canonical");
       return apiSuccess(canonical, 200);
@@ -850,6 +923,14 @@ async function handlePost(request: NextRequest) {
       lead: lead as Lead,
       newStageId: resolved.stageId,
     }).catch((err) => log.error({ err }, "Email rule on create failed"));
+
+    if (formConfig) {
+      void processFormAutoresponder(
+        formConfig as FormConfig,
+        lead as Lead,
+        { isResubmission: false, tenant: { name: tenant.name } }
+      ).catch(() => {});
+    }
   }
 
   return apiSuccess(lead, 201);

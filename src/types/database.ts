@@ -145,6 +145,13 @@ export interface Lead {
   // Dedup fields (Phase A1+)
   normalized_email: string | null;
   merged_into: string | null;
+  // IT Agency fields
+  company_name: string | null;
+  designation: string | null;
+  prospect_industry: string | null;
+  owner_id: string | null;
+  salutation: string | null;
+  company_email: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;
@@ -241,6 +248,12 @@ export interface FormConfig {
   redirect_url: string | null;
   attribution: FormAttribution | null;
   target_pipeline_id: string | null;
+  autoresponder?: {
+    enabled: boolean;
+    fire_mode: "every" | "first";
+    subject: string;
+    body_html: string;
+  };
   created_at: string;
   updated_at: string;
 }
