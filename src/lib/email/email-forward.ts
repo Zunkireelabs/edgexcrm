@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient, EMAIL_FROM } from "./index";
-import { interpolateTemplate } from "./smtp-sender";
+import { renderTemplate } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
 
@@ -68,16 +68,6 @@ export async function processEmailForwardRules({
       .eq("id", tenantId)
       .single();
 
-    const templateVars: Record<string, string> = {
-      first_name: lead.first_name || "",
-      last_name: lead.last_name || "",
-      email: lead.email || "",
-      phone: lead.phone || "",
-      tenant_name: tenant?.name || "",
-      pipeline_name: "",
-      stage_name: "",
-    };
-
     log.info(
       { leadId: lead.id, stageId: newStageId, ruleCount: rules.length },
       "Processing email forward rules"
@@ -87,14 +77,14 @@ export async function processEmailForwardRules({
       const pipelineName = (rule.pipelines as { name: string })?.name || "";
       const stageName = (rule.pipeline_stages as { name: string })?.name || "";
 
-      const vars = {
-        ...templateVars,
-        pipeline_name: pipelineName,
-        stage_name: stageName,
+      const renderCtx = {
+        lead,
+        tenant: { name: tenant?.name ?? "" },
+        extra: { pipeline_name: pipelineName, stage_name: stageName },
       };
 
-      const subject = interpolateTemplate(rule.subject, vars);
-      const body = interpolateTemplate(rule.body, vars);
+      const subject = renderTemplate(rule.subject, renderCtx);
+      const body = renderTemplate(rule.body, renderCtx);
 
       // Use custom from name if set, otherwise system default
       const fromAddress = rule.from_name

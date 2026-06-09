@@ -10,6 +10,13 @@ export interface TemplateDefinition {
   branding: Partial<FormBranding>;
 }
 
+export interface AutoresponderConfig {
+  enabled: boolean;
+  fire_mode: "every" | "first";
+  subject: string;
+  body_html: string;
+}
+
 export interface BuilderState {
   id: string;
   name: string;
@@ -19,6 +26,7 @@ export interface BuilderState {
   branding: FormBranding;
   redirectUrl: string | null;
   attribution: FormAttribution;
+  autoresponder: AutoresponderConfig;
   targetPipelineId: string | null;
   isDirty: boolean;
   saving: boolean;
@@ -41,6 +49,7 @@ export type BuilderAction =
   | { type: "MOVE_FIELD_DOWN"; payload: { stepIndex: number; fieldIndex: number } }
   | { type: "SET_BRANDING"; payload: Partial<FormBranding> }
   | { type: "SET_ATTRIBUTION"; payload: Partial<FormAttribution> }
+  | { type: "SET_AUTORESPONDER"; payload: Partial<AutoresponderConfig> }
   | { type: "SET_TARGET_PIPELINE_ID"; payload: string | null }
   | { type: "SET_SAVING"; payload: boolean }
   | { type: "MARK_SAVED" };

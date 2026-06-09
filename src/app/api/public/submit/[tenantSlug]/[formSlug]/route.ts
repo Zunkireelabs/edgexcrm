@@ -4,7 +4,7 @@ import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import { requirePermission } from "@/lib/api/integration-permissions";
-import type { FormStep, Lead } from "@/types/database";
+import type { FormStep, FormConfig, Lead } from "@/types/database";
 import {
   apiSuccess,
   apiError,
@@ -34,6 +34,7 @@ import {
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -163,7 +164,7 @@ export async function POST(
   // ── 6. Lookup form config ──
   const { data: formConfig } = await supabase
     .from("form_configs")
-    .select("id, tenant_id, slug, name, steps, attribution, target_pipeline_id")
+    .select("id, tenant_id, slug, name, steps, attribution, target_pipeline_id, autoresponder")
     .eq("tenant_id", tenant.id)
     .eq("slug", formSlug)
     .eq("is_active", true)
@@ -354,6 +355,12 @@ export async function POST(
       lead: canonical as Lead,
       newStageId: resolved.stageId,
     }).catch((err) => log.error({ err }, "Email rule on resubmit failed"));
+
+    void processFormAutoresponder(
+      formConfig as FormConfig,
+      canonical as Lead,
+      { isResubmission: true, tenant: { name: tenant.name } }
+    ).catch(() => {});
 
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
@@ -604,6 +611,12 @@ export async function POST(
     } as Lead,
     newStageId: resolved.stageId,
   }).catch((err) => log.error({ err }, "Email rule on create failed"));
+
+  void processFormAutoresponder(
+    formConfig as FormConfig,
+    { ...leadPayload, id: leadId } as Lead,
+    { isResubmission: false, tenant: { name: tenant.name } }
+  ).catch(() => {});
 
   return cors(apiSuccess({ lead_id: leadId }, 201));
 }
