@@ -58,13 +58,7 @@ Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance 
   - **Scope (backend-only, reduced)**: (a) `automation_email_log` table (migration 039, tenant_id FK + RLS) — one row per send attempt incl. failures/skips, kills silent fire-and-forget; (b) mirror each automation send into the lead's email timeline as a system/outbound record (CRM visibility, no Gmail); (c) Resend stays the sender. Log = visibility-only (no re-fire guard — would break catalogue re-download).
   - **Status**: spec + decision locked; Sonnet brief NOT yet written (deferred — working it_agency first). Pick up by writing the handoff brief from the brief's §5 Phase 1.2 bullet.
 
-- **Project Workspace** (`project-board` feature ID, industry-scoped to `it_agency`)
-  - **Brief**: `docs/PROJECT-WORKSPACE-BRIEF.md` (renamed from PROJECT-BOARD-BRIEF — Notion-style unified workspace with 4 views: Board / Table / Tasks / Members; lifted filters; URL-encoded state; ~550 lines)
-  - **Scope**: unified `/projects` workspace with view toggle + lifted filters. Migration 024 adds `tasks.assignee_id + due_date + priority + tags` and `projects.owner_id + accounts.owner_id`. Board view (drag-drop, card metrics), Table view (sortable rows, inline edits), Tasks view (cross-project, log-time-from-row), Members view (group by owner/assignee).
-  - **Phasing**: 5 commits (shell + Board + Table → drag-drop + card metrics → Tasks view + log-time → Members view → polish + URL + a11y)
-  - **Parked work**: `feature/project-board-phase-1` (eeeb7e6) by Sonnet — kanban only. ~70% reusable as `board-view.tsx` in Phase 1; ~30% (board-filters, page shell) reshapes into the workspace shell. Branch held until Phase 1 of this brief lands.
-  - **Workflow**: Opus planned + reviews; **Sonnet executes** (separate session). Opus gates each phase before push to stage.
-  - **Status**: design approved. Awaiting Sonnet session pickup for Phase 1.
+_(Project Workspace moved to Recently shipped — it_agency `/projects` workspace, all 5 phases, is live on prod. See FEATURE-CATALOG `project-board` row.)_
 
 ---
 
@@ -80,6 +74,7 @@ _(empty)_
 
 Cross-reference only. The authoritative current state lives in `docs/FEATURE-CATALOG.md`. Sessions live in `docs/SESSION-LOG.md`.
 
+- **Project Workspace** (`project-board`, industry-scoped `it_agency`) — unified `/projects` workspace, all 5 phases (Board / Table / Tasks / Members + lifted filters + log-time-from-row + a11y). Live on prod; squash-merged from the `feature/project-workspace-phase-*` branches (since deleted). Authoritative detail: FEATURE-CATALOG `project-board` row; brief archived at `docs/archive/features/PROJECT-WORKSPACE-BRIEF.md`.
 - 2026-05-25 — **Student/Parent tags + View Details panel** (education_consultancy, by Anish via `view-details` branch adapted to industry-module pattern). See SESSION-LOG entry for 2026-05-25.
 - 2026-05-24 — **Industry module foundation** + student check-in and form-builder migrated. See SESSION-LOG entry for 2026-05-24.
 
