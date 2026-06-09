@@ -13,7 +13,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { validateFormConfig } from "@/industries/_shared/features/form-builder/lib/validation";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
+import type { FormStep, FormBranding, FormAttribution, FormConfig } from "@/types/database";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -127,6 +127,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
       else if (v === null || v === undefined || v === "") normalized[key] = null;
     }
     updatePayload.attribution = normalized;
+  }
+
+  if (body.autoresponder !== undefined) {
+    const raw = (body.autoresponder ?? {}) as Record<string, unknown>;
+    const normalized: FormConfig["autoresponder"] = {
+      enabled: Boolean(raw.enabled ?? false),
+      fire_mode: raw.fire_mode === "first" ? "first" : "every",
+      // Cap lengths — this JSONB is re-read on every public form submission.
+      subject: typeof raw.subject === "string" ? raw.subject.slice(0, 998) : "",
+      body_html: typeof raw.body_html === "string" ? raw.body_html.slice(0, 100_000) : "",
+    };
+    updatePayload.autoresponder = normalized;
   }
 
   if (body.target_pipeline_id !== undefined) {

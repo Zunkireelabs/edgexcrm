@@ -248,6 +248,12 @@ export interface FormConfig {
   redirect_url: string | null;
   attribution: FormAttribution | null;
   target_pipeline_id: string | null;
+  autoresponder?: {
+    enabled: boolean;
+    fire_mode: "every" | "first";
+    subject: string;
+    body_html: string;
+  };
   created_at: string;
   updated_at: string;
 }

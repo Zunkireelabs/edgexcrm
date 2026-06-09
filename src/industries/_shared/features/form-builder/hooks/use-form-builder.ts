@@ -3,7 +3,7 @@
 import { useReducer, useCallback } from "react";
 import { toast } from "sonner";
 import type { FormStep, FormBranding, FormAttribution } from "@/types/database";
-import type { BuilderState, BuilderAction } from "../types";
+import type { AutoresponderConfig, BuilderState, BuilderAction } from "../types";
 
 function builderReducer(state: BuilderState, action: BuilderAction): BuilderState {
   switch (action.type) {
@@ -116,6 +116,9 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
     case "SET_ATTRIBUTION":
       return { ...state, attribution: { ...state.attribution, ...action.payload }, isDirty: true };
 
+    case "SET_AUTORESPONDER":
+      return { ...state, autoresponder: { ...state.autoresponder, ...action.payload }, isDirty: true };
+
     case "SET_TARGET_PIPELINE_ID":
       return { ...state, targetPipelineId: action.payload, isDirty: true };
 
@@ -130,6 +133,13 @@ function builderReducer(state: BuilderState, action: BuilderAction): BuilderStat
   }
 }
 
+const DEFAULT_AUTORESPONDER: AutoresponderConfig = {
+  enabled: false,
+  fire_mode: "every",
+  subject: "",
+  body_html: "",
+};
+
 function buildInitialState(formConfig: {
   id: string;
   name: string;
@@ -139,6 +149,7 @@ function buildInitialState(formConfig: {
   branding: FormBranding;
   redirect_url: string | null;
   attribution?: FormAttribution | null;
+  autoresponder?: Partial<AutoresponderConfig> | null;
   target_pipeline_id?: string | null;
 }): BuilderState {
   return {
@@ -150,6 +161,10 @@ function buildInitialState(formConfig: {
     branding: formConfig.branding,
     redirectUrl: formConfig.redirect_url,
     attribution: formConfig.attribution ?? {},
+    autoresponder: {
+      ...DEFAULT_AUTORESPONDER,
+      ...formConfig.autoresponder,
+    },
     targetPipelineId: formConfig.target_pipeline_id ?? null,
     isDirty: false,
     saving: false,
@@ -173,6 +188,7 @@ export function useFormBuilder(initialConfig: Parameters<typeof buildInitialStat
           branding: state.branding,
           redirect_url: state.redirectUrl,
           attribution: state.attribution,
+          autoresponder: state.autoresponder,
           target_pipeline_id: state.targetPipelineId,
         }),
       });

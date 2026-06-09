@@ -23,7 +23,7 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import type { Lead, FormStep } from "@/types/database";
+import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import {
   normalizeEmail,
@@ -38,6 +38,7 @@ import {
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -203,7 +204,7 @@ async function handlePost(request: NextRequest) {
   // Verify tenant exists
   const { data: tenant } = await supabase
     .from("tenants")
-    .select("id, slug, industry_id")
+    .select("id, slug, industry_id, name")
     .eq("id", tenantId)
     .single();
 
@@ -278,12 +279,18 @@ async function handlePost(request: NextRequest) {
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
   // Fetch form config for routing + schema validation (phone-parsing IIFE fetches steps separately)
-  let formConfig: { id: string; target_pipeline_id?: string | null; steps?: FormStep[] | null } | null = null;
+  let formConfig: {
+    id: string;
+    target_pipeline_id?: string | null;
+    steps?: FormStep[] | null;
+    autoresponder?: FormConfig["autoresponder"];
+  } | null = null;
   if (body.form_config_id) {
     const { data: fc } = await supabase
       .from("form_configs")
-      .select("id, target_pipeline_id, steps")
+      .select("id, target_pipeline_id, steps, autoresponder")
       .eq("id", body.form_config_id as string)
+      .eq("tenant_id", tenantId)
       .maybeSingle();
     formConfig = fc ?? null;
   }
@@ -343,6 +350,7 @@ async function handlePost(request: NextRequest) {
             .from("form_configs")
             .select("steps")
             .eq("id", body.form_config_id)
+            .eq("tenant_id", tenantId)
             .single();
           if (fc?.steps) {
             for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
@@ -584,6 +592,14 @@ async function handlePost(request: NextRequest) {
         lead: updated as Lead,
         newStageId: resolved.stageId,
       }).catch((err) => log.error({ err }, "Email rule on finalize failed"));
+
+      if (formConfig) {
+        void processFormAutoresponder(
+          formConfig as FormConfig,
+          updated as Lead,
+          { isResubmission: false, tenant: { name: tenant.name } }
+        ).catch(() => {});
+      }
     }
 
     return apiSuccess(updated, 200);
@@ -691,6 +707,16 @@ async function handlePost(request: NextRequest) {
           log.error({ err }, "Failed to send resubmission notification");
         }
       })();
+
+      // Re-fire the form autoresponder on resubmission (e.g. catalogue re-download).
+      // fire_mode:"every" → sends again; fire_mode:"first" → skipped via isResubmission.
+      if (formConfig) {
+        void processFormAutoresponder(
+          formConfig as FormConfig,
+          { ...canonical, ...patch } as Lead,
+          { isResubmission: true, tenant: { name: tenant.name } }
+        ).catch(() => {});
+      }
 
       log.info({ canonicalId: canonical.id }, "Incoming lead deduped into existing canonical");
       return apiSuccess(canonical, 200);
@@ -897,6 +923,14 @@ async function handlePost(request: NextRequest) {
       lead: lead as Lead,
       newStageId: resolved.stageId,
     }).catch((err) => log.error({ err }, "Email rule on create failed"));
+
+    if (formConfig) {
+      void processFormAutoresponder(
+        formConfig as FormConfig,
+        lead as Lead,
+        { isResubmission: false, tenant: { name: tenant.name } }
+      ).catch(() => {});
+    }
   }
 
   return apiSuccess(lead, 201);

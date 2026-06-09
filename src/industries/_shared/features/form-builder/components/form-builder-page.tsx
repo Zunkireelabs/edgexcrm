@@ -12,6 +12,7 @@ import { useFormBuilder } from "../hooks/use-form-builder";
 import { StepEditor } from "./step-editor";
 import { BrandingEditor } from "./branding-editor";
 import { AttributionEditor } from "./attribution-editor";
+import { AutoresponderEditor } from "./autoresponder-editor";
 import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { slugify } from "../lib/validation";
 
@@ -271,6 +272,7 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
               <TabsTrigger value="branding">Branding</TabsTrigger>
               <TabsTrigger value="attribution">Attribution</TabsTrigger>
               <TabsTrigger value="routing">Routing</TabsTrigger>
+              <TabsTrigger value="autoresponder">Confirmation Email</TabsTrigger>
             </TabsList>
 
             <TabsContent value="steps" className="space-y-3">
@@ -303,6 +305,14 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
             <TabsContent value="routing">
               <PipelineRoutingEditor
                 targetPipelineId={state.targetPipelineId}
+                dispatch={dispatch}
+              />
+            </TabsContent>
+
+            <TabsContent value="autoresponder">
+              <AutoresponderEditor
+                autoresponder={state.autoresponder}
+                steps={state.steps}
                 dispatch={dispatch}
               />
             </TabsContent>
