@@ -529,10 +529,10 @@ export function PipelineBoard({
         {/* Toolbar skeleton */}
         <div className="shrink-0 bg-card rounded-lg border p-3">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-60 bg-muted rounded animate-pulse" />
-            <div className="h-9 w-32 bg-muted rounded animate-pulse" />
+            <div className="h-7 w-60 bg-muted rounded animate-pulse" />
+            <div className="h-7 w-32 bg-muted rounded animate-pulse" />
             <div className="flex-1" />
-            <div className="h-9 w-24 bg-muted rounded animate-pulse" />
+            <div className="h-7 w-24 bg-muted rounded animate-pulse" />
           </div>
         </div>
         {/* Columns skeleton */}
@@ -570,13 +570,13 @@ export function PipelineBoard({
 
           {/* Search */}
           <div className="relative w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search leads..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full h-7 pl-7 pr-3 rounded-md border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
 
@@ -585,10 +585,13 @@ export function PipelineBoard({
           {/* Sort */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2">
-                <ArrowUpDown className="h-4 w-4" />
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              >
+                <ArrowUpDown className="h-3 w-3 shrink-0" />
                 Sort
-              </Button>
+              </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-4">
               <div className="space-y-4">
@@ -637,17 +640,25 @@ export function PipelineBoard({
           </Popover>
 
           {/* Export */}
-          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={handleExport}>
-            <Download className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+          >
+            <Download className="h-3 w-3 shrink-0" />
             Export
-          </Button>
+          </button>
 
           {/* Add Lead Button */}
           {canCreateLead && (
-            <Button size="sm" className="h-9 gap-2" onClick={() => setAddLeadOpen(true)}>
-              <Plus className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={() => setAddLeadOpen(true)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+            >
+              <Plus className="h-3 w-3 shrink-0" />
               Add Lead
-            </Button>
+            </button>
           )}
         </div>
 
