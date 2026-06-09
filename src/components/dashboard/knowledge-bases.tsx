@@ -91,12 +91,12 @@ export function KnowledgeBases({ role }: KnowledgeBasesProps) {
         <div className="flex items-center gap-2">
           {/* Search */}
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" />
             <Input
               placeholder="Search..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 w-48"
+              className="pl-7 h-7 w-48 text-xs"
             />
           </div>
           {/* View toggle */}
@@ -117,10 +117,14 @@ export function KnowledgeBases({ role }: KnowledgeBasesProps) {
             </button>
           </div>
           {isAdmin && (
-            <Button size="sm" className="gap-1.5" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4" />
+            <button
+              type="button"
+              onClick={() => setCreateOpen(true)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+            >
+              <Plus className="w-3 h-3 shrink-0" />
               New Knowledge Base
-            </Button>
+            </button>
           )}
         </div>
       </div>
