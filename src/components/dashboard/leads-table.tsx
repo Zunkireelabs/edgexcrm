@@ -609,6 +609,17 @@ export function LeadsTable({
             />
           </div>
 
+          {/* Edit columns — placed right after the search bar */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2"
+            onClick={() => setColumnDialogOpen(true)}
+          >
+            <Columns3 className="h-4 w-4" />
+            Edit columns
+          </Button>
+
           <div className="flex-1" />
 
           {/* Sort */}
@@ -665,17 +676,6 @@ export function LeadsTable({
               </div>
             </PopoverContent>
           </Popover>
-
-          {/* Columns */}
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-9 gap-2"
-            onClick={() => setColumnDialogOpen(true)}
-          >
-            <Columns3 className="h-4 w-4" />
-            Columns
-          </Button>
 
           {/* Export */}
           <Button variant="outline" size="sm" className="h-9 gap-2" onClick={exportCSV}>
