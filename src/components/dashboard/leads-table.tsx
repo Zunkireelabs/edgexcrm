@@ -42,6 +42,7 @@ import {
   Tag,
   GitMerge,
   Briefcase,
+  Columns3,
 } from "lucide-react";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { toast } from "sonner";
@@ -52,8 +53,12 @@ import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/databa
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
   getLeadColumns,
+  getDefaultVisibleKeys,
+  type LeadColumn,
   type LeadColumnCtx,
 } from "@/components/dashboard/leads/columns-registry";
+import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
+import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -386,36 +391,77 @@ export function LeadsTable({
   }
 
   function exportCSV() {
-    const headers = [
-      "Date",
-      "First Name",
-      "Last Name",
-      "Email",
-      "Phone",
-      "City",
-      "Country",
-      "Status",
-      "Assigned To",
-      "Source",
-      "Tag",
-    ];
-    const rows = filtered.map((l) => {
-      const source = l.form_config_id ? formMap[l.form_config_id] || "" : l.intake_source?.replace(/_/g, " ") || "";
-      return [
-        new Date(l.created_at).toLocaleDateString(),
-        l.first_name || "",
-        l.last_name || "",
-        l.email || "",
-        l.phone || "",
-        l.city || "",
-        l.country || "",
-        l.status,
-        l.assigned_to ? memberMap[l.assigned_to] || "" : "",
-        source,
-        (l.tags || []).join(", "),
-      ];
-    });
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const exportCols = visibleColumns.filter((c) => c.key !== "actions");
+    const headers = exportCols.map((c) => c.label);
+    const rows = filtered.map((lead) =>
+      exportCols.map((col): string => {
+        switch (col.key) {
+          case "name":
+            return `${lead.first_name || ""} ${lead.last_name || ""}`.trim();
+          case "email":
+            return lead.email || "";
+          case "phone":
+            return lead.phone || "";
+          case "location":
+            return [lead.city, lead.country].filter(Boolean).join(", ");
+          case "assigned": {
+            const email = lead.assigned_to ? memberMap[lead.assigned_to] : null;
+            return email ? email.split("@")[0] : "";
+          }
+          case "status": {
+            const stage = stages.find((s) => s.id === lead.stage_id);
+            return stage?.name || lead.status;
+          }
+          case "source": {
+            const formName = lead.form_config_id ? formMap[lead.form_config_id] : null;
+            const src = formName || lead.intake_source;
+            return src ? src.replace(/_/g, " ") : "";
+          }
+          case "medium":
+            return lead.intake_medium || "";
+          case "campaign":
+            return lead.intake_campaign || "";
+          case "last_activity":
+            return new Date(lead.last_activity_at).toLocaleDateString();
+          case "created":
+            return new Date(lead.created_at).toLocaleDateString();
+          case "preferred_contact":
+            return lead.preferred_contact_method || "";
+          case "display_id":
+            return lead.display_id || "";
+          case "ai_score":
+            return lead.ai_score != null ? String(lead.ai_score) : "";
+          case "ai_priority":
+            return lead.ai_priority || "";
+          case "tags":
+            return (lead.tags || []).join(", ");
+          case "lead_type":
+            return lead.lead_type || "lead";
+          case "company":
+            return lead.company_name || "";
+          case "designation":
+            return lead.designation || "";
+          case "prospect_industry":
+            return lead.prospect_industry || "";
+          case "salutation":
+            return lead.salutation || "";
+          case "company_email":
+            return lead.company_email || "";
+          case "owner": {
+            const email = lead.owner_id ? memberMap[lead.owner_id] : null;
+            return email ? email.split("@")[0] : "";
+          }
+          default:
+            if (col.key.startsWith("cf:")) {
+              return String(lead.custom_fields?.[col.key.slice(3)] ?? "");
+            }
+            return "";
+        }
+      }),
+    );
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -427,21 +473,77 @@ export function LeadsTable({
 
   const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
 
-  // ── Column registry ──────────────────────────────────────────────────────────
-  // Phase 1: resolve the default visible columns for this industry.
-  // showTags controls tag/type visibility (education_consultancy only).
-  const columns = useMemo(
-    () => getLeadColumns(industryId),
-    [industryId],
+  // ── Column registry (Phase 2) ─────────────────────────────────────────────
+  // Discover custom-field keys across loaded leads.
+  const customFieldKeys = useMemo(() => {
+    const keySet = new Set<string>();
+    localLeads.forEach((lead) => {
+      if (lead.custom_fields) {
+        Object.keys(lead.custom_fields).forEach((k) => keySet.add(k));
+      }
+    });
+    return Array.from(keySet).sort();
+  }, [localLeads]);
+
+  // Full column catalog for this industry + discovered custom fields.
+  const allColumns = useMemo(
+    () => getLeadColumns(industryId, customFieldKeys),
+    [industryId, customFieldKeys],
   );
 
-  // Columns visible by default — matches today's hardcoded set exactly.
-  // Tags and Type are already gated by `industries: ["education_consultancy"]`
-  // in the registry, so they only appear when industryId is correct.
-  const visibleColumns = useMemo(
-    () => columns.filter((c) => c.defaultVisible),
-    [columns],
-  );
+  // Default middle visible keys (anchors name + actions always implicit).
+  const defaultMiddleKeys = useMemo(() => {
+    const defaults = getDefaultVisibleKeys(industryId);
+    return defaults.filter((k) => k !== "name" && k !== "actions");
+  }, [industryId]);
+
+  // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
+  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+
+  // Load saved column prefs after mount to avoid SSR hydration mismatch.
+  // Intentionally narrow deps — reload only when tenant/user identity changes.
+  useEffect(() => {
+    if (!tenantId || !currentUserId) return;
+    const cfKeys = Array.from(
+      new Set(leads.flatMap((l) => (l.custom_fields ? Object.keys(l.custom_fields) : []))),
+    ).sort().map((k) => `cf:${k}`);
+    const staticKeys = getLeadColumns(industryId, [])
+      .filter((c) => !c.required)
+      .map((c) => c.key);
+    const validKeys = [...staticKeys, ...cfKeys];
+    const defKeys = getDefaultVisibleKeys(industryId).filter(
+      (k) => k !== "name" && k !== "actions",
+    );
+    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, currentUserId]);
+
+  // Resolve ordered column objects: name anchor → middle → actions anchor.
+  const visibleColumns = useMemo<LeadColumn[]>(() => {
+    const colMap = new Map(allColumns.map((c) => [c.key, c]));
+    const nameCol = colMap.get("name");
+    const actionsCol = colMap.get("actions");
+    const middleCols = visibleKeys
+      .map((k) => colMap.get(k))
+      .filter((c): c is LeadColumn => c !== undefined);
+    return [
+      ...(nameCol ? [nameCol] : []),
+      ...middleCols,
+      ...(actionsCol ? [actionsCol] : []),
+    ];
+  }, [allColumns, visibleKeys]);
+
+  // Handlers for the column manager dialog.
+  function handleColumnApply(keys: string[]) {
+    setVisibleKeys(keys);
+    saveColumnPrefs(tenantId, currentUserId, keys);
+  }
+
+  function handleColumnReset() {
+    clearColumnPrefs(tenantId, currentUserId);
+    setVisibleKeys(defaultMiddleKeys);
+  }
 
   // Context object passed to registry render functions.
   // Callbacks use stable setters so they don't need to appear in deps.
@@ -563,6 +665,17 @@ export function LeadsTable({
               </div>
             </PopoverContent>
           </Popover>
+
+          {/* Columns */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-2"
+            onClick={() => setColumnDialogOpen(true)}
+          >
+            <Columns3 className="h-4 w-4" />
+            Columns
+          </Button>
 
           {/* Export */}
           <Button variant="outline" size="sm" className="h-9 gap-2" onClick={exportCSV}>
@@ -1052,6 +1165,17 @@ export function LeadsTable({
           industryId={industryId}
         />
       )}
+
+      {/* Column Manager Dialog */}
+      <ColumnManagerDialog
+        open={columnDialogOpen}
+        onOpenChange={setColumnDialogOpen}
+        allColumns={allColumns}
+        currentMiddleKeys={visibleKeys}
+        defaultMiddleKeys={defaultMiddleKeys}
+        onApply={handleColumnApply}
+        onReset={handleColumnReset}
+      />
     </div>
   );
 }
