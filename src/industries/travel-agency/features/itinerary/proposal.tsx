@@ -16,6 +16,7 @@ interface ItineraryProposalProps {
   itinerary: Itinerary;
   lead: Lead;
   tenantName: string;
+  tenantLogoUrl?: string | null;
   onBack: () => void;
 }
 
@@ -23,6 +24,7 @@ export function ItineraryProposal({
   itinerary,
   lead,
   tenantName,
+  tenantLogoUrl,
   onBack,
 }: ItineraryProposalProps) {
   const cf = (lead.custom_fields || {}) as Record<string, string | number | null | undefined>;
@@ -76,11 +78,16 @@ export function ItineraryProposal({
       </div>
 
       {/* Printable proposal */}
-      <div className="bg-white text-gray-900 p-8 max-w-3xl mx-auto border border-border rounded-lg print:border-0 print:p-0 print:shadow-none">
+      <div className="print-proposal bg-white text-gray-900 p-8 max-w-3xl mx-auto border border-border rounded-lg print:border-0 print:p-0 print:shadow-none">
         {/* Branded header */}
         <div className="border-b-2 border-sky-600 pb-4 mb-6">
-          <h1 className="text-2xl font-bold text-sky-700">{tenantName}</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Travel Proposal</p>
+          {tenantLogoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={tenantLogoUrl} alt={tenantName} className="h-14 w-auto object-contain" />
+          ) : (
+            <h1 className="text-2xl font-bold text-sky-700">{tenantName}</h1>
+          )}
+          <p className="text-sm text-gray-500 mt-1">Travel Proposal</p>
         </div>
 
         {/* Trip title */}

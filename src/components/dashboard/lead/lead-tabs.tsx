@@ -35,6 +35,7 @@ interface LeadTabsProps {
   currentUserId: string;
   industryId?: string | null;
   tenantName?: string;
+  tenantLogoUrl?: string | null;
   onSaveItinerary?: (itinerary: Itinerary) => Promise<void>;
 }
 
@@ -44,7 +45,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -210,6 +211,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             <ItineraryBuilder
               lead={lead}
               tenantName={tenantName ?? ""}
+              tenantLogoUrl={tenantLogoUrl}
               onSave={onSaveItinerary}
             />
           </TabsContent>

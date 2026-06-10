@@ -329,6 +329,7 @@ export function LeadDetailV2({
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}
+            tenantLogoUrl={tenant.logo_url}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.

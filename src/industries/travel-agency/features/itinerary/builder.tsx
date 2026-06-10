@@ -29,6 +29,7 @@ import type { Lead } from "@/types/database";
 interface ItineraryBuilderProps {
   lead: Lead;
   tenantName: string;
+  tenantLogoUrl?: string | null;
   onSave: (itinerary: Itinerary) => Promise<void>;
 }
 
@@ -57,7 +58,7 @@ function computeNights(lead: Lead): number | null {
   return nights > 0 ? nights : null;
 }
 
-export function ItineraryBuilder({ lead, tenantName, onSave }: ItineraryBuilderProps) {
+export function ItineraryBuilder({ lead, tenantName, tenantLogoUrl, onSave }: ItineraryBuilderProps) {
   const cf = (lead.custom_fields || {}) as Record<string, unknown>;
   const nights = computeNights(lead);
   const stored = parseStoredItinerary(lead);
@@ -150,6 +151,7 @@ export function ItineraryBuilder({ lead, tenantName, onSave }: ItineraryBuilderP
         itinerary={itinerary}
         lead={lead}
         tenantName={tenantName}
+        tenantLogoUrl={tenantLogoUrl}
         onBack={() => setShowProposal(false)}
       />
     );
