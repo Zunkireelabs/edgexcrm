@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
+import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
+import { formatMoney } from "@/lib/travel/currency";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -35,6 +39,7 @@ interface KeyInfoSectionProps {
   industry?: Industry | null;
   industryId?: string | null;
   onLeadTypeChange?: (newType: string) => void;
+  onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
 }
 
 export function KeyInfoSection({
@@ -51,6 +56,7 @@ export function KeyInfoSection({
   industry,
   industryId,
   onLeadTypeChange,
+  onSaveTripFields,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -253,6 +259,15 @@ export function KeyInfoSection({
             </>
           )}
 
+          {/* Trip Inquiry — travel_agency only */}
+          {industryId === "travel_agency" && (
+            <TripInquiryPanel
+              lead={lead}
+              isAdmin={isAdmin}
+              onSave={onSaveTripFields}
+            />
+          )}
+
           {/* Divider */}
           <div className="border-t border-border" />
 
@@ -324,6 +339,291 @@ export function KeyInfoSection({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Trip Inquiry panel (travel_agency only) ────────────────────────────────
+
+interface TripInquiryPanelProps {
+  lead: Lead;
+  isAdmin: boolean;
+  onSave?: (fields: Record<string, unknown>) => Promise<void>;
+}
+
+function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({
+    trip_destination: String(cf.trip_destination ?? ""),
+    trip_departure_city: String(cf.trip_departure_city ?? ""),
+    trip_start_date: String(cf.trip_start_date ?? ""),
+    trip_end_date: String(cf.trip_end_date ?? ""),
+    trip_pax_adults: String(cf.trip_pax_adults ?? ""),
+    trip_pax_children: String(cf.trip_pax_children ?? ""),
+    trip_pax_infants: String(cf.trip_pax_infants ?? ""),
+    trip_budget_amount: String(cf.trip_budget_amount ?? ""),
+    trip_type: String(cf.trip_type ?? ""),
+    trip_flexibility: String(cf.trip_flexibility ?? ""),
+  });
+
+  function computeNights(): number | null {
+    const s = draft.trip_start_date;
+    const e = draft.trip_end_date;
+    if (!s || !e) return null;
+    const diff = new Date(e).getTime() - new Date(s).getTime();
+    const nights = Math.round(diff / 86_400_000);
+    return nights > 0 ? nights : null;
+  }
+
+  async function handleSave() {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      const fields: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(draft)) {
+        if (v !== "") fields[k] = v;
+      }
+      await onSave(fields);
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function set(key: string, value: string) {
+    setDraft((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const nights = computeNights();
+  const budget = draft.trip_budget_amount ? Number(draft.trip_budget_amount) : null;
+
+  return (
+    <>
+      <div className="border-t border-border" />
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+          Trip Inquiry
+        </p>
+        {isAdmin && !editing && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="text-[10px] text-primary hover:underline"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <LabeledInput
+            label="Destination"
+            value={draft.trip_destination}
+            placeholder="e.g. Bali, Indonesia"
+            onChange={(v) => set("trip_destination", v)}
+          />
+          <LabeledInput
+            label="Departure city"
+            value={draft.trip_departure_city}
+            placeholder="e.g. Kathmandu"
+            onChange={(v) => set("trip_departure_city", v)}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Start date</p>
+              <Input
+                type="date"
+                className="h-7 text-xs"
+                value={draft.trip_start_date}
+                onChange={(e) => set("trip_start_date", e.target.value)}
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">
+                End date{nights !== null ? ` (${nights}N)` : ""}
+              </p>
+              <Input
+                type="date"
+                className="h-7 text-xs"
+                value={draft.trip_end_date}
+                onChange={(e) => set("trip_end_date", e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Adults</p>
+              <Input
+                type="number"
+                min="0"
+                className="h-7 text-xs"
+                value={draft.trip_pax_adults}
+                onChange={(e) => set("trip_pax_adults", e.target.value)}
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Children</p>
+              <Input
+                type="number"
+                min="0"
+                className="h-7 text-xs"
+                value={draft.trip_pax_children}
+                onChange={(e) => set("trip_pax_children", e.target.value)}
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Infants</p>
+              <Input
+                type="number"
+                min="0"
+                className="h-7 text-xs"
+                value={draft.trip_pax_infants}
+                onChange={(e) => set("trip_pax_infants", e.target.value)}
+              />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Budget (NPR)</p>
+            <Input
+              type="number"
+              min="0"
+              className="h-7 text-xs"
+              value={draft.trip_budget_amount}
+              placeholder="e.g. 150000"
+              onChange={(e) => set("trip_budget_amount", e.target.value)}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Trip type</p>
+            <Select
+              value={draft.trip_type || "__none__"}
+              onValueChange={(v) => set("trip_type", v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground">Select type</span>
+                </SelectItem>
+                {TRIP_TYPES.map((t) => (
+                  <SelectItem key={t.value} value={t.value}>
+                    {t.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Date flexibility</p>
+            <Select
+              value={draft.trip_flexibility || "__none__"}
+              onValueChange={(v) => set("trip_flexibility", v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Select" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground">Select</span>
+                </SelectItem>
+                <SelectItem value="exact">Exact dates</SelectItem>
+                <SelectItem value="flexible">Flexible</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {cf.trip_destination ? (
+            <InfoRow label="Destination" value={String(cf.trip_destination)} />
+          ) : null}
+          {cf.trip_departure_city ? (
+            <InfoRow label="Departure city" value={String(cf.trip_departure_city)} />
+          ) : null}
+          {(cf.trip_start_date || cf.trip_end_date) ? (
+            <InfoRow
+              label={nights !== null ? `Dates (${computeNightsFromStored(cf)}N)` : "Dates"}
+              value={[cf.trip_start_date, cf.trip_end_date].filter(Boolean).join(" → ")}
+            />
+          ) : null}
+          {(cf.trip_pax_adults || cf.trip_pax_children || cf.trip_pax_infants) ? (
+            <InfoRow
+              label="Pax"
+              value={[
+                cf.trip_pax_adults ? `${cf.trip_pax_adults} adult${Number(cf.trip_pax_adults) !== 1 ? "s" : ""}` : null,
+                cf.trip_pax_children ? `${cf.trip_pax_children} child${Number(cf.trip_pax_children) !== 1 ? "ren" : ""}` : null,
+                cf.trip_pax_infants ? `${cf.trip_pax_infants} infant${Number(cf.trip_pax_infants) !== 1 ? "s" : ""}` : null,
+              ].filter(Boolean).join(", ")}
+            />
+          ) : null}
+          {cf.trip_budget_amount ? (
+            <InfoRow label="Budget" value={formatMoney(Number(cf.trip_budget_amount))} />
+          ) : null}
+          {cf.trip_type ? (
+            <InfoRow label="Trip type" value={tripTypeLabel(String(cf.trip_type)) ?? String(cf.trip_type)} />
+          ) : null}
+          {cf.trip_flexibility ? (
+            <InfoRow
+              label="Flexibility"
+              value={cf.trip_flexibility === "exact" ? "Exact dates" : "Flexible"}
+            />
+          ) : null}
+          {!cf.trip_destination && !cf.trip_type && !cf.trip_start_date && (
+            <p className="text-xs text-muted-foreground italic">
+              No trip details yet.{isAdmin ? " Click Edit to add." : ""}
+            </p>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function computeNightsFromStored(cf: Record<string, unknown>): number | null {
+  const s = cf.trip_start_date;
+  const e = cf.trip_end_date;
+  if (!s || !e) return null;
+  const diff = new Date(String(e)).getTime() - new Date(String(s)).getTime();
+  const nights = Math.round(diff / 86_400_000);
+  return nights > 0 ? nights : null;
+}
+
+interface LabeledInputProps {
+  label: string;
+  value: string;
+  placeholder?: string;
+  onChange: (v: string) => void;
+}
+
+function LabeledInput({ label, value, placeholder, onChange }: LabeledInputProps) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <Input
+        className="h-7 text-xs"
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+      />
     </div>
   );
 }

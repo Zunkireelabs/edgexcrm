@@ -296,6 +296,16 @@ export function LeadDetailV2({
                 toast.error("Failed to update lead type");
               }
             }}
+            onSaveTripFields={async (fields) => {
+              const merged = { ...(lead.custom_fields || {}), ...fields };
+              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ custom_fields: merged }),
+              });
+              if (!res.ok) throw new Error("Failed to save trip details");
+              toast.success("Trip details saved");
+            }}
           />
         </div>
 
