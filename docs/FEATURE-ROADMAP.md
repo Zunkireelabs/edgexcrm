@@ -7,7 +7,7 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-06-05 (AI-Native Knowledge Layer blueprint written — see Planned)
+Last updated: 2026-06-10 (NEW INDUSTRY `travel_agency` shipped to branch + roadmap captured — see Approved for dev. Prior: 2026-06-05 AI-Native Knowledge Layer blueprint.)
 
 ---
 
@@ -35,6 +35,29 @@ Four first-round candidates for the IT-agency manifest. All are industry-scoped 
   - Template-based proposal builder; IT-agency analog to the education form-builder.
   - Edit templates, fill placeholders, output as shareable link.
   - Bigger / more ambitious — best as a v2 once the other three have set the pattern.
+
+### Travel-agency industry (`travel_agency`)
+
+New industry shipped to branch 2026-06-10 (first tenant **Arya Travels**): itinerary/quote builder, Trip Inquiry panel, Packages catalog, Itineraries list — see FEATURE-CATALOG `itinerary` row. Roadmap below is the world-class travel-agency workflow (crm-expert analysis); intent approved 2026-06-10. Guiding model: **Package = reusable template, Itinerary = customized instance; track the *deal* (sales pipeline) separately from the *trip* (the operated product); margin is the business; LTV is repeat + referral.**
+
+- **Package-of-interest on leads** — *building now (2026-06-10), brief in `docs/TRAVEL-AGENCY-BRIEF.md`.*
+  - Attach each lead to a Package via the existing `lead.entity_id` (no new column). Selector on the Trip Inquiry panel + a Package column on the leads table; back-filled on Arya's seeded leads.
+  - Unlocks the "leads & revenue **by package**" report every travel owner asks for first (LeadSquared leads its travel pitch with it) and package-based routing to specialists.
+
+- **Package templates → auto-fill itinerary** (the headline next feature)
+  - Packages carry a base day-by-day itinerary + price template; picking a package on a lead **pre-fills the itinerary builder** (days + line items), agent then tweaks. Biggest time-saver; the itinerary builder already makes this a small lift.
+
+- **Margin tracking (cost vs sell)**
+  - Itinerary line items gain a **cost price** alongside the sell price → margin per quote + a margin report. The number the agency owner actually watches; what separates a tour operator's tooling from a generic CRM.
+
+- **Booking / operations back office**
+  - Convert a won lead into a **booking** (a distinct "trip" object from the sales lead): deposit/installment tracking, supplier vouchers, payments & receivables, multi-currency. The tour-operator ops layer.
+
+- **Post-trip repeat & referral automation**
+  - Post-travel feedback/review capture + re-engagement nurture for past travellers. Travel revenue compounds on repeat + word-of-mouth — this is the LTV engine, not an afterthought.
+
+- **Channel & capture**
+  - WhatsApp-first messaging (travel's dominant channel) + OTA-portal lead capture (MakeMyTrip / Booking.com style inbound).
 
 ### Other industries
 

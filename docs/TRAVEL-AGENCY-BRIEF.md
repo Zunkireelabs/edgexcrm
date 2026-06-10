@@ -123,3 +123,34 @@ Supplier/vendor booking, live availability/GDS, payments/deposits/installments, 
 - Creating the demo tenant (prospect's real company) + assigning `industry_id = travel_agency`.
 - Creating the tenant's pipeline from the travel stages + seeding realistic sample travel leads (with populated trip fields).
 - Re-running gates, reviewing the diff, merging to stage, deploy.
+
+---
+
+## ADDENDUM (2026-06-10) — Package-of-interest on leads
+
+**Continue on the SAME branch `feature/travel-agency-industry`.** Same guardrails as above (commit frequently, gates before commit, gate UI to `industryId === "travel_agency"`, DO NOT touch DB/seed — Opus already back-filled `entity_id` on Arya's leads, DO NOT merge, stop at review).
+
+**Goal:** surface the existing `lead.entity_id` link so an agent can set/see which **Package** a lead is interested in, and so it shows on the leads table. The catalog (`tenant_entities`, labelled "Packages") and the 8 package rows already exist; Opus has back-filled `entity_id` on the seeded leads. This is purely UI + one API line — **no DB migration, no new table.**
+
+Concept: **Destination** = the per-lead free-text field (already in the Trip Inquiry panel). **Package** = the sellable catalog product the lead maps to (`entity_id`). They are different — keep both.
+
+### Tasks
+
+1. **API — add `entity_id` to the PATCH whitelist.** In `src/app/(main)/api/v1/leads/[id]/route.ts`, the allowed-fields array (the one already containing `custom_fields`, `status`, `stage_id`, `assigned_to`, `lead_type`, `tags`) is **missing `entity_id`**. Add it; validate as a non-empty string OR `null` (null = clear the package). The POST/create route already accepts `entity_id`, so the validation shape is established there.
+
+2. **Trip Inquiry panel — Package selector.** In `src/components/dashboard/lead/key-info-section.tsx`, inside the existing `industryId === "travel_agency"` branch, add a **"Package"** selector at the top of the Trip Inquiry card:
+   - Options = the tenant's active packages from **`GET /api/v1/entities`** (fetch client-side, like other inline editors fetch their options). Include a **"— Custom trip (no package) —"** option that sets `entity_id` to `null`.
+   - Current value = `lead.entity_id`. On change, PATCH `/api/v1/leads/{id}` with `{ entity_id }` (mirror the existing inline-save pattern, e.g. `onLeadTypeChange` in `lead-detail-v2.tsx` — add a parallel `onPackageChange` callback, or do the fetch inline in the panel; either is fine).
+   - Read mode: show the selected package name (or "Custom trip" when null).
+   - Reuse `src/components/form/entity-select-field.tsx` if it fits cleanly; otherwise a plain shadcn `Select` is fine.
+
+3. **Leads table — "Package" column.** Add a Package column to the leads table via the column registry (`src/components/dashboard/leads/columns-registry.tsx`) as an **industry column for `travel_agency`** (group it with other industry columns; `defaultVisible: true` for travel). It shows the lead's package name.
+   - **First check the data path:** does the leads-list query (`queries.ts` `getLeads` / whatever feeds `leads-table.tsx`) already carry the entity/package name? If not, join `tenant_entities` (lead `entity_id` → name) into that query — minimal, tenant-scoped. Don't N+1 per row.
+
+4. **Verify + gates.** As a travel tenant: Package selector sets/clears and persists; leads table shows the Package column with the back-filled values; non-travel tenants unaffected (no Package selector, no column). `npm run build` clean + `npx eslint --max-warnings 50 .` 0 errors. Commit. **Stop at review.**
+
+### Out of scope (roadmap — see FEATURE-ROADMAP.md `travel_agency`)
+Package **templates** that auto-fill the itinerary, margin (cost vs sell), booking/payments back office, post-trip automation. Do NOT build these now.
+
+### Opus owns
+`entity_id` back-fill on Arya's seeded leads (DONE), review, gates, merge, deploy.
