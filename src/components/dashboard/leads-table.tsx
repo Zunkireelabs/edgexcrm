@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,7 +30,6 @@ import {
   Download,
   Search,
   Trash2,
-  Eye,
   Users2,
   Globe,
   Calendar,
@@ -44,24 +42,34 @@ import {
   Tag,
   GitMerge,
   Briefcase,
+  Columns3,
+  MoreHorizontal,
+  Pencil,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
 import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
-import { TruncatedText } from "@/components/ui/truncated-text";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
+import {
+  getLeadColumns,
+  getDefaultVisibleKeys,
+  type LeadColumn,
+  type LeadColumnCtx,
+} from "@/components/dashboard/leads/columns-registry";
+import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
+import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
-
-// Column width constants for consistent sizing
-const NAME_COLUMN_WIDTH = 180;
-const EMAIL_COLUMN_WIDTH = 200;
-const EMAIL_MOBILE_WIDTH = 140;
-// Note: Preview button padding (72px) is defined in Tailwind class `group-hover/name:pr-[72px]`
 
 interface TeamMember {
   user_id: string;
@@ -87,73 +95,6 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   const first = firstName?.charAt(0)?.toUpperCase() || "";
   const last = lastName?.charAt(0)?.toUpperCase() || "";
   return first + last || "?";
-}
-
-function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: string) => void }) {
-  const currentType = lead.lead_type || "lead";
-  const nextType = currentType === "lead" ? "prospect" : "lead";
-
-  async function toggle() {
-    onUpdate(nextType);
-    try {
-      const res = await fetch(`/api/v1/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_type: nextType }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
-      onUpdate(currentType);
-    }
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-        currentType === "prospect"
-          ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
-          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-      }`}
-      title={`Click to change to ${nextType}`}
-    >
-      {currentType === "prospect" ? "Prospect" : "Lead"}
-    </button>
-  );
-}
-
-function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
-  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
-  const nextTag = currentTag === "student" ? "parent" : "student";
-
-  async function toggle() {
-    const newTags = [nextTag];
-    onUpdate(newTags);
-    try {
-      const res = await fetch(`/api/v1/leads/${lead.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tags: newTags }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
-      onUpdate(lead.tags || ["student"]);
-    }
-  }
-
-  return (
-    <button
-      onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-        currentTag === "parent"
-          ? "bg-green-100 text-green-700 hover:bg-green-200"
-          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-      }`}
-      title={`Click to change to ${nextTag}`}
-    >
-      {currentTag === "parent" ? "Parent" : "Student"}
-    </button>
-  );
 }
 
 export function LeadsTable({
@@ -458,36 +399,77 @@ export function LeadsTable({
   }
 
   function exportCSV() {
-    const headers = [
-      "Date",
-      "First Name",
-      "Last Name",
-      "Email",
-      "Phone",
-      "City",
-      "Country",
-      "Status",
-      "Assigned To",
-      "Source",
-      "Tag",
-    ];
-    const rows = filtered.map((l) => {
-      const source = l.form_config_id ? formMap[l.form_config_id] || "" : l.intake_source?.replace(/_/g, " ") || "";
-      return [
-        new Date(l.created_at).toLocaleDateString(),
-        l.first_name || "",
-        l.last_name || "",
-        l.email || "",
-        l.phone || "",
-        l.city || "",
-        l.country || "",
-        l.status,
-        l.assigned_to ? memberMap[l.assigned_to] || "" : "",
-        source,
-        (l.tags || []).join(", "),
-      ];
-    });
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(",")).join("\n");
+    const exportCols = visibleColumns.filter((c) => c.key !== "actions");
+    const headers = exportCols.map((c) => c.label);
+    const rows = filtered.map((lead) =>
+      exportCols.map((col): string => {
+        switch (col.key) {
+          case "name":
+            return `${lead.first_name || ""} ${lead.last_name || ""}`.trim();
+          case "email":
+            return lead.email || "";
+          case "phone":
+            return lead.phone || "";
+          case "location":
+            return [lead.city, lead.country].filter(Boolean).join(", ");
+          case "assigned": {
+            const email = lead.assigned_to ? memberMap[lead.assigned_to] : null;
+            return email ? email.split("@")[0] : "";
+          }
+          case "status": {
+            const stage = stages.find((s) => s.id === lead.stage_id);
+            return stage?.name || lead.status;
+          }
+          case "source": {
+            const formName = lead.form_config_id ? formMap[lead.form_config_id] : null;
+            const src = formName || lead.intake_source;
+            return src ? src.replace(/_/g, " ") : "";
+          }
+          case "medium":
+            return lead.intake_medium || "";
+          case "campaign":
+            return lead.intake_campaign || "";
+          case "last_activity":
+            return new Date(lead.last_activity_at).toLocaleDateString();
+          case "created":
+            return new Date(lead.created_at).toLocaleDateString();
+          case "preferred_contact":
+            return lead.preferred_contact_method || "";
+          case "display_id":
+            return lead.display_id || "";
+          case "ai_score":
+            return lead.ai_score != null ? String(lead.ai_score) : "";
+          case "ai_priority":
+            return lead.ai_priority || "";
+          case "tags":
+            return (lead.tags || []).join(", ");
+          case "lead_type":
+            return lead.lead_type || "lead";
+          case "company":
+            return lead.company_name || "";
+          case "designation":
+            return lead.designation || "";
+          case "prospect_industry":
+            return lead.prospect_industry || "";
+          case "salutation":
+            return lead.salutation || "";
+          case "company_email":
+            return lead.company_email || "";
+          case "owner": {
+            const email = lead.owner_id ? memberMap[lead.owner_id] : null;
+            return email ? email.split("@")[0] : "";
+          }
+          default:
+            if (col.key.startsWith("cf:")) {
+              return String(lead.custom_fields?.[col.key.slice(3)] ?? "");
+            }
+            return "";
+        }
+      }),
+    );
+    const csv = [headers, ...rows]
+      .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -498,6 +480,122 @@ export function LeadsTable({
   }
 
   const previewLead = localLeads.find((l) => l.id === previewLeadId) || null;
+
+  // ── Column registry (Phase 2) ─────────────────────────────────────────────
+  // Discover custom-field keys across loaded leads.
+  const customFieldKeys = useMemo(() => {
+    const keySet = new Set<string>();
+    localLeads.forEach((lead) => {
+      if (lead.custom_fields) {
+        Object.keys(lead.custom_fields).forEach((k) => keySet.add(k));
+      }
+    });
+    return Array.from(keySet).sort();
+  }, [localLeads]);
+
+  // Full column catalog for this industry + discovered custom fields.
+  const allColumns = useMemo(
+    () => getLeadColumns(industryId, customFieldKeys),
+    [industryId, customFieldKeys],
+  );
+
+  // Default middle visible keys (anchors name + actions always implicit).
+  const defaultMiddleKeys = useMemo(() => {
+    const defaults = getDefaultVisibleKeys(industryId);
+    return defaults.filter((k) => k !== "name" && k !== "actions");
+  }, [industryId]);
+
+  // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
+  const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
+  const [columnDialogOpen, setColumnDialogOpen] = useState(false);
+
+  // Load saved column prefs after mount to avoid SSR hydration mismatch.
+  // Intentionally narrow deps — reload only when tenant/user identity changes.
+  useEffect(() => {
+    if (!tenantId || !currentUserId) return;
+    const cfKeys = Array.from(
+      new Set(leads.flatMap((l) => (l.custom_fields ? Object.keys(l.custom_fields) : []))),
+    ).sort().map((k) => `cf:${k}`);
+    const staticKeys = getLeadColumns(industryId, [])
+      .filter((c) => !c.required)
+      .map((c) => c.key);
+    const validKeys = [...staticKeys, ...cfKeys];
+    const defKeys = getDefaultVisibleKeys(industryId).filter(
+      (k) => k !== "name" && k !== "actions",
+    );
+    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenantId, currentUserId]);
+
+  // Resolve ordered column objects: name anchor → middle → actions anchor.
+  const visibleColumns = useMemo<LeadColumn[]>(() => {
+    const colMap = new Map(allColumns.map((c) => [c.key, c]));
+    const nameCol = colMap.get("name");
+    const actionsCol = colMap.get("actions");
+    const middleCols = visibleKeys
+      .map((k) => colMap.get(k))
+      .filter((c): c is LeadColumn => c !== undefined);
+    return [
+      ...(nameCol ? [nameCol] : []),
+      ...middleCols,
+      ...(actionsCol ? [actionsCol] : []),
+    ];
+  }, [allColumns, visibleKeys]);
+
+  // Handlers for the column manager dialog.
+  function handleColumnApply(keys: string[]) {
+    setVisibleKeys(keys);
+    saveColumnPrefs(tenantId, currentUserId, keys);
+  }
+
+  function handleColumnReset() {
+    clearColumnPrefs(tenantId, currentUserId);
+    setVisibleKeys(defaultMiddleKeys);
+  }
+
+  // Context object passed to registry render functions.
+  // Callbacks use stable setters so they don't need to appear in deps.
+  const entityMap = useMemo(
+    () => Object.fromEntries(entities.map((e) => [e.id, e.name])),
+    [entities],
+  );
+
+  const columnCtx: LeadColumnCtx = useMemo(
+    () => ({
+      memberMap,
+      formMap,
+      entityMap,
+      stages,
+      industryId,
+      selectedIds,
+      unreadLeadIds,
+      onToggleSelect: (id: string) => {
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(id)) {
+            next.delete(id);
+          } else {
+            next.add(id);
+          }
+          return next;
+        });
+      },
+      onPreviewToggle: (id: string) =>
+        setPreviewLeadId((prev) => (prev === id ? null : id)),
+      onTagUpdate: (leadId: string, tags: string[]) =>
+        setLocalLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, tags } : l)),
+        ),
+      onTypeUpdate: (leadId: string, type: string) =>
+        setLocalLeads((prev) =>
+          prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
+        ),
+    }),
+    [memberMap, formMap, entityMap, stages, industryId, selectedIds, unreadLeadIds],
+  );
+
+  // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
+  const totalColSpan = 3 + visibleColumns.length;
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -515,25 +613,38 @@ export function LeadsTable({
 
           {/* Search */}
           <div className="relative w-60">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
               type="text"
               placeholder="Search leads..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
+              className="w-full h-7 pl-7 pr-3 rounded-md border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
+
+          {/* Edit columns — placed right after the search bar */}
+          <button
+            type="button"
+            onClick={() => setColumnDialogOpen(true)}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+          >
+            <Columns3 className="h-3 w-3 shrink-0" />
+            <span>Edit columns</span>
+          </button>
 
           <div className="flex-1" />
 
           {/* Sort */}
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 gap-2">
-                <ArrowUpDown className="h-4 w-4" />
+              <button
+                type="button"
+                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              >
+                <ArrowUpDown className="h-3 w-3 shrink-0" />
                 Sort
-              </Button>
+              </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-72 p-4">
               <div className="space-y-4">
@@ -583,17 +694,25 @@ export function LeadsTable({
           </Popover>
 
           {/* Export */}
-          <Button variant="outline" size="sm" className="h-9 gap-2" onClick={exportCSV}>
-            <Download className="h-4 w-4" />
+          <button
+            type="button"
+            onClick={exportCSV}
+            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+          >
+            <Download className="h-3 w-3 shrink-0" />
             Export
-          </Button>
+          </button>
 
           {/* Add Lead Button */}
           {canCreateLead && tenantId && (
-            <Button size="sm" className="h-9 gap-2" onClick={() => setAddLeadOpen(true)}>
-              <Plus className="h-4 w-4" />
+            <button
+              type="button"
+              onClick={() => setAddLeadOpen(true)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+            >
+              <Plus className="h-3 w-3 shrink-0" />
               Add Lead
-            </Button>
+            </button>
           )}
         </div>
 
@@ -818,31 +937,27 @@ export function LeadsTable({
           <table className="w-full min-w-[900px]">
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="px-3 py-2 text-left w-10">
+              {/* Anchor: select checkbox */}
+              <th className="pl-3 pr-1 py-2 text-left w-10">
                 <Checkbox
                   checked={someSelected ? "indeterminate" : allSelected}
                   onCheckedChange={toggleSelectAll}
                   aria-label="Select all"
                 />
               </th>
+              {/* Anchor: ⋯ hover slot */}
+              <th className="px-1 py-2 w-7"></th>
+              {/* Anchor: avatar */}
               <th className="px-2 py-2 text-left w-8"></th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 w-[200px]">Name</th>
-              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">Tag</th>}
-              {showTags && <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[80px]">Type</th>}
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[220px]">Email</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[100px]">Location</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden lg:table-cell min-w-[120px]">Assigned</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[100px]">Status</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">Source</th>
-              <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[90px]">Last activity</th>
-              <th className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">Actions</th>
+              {/* Data columns from registry */}
+              {visibleColumns.map((col) => col.renderTh(columnCtx))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {paginatedLeads.length === 0 ? (
               <tr>
                 <td
-                  colSpan={hasMultipleForms ? 11 : 10}
+                  colSpan={totalColSpan}
                   className="text-center py-12 text-gray-500"
                 >
                   <p>No leads found</p>
@@ -851,157 +966,50 @@ export function LeadsTable({
               </tr>
             ) : (
               paginatedLeads.map((lead) => {
-                const assignedEmail = lead.assigned_to
-                  ? memberMap[lead.assigned_to]
-                  : null;
-                const formName = lead.form_config_id
-                  ? formMap[lead.form_config_id]
-                  : null;
                 const isSelected = selectedIds.has(lead.id);
                 const initials = getInitials(lead.first_name, lead.last_name);
 
                 return (
                   <tr
                     key={lead.id}
-                    className={`hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`group hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
                   >
-                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+                    {/* Anchor: select checkbox */}
+                    <td className="pl-3 pr-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(lead.id)}
                         aria-label={`Select ${lead.first_name} ${lead.last_name}`}
                       />
                     </td>
+                    {/* Anchor: ⋯ hover slot */}
+                    <td className="px-1 py-1.5 w-7" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Row actions"
+                            className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
+                    {/* Anchor: avatar */}
                     <td className="px-2 py-1.5">
                       <div className="h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 border border-gray-300 text-gray-500 text-xs font-medium">
                         {initials}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5">
-                      {/* Fixed width container for consistent Preview button alignment */}
-                      <div className="group/name relative" style={{ width: NAME_COLUMN_WIDTH }}>
-                        {unreadLeadIds.has(lead.id) && (
-                          <span
-                            className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-red-500"
-                            aria-label="Unread notification"
-                          />
-                        )}
-                        {/* Name link - padding increases on hover to make room for Preview button */}
-                        <Link
-                          href={`/leads/${lead.id}`}
-                          className="text-sm font-medium text-[#0f0f10] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
-                        >
-                          <TruncatedText
-                            text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
-                          />
-                        </Link>
-                        {/* Preview button - absolute positioned at right edge */}
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
-                          }}
-                          className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
-                        >
-                          <Eye size={12} />
-                          Preview
-                        </button>
-                      </div>
-                      {/* Mobile: email + preview icon */}
-                      <div className="flex items-center gap-2 md:hidden">
-                        <div className="text-xs text-gray-500">
-                          <TruncatedText text={lead.email || ""} maxWidth={EMAIL_MOBILE_WIDTH} />
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPreviewLeadId(prev => prev === lead.id ? null : lead.id);
-                          }}
-                          className="shrink-0 p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
-                        >
-                          <Eye size={14} />
-                        </button>
-                      </div>
-                    </td>
-                    {showTags && (
-                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-                        <LeadTagToggle lead={lead} onUpdate={(newTags) => {
-                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, tags: newTags } : l));
-                        }} />
-                      </td>
-                    )}
-                    {showTags && (
-                      <td className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-                        <LeadTypeToggle lead={lead} onUpdate={(newType) => {
-                          setLocalLeads((prev) => prev.map((l) => l.id === lead.id ? { ...l, lead_type: newType } : l));
-                        }} />
-                      </td>
-                    )}
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-                      <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
-                    </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-                      {lead.city || <span className="text-gray-400">—</span>}
-                    </td>
-                    <td className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-                      {assignedEmail ? (
-                        <span>{assignedEmail.split("@")[0]}</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {(() => {
-                        const stage = stages.find((s) => s.id === lead.stage_id);
-                        const badgeColors: Record<string, string> = {
-                          new: "bg-blue-100 text-blue-800",
-                          contacted: "bg-yellow-100 text-yellow-800",
-                          enrolled: "bg-green-100 text-green-800",
-                          rejected: "bg-red-100 text-red-800",
-                        };
-                        return (
-                          <span
-                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                              stage
-                                ? ""
-                                : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
-                            }`}
-                            style={
-                              stage
-                                ? { backgroundColor: `${stage.color}20`, color: stage.color }
-                                : undefined
-                            }
-                          >
-                            {stage?.name || lead.status}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-                      {(() => {
-                        const source = formName || lead.intake_source;
-                        if (!source) return <span className="text-gray-400">—</span>;
-                        const label = formName || source.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
-                        return (
-                          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-                            {label}
-                          </span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-                      {new Date(lead.last_activity_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-1.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Link
-                          href={`/leads/${lead.id}`}
-                          className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-                        >
-                          <Eye size={15} />
-                        </Link>
-                      </div>
-                    </td>
+                    {/* Data columns from registry */}
+                    {visibleColumns.map((col) => col.renderTd(lead, columnCtx))}
                   </tr>
                 );
               })
@@ -1203,6 +1211,17 @@ export function LeadsTable({
           industryId={industryId}
         />
       )}
+
+      {/* Column Manager Dialog */}
+      <ColumnManagerDialog
+        open={columnDialogOpen}
+        onOpenChange={setColumnDialogOpen}
+        allColumns={allColumns}
+        currentMiddleKeys={visibleKeys}
+        defaultMiddleKeys={defaultMiddleKeys}
+        onApply={handleColumnApply}
+        onReset={handleColumnReset}
+      />
     </div>
   );
 }

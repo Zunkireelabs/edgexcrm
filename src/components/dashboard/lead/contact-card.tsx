@@ -3,6 +3,7 @@
 import { Mail, Phone, MessageSquare, CheckSquare, MoreHorizontal, MessageCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,11 +16,22 @@ import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
 
+interface LeadDraftSubset {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+}
+
 interface ContactCardProps {
   lead: Lead;
   currentStage?: PipelineStage;
   onNoteClick?: () => void;
   onTaskClick?: () => void;
+  isEditing?: boolean;
+  draft?: LeadDraftSubset;
+  editErrors?: { email?: string; phone?: string };
+  onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
 }
 
 interface QuickActionButtonProps {
@@ -47,8 +59,19 @@ function QuickActionButton({ icon, label, onClick, disabled }: QuickActionButton
   );
 }
 
-export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: ContactCardProps) {
-  const fullName = getLeadFullName(lead);
+export function ContactCard({
+  lead,
+  currentStage,
+  onNoteClick,
+  onTaskClick,
+  isEditing = false,
+  draft,
+  editErrors = {},
+  onDraftChange,
+}: ContactCardProps) {
+  const fullName = isEditing && draft
+    ? [draft.first_name, draft.last_name].filter(Boolean).join(" ") || "—"
+    : getLeadFullName(lead);
   const initials = getLeadInitials(lead);
   const stageColor = currentStage?.color || "#6b7280";
 
@@ -92,22 +115,76 @@ export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: Co
               {initials}
             </span>
           </div>
-          <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
-          {currentStage && (
-            <Badge
-              variant="secondary"
-              className="mt-2"
-              style={{
-                backgroundColor: `${stageColor}20`,
-                color: stageColor,
-              }}
-            >
-              {currentStage.name}
-            </Badge>
+          {isEditing && draft ? (
+            <div className="w-full space-y-2 text-left">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">First name</p>
+                  <Input
+                    className="h-8 text-sm"
+                    value={draft.first_name}
+                    placeholder="First name"
+                    onChange={(e) => onDraftChange?.("first_name", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Last name</p>
+                  <Input
+                    className="h-8 text-sm"
+                    value={draft.last_name}
+                    placeholder="Last name"
+                    onChange={(e) => onDraftChange?.("last_name", e.target.value)}
+                  />
+                </div>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Email</p>
+                <Input
+                  className="h-8 text-sm"
+                  type="email"
+                  value={draft.email}
+                  placeholder="email@example.com"
+                  onChange={(e) => onDraftChange?.("email", e.target.value)}
+                />
+                {editErrors.email && (
+                  <p className="text-xs text-destructive mt-1">{editErrors.email}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Phone</p>
+                <Input
+                  className="h-8 text-sm"
+                  type="tel"
+                  value={draft.phone}
+                  placeholder="+977 98..."
+                  onChange={(e) => onDraftChange?.("phone", e.target.value)}
+                />
+                {editErrors.phone && (
+                  <p className="text-xs text-destructive mt-1">{editErrors.phone}</p>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
+              {currentStage && (
+                <Badge
+                  variant="secondary"
+                  className="mt-2"
+                  style={{
+                    backgroundColor: `${stageColor}20`,
+                    color: stageColor,
+                  }}
+                >
+                  {currentStage.name}
+                </Badge>
+              )}
+            </>
           )}
         </div>
 
-        {/* Contact Info */}
+        {/* Contact Info (read-only — inputs shown above when editing) */}
+        {!isEditing && (
         <div className="space-y-2 mb-4">
           {lead.email && (
             <div className="flex items-center justify-between group">
@@ -132,9 +209,10 @@ export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: Co
             </div>
           )}
         </div>
+        )}
 
-        {/* Quick Actions */}
-        <div className="flex items-center justify-center gap-4 pt-4 border-t border-border">
+        {/* Quick Actions (hidden in edit mode) */}
+        {!isEditing && <div className="flex items-center justify-center gap-4 pt-4 border-t border-border">
           <QuickActionButton
             icon={<MessageSquare className="h-4 w-4" />}
             label="Note"
@@ -181,7 +259,7 @@ export function ContactCard({ lead, currentStage, onNoteClick, onTaskClick }: Co
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-        </div>
+        </div>}
       </CardContent>
     </Card>
   );

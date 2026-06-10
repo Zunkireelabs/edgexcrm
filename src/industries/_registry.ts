@@ -20,6 +20,7 @@ export const INDUSTRIES = {
   HEALTHCARE: "healthcare",
   RECRUITMENT: "recruitment",
   GENERAL: "general",
+  TRAVEL_AGENCY: "travel_agency",
 } as const;
 
 export type IndustryId = (typeof INDUSTRIES)[keyof typeof INDUSTRIES];
@@ -38,6 +39,9 @@ export const FEATURES = {
   ACCOUNTS: "accounts",
   CRM_CONTACTS: "crm-contacts",
   PROJECT_BOARD: "project-board",
+  // Industry-scoped (travel_agency)
+  TRIP_INQUIRY: "trip-inquiry",
+  ITINERARY: "itinerary",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

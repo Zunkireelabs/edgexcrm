@@ -11,6 +11,7 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { normalizeEmail } from "@/lib/leads/dedup";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -48,6 +49,7 @@ const UPDATABLE_FIELDS = [
   "owner_id",
   "salutation",
   "company_email",
+  "entity_id",
 ] as const;
 
 const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id"];
@@ -223,12 +225,33 @@ export async function PATCH(
     }
   }
 
+  // Validate entity_id: must belong to this tenant if provided (null clears it)
+  if (body.entity_id !== undefined && body.entity_id !== null) {
+    const { data: entityCheck } = await supabase
+      .from("tenant_entities")
+      .select("id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.entity_id as string)
+      .single();
+
+    if (!entityCheck) {
+      return apiValidationError({
+        entity_id: ["Entity not found in this tenant"],
+      });
+    }
+  }
+
   // Build update payload from whitelist
   const updatePayload: Record<string, unknown> = {};
   for (const field of UPDATABLE_FIELDS) {
     if (body[field] !== undefined) {
       updatePayload[field] = body[field];
     }
+  }
+
+  // Recompute normalized_email when email changes to keep dedup keying accurate
+  if (body.email !== undefined) {
+    updatePayload.normalized_email = normalizeEmail(body.email as string | null | undefined);
   }
 
   if (Object.keys(updatePayload).length === 0) {

@@ -13,6 +13,7 @@ export const PROSPECT_INDUSTRIES = [
   { value: "media", label: "Media" },
   { value: "logistics", label: "Logistics" },
   { value: "airlines", label: "Airlines" },
+  { value: "ota", label: "Online Travel Agency" },
   { value: "government", label: "Government" },
   { value: "nonprofit", label: "Nonprofit" },
   { value: "other", label: "Other" },

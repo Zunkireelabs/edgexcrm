@@ -33,6 +33,7 @@ import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
+import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 interface TeamMember {
   user_id: string;
@@ -190,32 +191,12 @@ export function AddLeadSheet({
     }
   };
 
-  const validateEmail = (email: string): boolean => {
-    if (!email) return true;
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
-
-  const validatePhone = (phone: string): boolean => {
-    if (!phone) return true;
-    const local = phone.replace(/^\+\d{1,4}[-\s]?/, "");
-    return local.replace(/\D/g, "").length >= 7;
-  };
-
   const validate = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    if (!formData.email && !formData.firstName) {
-      newErrors.general = "Please provide at least an email or first name";
-    }
-
-    if (formData.email && !validateEmail(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    if (formData.phone && !validatePhone(formData.phone)) {
-      newErrors.phone = "Please enter a valid phone number";
-    }
+    const newErrors: FormErrors = validateLeadIdentity({
+      email: formData.email,
+      firstName: formData.firstName,
+      phone: formData.phone,
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
