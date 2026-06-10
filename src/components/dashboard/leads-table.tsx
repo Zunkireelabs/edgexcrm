@@ -938,7 +938,7 @@ export function LeadsTable({
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
               {/* Anchor: select checkbox */}
-              <th className="px-3 py-2 text-left w-10">
+              <th className="pl-3 pr-1 py-2 text-left w-10">
                 <Checkbox
                   checked={someSelected ? "indeterminate" : allSelected}
                   onCheckedChange={toggleSelectAll}
@@ -946,7 +946,7 @@ export function LeadsTable({
                 />
               </th>
               {/* Anchor: ⋯ hover slot */}
-              <th className="px-2 py-2 w-8"></th>
+              <th className="px-1 py-2 w-7"></th>
               {/* Anchor: avatar */}
               <th className="px-2 py-2 text-left w-8"></th>
               {/* Data columns from registry */}
@@ -975,7 +975,7 @@ export function LeadsTable({
                     className={`group hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
                   >
                     {/* Anchor: select checkbox */}
-                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="pl-3 pr-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(lead.id)}
@@ -983,7 +983,7 @@ export function LeadsTable({
                       />
                     </td>
                     {/* Anchor: ⋯ hover slot */}
-                    <td className="px-2 py-1.5 w-8" onClick={(e) => e.stopPropagation()}>
+                    <td className="px-1 py-1.5 w-7" onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button
