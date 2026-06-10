@@ -38,6 +38,8 @@ import {
   Network,
   ListChecks,
   GitCompare,
+  Plane,
+  MapPin,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -96,6 +98,8 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   UsersRound,
   Settings,
   Building2,
+  Plane,
+  MapPin,
 };
 
 function SidebarGroupRender({

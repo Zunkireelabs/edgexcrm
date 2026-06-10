@@ -18,6 +18,7 @@ import { manifest as realEstateManifest } from "./real-estate/manifest";
 import { manifest as healthcareManifest } from "./healthcare/manifest";
 import { manifest as recruitmentManifest } from "./recruitment/manifest";
 import { manifest as generalManifest } from "./general/manifest";
+import { manifest as travelAgencyManifest } from "./travel-agency/manifest";
 
 const MANIFESTS: Record<IndustryId, IndustryManifest> = {
   education_consultancy: educationConsultancyManifest,
@@ -27,6 +28,7 @@ const MANIFESTS: Record<IndustryId, IndustryManifest> = {
   healthcare: healthcareManifest,
   recruitment: recruitmentManifest,
   general: generalManifest,
+  travel_agency: travelAgencyManifest,
 };
 
 /**

@@ -296,6 +296,19 @@ export function LeadDetailV2({
                 toast.error("Failed to update lead type");
               }
             }}
+            onSaveTripFields={async (fields) => {
+              // Merge against live state (not the stale `lead` prop) so a trip
+              // save doesn't clobber an itinerary saved earlier this session.
+              const merged = { ...customFields, ...fields };
+              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ custom_fields: merged }),
+              });
+              if (!res.ok) throw new Error("Failed to save trip details");
+              setCustomFields(merged);
+              toast.success("Trip details saved");
+            }}
           />
         </div>
 
@@ -315,6 +328,20 @@ export function LeadDetailV2({
             isAdmin={isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
+            tenantName={tenant.name}
+            tenantLogoUrl={tenant.logo_url}
+            onSaveItinerary={async (itinerary) => {
+              // Merge against live state (not the stale `lead` prop) so saving the
+              // itinerary doesn't clobber trip fields saved earlier this session.
+              const merged = { ...customFields, itinerary };
+              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ custom_fields: merged }),
+              });
+              if (!res.ok) throw new Error("Failed to save itinerary");
+              setCustomFields(merged);
+            }}
           />
         </div>
 

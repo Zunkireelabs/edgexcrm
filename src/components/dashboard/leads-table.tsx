@@ -547,10 +547,16 @@ export function LeadsTable({
 
   // Context object passed to registry render functions.
   // Callbacks use stable setters so they don't need to appear in deps.
+  const entityMap = useMemo(
+    () => Object.fromEntries(entities.map((e) => [e.id, e.name])),
+    [entities],
+  );
+
   const columnCtx: LeadColumnCtx = useMemo(
     () => ({
       memberMap,
       formMap,
+      entityMap,
       stages,
       industryId,
       selectedIds,
@@ -577,7 +583,7 @@ export function LeadsTable({
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
     }),
-    [memberMap, formMap, stages, industryId, selectedIds, unreadLeadIds],
+    [memberMap, formMap, entityMap, stages, industryId, selectedIds, unreadLeadIds],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns

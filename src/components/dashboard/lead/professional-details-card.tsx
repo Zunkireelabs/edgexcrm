@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
+import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
 
 // Standard professional fields for B2B leads
 const PROFESSIONAL_FIELDS = [
@@ -35,7 +36,11 @@ export function ProfessionalDetailsCard({
   // Get other custom fields that aren't in our standard professional fields
   const professionalFieldKeys: string[] = PROFESSIONAL_FIELDS.map((f) => f.key);
   const otherFields = Object.entries(customFields).filter(
-    ([key, value]) => !professionalFieldKeys.includes(key) && value != null && value !== ""
+    ([key, value]) =>
+      !professionalFieldKeys.includes(key) &&
+      value != null &&
+      value !== "" &&
+      !isReservedCustomField(key)
   );
 
   // Check if any professional fields have values
