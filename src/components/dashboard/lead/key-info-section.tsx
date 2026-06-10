@@ -207,8 +207,11 @@ export function KeyInfoSection({
             )}
           </div>
 
-          {/* Entity (e.g., College, Service, Project Type) */}
-          {entity && (
+          {/* Entity (e.g., College, Service, Project Type).
+              travel_agency has its own editable Package selector in the Trip
+              Inquiry panel below, so skip this read-only block there to avoid a
+              duplicate "Package" field. */}
+          {entity && industryId !== "travel_agency" && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
               <div className="flex items-center gap-2">
@@ -349,6 +352,7 @@ export function KeyInfoSection({
 interface TripPackage {
   id: string;
   name: string;
+  description?: string | null;
 }
 
 interface TripInquiryPanelProps {
@@ -491,6 +495,13 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
               : "Custom trip"}
           </p>
         )}
+        {packageId &&
+          (() => {
+            const desc = packages.find((p) => p.id === packageId)?.description;
+            return desc ? (
+              <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{desc}</p>
+            ) : null;
+          })()}
       </div>
 
       {editing ? (
