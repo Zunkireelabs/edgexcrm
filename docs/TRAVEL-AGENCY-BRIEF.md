@@ -154,3 +154,36 @@ Package **templates** that auto-fill the itinerary, margin (cost vs sell), booki
 
 ### Opus owns
 `entity_id` back-fill on Arya's seeded leads (DONE), review, gates, merge, deploy.
+
+---
+
+## ADDENDUM 2 (2026-06-10) — Form Builder for travel_agency
+
+**Continue on the SAME branch `feature/travel-agency-industry`.** Same guardrails (commit; gates before commit; don't touch DB/seed — Opus seeds a sample form; don't merge; stop at review).
+
+**Goal:** opt `travel_agency` into the **existing `_shared` form-builder** (education + construction already use it) so Arya Travels can build public lead-capture forms — and add a **Trip Enquiry** template so web submissions land as rich travel leads (trip fields populate the Trip Inquiry panel; Package sets `entity_id`). **This is "promote, don't copy" — do NOT duplicate the form-builder folder.** No DB migration (`form_configs` already exists). The page routes (`/forms`, `/forms/new`, `/forms/[id]`) and API routes are shared and already gate on `FEATURES.FORM_BUILDER` via `getFeatureAccess`; opting travel into the feature meta opens all of them automatically.
+
+**Precedent to mirror: `src/industries/construction/manifest.ts`** (it registered form-builder with one feature entry + one sidebar item).
+
+### Tasks
+
+1. **Open the gate.** `src/industries/_shared/features/form-builder/meta.ts` — add `INDUSTRIES.TRAVEL_AGENCY` to `formBuilderMeta.industries`.
+
+2. **Manifest + sidebar.** `src/industries/travel-agency/manifest.ts` — import `formBuilderMeta` from `../_shared/features/form-builder/meta`; add `{ meta: formBuilderMeta }` to `features`; add a sidebar item `{ featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" }` (FileText is already in `INDUSTRY_ICONS`). Place it after the Itineraries item.
+
+3. **Trip Enquiry template.** New file `src/industries/_shared/features/form-builder/templates/trip-enquiry.ts` exporting `tripEnquiryTemplate: TemplateDefinition`. **Mirror the shape of `admission-inquiry.ts`.** First check the `FieldType` union in `../types.ts` and only use **supported** field types (admission uses `text`/`email`/`tel`/`select`/`entity_select`; if `date`/`number`/`textarea` are NOT in the union, fall back to `text` for dates/pax/budget and `text` for message). Fields:
+   - **Step "Contact":** `first_name`, `last_name`, `email`, `phone` (standard keys → lead columns).
+   - **Step "Your Trip":**
+     - `{ name: "package", label: "Package of Interest", type: "entity_select", required: false }` — `entity_select` binds to `lead.entity_id` (the Package), regardless of the field `name`.
+     - **These field `name`s MUST be exactly the trip_* keys** so submissions flow into `leads.custom_fields` and render in the Trip Inquiry panel: `trip_destination`, `trip_departure_city`, `trip_start_date`, `trip_end_date`, `trip_pax_adults`, `trip_pax_children`, `trip_type` (a `select` whose options are the values from `src/industries/travel-agency/leads/trip-types.ts`), `trip_budget_amount`. Add an optional `message` field last.
+   - Branding: title "Plan Your Trip", a friendly subtitle, button "Get My Quote", thank-you "We'll send your custom quote shortly."
+
+4. **Register the template.** `src/industries/_shared/features/form-builder/templates/index.ts` — import `tripEnquiryTemplate`; add a `case "travel_agency": return [tripEnquiryTemplate, generalContactTemplate, BLANK_TEMPLATE];` to `getTemplatesForIndustry`; and make `getTemplateById` resolve `trip-enquiry` (it currently only searches the education array + blank — add trip-enquiry to its lookup so `/forms/new?template=trip-enquiry` works).
+
+5. **Verify + gates.** As Arya (travel): `/forms` is in the sidebar and loads; `/forms/new` shows **Trip Enquiry + General Contact + Blank**; building from Trip Enquiry renders all fields incl. the Package (entity_select) dropdown of real packages; the live preview works. **Education + construction template sets are UNCHANGED.** Non-form industries (it_agency) still have no Forms item / 404. `npm run build` clean + `npx eslint --max-warnings 50 .` 0 errors. Commit. **Stop at review.**
+
+### Out of scope
+No changes to the form renderer, public submit API, or API-key flows (all shared + already work). No DB migration.
+
+### Opus owns
+Reviewing + gates + merge; seeding one **published sample "Trip Enquiry" form** (+ form API key) for Arya so `/forms` isn't empty in the pitch.
