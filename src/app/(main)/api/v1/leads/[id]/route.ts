@@ -11,6 +11,7 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { normalizeEmail } from "@/lib/leads/dedup";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -246,6 +247,11 @@ export async function PATCH(
     if (body[field] !== undefined) {
       updatePayload[field] = body[field];
     }
+  }
+
+  // Recompute normalized_email when email changes to keep dedup keying accurate
+  if (body.email !== undefined) {
+    updatePayload.normalized_email = normalizeEmail(body.email as string | null | undefined);
   }
 
   if (Object.keys(updatePayload).length === 0) {

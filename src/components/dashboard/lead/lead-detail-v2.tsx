@@ -1,14 +1,15 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, UserCheck } from "lucide-react";
+import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
+import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
@@ -36,6 +37,49 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
 }
 
+interface LeadDraft {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone: string;
+  city: string;
+  country: string;
+  intake_source: string;
+  intake_campaign: string;
+  preferred_contact_method: string;
+  // it_agency only
+  salutation: string;
+  company_name: string;
+  company_email: string;
+  designation: string;
+  prospect_industry: string;
+}
+
+interface EditErrors {
+  email?: string;
+  phone?: string;
+  general?: string;
+}
+
+function makeDraft(lead: Lead): LeadDraft {
+  return {
+    first_name: lead.first_name || "",
+    last_name: lead.last_name || "",
+    email: lead.email || "",
+    phone: lead.phone || "",
+    city: lead.city || "",
+    country: lead.country || "",
+    intake_source: lead.intake_source || "",
+    intake_campaign: lead.intake_campaign || "",
+    preferred_contact_method: lead.preferred_contact_method || "",
+    salutation: lead.salutation || "",
+    company_name: lead.company_name || "",
+    company_email: lead.company_email || "",
+    designation: lead.designation || "",
+    prospect_industry: lead.prospect_industry || "",
+  };
+}
+
 export function LeadDetailV2({
   lead,
   notes: initialNotes,
@@ -49,6 +93,7 @@ export function LeadDetailV2({
   industry,
 }: LeadDetailV2Props) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
 
@@ -64,6 +109,13 @@ export function LeadDetailV2({
   const [activeTab, setActiveTab] = useState("overview");
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
+
+  // Edit mode state
+  const [currentLead, setCurrentLead] = useState(lead);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [draft, setDraft] = useState<LeadDraft>(() => makeDraft(lead));
+  const [editErrors, setEditErrors] = useState<EditErrors>({});
 
   const isItAgency = tenant.industry_id === "it_agency";
 
@@ -121,6 +173,95 @@ export function LeadDetailV2({
       body: JSON.stringify({ link: `/leads/${lead.id}` }),
     }).catch(() => {});
   }, [lead.id]);
+
+  // Auto-open edit mode when ?edit=1 is present, then strip the param
+  useEffect(() => {
+    if (searchParams.get("edit") === "1") {
+      setIsEditing(true);
+      setDraft(makeDraft(currentLead));
+      const url = new URL(window.location.href);
+      url.searchParams.delete("edit");
+      router.replace(url.pathname + url.search);
+    }
+  // Run once on mount only
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const startEditing = () => {
+    setDraft(makeDraft(currentLead));
+    setEditErrors({});
+    setIsEditing(true);
+  };
+
+  const cancelEditing = () => {
+    setIsEditing(false);
+    setEditErrors({});
+  };
+
+  const updateDraft = (field: keyof LeadDraft, value: string) => {
+    setDraft((prev) => ({ ...prev, [field]: value }));
+    setEditErrors((prev) => {
+      if (field === "email" || field === "phone") {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      }
+      return prev;
+    });
+  };
+
+  const validateDraft = (): boolean => {
+    const errors: EditErrors = validateLeadIdentity({
+      email: draft.email,
+      firstName: draft.first_name,
+      phone: draft.phone,
+    });
+    setEditErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleSave = async () => {
+    if (!validateDraft()) return;
+
+    // Build diff — only send changed fields
+    const original = makeDraft(currentLead);
+    const changedFields: Record<string, string | null> = {};
+    for (const key of Object.keys(draft) as Array<keyof LeadDraft>) {
+      const draftVal = draft[key] || null;
+      const origVal = original[key] || null;
+      if (draftVal !== origVal) {
+        changedFields[key] = draftVal;
+      }
+    }
+
+    if (Object.keys(changedFields).length === 0) {
+      setIsEditing(false);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changedFields),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        const msg = json?.error?.message || "Failed to save changes";
+        toast.error(msg);
+        return;
+      }
+      const json = await res.json();
+      setCurrentLead(json.data as Lead);
+      setIsEditing(false);
+      toast.success("Lead updated");
+    } catch {
+      toast.error("Failed to save changes");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Handlers
   const handleNoteClick = () => {
@@ -216,18 +357,18 @@ export function LeadDetailV2({
           </Link>
           <div>
             <h1 className="text-2xl font-bold">
-              {getLeadFullName(lead)}
+              {getLeadFullName(currentLead)}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Submitted {new Date(lead.created_at).toLocaleDateString()} at{" "}
-              {new Date(lead.created_at).toLocaleTimeString()}
+              Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
+              {new Date(currentLead.created_at).toLocaleTimeString()}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isItAgency && (
-            lead.converted_contact_id ? (
-              <Link href={`/contacts/${lead.converted_contact_id}`}>
+          {isItAgency && !isEditing && (
+            currentLead.converted_contact_id ? (
+              <Link href={`/contacts/${currentLead.converted_contact_id}`}>
                 <Button variant="outline" size="sm">
                   <UserCheck className="h-4 w-4 mr-2" />
                   Converted to {convertedContactName ?? "Contact"}
@@ -244,7 +385,42 @@ export function LeadDetailV2({
               </Button>
             )
           )}
-          {isAdmin && (
+          {!isEditing && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={startEditing}
+            >
+              <Pencil className="h-4 w-4 mr-2" />
+              Edit
+            </Button>
+          )}
+          {isEditing && (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={cancelEditing}
+                disabled={isSaving}
+              >
+                <X className="h-4 w-4 mr-2" />
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={isSaving || Object.keys(editErrors).length > 0}
+              >
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Check className="h-4 w-4 mr-2" />
+                )}
+                {isSaving ? "Saving..." : "Save"}
+              </Button>
+            </>
+          )}
+          {isAdmin && !isEditing && (
             <Button
               variant="destructive"
               size="sm"
@@ -264,15 +440,19 @@ export function LeadDetailV2({
         <div className="space-y-4">
           {/* Contact Card */}
           <ContactCard
-            lead={lead}
+            lead={currentLead}
             currentStage={currentStage}
             onNoteClick={handleNoteClick}
             onTaskClick={handleTaskClick}
+            isEditing={isEditing}
+            draft={draft}
+            editErrors={editErrors}
+            onDraftChange={updateDraft}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
           <KeyInfoSection
-            lead={lead}
+            lead={currentLead}
             stages={stages}
             currentStage={currentStage}
             stageId={stageId}
@@ -284,9 +464,13 @@ export function LeadDetailV2({
             entity={entity}
             industry={industry}
             industryId={tenant.industry_id}
+            isEditing={isEditing}
+            draft={draft}
+            editErrors={editErrors}
+            onDraftChange={updateDraft}
             onLeadTypeChange={async (newType) => {
               try {
-                await fetch(`/api/v1/leads/${lead.id}`, {
+                await fetch(`/api/v1/leads/${currentLead.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify({ lead_type: newType }),
@@ -300,7 +484,7 @@ export function LeadDetailV2({
               // Merge against live state (not the stale `lead` prop) so a trip
               // save doesn't clobber an itinerary saved earlier this session.
               const merged = { ...customFields, ...fields };
-              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ custom_fields: merged }),
@@ -316,7 +500,7 @@ export function LeadDetailV2({
         <div className="min-w-0">
           <LeadTabs
             ref={notesTabRef}
-            lead={lead}
+            lead={currentLead}
             notes={notes}
             activities={activities}
             teamMemberEmails={teamMemberEmails}
@@ -334,7 +518,7 @@ export function LeadDetailV2({
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.
               const merged = { ...customFields, itinerary };
-              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ custom_fields: merged }),
@@ -349,7 +533,7 @@ export function LeadDetailV2({
         <div className="lg:col-span-full xl:col-span-1">
           <ManagementPanel
             ref={checklistRef}
-            lead={lead}
+            lead={currentLead}
             checklists={checklists}
             isAdmin={isAdmin}
             onChecklistsChange={handleChecklistsChange}
@@ -359,12 +543,12 @@ export function LeadDetailV2({
 
       {isItAgency && !lead.converted_contact_id && (
         <ConvertLeadDialog
-          leadId={lead.id}
-          leadFirstName={lead.first_name}
-          leadLastName={lead.last_name}
-          leadEmail={lead.email}
-          leadPhone={lead.phone}
-          leadAccountId={lead.account_id}
+          leadId={currentLead.id}
+          leadFirstName={currentLead.first_name}
+          leadLastName={currentLead.last_name}
+          leadEmail={currentLead.email}
+          leadPhone={currentLead.phone}
+          leadAccountId={currentLead.account_id}
           open={convertDialogOpen}
           onOpenChange={setConvertDialogOpen}
         />

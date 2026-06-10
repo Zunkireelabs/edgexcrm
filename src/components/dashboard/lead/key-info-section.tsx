@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { ChevronDown, UserCircle, Building } from "lucide-react";
-import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
+import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,11 +20,47 @@ import {
 import { cn } from "@/lib/utils";
 import type { Lead, PipelineStage, TenantEntity, Industry } from "@/types/database";
 
+const INTAKE_SOURCES = [
+  { value: "manual_entry", label: "Manual Entry" },
+  { value: "phone_call", label: "Phone Call" },
+  { value: "walk_in", label: "Walk-in" },
+  { value: "referral", label: "Referral" },
+  { value: "trade_show", label: "Trade Show / Event" },
+  { value: "social_media", label: "Social Media" },
+  { value: "email", label: "Email Inquiry" },
+  { value: "other", label: "Other" },
+];
+
+const CONTACT_METHODS = [
+  { value: "phone", label: "Phone" },
+  { value: "email", label: "Email" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "any", label: "Any" },
+];
+
+const COUNTRIES = [
+  "Nepal", "India", "United States", "United Kingdom", "Canada", "Australia",
+  "Germany", "France", "Japan", "China", "Singapore", "UAE", "Other",
+];
+
 interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   email: string;
+}
+
+interface LeadDraftSubset {
+  city: string;
+  country: string;
+  intake_source: string;
+  intake_campaign: string;
+  preferred_contact_method: string;
+  salutation: string;
+  company_name: string;
+  company_email: string;
+  designation: string;
+  prospect_industry: string;
 }
 
 interface KeyInfoSectionProps {
@@ -39,6 +76,10 @@ interface KeyInfoSectionProps {
   entity?: TenantEntity | null;
   industry?: Industry | null;
   industryId?: string | null;
+  isEditing?: boolean;
+  draft?: LeadDraftSubset;
+  editErrors?: { email?: string; phone?: string; general?: string };
+  onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   onLeadTypeChange?: (newType: string) => void;
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
 }
@@ -56,6 +97,9 @@ export function KeyInfoSection({
   entity,
   industry,
   industryId,
+  isEditing = false,
+  draft,
+  onDraftChange,
   onLeadTypeChange,
   onSaveTripFields,
 }: KeyInfoSectionProps) {
@@ -229,10 +273,83 @@ export function KeyInfoSection({
           )}
 
           {/* Company / Contact extras — it_agency only */}
-          {industryId === "it_agency" && (
+          {industryId === "it_agency" && isEditing && draft ? (
+            <>
+              <div className="border-t border-border" />
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Company
+              </p>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Salutation</p>
+                <Select
+                  value={draft.salutation || "__none__"}
+                  onValueChange={(v) => onDraftChange?.("salutation", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">None</span>
+                    </SelectItem>
+                    {SALUTATIONS.map((s) => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Company Name</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.company_name}
+                  placeholder="Acme Corp"
+                  onChange={(e) => onDraftChange?.("company_name", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Company Email</p>
+                <Input
+                  className="h-8 text-sm"
+                  type="email"
+                  value={draft.company_email}
+                  placeholder="contact@acme.com"
+                  onChange={(e) => onDraftChange?.("company_email", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Designation</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.designation}
+                  placeholder="CEO"
+                  onChange={(e) => onDraftChange?.("designation", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Industry</p>
+                <Select
+                  value={draft.prospect_industry || "__none__"}
+                  onValueChange={(v) => onDraftChange?.("prospect_industry", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select industry" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select industry</span>
+                    </SelectItem>
+                    {PROSPECT_INDUSTRIES.map((i) => (
+                      <SelectItem key={i.value} value={i.value}>{i.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          ) : industryId === "it_agency" && (
             lead.owner_id || lead.salutation || lead.company_name || lead.designation ||
             lead.prospect_industry || lead.company_email
-          ) && (
+          ) ? (
             <>
               <div className="border-t border-border" />
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
@@ -261,7 +378,7 @@ export function KeyInfoSection({
                 />
               )}
             </>
-          )}
+          ) : null}
 
           {/* Trip Inquiry — travel_agency only */}
           {industryId === "travel_agency" && (
@@ -276,17 +393,71 @@ export function KeyInfoSection({
           <div className="border-t border-border" />
 
           {/* Location */}
-          {location && (
+          {isEditing && draft ? (
+            <div className="space-y-2">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Location
+              </p>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">City</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.city}
+                  placeholder="Kathmandu"
+                  onChange={(e) => onDraftChange?.("city", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Country</p>
+                <Select
+                  value={draft.country || "__none__"}
+                  onValueChange={(v) => onDraftChange?.("country", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select country" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select country</span>
+                    </SelectItem>
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          ) : location ? (
             <InfoRow label="Location" value={location} />
-          )}
+          ) : null}
 
           {/* Preferred Contact */}
-          {lead.preferred_contact_method && (
+          {isEditing && draft ? (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Preferred Contact</p>
+              <Select
+                value={draft.preferred_contact_method || "__none__"}
+                onValueChange={(v) => onDraftChange?.("preferred_contact_method", v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">None</span>
+                  </SelectItem>
+                  {CONTACT_METHODS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : lead.preferred_contact_method ? (
             <InfoRow
               label="Preferred Contact"
               value={lead.preferred_contact_method.charAt(0).toUpperCase() + lead.preferred_contact_method.slice(1)}
             />
-          )}
+          ) : null}
 
           {/* Created */}
           <InfoRow
@@ -307,7 +478,42 @@ export function KeyInfoSection({
           />
 
           {/* Intake Details */}
-          {hasIntakeInfo && (
+          {isEditing && draft ? (
+            <>
+              <div className="border-t border-border" />
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Intake Details
+              </p>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Source</p>
+                <Select
+                  value={draft.intake_source || "__none__"}
+                  onValueChange={(v) => onDraftChange?.("intake_source", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select source</span>
+                    </SelectItem>
+                    {INTAKE_SOURCES.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Campaign</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.intake_campaign}
+                  placeholder="e.g. spring-2025"
+                  onChange={(e) => onDraftChange?.("intake_campaign", e.target.value)}
+                />
+              </div>
+            </>
+          ) : hasIntakeInfo ? (
             <>
               <div className="border-t border-border" />
               <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
@@ -323,7 +529,7 @@ export function KeyInfoSection({
                 <InfoRow label="Campaign" value={lead.intake_campaign} />
               )}
             </>
-          )}
+          ) : null}
 
           {/* Custom Fields */}
           {customFields.length > 0 && (
@@ -445,7 +651,6 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
   }
 
   const nights = computeNights();
-  const budget = draft.trip_budget_amount ? Number(draft.trip_budget_amount) : null;
 
   return (
     <>
