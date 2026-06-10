@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
@@ -346,14 +346,56 @@ export function KeyInfoSection({
 
 // ── Trip Inquiry panel (travel_agency only) ────────────────────────────────
 
+interface TripPackage {
+  id: string;
+  name: string;
+}
+
 interface TripInquiryPanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
 }
 
+const NULL_PACKAGE = "__none__";
+
 function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
   const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+
+  const [packages, setPackages] = useState<TripPackage[]>([]);
+  const [packageId, setPackageId] = useState<string | null>(lead.entity_id);
+  const [savingPackage, setSavingPackage] = useState(false);
+
+  const fetchPackages = useCallback(async () => {
+    try {
+      const res = await fetch("/api/v1/entities");
+      if (res.ok) {
+        const json = await res.json();
+        setPackages((json.data || []) as TripPackage[]);
+      }
+    } catch {
+      // silently ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPackages();
+  }, [fetchPackages]);
+
+  async function handlePackageChange(value: string) {
+    const newId = value === NULL_PACKAGE ? null : value;
+    setSavingPackage(true);
+    try {
+      await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ entity_id: newId }),
+      });
+      setPackageId(newId);
+    } finally {
+      setSavingPackage(false);
+    }
+  }
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -416,6 +458,38 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
           >
             Edit
           </button>
+        )}
+      </div>
+
+      {/* Package selector — always visible, saves immediately on change */}
+      <div>
+        <p className="text-xs text-muted-foreground mb-1">Package</p>
+        {isAdmin ? (
+          <Select
+            value={packageId ?? NULL_PACKAGE}
+            onValueChange={handlePackageChange}
+            disabled={savingPackage}
+          >
+            <SelectTrigger className="h-8 text-sm">
+              <SelectValue placeholder="Select package" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NULL_PACKAGE}>
+                <span className="text-muted-foreground">— Custom trip (no package) —</span>
+              </SelectItem>
+              {packages.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {p.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <p className="text-sm font-medium">
+            {packageId
+              ? (packages.find((p) => p.id === packageId)?.name ?? "Loading…")
+              : "Custom trip"}
+          </p>
         )}
       </div>
 

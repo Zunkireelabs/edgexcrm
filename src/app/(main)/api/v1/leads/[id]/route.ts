@@ -48,6 +48,7 @@ const UPDATABLE_FIELDS = [
   "owner_id",
   "salutation",
   "company_email",
+  "entity_id",
 ] as const;
 
 const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id"];
@@ -219,6 +220,22 @@ export async function PATCH(
     if (!ownerCheck) {
       return apiValidationError({
         owner_id: ["Owner is not a member of this tenant"],
+      });
+    }
+  }
+
+  // Validate entity_id: must belong to this tenant if provided (null clears it)
+  if (body.entity_id !== undefined && body.entity_id !== null) {
+    const { data: entityCheck } = await supabase
+      .from("tenant_entities")
+      .select("id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.entity_id as string)
+      .single();
+
+    if (!entityCheck) {
+      return apiValidationError({
+        entity_id: ["Entity not found in this tenant"],
       });
     }
   }

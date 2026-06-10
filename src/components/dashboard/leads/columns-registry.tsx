@@ -15,6 +15,7 @@ export const EMAIL_MOBILE_WIDTH = 140;
 export interface LeadColumnCtx {
   memberMap: Record<string, string>;
   formMap: Record<string, string>;
+  entityMap: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
   selectedIds: Set<string>;
@@ -621,6 +622,32 @@ const STATIC_COLUMNS: LeadColumn[] = [
           ) : (
             <span className="text-gray-400">—</span>
           )}
+        </td>
+      );
+    },
+  },
+
+  // ── package (travel_agency only)
+  {
+    key: "package",
+    label: "Package",
+    group: "industry",
+    industries: ["travel_agency"],
+    defaultVisible: true,
+    thClassName: "hidden md:table-cell",
+    tdClassName: "hidden md:table-cell",
+    renderTh: () => (
+      <th key="package" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">
+        Package
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const name = lead.entity_id ? (ctx.entityMap[lead.entity_id] ?? "—") : (
+        <span className="text-gray-400">Custom trip</span>
+      );
+      return (
+        <td key="package" className="px-3 py-1.5 text-sm text-[#787871] hidden md:table-cell">
+          {name}
         </td>
       );
     },
