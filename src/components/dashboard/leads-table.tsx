@@ -595,7 +595,7 @@ export function LeadsTable({
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
-  const totalColSpan = 2 + visibleColumns.length + 1;
+  const totalColSpan = 3 + visibleColumns.length;
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -938,19 +938,19 @@ export function LeadsTable({
           <thead className="sticky top-0 z-10">
             <tr className="border-b border-gray-200 bg-gray-50">
               {/* Anchor: select checkbox */}
-              <th className="px-3 py-2 text-left w-10">
+              <th className="pl-3 pr-1 py-2 text-left w-10">
                 <Checkbox
                   checked={someSelected ? "indeterminate" : allSelected}
                   onCheckedChange={toggleSelectAll}
                   aria-label="Select all"
                 />
               </th>
+              {/* Anchor: ⋯ hover slot */}
+              <th className="px-1 py-2 w-7"></th>
               {/* Anchor: avatar */}
               <th className="px-2 py-2 text-left w-8"></th>
               {/* Data columns from registry */}
               {visibleColumns.map((col) => col.renderTh(columnCtx))}
-              {/* Row actions */}
-              <th className="px-2 py-2 text-left w-8"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -972,15 +972,35 @@ export function LeadsTable({
                 return (
                   <tr
                     key={lead.id}
-                    className={`hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
+                    className={`group hover:bg-gray-50 transition-colors ${isSelected ? "bg-blue-50" : ""}`}
                   >
                     {/* Anchor: select checkbox */}
-                    <td className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+                    <td className="pl-3 pr-1 py-1.5" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         checked={isSelected}
                         onCheckedChange={() => toggleSelect(lead.id)}
                         aria-label={`Select ${lead.first_name} ${lead.last_name}`}
                       />
+                    </td>
+                    {/* Anchor: ⋯ hover slot */}
+                    <td className="px-1 py-1.5 w-7" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            aria-label="Row actions"
+                            className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </td>
                     {/* Anchor: avatar */}
                     <td className="px-2 py-1.5">
@@ -990,26 +1010,6 @@ export function LeadsTable({
                     </td>
                     {/* Data columns from registry */}
                     {visibleColumns.map((col) => col.renderTd(lead, columnCtx))}
-                    {/* Row actions */}
-                    <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button
-                            type="button"
-                            className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-                            aria-label="Row actions"
-                          >
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
-                            <Pencil className="h-4 w-4 mr-2" />
-                            Edit
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
                   </tr>
                 );
               })

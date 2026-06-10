@@ -653,31 +653,6 @@ const STATIC_COLUMNS: LeadColumn[] = [
     },
   },
 
-  // ── actions (required anchor, always last)
-  {
-    key: "actions",
-    label: "Actions",
-    group: "standard",
-    required: true,
-    defaultVisible: true,
-    renderTh: () => (
-      <th key="actions" className="px-3 py-2 text-right text-xs font-medium text-gray-600 w-20">
-        Actions
-      </th>
-    ),
-    renderTd: (lead) => (
-      <td key="actions" className="px-3 py-1.5 text-right">
-        <div className="flex items-center justify-end gap-1">
-          <Link
-            href={`/leads/${lead.id}`}
-            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <Eye size={15} />
-          </Link>
-        </div>
-      </td>
-    ),
-  },
 ];
 
 // ─── Public API ────────────────────────────────────────────────────────────────
@@ -713,10 +688,7 @@ export function getLeadColumns(
     ),
   }));
 
-  // Inject custom cols between last standard/industry col and actions
-  const actionCol = staticCols.find((c) => c.key === "actions")!;
-  const withoutActions = staticCols.filter((c) => c.key !== "actions");
-  return [...withoutActions, ...customCols, actionCol];
+  return [...staticCols, ...customCols];
 }
 
 /**
