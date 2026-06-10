@@ -325,6 +325,19 @@ export function LeadDetailV2({
             isAdmin={isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
+            tenantName={tenant.name}
+            onSaveItinerary={async (itinerary) => {
+              const merged = {
+                ...(lead.custom_fields || {}),
+                itinerary,
+              };
+              const res = await fetch(`/api/v1/leads/${lead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ custom_fields: merged }),
+              });
+              if (!res.ok) throw new Error("Failed to save itinerary");
+            }}
           />
         </div>
 

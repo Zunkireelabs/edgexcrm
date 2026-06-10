@@ -18,6 +18,8 @@ import { ActivitiesPanel } from "./activities/activities-panel";
 import { MergeDialog } from "./merge-dialog";
 import { useEmailThreads } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
 import { getLeadFullName } from "./lead-name";
+import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
+import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -32,6 +34,8 @@ interface LeadTabsProps {
   isAdmin: boolean;
   currentUserId: string;
   industryId?: string | null;
+  tenantName?: string;
+  onSaveItinerary?: (itinerary: Itinerary) => Promise<void>;
 }
 
 export interface LeadTabsRef {
@@ -40,7 +44,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, onSaveItinerary },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -93,6 +97,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               Beta
             </Badge>
           </TabsTrigger>
+          {industryId === "travel_agency" && (
+            <TabsTrigger value="itinerary">Itinerary</TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-4 mt-0">
@@ -197,6 +204,16 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         <TabsContent value="ai-insights" className="mt-0">
           <AIInsightsTab lead={lead} notes={notes} />
         </TabsContent>
+
+        {industryId === "travel_agency" && onSaveItinerary && (
+          <TabsContent value="itinerary" className="mt-0">
+            <ItineraryBuilder
+              lead={lead}
+              tenantName={tenantName ?? ""}
+              onSave={onSaveItinerary}
+            />
+          </TabsContent>
+        )}
       </Tabs>
     );
   }
