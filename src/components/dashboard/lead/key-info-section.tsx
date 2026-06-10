@@ -651,7 +651,6 @@ function TripInquiryPanel({ lead, isAdmin, onSave }: TripInquiryPanelProps) {
   }
 
   const nights = computeNights();
-  const budget = draft.trip_budget_amount ? Number(draft.trip_budget_amount) : null;
 
   return (
     <>

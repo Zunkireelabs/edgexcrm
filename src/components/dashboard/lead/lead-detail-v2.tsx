@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
-import { isValidEmail, isValidPhone } from "@/lib/leads/lead-validation";
+import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
@@ -211,16 +211,11 @@ export function LeadDetailV2({
   };
 
   const validateDraft = (): boolean => {
-    const errors: EditErrors = {};
-    if (!draft.email && !draft.first_name) {
-      errors.general = "Please provide at least an email or first name";
-    }
-    if (draft.email && !isValidEmail(draft.email)) {
-      errors.email = "Please enter a valid email address";
-    }
-    if (draft.phone && !isValidPhone(draft.phone)) {
-      errors.phone = "Please enter a valid phone number";
-    }
+    const errors: EditErrors = validateLeadIdentity({
+      email: draft.email,
+      firstName: draft.first_name,
+      phone: draft.phone,
+    });
     setEditErrors(errors);
     return Object.keys(errors).length === 0;
   };

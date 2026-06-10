@@ -33,7 +33,7 @@ import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
-import { isValidEmail, isValidPhone } from "@/lib/leads/lead-validation";
+import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 interface TeamMember {
   user_id: string;
@@ -192,19 +192,11 @@ export function AddLeadSheet({
   };
 
   const validate = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    if (!formData.email && !formData.firstName) {
-      newErrors.general = "Please provide at least an email or first name";
-    }
-
-    if (formData.email && !isValidEmail(formData.email)) {
-      newErrors.email = "Please enter a valid email address";
-    }
-
-    if (formData.phone && !isValidPhone(formData.phone)) {
-      newErrors.phone = "Please enter a valid phone number";
-    }
+    const newErrors: FormErrors = validateLeadIdentity({
+      email: formData.email,
+      firstName: formData.firstName,
+      phone: formData.phone,
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
