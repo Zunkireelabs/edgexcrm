@@ -43,7 +43,15 @@ import {
   GitMerge,
   Briefcase,
   Columns3,
+  MoreHorizontal,
+  Pencil,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
@@ -586,8 +594,8 @@ export function LeadsTable({
     [memberMap, formMap, entityMap, stages, industryId, selectedIds, unreadLeadIds],
   );
 
-  // Total column count: 2 anchors (select + avatar) + visible data columns
-  const totalColSpan = 2 + visibleColumns.length;
+  // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
+  const totalColSpan = 2 + visibleColumns.length + 1;
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -941,6 +949,8 @@ export function LeadsTable({
               <th className="px-2 py-2 text-left w-8"></th>
               {/* Data columns from registry */}
               {visibleColumns.map((col) => col.renderTh(columnCtx))}
+              {/* Row actions */}
+              <th className="px-2 py-2 text-left w-8"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -980,6 +990,26 @@ export function LeadsTable({
                     </td>
                     {/* Data columns from registry */}
                     {visibleColumns.map((col) => col.renderTd(lead, columnCtx))}
+                    {/* Row actions */}
+                    <td className="px-2 py-1.5" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button
+                            type="button"
+                            className="h-6 w-6 rounded flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                            aria-label="Row actions"
+                          >
+                            <MoreHorizontal className="h-3.5 w-3.5" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
+                            <Pencil className="h-4 w-4 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
                 );
               })
