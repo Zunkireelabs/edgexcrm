@@ -5,6 +5,7 @@ import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
+import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,7 +72,7 @@ export function KeyInfoSection({
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
-    ([, v]) => v != null && v !== ""
+    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
   );
 
   return (
