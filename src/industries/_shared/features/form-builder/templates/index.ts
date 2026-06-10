@@ -3,6 +3,7 @@ import { scholarshipApplicationTemplate } from "./scholarship-application";
 import { admissionInquiryTemplate } from "./admission-inquiry";
 import { counselingBookingTemplate } from "./counseling-booking";
 import { generalContactTemplate } from "./general-contact";
+import { tripEnquiryTemplate } from "./trip-enquiry";
 
 export const EDUCATION_CONSULTANCY_TEMPLATES: TemplateDefinition[] = [
   scholarshipApplicationTemplate,
@@ -32,9 +33,14 @@ export const BLANK_TEMPLATE: TemplateDefinition = {
   ],
 };
 
+const ALL_NAMED_TEMPLATES: TemplateDefinition[] = [
+  ...EDUCATION_CONSULTANCY_TEMPLATES,
+  tripEnquiryTemplate,
+];
+
 export function getTemplateById(id: string): TemplateDefinition | undefined {
   if (id === "blank") return BLANK_TEMPLATE;
-  return EDUCATION_CONSULTANCY_TEMPLATES.find((t) => t.id === id);
+  return ALL_NAMED_TEMPLATES.find((t) => t.id === id);
 }
 
 export function getTemplatesForIndustry(industryId: string | null | undefined): TemplateDefinition[] {
@@ -43,6 +49,8 @@ export function getTemplatesForIndustry(industryId: string | null | undefined): 
       return [...EDUCATION_CONSULTANCY_TEMPLATES, BLANK_TEMPLATE];
     case "construction":
       return [generalContactTemplate, BLANK_TEMPLATE];
+    case "travel_agency":
+      return [tripEnquiryTemplate, generalContactTemplate, BLANK_TEMPLATE];
     default:
       return [generalContactTemplate, BLANK_TEMPLATE];
   }
@@ -53,4 +61,5 @@ export {
   admissionInquiryTemplate,
   counselingBookingTemplate,
   generalContactTemplate,
+  tripEnquiryTemplate,
 };
