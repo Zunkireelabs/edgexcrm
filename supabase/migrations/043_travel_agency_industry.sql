@@ -7,7 +7,7 @@ VALUES (
   'travel_agency',
   'Travel Agency',
   'Travel agencies, tour operators, and destination management companies',
-  'Destinations', 'Destination', 'Plane',
+  'Packages', 'Package', 'Plane',
   '[
     {"name":"New Inquiry","slug":"new-inquiry","position":0,"color":"#3b82f6","is_default":true,"is_terminal":false},
     {"name":"Qualifying","slug":"qualifying","position":1,"color":"#06b6d4","is_default":false,"is_terminal":false},
