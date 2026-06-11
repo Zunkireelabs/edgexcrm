@@ -58,6 +58,33 @@ export async function PATCH(
   if (!auth) return apiUnauthorized();
 
   const { id } = await params;
+  const supabase = await createServiceClient();
+
+  // Access check (tenant + counselor scoping) must run before any mutation —
+  // editing must match viewing (same check as the GET handler above).
+  const { data: conv } = await supabase
+    .from("conversations")
+    .select("id, lead_id")
+    .eq("id", id)
+    .eq("tenant_id", auth.tenantId)
+    .maybeSingle();
+
+  if (!conv) return apiNotFound("Conversation");
+
+  if (auth.role === "counselor") {
+    const leadId = (conv as { lead_id: string | null }).lead_id;
+    if (!leadId) return apiForbidden();
+    const { data: lead } = await supabase
+      .from("leads")
+      .select("assigned_to")
+      .eq("id", leadId)
+      .eq("tenant_id", auth.tenantId)
+      .maybeSingle();
+    if (!lead || (lead as { assigned_to: string | null }).assigned_to !== auth.userId) {
+      return apiForbidden();
+    }
+  }
+
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
 
   const allowed = ["status", "assignee_type", "assigned_to_user_id", "stage_tag", "ai_autonomy", "snoozed_until", "lead_id"];
@@ -69,8 +96,6 @@ export async function PATCH(
   if (Object.keys(patch).length === 0) {
     return apiSuccess({});
   }
-
-  const supabase = await createServiceClient();
 
   const { data, error } = await supabase
     .from("conversations")
