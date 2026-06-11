@@ -8,6 +8,7 @@ import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-m
 import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-card";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
 import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
+import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
 import { getFeatureAccess, getIndustrySidebarItems } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -107,6 +108,7 @@ export default async function SettingsPage() {
       )}
       <PositionsManager navCatalog={navCatalog} widgetCatalog={widgetCatalog} />
       <EmailRulesManager tenantId={tenantData.tenant.id} />
+      <ChannelsCard />
       {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.EMAIL) && (
         <Suspense>
           <InboxConnector />

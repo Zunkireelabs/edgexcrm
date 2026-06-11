@@ -96,7 +96,9 @@ _(Project Workspace moved to Recently shipped — it_agency `/projects` workspac
 
 Someone is actively building it. Each entry includes: owner, ETA, branch link, brief link.
 
-_(empty)_
+- **Unified Inbox (omnichannel)** — universal/Global; **Phases 1+2+3a on `stage` (`0279241`); real WhatsApp LIVE end-to-end on `dev-lead-crm`; NOT on prod.** Full detail + dev wiring + prod checklist: **`docs/UNIFIED-INBOX-BRIEF.md`**.
+  - **Live now:** 3-pane UI · channel-agnostic tables (mig 044) · sandbox + **WhatsApp Cloud API** channels · inbound (Meta webhook → route by phone_number_id → queue) + outbound + **read receipts** · connect-a-channel Settings UI · **AES-256-GCM token encryption** · enforced 24h-window guard · notifications-on-inbound + deep-link · counselor scoping · realtime · AI seams (4 declared tools). Dev auto-drain cron `*/1`; permanent System User token.
+  - **Next: Phase 3b** = near-instant inbound (inline-process after fast-ack; brief `docs/UNIFIED-INBOX-PHASE-3B-BRIEF.md`) — today inbound lags up to ~60s on dev (1-min cron). Then **prod promotion** (env vars on prod + prod-URL drain + privacy page + real business number). **Phase 4** = Messenger + Instagram (adapters still stubs). **Phase 5** = AI agent runtime over the 4 tools.
 
 ---
 
