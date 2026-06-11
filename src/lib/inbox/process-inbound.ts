@@ -63,19 +63,14 @@ export async function processInboundEvents(limit = 50): Promise<ProcessResult> {
       await processOneEvent(supabase, evt);
       await supabase
         .from("events")
-        .update({ status: "processed" })
+        .update({ status: "completed" })
         .eq("id", evt.id);
       processed++;
     } catch (err) {
       errors++;
       const errMsg = err instanceof Error ? err.message : String(err);
       logger.error({ err, eventId: evt.id }, "processInboundEvents: failed to process event");
-      // Increment attempt counter; leave as pending for retry up to MAX attempts
-      await supabase
-        .from("events")
-        .update({ last_error: errMsg, attempts: supabase.rpc })
-        .eq("id", evt.id);
-      // Simple increment: fetch + update (events table has an attempts column per mig 002)
+      // Increment attempt counter; leave as pending for retry up to MAX attempts (mig 002 attempts column)
       const { data: current } = await supabase
         .from("events")
         .select("attempts")

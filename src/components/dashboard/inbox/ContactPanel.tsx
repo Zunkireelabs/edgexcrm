@@ -24,7 +24,7 @@ interface ContactPanelProps {
   onConversationUpdate: () => void;
 }
 
-export function ContactPanel({ conversation, tenantId: _tenantId, onConversationUpdate }: ContactPanelProps) {
+export function ContactPanel({ conversation, tenantId, onConversationUpdate }: ContactPanelProps) {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loadingLead, setLoadingLead] = useState(false);
 
@@ -61,6 +61,7 @@ export function ContactPanel({ conversation, tenantId: _tenantId, onConversation
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        tenant_id: tenantId,
         first_name: firstName,
         last_name: lastName,
         phone: phone ?? undefined,

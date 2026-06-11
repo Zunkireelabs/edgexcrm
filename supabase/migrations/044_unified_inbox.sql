@@ -156,3 +156,18 @@ CREATE POLICY "Tenant members can manage messages"
 CREATE POLICY "Service role full access to messages"
   ON messages FOR ALL
   USING (auth.role() = 'service_role');
+
+-- ── Realtime ─────────────────────────────────────────────────────────────────────
+-- The inbox UI subscribes to postgres_changes on `messages` (INSERT/UPDATE) for live
+-- threads. That only fires if the table is in the supabase_realtime publication.
+-- Guarded: no-op on local Postgres without the publication, or if already a member.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')
+     AND NOT EXISTS (
+       SELECT 1 FROM pg_publication_tables
+       WHERE pubname = 'supabase_realtime' AND tablename = 'messages'
+     ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE messages;
+  END IF;
+END $$;

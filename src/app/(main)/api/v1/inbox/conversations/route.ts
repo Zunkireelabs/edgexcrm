@@ -49,16 +49,16 @@ export async function GET(request: NextRequest) {
 
     const myLeadIds = (myLeads ?? []).map((l: { id: string }) => l.id);
     if (myLeadIds.length === 0) {
-      return apiSuccess({ data: [], meta: { total: 0, limit, offset } });
+      return apiSuccess([]);
     }
     query = query.in("lead_id", myLeadIds);
   }
 
-  const { data, error, count } = await query;
+  const { data, error } = await query;
 
   if (error) {
-    return apiSuccess({ data: [], meta: { total: 0, limit, offset } });
+    return apiSuccess([]);
   }
 
-  return apiSuccess({ data: data ?? [], meta: { total: count ?? 0, limit, offset } });
+  return apiSuccess(data ?? []);
 }
