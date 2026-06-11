@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MessageThread } from "./MessageThread";
@@ -33,8 +34,9 @@ export function InboxUI({
   initialChannels,
   initialConversations,
 }: InboxUIProps) {
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<ConversationRow[]>(initialConversations);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("conversation"));
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [filterStatus, setFilterStatus] = useState<"open" | "closed" | "all">("open");
