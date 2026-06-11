@@ -2,7 +2,7 @@
 
 > **Single source of truth for the omnichannel inbox.** Captures what shipped, what's deliberately stubbed, what's required before it works in a deployed env, and the remaining roadmap. Keep this current until the feature is fully live, then archive to `docs/archive/features/`.
 
-**Status (2026-06-11):** v1 foundation **built + Opus-reviewed + verified working end-to-end on a sandbox channel**. On branch `feature/unified-inbox` (@ `fb72713`), **not yet merged to stage**. Migration 044 already applied to the shared Supabase DB (additive, dormant for prod).
+**Status (2026-06-11):** v1 foundation **built + Opus-reviewed + verified working end-to-end on a sandbox channel**, **SHIPPED TO STAGE** (`stage` @ `9eb782a`; deploy `27334257254` ✅; live on `dev-lead-crm`). Migration 044 already applied to the shared Supabase DB (additive, dormant for prod). **Phase 2 next:** wire the dev VPS (`INBOX_SANDBOX_SECRET` + processor cron — needs auth) so inbound processes on dev, then notifications-on-inbound. Prod promotion is a separate later GO.
 
 ---
 

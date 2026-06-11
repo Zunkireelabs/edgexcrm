@@ -96,10 +96,10 @@ _(Project Workspace moved to Recently shipped — it_agency `/projects` workspac
 
 Someone is actively building it. Each entry includes: owner, ETA, branch link, brief link.
 
-- **Unified Inbox (omnichannel)** — universal/Global; **v1 foundation built + Opus-reviewed + verified working on a sandbox channel.** Branch `feature/unified-inbox` (@ `fb72713`), NOT yet merged to stage. Full detail + remaining roadmap: **`docs/UNIFIED-INBOX-BRIEF.md`**.
+- **Unified Inbox (omnichannel)** — universal/Global; **v1 SHIPPED TO STAGE (`stage` @ `9eb782a`, deploy `27334257254` ✅, live on `dev-lead-crm`).** Phase 2 in progress. Full detail + remaining roadmap: **`docs/UNIFIED-INBOX-BRIEF.md`**.
   - **What works (v1):** 3-pane inbox UI · inbound→thread→human reply · channel-agnostic `inbox_channels`/`conversations`/`messages` (mig 044, applied to shared DB) · phone dedup/auto-link · convert-to-lead · realtime · counselor scoping · AI seams (draft/approve, `ai_agent` author, `ai_autonomy`, 4 declared tools). Sandbox channel only — Meta channels deliberately deferred.
   - **Remaining (phased, in the brief):** Phase 2 = inbound processor **cron** (REQUIRED before any deployed env processes inbound) + notifications-on-inbound (reuse `upsertThreadNotification`). Phase 3 = connect-a-channel admin UI + **WhatsApp Cloud API go-live** (adapter built but flag-disabled; needs Meta app review) + Meta webhook signature/routing/status callbacks. Phase 4 = Messenger + Instagram (interface stubs today). Phase 5 = AI agent runtime over the 4 declared tools.
-  - **Next:** Sadin's GO to merge → stage (code-only) + add the dev VPS cron line.
+  - **Next (Phase 2):** wire the dev VPS (`INBOX_SANDBOX_SECRET` + processor cron — needs Sadin's auth) so dev inbound processes; build notifications-on-inbound.
 
 ---
 
