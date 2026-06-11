@@ -26,6 +26,7 @@ import {
   Menu,
   FileText,
   Kanban,
+  MessageSquare,
   UsersRound,
   UserCheck,
   Clock,
@@ -64,6 +65,7 @@ const UNIVERSAL_NAV_TOP = [
 
 const UNIVERSAL_NAV_MIDDLE = [
   { href: "/pipeline", label: "Pipeline", icon: Kanban },
+  { href: "/inbox", label: "Inbox", icon: MessageSquare },
 ];
 
 const UNIVERSAL_NAV_BOTTOM = [
@@ -93,6 +95,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LayoutGrid,
   Kanban,
+  MessageSquare,
   Stamp,
   Users,
   UsersRound,

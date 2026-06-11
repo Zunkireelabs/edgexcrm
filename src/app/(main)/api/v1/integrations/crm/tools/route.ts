@@ -115,6 +115,49 @@ const TOOL_MANIFEST = {
       endpoint: "/api/v1/integrations/crm/pipeline",
       parameters: {},
     },
+    {
+      name: "list_conversations",
+      description: "List inbox conversations with optional filtering by status, channel, or assignee",
+      method: "GET",
+      endpoint: "/api/v1/inbox/conversations",
+      parameters: {
+        status: "string (optional, 'open'|'closed'|'all', default 'open')",
+        channel_id: "uuid (optional)",
+        assignee: "string (optional, 'mine'|'unassigned')",
+        limit: "number (optional, default 50, max 100)",
+        offset: "number (optional, default 0)",
+      },
+    },
+    {
+      name: "get_conversation",
+      description: "Get a single inbox conversation by ID including linked lead and channel info",
+      method: "GET",
+      endpoint: "/api/v1/inbox/conversations/:id",
+      parameters: {
+        id: "uuid (required, path parameter)",
+      },
+    },
+    {
+      name: "send_message",
+      description: "Send a message in a conversation as a human agent or approve a draft",
+      method: "POST",
+      endpoint: "/api/v1/inbox/conversations/:id/messages",
+      parameters: {
+        id: "uuid (required, path parameter)",
+        content: "string (required unless approve_draft_id is set)",
+        approve_draft_id: "uuid (optional — if set, approves and sends the specified draft message)",
+      },
+    },
+    {
+      name: "draft_reply",
+      description: "Approve an AI-drafted reply and send it in the conversation",
+      method: "POST",
+      endpoint: "/api/v1/inbox/conversations/:id/draft",
+      parameters: {
+        id: "uuid (required, path parameter)",
+        draft_message_id: "uuid (required — the draft message to approve)",
+      },
+    },
   ],
 };
 
