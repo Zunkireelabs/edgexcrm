@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { ConversationList } from "./ConversationList";
 import { MessageThread } from "./MessageThread";
@@ -35,6 +35,8 @@ export function InboxUI({
   initialConversations,
 }: InboxUIProps) {
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
   const [conversations, setConversations] = useState<ConversationRow[]>(initialConversations);
   const [selectedId, setSelectedId] = useState<string | null>(searchParams.get("conversation"));
   const [messages, setMessages] = useState<MessageRow[]>([]);
@@ -42,6 +44,17 @@ export function InboxUI({
   const [filterStatus, setFilterStatus] = useState<"open" | "closed" | "all">("open");
   const [filterAssignee, setFilterAssignee] = useState<"all" | "mine" | "unassigned">("all");
   const [filterChannel, setFilterChannel] = useState<string | "all">("all");
+
+  // Deep-link from a notification (/inbox?conversation=<id>): select the conversation.
+  // Reacts to param changes even when already mounted on /inbox (router.push only swaps
+  // the query string — no remount), then strips the param (matches the ?edit=1 pattern).
+  const conversationParam = searchParams.get("conversation");
+  useEffect(() => {
+    if (conversationParam) {
+      setSelectedId(conversationParam);
+      router.replace(pathname);
+    }
+  }, [conversationParam, router, pathname]);
 
   const selectedConv = conversations.find((c) => c.id === selectedId) ?? null;
 
