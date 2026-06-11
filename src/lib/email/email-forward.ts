@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { getResendClient, EMAIL_FROM } from "./index";
+import { getResendClient } from "./index";
+import { resolveTenantSender } from "./sender";
 import { renderTemplate } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
@@ -86,14 +87,12 @@ export async function processEmailForwardRules({
       const subject = renderTemplate(rule.subject, renderCtx);
       const body = renderTemplate(rule.body, renderCtx);
 
-      // Use custom from name if set, otherwise system default
-      const fromAddress = rule.from_name
-        ? `${rule.from_name} <noreply@lead-crm.zunkireelabs.com>`
-        : EMAIL_FROM;
+      const sender = await resolveTenantSender(tenantId, { nameOverride: rule.from_name ?? undefined });
 
       try {
         const { data, error: sendError } = await resend.emails.send({
-          from: fromAddress,
+          from: sender.from,
+          ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
           to: lead.email!,
           subject,
           html: body,
