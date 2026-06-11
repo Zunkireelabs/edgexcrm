@@ -10,6 +10,7 @@ import type {
   ChannelAdapter,
   ChannelCapabilities,
   NormalizedInbound,
+  StatusEventResult,
   SendResult,
 } from "./types";
 
@@ -33,9 +34,16 @@ interface WAMessage {
   text?: { body?: string };
   type: string;
 }
+interface WAStatus {
+  id: string;
+  status: string;
+  timestamp: string;
+}
 interface WAValue {
   contacts?: WAContact[];
   messages?: WAMessage[];
+  statuses?: WAStatus[];
+  metadata?: { phone_number_id?: string };
 }
 interface WAChange {
   value?: WAValue;
@@ -101,6 +109,8 @@ export const whatsappAdapter: ChannelAdapter = {
           if (c.wa_id) contactMap[c.wa_id] = c;
         }
 
+        const channelRef = value.metadata?.phone_number_id ?? "";
+
         for (const msg of value.messages) {
           const contact = contactMap[msg.from];
           results.push({
@@ -111,6 +121,33 @@ export const whatsappAdapter: ChannelAdapter = {
             providerTimestamp: new Date(parseInt(msg.timestamp, 10) * 1000).toISOString(),
             contentText: msg.text?.body ?? null,
             attachments: [],
+            channelRef,
+          });
+        }
+      }
+    }
+
+    return results;
+  },
+
+  parseStatusEvent(payload): StatusEventResult[] {
+    if (!process.env.INBOX_WHATSAPP_ENABLED) return [];
+
+    const p = payload as WAPayload;
+    const results: StatusEventResult[] = [];
+
+    for (const entry of p?.entry ?? []) {
+      for (const change of entry?.changes ?? []) {
+        const statuses = change?.value?.statuses;
+        if (!statuses) continue;
+        for (const s of statuses) {
+          if (s.status !== "delivered" && s.status !== "read") continue;
+          results.push({
+            providerMessageId: s.id,
+            status: s.status as "delivered" | "read",
+            timestamp: s.timestamp
+              ? new Date(parseInt(s.timestamp, 10) * 1000).toISOString()
+              : null,
           });
         }
       }

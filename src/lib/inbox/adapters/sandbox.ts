@@ -3,6 +3,7 @@ import type {
   ChannelAdapter,
   ChannelCapabilities,
   NormalizedInbound,
+  StatusEventResult,
   SendResult,
 } from "./types";
 
@@ -103,7 +104,12 @@ export const sandboxAdapter: ChannelAdapter = {
         providerTimestamp: m.timestamp ?? null,
         contentText: m.text ?? null,
         attachments: m.attachments ?? [],
+        channelRef: "",  // sandbox routes by X-Channel-ID header; channelRef unused
       }));
+  },
+
+  parseStatusEvent(): StatusEventResult[] {
+    return [];
   },
 
   async sendMessage(): Promise<SendResult> {
