@@ -2,7 +2,34 @@
 
 > **Single source of truth for the omnichannel inbox.** Captures what shipped, what's deliberately stubbed, what's required before it works in a deployed env, and the remaining roadmap. Keep this current until the feature is fully live, then archive to `docs/archive/features/`.
 
-**Status (2026-06-11):** v1 foundation **built + Opus-reviewed + verified working end-to-end on a sandbox channel**, **SHIPPED TO STAGE** (`stage` @ `9eb782a`; deploy `27334257254` ✅; live on `dev-lead-crm`). Migration 044 already applied to the shared Supabase DB (additive, dormant for prod). **Phase 2 next:** wire the dev VPS (`INBOX_SANDBOX_SECRET` + processor cron — needs auth) so inbound processes on dev, then notifications-on-inbound. Prod promotion is a separate later GO.
+**Status (2026-06-11):** Phases 1 + 2 + 3a **shipped to stage**; **real WhatsApp is LIVE end-to-end on dev** (`dev-lead-crm`) — inbound + outbound + read receipts, verified with a real phone. Migration 044 applied to the shared Supabase DB (additive, dormant for prod). **Not on prod yet.** Next: Phase 3b (near-instant inbound — `docs/UNIFIED-INBOX-PHASE-3B-BRIEF.md`), then prod promotion. See **Live state log** below for the exact dev wiring.
+
+### Phase ledger
+| Phase | What | Status |
+|---|---|---|
+| 1 | Foundation: tables, adapter seam, sandbox loop, 3-pane UI, AI seams | ✅ stage (`9eb782a`) |
+| 2 | Notifications-on-inbound + `inbox-process.yml` workflow | ✅ stage (`8c19dbc`) |
+| 3a | Connect-a-channel UI + WhatsApp go-live (webhook wiring, token encryption, 24h guard, status callbacks) | ✅ stage (`0279241`); **WhatsApp LIVE on dev** |
+| 3b | Near-instant inbound (inline-process after fast-ack) | 📋 brief written, awaiting Sonnet |
+| 4 | Messenger + Instagram (adapters are stubs) | ⏳ future |
+| 5 | AI agent runtime over the 4 declared tools | ⏳ future |
+
+### Live state log — WhatsApp on dev (2026-06-11)
+Real WhatsApp proven end-to-end on `dev-lead-crm`. The wiring, for reproducibility / prod parity:
+- **Meta app:** "EdgeX CRM" (app id `1322014153236497`), **Published/Live**, under business portfolio "Zunkiree Labs Pvt. Ltd." (`2965471130325336`). WhatsApp use case added.
+- **Test number:** phone_number_id `1143343632197234` (`+1 555-646-8778`), WABA `1017943797291700`, status CONNECTED, recipient `+917624807563` verified.
+- **Token:** a **permanent System User token** ("Edgex crm" system user, id `61590939201995`, Admin, assigned the app + WABA with Full control, scopes `whatsapp_business_messaging` + `whatsapp_business_management`, **never expires**). The earlier *temporary* dashboard token expired within hours and caused outbound 131005 — **always use a System User token.**
+- **Channel row:** `inbox_channels` provider `whatsapp`, external_account_id `1143343632197234`, status active, token **encrypted at rest** (re-stored after the System User token swap; conversation preserved).
+- **Dev env vars** (on the dev box `.env.local`): `INBOX_WHATSAPP_ENABLED=true`, `META_APP_SECRET`, `META_WEBHOOK_VERIFY_TOKEN`, `INBOX_TOKEN_ENC_KEY`, plus pre-existing `INTERNAL_CRON_SECRET` + `NEXT_PUBLIC_APP_URL`.
+- **Webhook in Meta:** callback `https://dev-lead-crm.zunkireelabs.com/api/webhooks/meta/whatsapp`, subscribed to the **`messages`** field. **Gotcha:** had to subscribe the WABA to the app (`POST /<WABA_ID>/subscribed_apps`) — the use-case "Try it out" flow doesn't auto-subscribe it, so real inbound was silently dropped until then. Publishing the app was also required (unpublished apps only receive dashboard *test* webhooks, not real messages).
+- **Dev auto-drain cron** (added to VPS root crontab, authorized by Sadin): `*/1 * * * *` hits `/api/internal/inbox/process` (reads `INTERNAL_CRON_SECRET` from `.env.local` at runtime). So inbound drains within ~1 min on dev. **This is why inbound lags up to ~60s on dev → Phase 3b makes it ~1–2s.**
+
+### Prod-promotion checklist (when ready)
+1. `git checkout main && git merge --no-ff stage && git push` (mig 044 already on shared DB — code-only).
+2. Set the 4 WhatsApp env vars on the **prod** box (System User token works for both envs since it's account-scoped).
+3. The `inbox-process.yml` workflow auto-runs on prod once on main (no prod VPS cron needed) — but it targets the **dev** URL; **add a prod-URL drain** (prod VPS cron or a prod workflow) so prod inbound processes.
+4. Connect the channel on prod (Settings → Channels) and update the Meta webhook to the **prod** callback (or run separate apps/numbers per env).
+5. A real **privacy policy page** + **real business number** + **Business Verification** for production WhatsApp (test number → 5 recipients only).
 
 ---
 
