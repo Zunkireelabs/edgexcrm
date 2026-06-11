@@ -51,11 +51,23 @@ export interface NormalizedInbound {
   contentText: string | null;
   /** Raw attachments (not fully parsed in v1) */
   attachments: unknown[];
+  /** Provider account id the message arrived on (phone_number_id for WA, page id for Messenger).
+   *  Used by the Meta webhook to map the payload to the correct inbox_channels row. */
+  channelRef: string;
+}
+
+export interface StatusEventResult {
+  providerMessageId: string;
+  /** 'delivered' | 'read' — forward-only; never downgrade */
+  status: 'delivered' | 'read';
+  timestamp: string | null;
 }
 
 export interface SendMessageContent {
   text: string;
   attachments?: unknown[];
+  /** Pre-approved template payload (WhatsApp). If absent and window is closed, send will fail. */
+  template?: unknown;
 }
 
 export interface SendResult {
@@ -89,6 +101,13 @@ export interface ChannelAdapter {
    * Returns an empty array for non-message events (delivery receipts, read marks).
    */
   parseInboundEvent(payload: unknown): NormalizedInbound[];
+
+  /**
+   * Parse a raw provider payload into delivery/read status update records.
+   * Returns an empty array if the payload carries no status events (message events, etc.).
+   * WhatsApp posts value.statuses[]; sandbox and stub adapters return [].
+   */
+  parseStatusEvent(payload: unknown): StatusEventResult[];
 
   /**
    * Send a message via the provider.

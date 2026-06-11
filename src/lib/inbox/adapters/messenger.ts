@@ -5,6 +5,7 @@ import type {
   ChannelAdapter,
   ChannelCapabilities,
   NormalizedInbound,
+  StatusEventResult,
   SendResult,
 } from "./types";
 
@@ -31,6 +32,10 @@ export const messengerAdapter: ChannelAdapter = {
   },
 
   parseInboundEvent(): NormalizedInbound[] {
+    throw new Error(NOT_IMPLEMENTED);
+  },
+
+  parseStatusEvent(): StatusEventResult[] {
     throw new Error(NOT_IMPLEMENTED);
   },
 

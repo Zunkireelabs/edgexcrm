@@ -6,6 +6,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { getAdapter } from "./adapters";
+import { decryptToken } from "./crypto";
 import type { InboxProvider } from "./adapters/types";
 
 export interface HumanAuthor {
@@ -35,6 +36,7 @@ export interface SendMessageResult {
   messageId: string;
   providerMessageId: string | null;
   status: string;
+  error?: string;
 }
 
 interface ConversationRow {
@@ -88,14 +90,41 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
   }
   const channel = ch as ChannelRow;
 
-  // Session-window guard (capability-driven; lives here so both callers obey it)
   const adapter = getAdapter(conversation.provider as InboxProvider);
-  if (adapter.capabilities.requiresTemplateOutsideWindow && input.author.type === "human_agent") {
-    // In v1 we log the warning but don't block — template support lands with WhatsApp
-    logger.warn(
-      { conversationId: input.conversationId, provider: conversation.provider },
-      "Sending outside session window — template may be required"
-    );
+
+  // Session-window guard: enforce for providers that require templates outside the window.
+  // Template composing UI is out of scope — if we're outside the window and no template is
+  // provided, fail early so the rep gets a clear error instead of a silent Meta rejection.
+  if (adapter.capabilities.requiresTemplateOutsideWindow && adapter.capabilities.sessionWindowHours !== null) {
+    const windowHours = adapter.capabilities.sessionWindowHours;
+
+    const { data: latestInbound } = await supabase
+      .from("messages")
+      .select("provider_timestamp, created_at")
+      .eq("conversation_id", input.conversationId)
+      .eq("tenant_id", input.tenantId)
+      .eq("direction", "inbound")
+      .order("provider_timestamp", { ascending: false, nullsFirst: false })
+      .limit(1)
+      .maybeSingle();
+
+    const lastInboundTs = latestInbound
+      ? ((latestInbound as { provider_timestamp: string | null; created_at: string }).provider_timestamp ??
+          (latestInbound as { provider_timestamp: string | null; created_at: string }).created_at)
+      : null;
+
+    const outsideWindow =
+      !lastInboundTs ||
+      Date.now() - new Date(lastInboundTs).getTime() > windowHours * 3600 * 1000;
+
+    if (outsideWindow) {
+      const errMsg = `OUTSIDE_SESSION_WINDOW: no inbound message in the last ${windowHours}h — a pre-approved template is required to initiate this conversation`;
+      logger.warn(
+        { conversationId: input.conversationId, provider: conversation.provider, lastInboundTs },
+        errMsg
+      );
+      return { messageId: "", providerMessageId: null, status: "failed", error: errMsg };
+    }
   }
 
   const authorUserId = input.author.type === "human_agent" ? input.author.userId : null;
@@ -142,6 +171,25 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
     messageId = (inserted as { id: string }).id;
   }
 
+  // Decrypt the channel access token (encrypted at rest since Phase 3a).
+  // Fail closed: if the key is missing or the blob is invalid, fail the send rather
+  // than sending a garbled token to the provider. Sandbox has no access_token → skipped.
+  let plaintextToken: string | null = channel.access_token;
+  if (channel.access_token) {
+    try {
+      plaintextToken = decryptToken(channel.access_token);
+    } catch (decryptErr) {
+      const errMsg = `Failed to decrypt channel access token: ${decryptErr instanceof Error ? decryptErr.message : String(decryptErr)}`;
+      logger.error({ err: decryptErr, channelId: channel.id }, errMsg);
+      await supabase
+        .from("messages")
+        .update({ status: "failed", error: errMsg })
+        .eq("id", messageId)
+        .eq("tenant_id", input.tenantId);
+      return { messageId, providerMessageId: null, status: "failed", error: errMsg };
+    }
+  }
+
   // Attempt delivery
   let providerMessageId: string | null = null;
   let finalStatus = "sent";
@@ -155,7 +203,7 @@ export async function sendMessage(input: SendMessageInput): Promise<SendMessageR
         external_account_id: channel.external_account_id,
         display_name: channel.display_name,
         status: channel.status,
-        access_token: channel.access_token,
+        access_token: plaintextToken,
         webhook_verify_token_hash: channel.webhook_verify_token_hash,
         meta: channel.meta,
       },
