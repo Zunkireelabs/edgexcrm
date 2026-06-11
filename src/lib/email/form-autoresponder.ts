@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { getResendClient, EMAIL_FROM } from "./index";
+import { getResendClient } from "./index";
+import { resolveTenantSender } from "./sender";
 import { renderTemplate } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { FormConfig, Lead } from "@/types/database";
@@ -63,9 +64,12 @@ export async function processFormAutoresponder(
   let errorMsg: string | null = null;
   let providerMessageId: string | null = null;
 
+  const sender = await resolveTenantSender(lead.tenant_id);
+
   try {
     const { data, error } = await resend.emails.send({
-      from: EMAIL_FROM,
+      from: sender.from,
+      ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
       to: lead.email,
       subject,
       html: bodyHtml,
