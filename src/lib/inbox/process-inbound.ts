@@ -8,6 +8,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { normalizePhone } from "@/lib/leads/dedup";
+import { NotificationTypes, getTenantAdminRecipients, upsertThreadNotification } from "@/lib/notifications";
 
 interface InboundEventPayload {
   channel_id: string;
@@ -103,17 +104,24 @@ async function processOneEvent(
   // 1. find-or-create conversation
   const { data: existingConv } = await supabase
     .from("conversations")
-    .select("id, lead_id, unread_count")
+    .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
     .eq("channel_id", p.channel_id)
     .eq("external_contact_id", p.external_contact_id)
     .maybeSingle();
 
   let conversationId: string;
   let currentUnread = 0;
+  let convLeadId: string | null = null;
+  let convAssigneeType = "unassigned";
+  let convAssignedToUserId: string | null = null;
 
   if (existingConv) {
-    conversationId = (existingConv as { id: string; lead_id: string | null; unread_count: number }).id;
-    currentUnread = (existingConv as { id: string; lead_id: string | null; unread_count: number }).unread_count;
+    const c = existingConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+    conversationId = c.id;
+    currentUnread = c.unread_count;
+    convLeadId = c.lead_id;
+    convAssigneeType = c.assignee_type;
+    convAssignedToUserId = c.assigned_to_user_id;
   } else {
     // Create new conversation; attempt phone-based lead linkage (Decision D)
     const resolvedLeadId = await resolveLeadByPhone(supabase, p.tenant_id, p.contact_phone);
@@ -140,7 +148,7 @@ async function processOneEvent(
       // May be a race — try to fetch again
       const { data: raceConv } = await supabase
         .from("conversations")
-        .select("id, lead_id, unread_count")
+        .select("id, lead_id, unread_count, assigned_to_user_id, assignee_type")
         .eq("channel_id", p.channel_id)
         .eq("external_contact_id", p.external_contact_id)
         .maybeSingle();
@@ -148,11 +156,17 @@ async function processOneEvent(
       if (!raceConv) {
         throw new Error(`Failed to create conversation: ${createErr?.message}`);
       }
-      conversationId = (raceConv as { id: string; lead_id: string | null; unread_count: number }).id;
-      currentUnread = (raceConv as { id: string; lead_id: string | null; unread_count: number }).unread_count;
+      const r = raceConv as { id: string; lead_id: string | null; unread_count: number; assigned_to_user_id: string | null; assignee_type: string };
+      conversationId = r.id;
+      currentUnread = r.unread_count;
+      convLeadId = r.lead_id;
+      convAssigneeType = r.assignee_type;
+      convAssignedToUserId = r.assigned_to_user_id;
     } else {
       conversationId = (newConv as { id: string }).id;
       currentUnread = 0;
+      convLeadId = resolvedLeadId;
+      // New conversations always start unassigned
     }
   }
 
@@ -191,6 +205,51 @@ async function processOneEvent(
     })
     .eq("id", conversationId)
     .eq("tenant_id", p.tenant_id);
+
+  // 4. Fire bell notification (non-fatal)
+  try {
+    const recipientIds = new Set<string>();
+
+    if (convAssigneeType === "human" && convAssignedToUserId) {
+      recipientIds.add(convAssignedToUserId);
+    }
+
+    if (convLeadId) {
+      const { data: leadRow } = await supabase
+        .from("leads")
+        .select("assigned_to")
+        .eq("id", convLeadId)
+        .eq("tenant_id", p.tenant_id)
+        .maybeSingle();
+      if ((leadRow as { assigned_to?: string | null } | null)?.assigned_to) {
+        recipientIds.add((leadRow as { assigned_to: string }).assigned_to);
+      }
+    }
+
+    if (recipientIds.size === 0) {
+      const admins = await getTenantAdminRecipients(supabase, p.tenant_id);
+      admins.forEach((id) => recipientIds.add(id));
+    }
+
+    const preview = p.content_text?.slice(0, 200) ?? "";
+    const senderLabel = p.contact_display_name || p.contact_phone || "Unknown";
+    const link = `/inbox?conversation=${conversationId}`;
+
+    await Promise.all(
+      [...recipientIds].map((userId) =>
+        upsertThreadNotification({
+          tenantId: p.tenant_id,
+          userId,
+          type: NotificationTypes.INBOX_MESSAGE_RECEIVED,
+          title: "New message",
+          message: `${senderLabel}: ${preview}`,
+          link,
+        })
+      )
+    );
+  } catch (notifyErr) {
+    logger.warn({ err: notifyErr, conversation_id: conversationId }, "Failed to create inbox notification (non-fatal)");
+  }
 }
 
 // Decision D: match incoming phone to exactly ONE existing lead by trailing digits.
