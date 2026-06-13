@@ -22,7 +22,8 @@ import {
   ContactTabs,
   ContactRelatedPanel,
 } from "../components/contact-detail";
-import type { Contact, ContactStatus } from "@/types/database";
+import { AddDealSheet } from "../../deals/components/add-deal-sheet";
+import type { Contact, ContactStatus, Deal, DealStage } from "@/types/database";
 
 type ProjectContactRole = "primary" | "technical" | "billing" | "other" | null;
 
@@ -86,6 +87,10 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
   const [removing, setRemoving] = useState(false);
   const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
 
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [dealStages, setDealStages] = useState<DealStage[]>([]);
+  const [addDealOpen, setAddDealOpen] = useState(false);
+
   useEffect(() => {
     fetch(`/api/v1/contacts/${contactId}`)
       .then((r) => r.json())
@@ -101,6 +106,18 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
       .catch(() => toast.error("Failed to load contact"))
       .finally(() => setLoading(false));
   }, [contactId, router]);
+
+  useEffect(() => {
+    Promise.all([
+      fetch(`/api/v1/deals?contact_id=${contactId}&pageSize=50`).then((r) => r.json()),
+      fetch("/api/v1/deal-stages").then((r) => r.json()),
+    ])
+      .then(([dealsRes, stagesRes]) => {
+        setDeals(dealsRes.data ?? []);
+        setDealStages(stagesRes.data ?? []);
+      })
+      .catch(() => {});
+  }, [contactId]);
 
   function handleUpdated(updated: Contact) {
     setContact((prev) => (prev ? { ...prev, ...updated } : null));
@@ -296,6 +313,65 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
           />
         </div>
       </div>
+
+      {/* Deals section */}
+      <div className="bg-card border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-sm">Deals ({deals.length})</h2>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setAddDealOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              + New Deal
+            </button>
+          )}
+        </div>
+        {deals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No deals yet.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {deals.map((d) => {
+              const stage = dealStages.find((s) => s.id === d.stage_id);
+              return (
+                <div key={d.id} className="flex items-center justify-between py-2.5 text-sm">
+                  <a href={`/deals/${d.id}`} className="font-medium hover:text-primary transition-colors truncate max-w-xs">
+                    {d.name}
+                  </a>
+                  <div className="flex items-center gap-3 shrink-0 ml-3">
+                    {stage && (
+                      <div className="flex items-center gap-1">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        <span className="text-xs text-muted-foreground">{stage.name}</span>
+                      </div>
+                    )}
+                    {d.amount !== null && d.amount !== undefined && (
+                      <span className="text-xs font-medium tabular-nums">{d.currency} {d.amount.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add Deal sheet */}
+      <AddDealSheet
+        open={addDealOpen}
+        onOpenChange={setAddDealOpen}
+        stages={dealStages}
+        role={role}
+        prefillContactId={contactId}
+        prefillContactName={contact ? [contact.first_name, contact.last_name].filter(Boolean).join(" ") : undefined}
+        onSuccess={() => {
+          fetch(`/api/v1/deals?contact_id=${contactId}&pageSize=50`)
+            .then((r) => r.json())
+            .then((j) => setDeals(j.data ?? []))
+            .catch(() => {});
+        }}
+      />
 
       {/* Project picker */}
       {contact && (
