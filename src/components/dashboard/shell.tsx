@@ -42,6 +42,7 @@ import {
   Plane,
   MapPin,
   Handshake,
+  ChartColumn,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -106,6 +107,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Plane,
   MapPin,
   Handshake,
+  ChartColumn,
 };
 
 function SidebarGroupRender({
@@ -214,6 +216,7 @@ export function DashboardShell({
   const { counts } = useBadgeCounts();
 
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
+  const isEducation = tenant.industry_id === "education_consultancy";
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
@@ -314,13 +317,16 @@ export function DashboardShell({
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
           <>
-            {UNIVERSAL_NAV_TOP.filter((i) => navAllowed(i.href)).map((item) =>
-              renderNavItem(
-                item.href === "/leads"
-                  ? { ...item, badge: counts.unread_leads || undefined }
-                  : item
-              )
-            )}
+            {UNIVERSAL_NAV_TOP
+              .filter((i) => navAllowed(i.href))
+              .filter((i) => !(isEducation && i.href === "/dashboard"))
+              .map((item) =>
+                renderNavItem(
+                  item.href === "/leads"
+                    ? { ...item, badge: counts.unread_leads || undefined }
+                    : item
+                )
+              )}
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}

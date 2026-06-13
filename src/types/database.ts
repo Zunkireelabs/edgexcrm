@@ -758,3 +758,16 @@ export interface Deal {
   accounts?: { id: string; name: string } | null;
   contacts?: { id: string; first_name: string; last_name: string } | null;
 }
+
+export interface Dashboard {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  widgets: string[];               // widget keys, ordered
+  granted_position_ids: string[];  // position ids
+  sort_order: number;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}

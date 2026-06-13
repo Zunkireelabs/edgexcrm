@@ -2,12 +2,16 @@ import { redirect } from "next/navigation";
 import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
-import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
 import { canSeeWidget, leadQueryScope } from "@/lib/api/permissions";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+
+  // Education tenants have their own Insights → Dashboards surface.
+  if (tenantData.tenant.industry_id === "education_consultancy") {
+    redirect("/insights/dashboards");
+  }
 
   const { permissions } = tenantData;
 
@@ -47,10 +51,6 @@ export default async function DashboardPage() {
         )}
       </div>
 
-      {/* UTM Attribution (education_consultancy only) */}
-      {tenantData.tenant.industry_id === "education_consultancy" && canSeeWidget(permissions, "utm") && (
-        <UtmAnalyticsSection leads={leads} />
-      )}
     </div>
   );
 }
