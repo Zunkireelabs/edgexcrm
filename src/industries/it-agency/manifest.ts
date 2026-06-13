@@ -4,6 +4,7 @@ import { accountsMeta } from "./features/accounts/meta";
 import { crmContactsMeta } from "./features/crm-contacts/meta";
 import { timeTrackingMeta } from "./features/time-tracking/meta";
 import { projectBoardMeta } from "./features/project-board/meta";
+import { dealsMeta } from "./features/deals/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -13,6 +14,7 @@ export const manifest: IndustryManifest = {
     { meta: accountsMeta },
     { meta: timeTrackingMeta },
     { meta: projectBoardMeta },
+    { meta: dealsMeta },
   ],
   sidebar: [
     {
@@ -26,6 +28,12 @@ export const manifest: IndustryManifest = {
       href: "/accounts",
       label: "Accounts",
       icon: "Building2",
+    },
+    {
+      featureId: FEATURES.DEALS,
+      href: "/deals",
+      label: "Deals",
+      icon: "Handshake",
     },
     {
       kind: "group" as const,

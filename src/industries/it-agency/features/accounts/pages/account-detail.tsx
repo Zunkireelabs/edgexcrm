@@ -23,7 +23,8 @@ import {
   AccountTabs,
   AccountRelatedPanel,
 } from "../components/account-detail";
-import type { Account, Project, ProjectStatus, ContactStatus } from "@/types/database";
+import { AddDealSheet } from "../../deals/components/add-deal-sheet";
+import type { Account, Project, ProjectStatus, ContactStatus, Deal, DealStage } from "@/types/database";
 import type { AccountTeam } from "../components/account-detail/account-team-card";
 import type { ActivityItem } from "../components/account-detail/activity-row";
 
@@ -78,6 +79,8 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
   const [contacts, setContacts] = useState<AccountContact[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [deals, setDeals] = useState<Deal[]>([]);
+  const [dealStages, setDealStages] = useState<DealStage[]>([]);
   const [billableSummary, setBillableSummary] = useState<BillableSummary | null>(null);
   const [team, setTeam] = useState<AccountTeam | null>(null);
   const [activity, setActivity] = useState<ActivityData | null>(null);
@@ -92,6 +95,7 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createContactOpen, setCreateContactOpen] = useState(false);
   const [primaryPickerOpen, setPrimaryPickerOpen] = useState(false);
+  const [addDealOpen, setAddDealOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState("overview");
 
@@ -104,8 +108,10 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
       fetch(`/api/v1/accounts/${accountId}/billable-summary`).then((r) => r.json()),
       fetch(`/api/v1/accounts/${accountId}/team`).then((r) => r.json()),
       fetch(`/api/v1/accounts/${accountId}/activity?page=1&limit=30`).then((r) => r.json()),
+      fetch(`/api/v1/deals?account_id=${accountId}&pageSize=50`).then((r) => r.json()),
+      fetch("/api/v1/deal-stages").then((r) => r.json()),
     ])
-      .then(([accRes, leadsRes, projRes, contactsRes, billableRes, teamRes, activityRes]) => {
+      .then(([accRes, leadsRes, projRes, contactsRes, billableRes, teamRes, activityRes, dealsRes, stagesRes]) => {
         if (accRes.error) {
           toast.error("Account not found");
           router.push("/accounts");
@@ -118,6 +124,8 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
         setBillableSummary(billableRes.data ?? null);
         setTeam(teamRes.data ?? null);
         setActivity(activityRes.data ?? null);
+        setDeals(dealsRes.data ?? []);
+        setDealStages(stagesRes.data ?? []);
       })
       .catch(() => toast.error("Failed to load account"))
       .finally(() => setLoading(false));
@@ -279,6 +287,65 @@ export function AccountDetailPage({ role, accountId }: AccountDetailPageProps) {
           />
         </div>
       </div>
+
+      {/* Deals section */}
+      <div className="bg-card border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-sm">Deals ({deals.length})</h2>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setAddDealOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              + New Deal
+            </button>
+          )}
+        </div>
+        {deals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No deals yet.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {deals.map((d) => {
+              const stage = dealStages.find((s) => s.id === d.stage_id);
+              return (
+                <div key={d.id} className="flex items-center justify-between py-2.5 text-sm">
+                  <a href={`/deals/${d.id}`} className="font-medium hover:text-primary transition-colors truncate max-w-xs">
+                    {d.name}
+                  </a>
+                  <div className="flex items-center gap-3 shrink-0 ml-3">
+                    {stage && (
+                      <div className="flex items-center gap-1">
+                        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: stage.color }} />
+                        <span className="text-xs text-muted-foreground">{stage.name}</span>
+                      </div>
+                    )}
+                    {d.amount !== null && d.amount !== undefined && (
+                      <span className="text-xs font-medium tabular-nums">{d.currency} {d.amount.toLocaleString()}</span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Add Deal sheet */}
+      <AddDealSheet
+        open={addDealOpen}
+        onOpenChange={setAddDealOpen}
+        stages={dealStages}
+        role={role as import("@/types/database").UserRole}
+        prefillAccountId={accountId}
+        prefillAccountName={account?.name}
+        onSuccess={() => {
+          fetch(`/api/v1/deals?account_id=${accountId}&pageSize=50`)
+            .then((r) => r.json())
+            .then((j) => setDeals(j.data ?? []))
+            .catch(() => {});
+        }}
+      />
 
       {/* Dialogs */}
       <AccountForm
