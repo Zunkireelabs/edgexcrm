@@ -686,3 +686,75 @@ export interface LeadDuplicateSuggestion {
   status: "open" | "dismissed" | "merged";
   created_at: string;
 }
+
+// ============================================================
+// Deals / Opportunities (it_agency feature)
+// ============================================================
+
+export interface DealPipeline {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_default: boolean;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DealPipelineWithCounts extends DealPipeline {
+  stage_count: number;
+  deal_count: number;
+}
+
+export interface DealStageWithCount extends DealStage {
+  deal_count: number;
+}
+
+export interface DealPipelineWithStages extends DealPipeline {
+  stages: DealStageWithCount[];
+  deal_count: number;
+}
+
+export interface DealStage {
+  id: string;
+  tenant_id: string;
+  pipeline_id: string;
+  name: string;
+  slug: string;
+  position: number;
+  color: string;
+  is_default: boolean;
+  is_terminal: boolean;
+  terminal_type: "won" | "lost" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Deal {
+  id: string;
+  tenant_id: string;
+  pipeline_id: string | null;
+  name: string;
+  account_id: string | null;
+  primary_contact_id: string | null;
+  stage_id: string;
+  amount: number | null;
+  currency: string;
+  close_date: string | null;
+  owner_id: string | null;
+  deal_type: string | null;
+  priority: "low" | "medium" | "high" | null;
+  description: string | null;
+  status: "open" | "won" | "lost";
+  last_activity_at: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Joined fields (from API responses)
+  accounts?: { id: string; name: string } | null;
+  contacts?: { id: string; first_name: string; last_name: string } | null;
+}

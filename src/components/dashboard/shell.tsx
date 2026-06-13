@@ -41,6 +41,7 @@ import {
   GitCompare,
   Plane,
   MapPin,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -75,6 +76,7 @@ const UNIVERSAL_NAV_BOTTOM = [
 
 const ORCA_NAV = [
   { href: "/orca", label: "Overview", icon: LayoutDashboard },
+  { href: "/orca/activity", label: "Ask Orca", icon: MessageSquare },
   { href: "/orca/structure", label: "Org Structure", icon: Network },
   { href: "/orca/roles", label: "Roles", icon: Contact },
   { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
@@ -103,6 +105,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Building2,
   Plane,
   MapPin,
+  Handshake,
 };
 
 function SidebarGroupRender({
