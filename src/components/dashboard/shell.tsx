@@ -237,6 +237,9 @@ export function DashboardShell({
     else if (value === "ops") router.push("/home");
   }
 
+  const industryAfterHome = industrySidebarItems.filter(
+    (e) => e.position === "after-home",
+  );
   const industryBefore = industrySidebarItems.filter(
     (e) => (e.position ?? "before-pipeline") === "before-pipeline",
   );
@@ -320,13 +323,17 @@ export function DashboardShell({
             {UNIVERSAL_NAV_TOP
               .filter((i) => navAllowed(i.href))
               .filter((i) => !(isEducation && i.href === "/dashboard"))
-              .map((item) =>
-                renderNavItem(
+              .flatMap((item) => {
+                const node = renderNavItem(
                   item.href === "/leads"
                     ? { ...item, badge: counts.unread_leads || undefined }
                     : item
-                )
-              )}
+                );
+                if (item.href === "/home") {
+                  return [node, ...industryAfterHome.map(renderIndustryEntry)];
+                }
+                return [node];
+              })}
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}

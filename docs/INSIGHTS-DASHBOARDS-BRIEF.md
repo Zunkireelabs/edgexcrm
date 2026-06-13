@@ -356,3 +356,32 @@ Functional (describe results to Opus; the migration is NOT yet applied, so note 
 ## 15. Sonnet handoff prompt (paste this to the Sonnet session)
 
 > Implement the Insights → Dashboards feature for the `education_consultancy` tenant per `docs/INSIGHTS-DASHBOARDS-BRIEF.md`, on the existing `feature/insights-dashboards` branch (already checked out off `stage`). Build all of it: migration `048_dashboards.sql` (file only — do NOT apply it to any DB), the `insights` feature folder, registry + education manifest registration, the education-gated nav surgery in `shell.tsx`, the 3 route shells, the `/api/v1/dashboards` CRUD routes, and the list/builder/renderer/view UI — reusing the existing dashboard widget components and `leadQueryScope` scoping. Honor every item in §11 (gating/isolation) and §10 (visibility contract). When done, run BOTH gates (`npm run build` and `npx eslint . --max-warnings 50`) and report results, then STOP for Opus review — do NOT merge, push, or apply the migration.
+
+---
+
+## 16. PENDING follow-up — "Admin Dashboard" funnel widget (NOT yet built; shipped through here = Phases 1–2 + switcher + nav-after-home)
+
+**Status (2026-06-13):** Phases 1–2 (named dashboards, position grants, switcher, layout, Insights-after-Home nav) shipped to stage. Admizz's client then requested a **second dashboard, "Admin Dashboard" (owner/admin only)**, containing a **new funnel-scorecard widget**. Blocked on two decisions below — not built yet. Owner == admin throughout (both base-tiers see every dashboard via the resolver override; an empty `granted_position_ids` already means admin-only, so the "Admin Dashboard" needs no special grant).
+
+**Client spec — 4-phase funnel, each with sub-metrics:**
+
+| Phase | Metrics |
+|---|---|
+| Leads | Total · New · active · Lost |
+| Prospects | Total · New · active · Lost |
+| Applications | Total · New · active · Lost |
+| Conversion | Success · Lost |
+
+**Decision 1 — stage→phase mapping (needs client approval).** Admizz's "Admizz Pipeline" has **32 stages** (messy: `Prospect` ×2, `Not Reachable` ×4, `Closed` ×3, most empty). Draft mapping:
+
+| Phase | Stages |
+|---|---|
+| Leads | New Lead (333), Connected, Lead Qualified, Profile Verified |
+| Prospects | Prospect (2), Assigned Prospects, Counseling Scheduled, Counseling, Needs More Time |
+| Applications | Documents Collected (1), Application Submitted, Offer Received, Visa Filed, Application Ready, New App, Class Ready |
+| Conversion · Success | Enrolled, Joined Class *(terminal `won`)* |
+| Conversion · Lost | Lost, Closed, Non-converted leads (1), Not Eligible, Not Interested, Not Reachable |
+
+**Decision 2 — "New"/"Lost" definitions.** "New" = entered phase in last 7 days (computable now, mirrors stat-cards "this week"). **Per-phase "Lost" is NOT computable from current lead state** (a lost lead sits in one global Lost/Closed stage, untagged by phase) — true per-phase Lost needs `events` (`lead.stage_changed`) history reconstruction = bigger lift. Pick: **lean v1** (Total+New+active per phase, single Conversion Success/Lost) vs **full spec** (per-phase Lost via events).
+
+**Build path once decisions locked:** add a `funnel` key to the insights widget catalog + a `FunnelWidget` (and likely a where-to-store-the-stage-mapping call: widget config vs a `pipeline_stages.funnel_phase` column) → create a dashboard row "Admin Dashboard" (`granted_position_ids = {}`) for Admizz (or seed/lazy-create) → Sonnet brief → review → stage → main. Opus plans/reviews; Sonnet builds the widget.

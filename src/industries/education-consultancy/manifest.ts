@@ -19,7 +19,7 @@ export const manifest: IndustryManifest = {
   sidebar: [
     {
       kind: "group",
-      position: "before-pipeline",
+      position: "after-home",
       id: "insights",
       label: "Insights",
       icon: "ChartColumn",
