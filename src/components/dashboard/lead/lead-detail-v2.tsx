@@ -106,7 +106,7 @@ export function LeadDetailV2({
   const [assignedTo, setAssignedTo] = useState(lead.assigned_to || "");
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [deleting, setDeleting] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState("activity");
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
 

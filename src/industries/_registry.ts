@@ -34,6 +34,7 @@ export const FEATURES = {
   FORM_BUILDER: "form-builder",
   CONTACTS: "contacts",
   EMAIL: "email",
+  INSIGHTS: "insights",
   // Industry-scoped (it_agency)
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",
