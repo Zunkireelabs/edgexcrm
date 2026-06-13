@@ -22,7 +22,7 @@ export interface FeatureMeta<TConfig = unknown> {
   defaultConfig?: TConfig;
 }
 
-type SidebarPosition = "before-pipeline" | "after-pipeline";
+type SidebarPosition = "after-home" | "before-pipeline" | "after-pipeline";
 
 /**
  * Sidebar entry contributed by an industry. Rendered alongside the
