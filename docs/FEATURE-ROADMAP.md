@@ -69,6 +69,11 @@ _(no approved features yet)_
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
 
+- **Insights → "Admin Dashboard" funnel widget** (education_consultancy) — **requested by Admizz's client 2026-06-13; blocked on 2 decisions before build.**
+  - **Brief**: `docs/INSIGHTS-DASHBOARDS-BRIEF.md` §16. A new `funnel` widget for the Insights catalog: 4-phase education funnel (Leads → Prospects → Applications → Conversion), each with Total / New / active / Lost; lands in a 2nd dashboard "Admin Dashboard" (owner/admin only via empty grant).
+  - **Blocking decisions**: (1) stage→phase mapping for the messy 32-stage Admizz pipeline (draft in the brief, needs client approval); (2) per-phase "Lost" is not computable from current lead state — needs `events` (`lead.stage_changed`) history = bigger lift → **lean v1** (Total+New+active + single Conversion Success/Lost) vs **full spec**.
+  - **Status**: spec captured; awaiting Sadin/client on the two decisions, then Sonnet brief.
+
 - **Leads Column Manager — "Edit columns"** (universal; all industries) — **brief written + approved 2026-06-09, top of queue for Sonnet.**
   - **Brief**: `docs/LEADS-COLUMN-MANAGER-BRIEF.md`. HubSpot-style "Choose which columns you see" dialog on the `/leads` data table: pick which lead fields are columns, reorder via drag (@dnd-kit), toggle visibility.
   - **Decisions locked**: localStorage persistence (per tenant+user) · custom fields discovered from loaded data · frozen columns deferred to v2 · leads table only · export follows visible columns · Name/Actions/select are fixed anchors · industry-gated columns (it_agency Company/Designation/Prospect Industry/etc.).
@@ -106,6 +111,7 @@ Someone is actively building it. Each entry includes: owner, ETA, branch link, b
 
 Cross-reference only. The authoritative current state lives in `docs/FEATURE-CATALOG.md`. Sessions live in `docs/SESSION-LOG.md`.
 
+- **Insights → Dashboards** (`insights`, industry-scoped `education_consultancy`) — named, position-scoped dashboards replacing the universal Dashboard nav for education tenants; admin/owner build dashboards over a fixed widget catalog + grant to positions; Pipeline-style switcher; data scoped by viewer's `leadScope`. Shipped to **stage** 2026-06-13 (mig 048 applied to shared DB). Follow-up funnel widget in Planned above. Brief: `docs/INSIGHTS-DASHBOARDS-BRIEF.md`.
 - **Project Workspace** (`project-board`, industry-scoped `it_agency`) — unified `/projects` workspace, all 5 phases (Board / Table / Tasks / Members + lifted filters + log-time-from-row + a11y). Live on prod; squash-merged from the `feature/project-workspace-phase-*` branches (since deleted). Authoritative detail: FEATURE-CATALOG `project-board` row; brief archived at `docs/archive/features/PROJECT-WORKSPACE-BRIEF.md`.
 - 2026-05-25 — **Student/Parent tags + View Details panel** (education_consultancy, by Anish via `view-details` branch adapted to industry-module pattern). See SESSION-LOG entry for 2026-05-25.
 - 2026-05-24 — **Industry module foundation** + student check-in and form-builder migrated. See SESSION-LOG entry for 2026-05-24.
