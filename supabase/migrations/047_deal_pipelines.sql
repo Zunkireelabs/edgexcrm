@@ -111,7 +111,14 @@ WHERE dp.tenant_id = d.tenant_id AND dp.is_default = true AND d.pipeline_id IS N
 -- 5. Swap deal_stages uniqueness from per-tenant to per-pipeline
 -- ============================================================
 ALTER TABLE deal_stages DROP CONSTRAINT IF EXISTS deal_stages_tenant_id_slug_key;
-ALTER TABLE deal_stages ADD CONSTRAINT IF NOT EXISTS deal_stages_pipeline_slug_key UNIQUE (pipeline_id, slug);
+-- NOTE: Postgres does NOT support `ADD CONSTRAINT IF NOT EXISTS`; guard with a DO block.
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'deal_stages_pipeline_slug_key'
+  ) THEN
+    ALTER TABLE deal_stages ADD CONSTRAINT deal_stages_pipeline_slug_key UNIQUE (pipeline_id, slug);
+  END IF;
+END $$;
 
 -- ============================================================
 -- 6. Enforce NOT NULL on deal_stages.pipeline_id after backfill
