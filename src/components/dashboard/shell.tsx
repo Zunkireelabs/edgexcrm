@@ -41,6 +41,7 @@ import {
   GitCompare,
   Plane,
   MapPin,
+  Handshake,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -103,6 +104,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Building2,
   Plane,
   MapPin,
+  Handshake,
 };
 
 function SidebarGroupRender({

@@ -1,0 +1,240 @@
+"use client";
+
+import { useState, useEffect, useRef } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Settings, Plus, ChevronDown, Search, Check, GitBranch } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DealPipelineSettingsModal } from "./deal-pipeline-settings-modal";
+import { CreateDealPipelineModal } from "./create-deal-pipeline-modal";
+import type { DealPipelineWithCounts, UserRole } from "@/types/database";
+
+interface DealPipelineSelectorProps {
+  pipelines: DealPipelineWithCounts[];
+  selectedPipelineId: string;
+  role: UserRole;
+  tenantId: string;
+}
+
+export function DealPipelineSelector({
+  pipelines: initialPipelines,
+  selectedPipelineId,
+  role,
+  tenantId,
+}: DealPipelineSelectorProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [pipelines, setPipelines] = useState(initialPipelines);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const isAdmin = role === "owner" || role === "admin";
+  const selectedPipeline = pipelines.find((p) => p.id === selectedPipelineId);
+  const isNonDefaultSelected = selectedPipeline && !selectedPipeline.is_default;
+
+  const filteredPipelines = pipelines.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSearchQuery("");
+      }
+    }
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+      return () => document.removeEventListener("mousedown", handleClickOutside);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && searchInputRef.current) {
+      const timer = setTimeout(() => { searchInputRef.current?.focus(); }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") { setIsOpen(false); setSearchQuery(""); }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen]);
+
+  const refreshPipelines = async () => {
+    try {
+      const res = await fetch("/api/v1/deal-pipelines");
+      const json = await res.json();
+      if (json.data) setPipelines(json.data);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handlePipelineChange = (pipelineId: string) => {
+    try {
+      localStorage.setItem(`deal_pipeline_selected_${tenantId}`, pipelineId);
+    } catch { /* ignore */ }
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("pipeline", pipelineId);
+    router.push(`/deals?${params.toString()}`);
+    setIsOpen(false);
+    setSearchQuery("");
+  };
+
+  const handleSettingsClose = () => {
+    setSettingsOpen(false);
+    refreshPipelines();
+    router.refresh();
+  };
+
+  const handleCreateClose = (newPipelineId?: string) => {
+    setCreateOpen(false);
+    refreshPipelines().then(() => {
+      if (newPipelineId) handlePipelineChange(newPipelineId);
+    });
+  };
+
+  const handleCreateClick = () => {
+    setIsOpen(false);
+    setSearchQuery("");
+    setCreateOpen(true);
+  };
+
+  useEffect(() => { setPipelines(initialPipelines); }, [initialPipelines]);
+
+  useEffect(() => {
+    if (searchParams.get("pipeline")) return;
+    try {
+      const saved = localStorage.getItem(`deal_pipeline_selected_${tenantId}`);
+      if (saved && saved !== selectedPipelineId && initialPipelines.some((p) => p.id === saved)) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set("pipeline", saved);
+        router.replace(`/deals?${params.toString()}`);
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <div ref={dropdownRef} className="relative">
+          <button
+            type="button"
+            onClick={() => setIsOpen(!isOpen)}
+            className={`
+              inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors
+              ${isNonDefaultSelected
+                ? "border-[#0f0f10] bg-[#0000170b] text-[#0f0f10]"
+                : "border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              }
+            `}
+          >
+            <GitBranch className="h-3 w-3 shrink-0" />
+            <span className="truncate max-w-[140px]">{selectedPipeline?.name || "Select Pipeline"}</span>
+            <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+          </button>
+
+          {isOpen && (
+            <div className="absolute top-full right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="absolute -top-2 right-4 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45" />
+
+              <div className="p-2 border-b border-gray-100">
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                  <input
+                    ref={searchInputRef}
+                    type="text"
+                    placeholder="Search pipelines..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent"
+                  />
+                </div>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto py-1">
+                {filteredPipelines.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-gray-500 text-center">No pipelines found</div>
+                ) : (
+                  filteredPipelines.map((pipeline) => {
+                    const isSelected = selectedPipelineId === pipeline.id;
+                    return (
+                      <button
+                        key={pipeline.id}
+                        type="button"
+                        onClick={() => handlePipelineChange(pipeline.id)}
+                        className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
+                      >
+                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0 ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}`}>
+                          {isSelected && <Check className="w-2 h-2 text-white" />}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            {pipeline.is_default && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 font-medium shrink-0">Default</span>
+                            )}
+                            <span className="text-xs font-medium truncate text-[#0f0f10]">{pipeline.name}</span>
+                          </div>
+                          <div className="text-[11px] text-[#787871] mt-0.5">
+                            {pipeline.deal_count} {pipeline.deal_count === 1 ? "deal" : "deals"} · {pipeline.stage_count} stages
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+
+              {isAdmin && (
+                <>
+                  <div className="h-px bg-gray-100" />
+                  <div className="p-1">
+                    <button
+                      type="button"
+                      onClick={handleCreateClick}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Create New Pipeline
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {isAdmin && selectedPipeline && (
+          <Button variant="ghost" size="icon-sm" onClick={() => setSettingsOpen(true)} title="Pipeline Settings">
+            <Settings className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      {isAdmin && selectedPipeline && (
+        <DealPipelineSettingsModal
+          open={settingsOpen}
+          onClose={handleSettingsClose}
+          pipeline={selectedPipeline}
+        />
+      )}
+
+      {isAdmin && (
+        <CreateDealPipelineModal
+          open={createOpen}
+          onClose={handleCreateClose}
+          pipelines={pipelines}
+        />
+      )}
+    </>
+  );
+}

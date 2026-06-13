@@ -39,6 +39,7 @@ export const FEATURES = {
   ACCOUNTS: "accounts",
   CRM_CONTACTS: "crm-contacts",
   PROJECT_BOARD: "project-board",
+  DEALS: "deals",
   // Industry-scoped (travel_agency)
   TRIP_INQUIRY: "trip-inquiry",
   ITINERARY: "itinerary",
