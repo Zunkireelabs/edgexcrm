@@ -44,6 +44,8 @@ interface DealBoardProps {
   role: UserRole;
   tenantId: string;
   onRefresh: () => void;
+  onStagesChange?: (stages: DealStage[]) => void;
+  onDealsChange?: (deals: Deal[]) => void;
 }
 
 export function DealBoard({ stages, deals, role, tenantId, onRefresh }: DealBoardProps) {

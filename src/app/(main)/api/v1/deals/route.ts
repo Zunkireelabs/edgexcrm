@@ -14,7 +14,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { ensureDealStages } from "@/lib/deals/stages";
+import { ensureDealPipeline } from "@/lib/deals/stages";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -22,9 +22,10 @@ export async function GET(request: NextRequest) {
   if (!getFeatureAccess(auth.industryId, FEATURES.DEALS)) return apiForbidden();
 
   const db = await scopedClient(auth);
-  await ensureDealStages(db, auth.tenantId);
+  const defaultPipelineId = await ensureDealPipeline(db, auth.tenantId);
 
   const { searchParams } = new URL(request.url);
+  const pipelineId = searchParams.get("pipeline_id") || defaultPipelineId;
   const stageId = searchParams.get("stage_id");
   const accountId = searchParams.get("account_id");
   const contactId = searchParams.get("contact_id");
@@ -40,7 +41,8 @@ export async function GET(request: NextRequest) {
       "*, accounts!deals_account_id_fkey(id,name), contacts!deals_primary_contact_id_fkey(id,first_name,last_name)",
       { count: "exact" }
     )
-    .is("deleted_at", null);
+    .is("deleted_at", null)
+    .eq("pipeline_id", pipelineId);
 
   if (stageId) query = query.eq("stage_id", stageId);
   if (accountId) query = query.eq("account_id", accountId);
@@ -89,13 +91,18 @@ export async function POST(request: NextRequest) {
   if (!valid) return apiValidationError(errors);
 
   const db = await scopedClient(auth);
-  await ensureDealStages(db, auth.tenantId);
+  const defaultPipelineId = await ensureDealPipeline(db, auth.tenantId);
 
+  // Resolve pipeline_id
+  const pipelineId = (body.pipeline_id as string | undefined) || defaultPipelineId;
+
+  // Resolve stage_id: use supplied (if in correct pipeline) else default stage of that pipeline
   let stageId = body.stage_id as string | undefined;
   if (!stageId) {
     const { data: defaultStage } = await db
       .from("deal_stages")
       .select("id")
+      .eq("pipeline_id", pipelineId)
       .eq("is_default", true)
       .maybeSingle();
     const defaultRow = defaultStage as unknown as { id: string } | null;
@@ -103,6 +110,7 @@ export async function POST(request: NextRequest) {
       const { data: firstStage } = await db
         .from("deal_stages")
         .select("id")
+        .eq("pipeline_id", pipelineId)
         .order("position", { ascending: true })
         .limit(1)
         .maybeSingle();
@@ -110,9 +118,18 @@ export async function POST(request: NextRequest) {
     } else {
       stageId = defaultRow.id;
     }
+  } else {
+    // Validate supplied stage belongs to resolved pipeline
+    const { data: stageCheck } = await db
+      .from("deal_stages")
+      .select("id")
+      .eq("id", stageId)
+      .eq("pipeline_id", pipelineId)
+      .maybeSingle();
+    if (!stageCheck) return apiError("NOT_FOUND", "Stage not found in this pipeline", 404);
   }
 
-  if (!stageId) return apiError("NO_STAGES", "No deal stages found for this tenant", 500);
+  if (!stageId) return apiError("NO_STAGES", "No deal stages found for this pipeline", 500);
 
   // Validate FK ownership for supplied IDs
   if (body.account_id) {
@@ -131,6 +148,7 @@ export async function POST(request: NextRequest) {
   const insert: Record<string, unknown> = {
     name: String(body.name).trim(),
     stage_id: stageId,
+    pipeline_id: pipelineId,
     status: "open",
     created_by: auth.userId,
   };
@@ -155,24 +173,26 @@ export async function POST(request: NextRequest) {
     return apiError("DB_ERROR", "Failed to create deal", 500);
   }
 
+  const createdRow = created as unknown as { id: string };
+
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
       userId: auth.userId,
       action: "deal.created",
       entityType: "deal",
-      entityId: created.id,
+      entityId: createdRow.id,
       requestId,
     }),
     emitEvent({
       tenantId: auth.tenantId,
       type: "deal.created",
       entityType: "deal",
-      entityId: created.id,
+      entityId: createdRow.id,
       requestId,
     }),
   ]);
 
-  log.info({ dealId: created.id }, "Deal created");
+  log.info({ dealId: createdRow.id }, "Deal created");
   return apiSuccess(created, 201);
 }

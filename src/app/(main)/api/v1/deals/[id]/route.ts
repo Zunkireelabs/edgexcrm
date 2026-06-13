@@ -85,9 +85,40 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
   }
 
-  // Stage change: derive status and bump last_activity_at
-  const stageChanged = body.stage_id !== undefined && body.stage_id !== existingRow.stage_id;
-  if (body.stage_id !== undefined) {
+  // Pipeline change: move deal to a different pipeline → reset stage to that pipeline's default
+  const pipelineChanged = body.pipeline_id !== undefined && body.pipeline_id !== existingRow.pipeline_id;
+  if (pipelineChanged) {
+    patch.pipeline_id = body.pipeline_id;
+
+    // If a valid stage_id in the new pipeline is supplied, use it; otherwise use the pipeline's default
+    let newStageId = body.stage_id as string | undefined;
+    if (newStageId) {
+      const { data: stageCheck } = await db
+        .from("deal_stages")
+        .select("id")
+        .eq("id", newStageId)
+        .eq("pipeline_id", String(body.pipeline_id))
+        .maybeSingle();
+      if (!stageCheck) newStageId = undefined;
+    }
+    if (!newStageId) {
+      const { data: defaultStage } = await db
+        .from("deal_stages")
+        .select("id")
+        .eq("pipeline_id", String(body.pipeline_id))
+        .eq("is_default", true)
+        .maybeSingle();
+      const defaultRow = defaultStage as unknown as { id: string } | null;
+      if (defaultRow) newStageId = defaultRow.id;
+    }
+    if (newStageId) patch.stage_id = newStageId;
+    patch.status = "open";
+    patch.last_activity_at = new Date().toISOString();
+  }
+
+  // Stage change within same pipeline: derive status and bump last_activity_at
+  const stageChanged = !pipelineChanged && body.stage_id !== undefined && body.stage_id !== existingRow.stage_id;
+  if (!pipelineChanged && body.stage_id !== undefined) {
     patch.stage_id = body.stage_id;
     if (stageChanged) {
       const { data: stage } = await db

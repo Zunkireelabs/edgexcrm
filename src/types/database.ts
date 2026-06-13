@@ -691,9 +691,37 @@ export interface LeadDuplicateSuggestion {
 // Deals / Opportunities (it_agency feature)
 // ============================================================
 
+export interface DealPipeline {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  is_default: boolean;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DealPipelineWithCounts extends DealPipeline {
+  stage_count: number;
+  deal_count: number;
+}
+
+export interface DealStageWithCount extends DealStage {
+  deal_count: number;
+}
+
+export interface DealPipelineWithStages extends DealPipeline {
+  stages: DealStageWithCount[];
+  deal_count: number;
+}
+
 export interface DealStage {
   id: string;
   tenant_id: string;
+  pipeline_id: string;
   name: string;
   slug: string;
   position: number;
@@ -708,6 +736,7 @@ export interface DealStage {
 export interface Deal {
   id: string;
   tenant_id: string;
+  pipeline_id: string | null;
   name: string;
   account_id: string | null;
   primary_contact_id: string | null;

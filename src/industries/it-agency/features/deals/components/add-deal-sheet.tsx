@@ -32,6 +32,7 @@ interface AddDealSheetProps {
   onOpenChange: (open: boolean) => void;
   stages: DealStage[];
   role: UserRole;
+  pipelineId?: string;
   prefillAccountId?: string;
   prefillAccountName?: string;
   prefillContactId?: string;
@@ -52,6 +53,7 @@ export function AddDealSheet({
   onOpenChange,
   stages,
   role,
+  pipelineId,
   prefillAccountId,
   prefillAccountName,
   prefillContactId,
@@ -123,6 +125,7 @@ export function AddDealSheet({
         stage_id: stageId || undefined,
         currency,
       };
+      if (pipelineId) body.pipeline_id = pipelineId;
       if (amount) body.amount = parseFloat(amount);
       if (closeDate) body.close_date = closeDate;
       if (ownerId) body.owner_id = ownerId;
