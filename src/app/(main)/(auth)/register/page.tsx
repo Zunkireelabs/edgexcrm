@@ -42,6 +42,7 @@ function RegisterPageContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [existingAccount, setExistingAccount] = useState(false);
   const [tokenStatus, setTokenStatus] = useState<TokenStatus>('loading');
   const [inviteData, setInviteData] = useState<InviteData | null>(null);
 
@@ -116,6 +117,7 @@ function RegisterPageContent() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setExistingAccount(false);
 
     // Validate passwords match
     if (password !== confirmPassword) {
@@ -146,7 +148,7 @@ function RegisterPageContent() {
 
       if (!res.ok) {
         if (json.error?.code === 'USER_EXISTS') {
-          setError('An account with this email already exists. Please login instead.');
+          setExistingAccount(true);
         } else if (json.error?.code === 'TOKEN_EXPIRED') {
           setTokenStatus('expired');
         } else if (json.error?.code === 'TOKEN_USED') {
@@ -346,6 +348,14 @@ function RegisterPageContent() {
           </p>
 
           <div className="register-card">
+            {existingAccount && (
+              <div className="register-existing-account">
+                <p>You already have an account. Log in to accept this invitation and join the team.</p>
+                <Link href={`/login?token=${token}`} className="register-existing-btn">
+                  Log in to accept invite
+                </Link>
+              </div>
+            )}
             {error && (
               <div className="register-error">{error}</div>
             )}
@@ -578,6 +588,44 @@ const styles = `
   .register-card {
     width: 100%;
     max-width: 420px;
+  }
+  .register-existing-account {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  :global(.dark) .register-existing-account {
+    background: #172554;
+    border-color: #1d4ed8;
+  }
+  .register-existing-account p {
+    font-size: 14px;
+    font-weight: 400;
+    color: #1e40af;
+    margin-bottom: 12px;
+    letter-spacing: -0.01em;
+    line-height: 1.5;
+  }
+  :global(.dark) .register-existing-account p {
+    color: #93c5fd;
+  }
+  .register-existing-btn {
+    display: inline-block;
+    padding: 10px 20px;
+    background: var(--primary);
+    color: var(--primary-foreground);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+    letter-spacing: -0.01em;
+  }
+  .register-existing-btn:hover {
+    opacity: 0.9;
   }
   .register-error {
     background: #fef2f2;

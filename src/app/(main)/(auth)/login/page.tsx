@@ -72,11 +72,16 @@ function LoginPageContent() {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
-        // If user is logged in and has a token, try to accept the invite
         if (token) {
-          await acceptInvite(token);
+          // Only redirect to dashboard if invite acceptance succeeded
+          const accepted = await acceptInvite(token);
+          if (accepted) {
+            router.push('/dashboard');
+          }
+          // On failure, stay on page — error is already set by acceptInvite
+        } else {
+          router.push('/dashboard');
         }
-        router.push('/dashboard');
       }
     };
     checkUser();
@@ -112,8 +117,10 @@ function LoginPageContent() {
     validateToken();
   }, [token]);
 
-  // Helper function to accept invite after login
-  const acceptInvite = async (inviteToken: string) => {
+  // Helper function to accept invite after login.
+  // Returns true on success, false on failure. Callers should only redirect
+  // to /dashboard when this returns true (or when no token was present).
+  const acceptInvite = async (inviteToken: string): Promise<boolean> => {
     try {
       const res = await fetch('/api/v1/invites/accept', {
         method: 'POST',
@@ -123,9 +130,16 @@ function LoginPageContent() {
 
       if (res.ok) {
         setMessage('Invite accepted! Redirecting to dashboard...');
+        return true;
       }
+
+      // Surface the failure so the user knows what went wrong
+      const json = await res.json().catch(() => ({}));
+      setError(json.error?.message || 'Failed to accept invite. The link may have expired or already been used.');
+      return false;
     } catch {
-      // Invite acceptance failed, but user can still proceed
+      setError('Failed to accept invite. Please try again.');
+      return false;
     }
   };
 
@@ -158,9 +172,10 @@ function LoginPageContent() {
         });
         if (error) throw error;
 
-        // If there's an invite token, accept it
+        // If there's an invite token, accept it — only redirect on success
         if (token) {
-          await acceptInvite(token);
+          const accepted = await acceptInvite(token);
+          if (!accepted) return; // error already shown by acceptInvite
         }
 
         router.push('/dashboard');
