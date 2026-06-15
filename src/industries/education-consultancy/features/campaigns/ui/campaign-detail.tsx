@@ -22,6 +22,7 @@ import {
 import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { LeaderboardEntry } from "../lib/scoring";
 import { buildAgentPrompt } from "../lib/agent-prompt";
+import { CAMPAIGN_PUBLIC_BASE_URL } from "../lib/constants";
 
 interface EspnResult {
   match_id: string;
@@ -104,7 +105,7 @@ function GearDialog({
   const [agentPromptCopied, setAgentPromptCopied] = useState(false);
 
   const publicUrl = campaign.public_token
-    ? `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "")}/api/public/campaigns/${campaign.public_token}/leaderboard`
+    ? `${CAMPAIGN_PUBLIC_BASE_URL}/api/public/campaigns/${campaign.public_token}/leaderboard`
     : null;
 
   async function patchCampaign(body: { public_enabled?: boolean; regenerate_token?: boolean }) {
