@@ -1,8 +1,8 @@
 # Domain Migration Brief — `lead-crm.zunkireelabs.com` → `edgex.zunkireelabs.com`
 
-**Status:** In-flight (planning complete, Phase 0 not yet started)
+**Status:** In-flight — ✅ Phase 0 + ✅ Phase 1 DONE (2026-06-15, `main` @ `cdc84f9`, edgex LIVE dual-host); ⏳ Phase 2 (drain) + Phase 3 (308 redirect → remove lead-crm) pending.
 **Author:** Opus (planning session) · **Executor:** Sonnet for code, Sadin for manual/external steps · **Reviewer:** Opus
-**Created:** 2026-06-14
+**Created:** 2026-06-14 · **Updated:** 2026-06-15
 
 ---
 
