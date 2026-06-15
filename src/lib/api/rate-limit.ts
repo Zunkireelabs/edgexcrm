@@ -24,6 +24,11 @@ export const INTEGRATION_LIMIT: RateLimitConfig = {
   windowMs: 60_000, // 1 minute
 };
 
+export const PUBLIC_READ_LIMIT: RateLimitConfig = {
+  maxRequests: 60,
+  windowMs: 60_000, // 1 minute
+};
+
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig

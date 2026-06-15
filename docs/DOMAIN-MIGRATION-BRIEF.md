@@ -1,8 +1,34 @@
 # Domain Migration Brief — `lead-crm.zunkireelabs.com` → `edgex.zunkireelabs.com`
 
-**Status:** In-flight (planning complete, Phase 0 not yet started)
+**Status:** In-flight — ✅ Phase 0 + ✅ Phase 1 DONE (2026-06-15, `main` @ `cdc84f9`, edgex LIVE dual-host); ⏳ Phase 2 (drain) + Phase 3 (308 redirect → remove lead-crm) pending.
 **Author:** Opus (planning session) · **Executor:** Sonnet for code, Sadin for manual/external steps · **Reviewer:** Opus
-**Created:** 2026-06-14
+**Created:** 2026-06-14 · **Updated:** 2026-06-15
+
+---
+
+## 📍 PHASE 2 CHECKPOINT — call sign `EDGEX-DRAIN` (paused 2026-06-15)
+
+> Say **"resume EDGEX-DRAIN"** to pick up here. Phase 0+1 LIVE; Phase 2 investigation done; paused before the placement re-point work. No prod state changed since `cdc84f9`.
+
+**Where we are:** Sonnet ran the Phase 2 read-only investigation (full report in SESSION-LOG 2026-06-15). Opus reviewed it against the code and found one interpretation error that *shrinks* the Phase-3 risk surface. Nothing has been re-pointed yet; no Traefik change made.
+
+**Established facts (verified):**
+- **10 live forms** — Admizz: `registration-form`, `worldcup-predict-win`, `test-prep`, `enquiry`, `find-your-destination`, `spin-win`, `uk-education-expo-2026` (+ `test-form-2` dormant, 0 leads). Prime (`prime-ceramics`): `download-catalogue`, `request-a-quote`. Before/after URL tables in the SESSION-LOG report.
+- **Dead key confirmed:** Admizz `Orca-connection` integration key (`{admin}` scope, last used 2026-03-06, 101d idle, 0 idempotency rows, 0 integration leads) → **safe for Phase 3**. The `Form V2` key (category `form`) is HOT (used daily).
+- **Zero in-repo / in-DB placements.** All `form_configs.redirect_url` NULL; no lead-crm URL literal in any tenant/form DB field; only intentional code refs (Traefik rule, `PLATFORM_EMAIL_HOST` which stays lead-crm) + docs. Every placement is **external**.
+- **Traefik access logging is OFF** (`/home/zunkireelabs/traefik/traefik.yml` has no `accessLog:` block) → cannot measure per-host drain today.
+
+**Opus correction (the key insight — changes the risk surface):** there are **two ingestion channels, distinguished by endpoint, NOT by `intake_source`** (`intake_source` is a UTM/attribution label, not a channel signal):
+- **Hosted form** → `POST /api/v1/leads` (public, no key); `events` payload has **no `source`**. → **Fully 308-safe** (GET `/form/...` → 308 → browser follows → page loads from edgex → same-origin submit). **Re-pointing optional, does NOT gate Phase 3.**
+- **API integration** → `POST /api/public/submit/...` (Bearer key); `events.payload->>'source' = 'public_api'`. → **The ONLY Phase-3 risk** (a server-side POST that may not follow a 308; 308 *does* preserve method+body, so only clients configured not-to-follow-on-POST break). **Only these callers must be re-pointed/verified before Phase 3.**
+
+**NEXT STEP when resumed (drafted, not yet run):** a tight read-only Sonnet follow-up to get ground truth instead of `intake_source` guesses —
+- (A) definitive per-form channel split via `events`→`leads`→`form_configs` (resolve form via `leads.form_config_id`; hosted event payload lacks `form_slug`). Forms with `api_posts>0` = the real Phase-3 risk list.
+- (B) caller fingerprint (IP / user-agent / key) for api-channel forms only — to identify WHO controls each caller. (Note: `audit_logs 'lead.created'` is suppressed when a `lead.submission` audit is written — check `lead.submission` rows / any `lead_submissions` table.)
+- (C) list hosted-only forms (`api_posts=0`) explicitly as "308-safe, no re-point."
+- The full follow-up prompt is in the chat that produced this checkpoint.
+
+**Then, the only open question per api-channel form:** do we control / can we contact the caller to switch its base URL to edgex? If yes for all → 308 is a pure safety net, likely **skip the Traefik restart**. If any caller is third-party/unknown → enable access logging to **stdout (`docker logs traefik`, no volume mount, sub-second restart at low-traffic)** during the soak to catch silent 308 non-followers. **Phase 3 is still a separate explicit GO.**
 
 ---
 

@@ -39,7 +39,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-md: 0.75rem;
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
   --radius-2xl: calc(var(--radius) + 8px);
@@ -48,7 +48,7 @@
 }
 
 :root {
-  --radius: 0.5rem;
+  --radius: 1rem;
   /* Zunkireelabs unified color system (matches agentic-commerce) */
   --background: #f7f7f7;
   --foreground: #171717;

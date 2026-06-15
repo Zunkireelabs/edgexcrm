@@ -932,7 +932,7 @@ export function LeadsTable({
       </div>
 
       {/* Table - Compact style with sticky header and horizontal scroll */}
-      <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full min-w-[900px]">
           <thead className="sticky top-0 z-10">
