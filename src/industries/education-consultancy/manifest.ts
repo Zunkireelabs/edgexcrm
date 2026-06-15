@@ -5,6 +5,7 @@ import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
 import { emailMeta } from "./features/email/meta";
 import { insightsMeta } from "./features/insights/meta";
+import { campaignsMeta } from "./features/campaigns/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -15,6 +16,7 @@ export const manifest: IndustryManifest = {
     { meta: formBuilderMeta },
     { meta: contactsMeta },
     { meta: emailMeta },
+    { meta: campaignsMeta },
   ],
   sidebar: [
     {
@@ -44,6 +46,13 @@ export const manifest: IndustryManifest = {
       href: "/forms",
       label: "Forms",
       icon: "FileText",
+    },
+    {
+      featureId: FEATURES.CAMPAIGNS,
+      href: "/campaigns",
+      label: "Campaigns",
+      icon: "Megaphone",
+      minRoles: ["owner", "admin"],
     },
   ],
   ai: aiConfig,
