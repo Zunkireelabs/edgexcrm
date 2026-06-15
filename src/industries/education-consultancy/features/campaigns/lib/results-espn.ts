@@ -13,6 +13,8 @@ export interface EspnResult {
   away_score: number | null;
   outcome: "team_a" | "team_b" | "draw" | null;
   status: "scheduled" | "final";
+  source: "espn" | "manual";
+  locked: boolean;
 }
 
 interface EspnCompetitor {
@@ -130,7 +132,7 @@ export async function refreshEspnResults(
   // Return all current results for this campaign
   const { data: allResults } = await supabase
     .from("campaign_results")
-    .select("match_id, match_label, home_team, away_team, home_score, away_score, outcome, status")
+    .select("match_id, match_label, home_team, away_team, home_score, away_score, outcome, status, source, locked")
     .eq("campaign_id", campaignId);
 
   return (allResults ?? []) as EspnResult[];
