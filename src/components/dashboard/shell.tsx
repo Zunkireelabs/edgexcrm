@@ -43,6 +43,7 @@ import {
   MapPin,
   Handshake,
   ChartColumn,
+  Megaphone,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -108,6 +109,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   MapPin,
   Handshake,
   ChartColumn,
+  Megaphone,
 };
 
 function SidebarGroupRender({
