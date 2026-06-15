@@ -1,6 +1,6 @@
 # Campaigns Feature Brief — Prediction Leaderboard (Admizz / education_consultancy)
 
-**Status:** 🔨 Phase 1 IN PROGRESS — Sonnet building (handed off 2026-06-15). Call sign `CAMPAIGN-KICKOFF`. Awaiting Sonnet's Phase 1 diff → Opus review (do NOT expect it on stage; review the diff first).
+**Status:** ✅ Phase 1 + 1.5 + 1.6 **SHIPPED TO PRODUCTION** 2026-06-15 (edgex). Call sign `CAMPAIGN-KICKOFF`. Migs 049/050 on shared DB. Public URL live: `https://edgex.zunkireelabs.com/api/public/campaigns/<token>/leaderboard`. **Phase 2 still pending** (admin result override UI + integrity flags) — brief stays active for it.
 **Author:** Opus (planning) · **Executor:** Sonnet (code) · **Reviewer:** Opus · **Smoke:** Sadin
 **Created:** 2026-06-15 · **Updated:** 2026-06-15
 
@@ -193,6 +193,53 @@ Public page freshness is tied to admin "Refresh results" (no cron in v1) — fin
 - Enable public in the gear popup → hit the public URL unauthenticated (curl + from a different origin) → 200, masked names ("Milan K."), **no email/phone/picks** in the payload, CORS header present.
 - Toggle off → public URL 404s. Regenerate token → old URL 404s, new one works.
 - Entry with no name → shows "Participant", not an email.
+
+---
+
+## Phase 1.6 — "Agent prompt" in the gear dialog (LLM-ready integration handoff)
+
+**Small, client-side-only addition.** Lets an admin copy a **task-loaded prompt** (not just the URL) to hand the website dev's AI coding agent, so it understands the API shape + semantics and builds the integration correctly first time. On-brand for the AI-native product.
+
+### Shared helper — `features/campaigns/lib/agent-prompt.ts`
+Export `buildAgentPrompt({ url, campaignName }: { url: string; campaignName: string }): string` returning the template below with `{url}` and `{campaignName}` injected. **Co-locate a sync note**: add a comment at the top of both `agent-prompt.ts` and `src/app/api/public/campaigns/[token]/leaderboard/route.ts` — "⚠️ If you change the public response shape, update the other file" — so the prompt can't silently drift from the API.
+
+Template (task-loaded — keep the en-dash in the score example, match the real field set exactly):
+```
+You are integrating a public, read-only prediction leaderboard into a website.
+
+API (no auth, CORS-enabled, browser-safe):
+GET {url}
+Optional: ?limit=N (max 500). Responses cached ~60s — poll at most once/min.
+
+Response JSON:
+{ "data": {
+  "campaign": { "name": string, "status": "active"|"final" },
+  "updated_at": string|null,   // ISO; when results were last refreshed (may lag live matches)
+  "standings": [ { "rank": number, "name": string, "correct": number, "scored": number, "pct": number } ],
+  "results":   [ { "match_label": string, "score": string|null, "outcome": "team_a"|"team_b"|"draw"|null, "status": "final"|"scheduled" } ],
+  "pending_matches": [ { "match_id": string, "match_label": string } ]
+}}
+
+Semantics:
+- standings are pre-sorted best->worst by `correct`, tie-broken by accuracy. `name` is already
+  privacy-masked (first name + last initial) - there is NO email/phone. `scored` = finished
+  matches counted; `pct` = accuracy %.
+- results: `outcome` team_a/team_b = first/second team in `match_label`; `score` like "2-0" or null.
+- pending_matches non-empty => standings NOT final yet.
+
+Task: build a responsive "{campaignName}" leaderboard - standings table (rank, name,
+correct/scored, %), top-3 emphasized; a results list; a "pending matches" banner; a "last
+updated" stamp from updated_at. Handle loading/empty/error states. Re-fetch every 60s. Don't
+assume fields beyond the above.
+```
+
+### UI — in the gear `Dialog` (`campaign-detail.tsx`)
+- Add a collapsible **"Agent prompt"** section (below "Example API response shape"), shown only when public is enabled + a token exists.
+- Render the generated prompt in a monospace block + a **Copy** button (reuse the existing copy pattern).
+- Build the prompt from the **same canonical base** the URL field uses: `const base = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;` → `buildAgentPrompt({ url: \`${base}/api/public/campaigns/${campaign.public_token}/leaderboard\`, campaignName: campaign.name })`.
+
+### Verify
+- Enable public → open "Agent prompt" → Copy → confirm it contains the **edgex** URL (not localhost in prod), the campaign name, and the full response schema. No secrets beyond the (already-public) token.
 
 ---
 

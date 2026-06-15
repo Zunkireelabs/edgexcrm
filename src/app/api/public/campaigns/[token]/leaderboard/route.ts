@@ -1,5 +1,6 @@
 // Public leaderboard — no auth required. Freshness is tied to admin "Refresh results";
 // no ESPN fetch here (keeps this path fast and abuse-proof).
+// ⚠️  Keep in sync with the agent prompt template in src/industries/education-consultancy/features/campaigns/lib/agent-prompt.ts
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
