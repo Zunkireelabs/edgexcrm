@@ -100,10 +100,9 @@ function GearDialog({
   const [copied, setCopied] = useState(false);
   const [exampleOpen, setExampleOpen] = useState(false);
 
-  const publicUrl =
-    typeof window !== "undefined" && campaign.public_token
-      ? `${window.location.origin}/api/public/campaigns/${campaign.public_token}/leaderboard`
-      : null;
+  const publicUrl = campaign.public_token
+    ? `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "")}/api/public/campaigns/${campaign.public_token}/leaderboard`
+    : null;
 
   async function patchCampaign(body: { public_enabled?: boolean; regenerate_token?: boolean }) {
     setSaving(true);
