@@ -321,7 +321,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
             )}
           </div>
         ) : (
-          <div className="flex-1 min-h-0 bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden">
+          <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
             <div className="flex-1 min-h-0 overflow-auto">
               <table className="w-full">
                 <thead className="sticky top-0 z-10">

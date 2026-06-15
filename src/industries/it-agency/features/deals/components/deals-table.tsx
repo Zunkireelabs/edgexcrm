@@ -32,7 +32,7 @@ export function DealsTable({ deals, stages }: DealsTableProps) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card">
+    <div className="overflow-x-auto rounded-[0.75rem] border bg-card">
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">

@@ -133,7 +133,7 @@ export function MergeDialog({ leadA, leadB, open, onOpenChange, onMerged }: Merg
         </div>
 
         {/* Side-by-side field diff */}
-        <div className="rounded-lg border overflow-hidden">
+        <div className="rounded-[0.75rem] border overflow-hidden">
           <div className="grid grid-cols-[120px_1fr_1fr] bg-muted/50 border-b text-xs font-medium">
             <div className="px-3 py-2 text-muted-foreground">Field</div>
             <div className="px-3 py-2 border-l">
