@@ -6,12 +6,12 @@
     "version": "1.0.0",
     "contact": {
       "name": "Zunkiree Labs",
-      "url": "https://lead-crm.zunkireelabs.com"
+      "url": "https://edgex.zunkireelabs.com"
     }
   },
   "servers": [
     {
-      "url": "https://lead-crm.zunkireelabs.com",
+      "url": "https://edgex.zunkireelabs.com",
       "description": "Production"
     }
   ],
