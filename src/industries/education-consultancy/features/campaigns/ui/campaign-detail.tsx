@@ -4,6 +4,14 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import {
   Table,
   TableBody,
   TableCell,
@@ -11,7 +19,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, AlertCircle, Lock, Trophy } from "lucide-react";
+import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { LeaderboardEntry } from "../lib/scoring";
 
 interface EspnResult {
@@ -32,6 +40,8 @@ interface Campaign {
   name: string;
   status: "draft" | "active" | "final";
   updated_at: string;
+  public_enabled?: boolean;
+  public_token?: string | null;
 }
 
 interface LeaderboardData {
@@ -57,12 +67,172 @@ function predictionLabel(prediction: string) {
 
 const TOP3_COLORS = ["bg-yellow-50 dark:bg-yellow-950", "bg-slate-50 dark:bg-slate-900", "bg-orange-50 dark:bg-orange-950"];
 
+const EXAMPLE_RESPONSE = JSON.stringify({
+  data: {
+    campaign: { name: "FIFA World Cup 2026 — Predict & Win", status: "active" },
+    updated_at: "2026-06-15T10:00:00Z",
+    standings: [
+      { rank: 1, name: "Milan K.", correct: 8, scored: 12, pct: 67 },
+      { rank: 2, name: "Participant", correct: 7, scored: 12, pct: 58 },
+    ],
+    results: [
+      { match_label: "Mexico vs South Africa", score: "2–1", outcome: "team_a", status: "final" },
+    ],
+    pending_matches: [{ match_id: "espn-760416", match_label: "USA vs Canada" }],
+  },
+}, null, 2);
+
+function GearDialog({
+  campaignId,
+  campaign,
+  open,
+  onClose,
+  onUpdated,
+}: {
+  campaignId: string;
+  campaign: Campaign;
+  open: boolean;
+  onClose: () => void;
+  onUpdated: (patch: { public_enabled: boolean; public_token: string | null }) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [exampleOpen, setExampleOpen] = useState(false);
+
+  const publicUrl =
+    typeof window !== "undefined" && campaign.public_token
+      ? `${window.location.origin}/api/public/campaigns/${campaign.public_token}/leaderboard`
+      : null;
+
+  async function patchCampaign(body: { public_enabled?: boolean; regenerate_token?: boolean }) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (json.data) onUpdated(json.data);
+    } finally {
+      setSaving(false);
+      setConfirmRegen(false);
+    }
+  }
+
+  function copyUrl() {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Public Leaderboard Settings</DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-5 py-2">
+          {/* Toggle */}
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="public-toggle"
+              checked={!!campaign.public_enabled}
+              disabled={saving}
+              onCheckedChange={(checked) => patchCampaign({ public_enabled: checked === true })}
+              className="mt-0.5"
+            />
+            <div>
+              <Label htmlFor="public-toggle" className="text-sm font-medium cursor-pointer">
+                Public leaderboard
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Anyone with the URL can view masked standings (names only, no contact info).
+              </p>
+            </div>
+          </div>
+
+          {/* URL + copy */}
+          {campaign.public_enabled && publicUrl && (
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-muted-foreground">Public URL</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">
+                  {publicUrl}
+                </code>
+                <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Freshness is tied to admin &ldquo;Refresh results&rdquo; — no automatic updates.
+              </p>
+            </div>
+          )}
+
+          {/* Regenerate token */}
+          {campaign.public_enabled && (
+            <div className="border-t pt-4">
+              {!confirmRegen ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => setConfirmRegen(true)}
+                  disabled={saving}
+                >
+                  Regenerate token
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-destructive">
+                    This will break the existing URL. Are you sure?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="destructive" disabled={saving} onClick={() => patchCampaign({ regenerate_token: true })}>
+                      Yes, regenerate
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmRegen(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Example response */}
+          <div className="border-t pt-4">
+            <button
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setExampleOpen((v) => !v)}
+            >
+              {exampleOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+              Example API response shape
+            </button>
+            {exampleOpen && (
+              <pre className="mt-2 max-h-64 overflow-auto rounded bg-muted p-3 text-xs leading-relaxed">
+                {EXAMPLE_RESPONSE}
+              </pre>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [gearOpen, setGearOpen] = useState(false);
 
   const loadLeaderboard = useCallback(() => {
     setLoading(true);
@@ -112,6 +282,10 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
   const { campaign, standings, results, pending_matches } = data;
 
+  function handleGearUpdated(patch: { public_enabled: boolean; public_token: string | null }) {
+    setData((prev) => prev ? { ...prev, campaign: { ...prev.campaign, ...patch } } : prev);
+  }
+
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
@@ -128,17 +302,36 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             {campaign.status}
           </Badge>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleRefresh}
-          disabled={refreshing}
-          className="gap-2"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-          {refreshing ? "Refreshing…" : "Refresh results"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Refreshing…" : "Refresh results"}
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-8 w-8"
+            onClick={() => setGearOpen(true)}
+            title="Public leaderboard settings"
+          >
+            <Settings className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
+
+      <GearDialog
+        campaignId={campaignId}
+        campaign={campaign}
+        open={gearOpen}
+        onClose={() => setGearOpen(false)}
+        onUpdated={handleGearUpdated}
+      />
 
       {/* Pending banner */}
       {pending_matches.length > 0 && (

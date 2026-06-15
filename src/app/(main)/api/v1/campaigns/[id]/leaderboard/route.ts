@@ -19,6 +19,8 @@ interface CampaignRow {
   config: CampaignConfig;
   created_at: string;
   updated_at: string;
+  public_enabled: boolean;
+  public_token: string | null;
 }
 
 export async function GET(
@@ -37,7 +39,7 @@ export async function GET(
   // Load campaign (scoped to tenant)
   const { data: campaignData, error: campaignError } = await db
     .from("campaigns")
-    .select("id, name, slug, type, status, form_config_id, config, created_at, updated_at")
+    .select("id, name, slug, type, status, form_config_id, config, created_at, updated_at, public_enabled, public_token")
     .eq("id", id)
     .maybeSingle();
 
