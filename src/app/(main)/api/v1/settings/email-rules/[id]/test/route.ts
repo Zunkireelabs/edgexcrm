@@ -9,7 +9,7 @@ import {
   apiNotFound,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { getResendClient, EMAIL_FROM } from "@/lib/email/index";
+import { getResendClient, EMAIL_FROM, PLATFORM_EMAIL_ADDRESS } from "@/lib/email/index";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteContext {
@@ -60,7 +60,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   log.info({ ruleId: id, testEmailAddr }, "Sending test email via Resend");
 
   const fromAddress = rule.from_name
-    ? `${rule.from_name} <noreply@lead-crm.zunkireelabs.com>`
+    ? `${rule.from_name} <${PLATFORM_EMAIL_ADDRESS}>`
     : EMAIL_FROM;
 
   const { data, error } = await resend.emails.send({

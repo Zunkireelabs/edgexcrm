@@ -431,7 +431,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                         <div>
                           <p className="text-xs text-muted-foreground">Base URL</p>
                           <code className="text-sm block mt-0.5">
-                            https://lead-crm.zunkireelabs.com
+                            https://edgex.zunkireelabs.com
                           </code>
                         </div>
                         <div>
@@ -448,7 +448,7 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
                           </p>
                           <pre className="text-xs mt-1 bg-background rounded p-2 overflow-x-auto">
 {`curl -H "Authorization: Bearer ${createdKey.key.slice(0, 20)}..." \\
-  https://lead-crm.zunkireelabs.com/api/v1/integrations/crm/leads`}
+  https://edgex.zunkireelabs.com/api/v1/integrations/crm/leads`}
                           </pre>
                         </div>
                       </div>

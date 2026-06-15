@@ -14,9 +14,13 @@ export function getResendClient(): Resend | null {
   return _resend;
 }
 
-// Email sender address - using verified domain
-export const EMAIL_FROM = "EdgeX <noreply@lead-crm.zunkireelabs.com>";
+// Platform email host — kept on the Resend-verified domain (NOT migrated to edgex; moving the
+// from-address needs separate Resend domain verification). Single source of truth.
+export const PLATFORM_EMAIL_HOST = "lead-crm.zunkireelabs.com";
+export const PLATFORM_EMAIL_ADDRESS = `noreply@${PLATFORM_EMAIL_HOST}`;
 
+// Email sender address - using verified domain
+export const EMAIL_FROM = `EdgeX <${PLATFORM_EMAIL_ADDRESS}>`;
 // App URL for email links
 export const APP_URL =
-  process.env.NEXT_PUBLIC_APP_URL || "https://lead-crm.zunkireelabs.com";
+  process.env.NEXT_PUBLIC_APP_URL || "https://edgex.zunkireelabs.com";

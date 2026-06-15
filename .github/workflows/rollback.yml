@@ -49,10 +49,14 @@ jobs:
 
       - name: Verify Health
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://lead-crm.zunkireelabs.com/login)
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "Rollback verified (HTTP $HTTP_CODE)"
-          else
-            echo "Health check failed after rollback (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+          for i in $(seq 1 12); do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://edgex.zunkireelabs.com/login)
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "Rollback verified (HTTP $HTTP_CODE)"
+              exit 0
+            fi
+            echo "Attempt $i/12: HTTP $HTTP_CODE, waiting..."
+            sleep 10
+          done
+          echo "Health check failed after rollback"
+          exit 1
