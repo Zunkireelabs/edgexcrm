@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/table";
 import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
 import type { LeaderboardEntry } from "../lib/scoring";
+import { buildAgentPrompt } from "../lib/agent-prompt";
+import { CAMPAIGN_PUBLIC_BASE_URL } from "../lib/constants";
 
 interface EspnResult {
   match_id: string;
@@ -99,9 +101,11 @@ function GearDialog({
   const [confirmRegen, setConfirmRegen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [exampleOpen, setExampleOpen] = useState(false);
+  const [agentPromptOpen, setAgentPromptOpen] = useState(false);
+  const [agentPromptCopied, setAgentPromptCopied] = useState(false);
 
   const publicUrl = campaign.public_token
-    ? `${process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "")}/api/public/campaigns/${campaign.public_token}/leaderboard`
+    ? `${CAMPAIGN_PUBLIC_BASE_URL}/api/public/campaigns/${campaign.public_token}/leaderboard`
     : null;
 
   async function patchCampaign(body: { public_enabled?: boolean; regenerate_token?: boolean }) {
@@ -219,6 +223,42 @@ function GearDialog({
               </pre>
             )}
           </div>
+
+          {/* Agent prompt — only when public is on and a token exists */}
+          {campaign.public_enabled && publicUrl && (
+            <div className="border-t pt-4">
+              <button
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setAgentPromptOpen((v) => !v)}
+              >
+                {agentPromptOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                Agent prompt
+              </button>
+              {agentPromptOpen && (
+                <div className="mt-2 flex flex-col gap-2">
+                  <pre className="max-h-64 overflow-auto rounded bg-muted p-3 text-xs leading-relaxed whitespace-pre-wrap">
+                    {buildAgentPrompt({ url: publicUrl, campaignName: campaign.name })}
+                  </pre>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="self-start gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        buildAgentPrompt({ url: publicUrl, campaignName: campaign.name })
+                      ).then(() => {
+                        setAgentPromptCopied(true);
+                        setTimeout(() => setAgentPromptCopied(false), 2000);
+                      });
+                    }}
+                  >
+                    {agentPromptCopied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                    {agentPromptCopied ? "Copied!" : "Copy prompt"}
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
