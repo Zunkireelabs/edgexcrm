@@ -1,7 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { EMAIL_FROM } from "./index";
-
-const PLATFORM_ADDRESS = "noreply@lead-crm.zunkireelabs.com";
+import { EMAIL_FROM, PLATFORM_EMAIL_ADDRESS } from "./index";
 
 export type ResolvedSender = { from: string; replyTo?: string };
 
@@ -38,7 +36,7 @@ export async function resolveTenantSender(
 
     // Custom address ONLY when the domain is verified. Otherwise brand the name
     // on our verified domain and route replies to the tenant address.
-    const address = data?.domain_verified && customAddr ? customAddr : PLATFORM_ADDRESS;
+    const address = data?.domain_verified && customAddr ? customAddr : PLATFORM_EMAIL_ADDRESS;
 
     const replyToRaw = data?.reply_to || customAddr || null;
     const replyTo = replyToRaw && isValidEmail(replyToRaw) ? replyToRaw : undefined;

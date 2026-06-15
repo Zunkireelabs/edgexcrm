@@ -18,7 +18,7 @@
   "variable": [
     {
       "key": "base_url",
-      "value": "https://lead-crm.zunkireelabs.com",
+      "value": "https://edgex.zunkireelabs.com",
       "type": "string"
     },
     {
@@ -587,7 +587,7 @@
         "exec": [
           "// Set base_url from environment or collection variable",
           "if (!pm.variables.get('base_url')) {",
-          "    pm.variables.set('base_url', 'https://lead-crm.zunkireelabs.com');",
+          "    pm.variables.set('base_url', 'https://edgex.zunkireelabs.com');",
           "}"
         ]
       }
