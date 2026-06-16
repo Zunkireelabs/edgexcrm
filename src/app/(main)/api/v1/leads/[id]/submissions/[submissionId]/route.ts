@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to")
+    .select("id, assigned_to, branch_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -37,8 +37,16 @@ export async function GET(
 
   if (!lead) return apiNotFound("Lead");
 
+  // Counselor: own-only
   if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) {
     return apiNotFound("Lead");
+  }
+  // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
+  if (auth.permissions.leadScope === "team") {
+    const allowed = auth.branchId
+      ? lead.branch_id === auth.branchId
+      : lead.assigned_to === auth.userId;
+    if (!allowed) return apiNotFound("Lead");
   }
 
   const { data, error } = await supabase

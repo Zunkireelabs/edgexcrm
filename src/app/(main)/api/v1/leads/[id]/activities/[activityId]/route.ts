@@ -23,7 +23,7 @@ export async function DELETE(
   // Verify lead exists and belongs to tenant
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, assigned_to, branch_id")
     .eq("id", leadId)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -31,6 +31,14 @@ export async function DELETE(
 
   if (leadError || !lead) {
     return apiNotFound("Lead");
+  }
+
+  // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
+  if (auth.permissions.leadScope === "team") {
+    const allowed = auth.branchId
+      ? lead.branch_id === auth.branchId
+      : lead.assigned_to === auth.userId;
+    if (!allowed) return apiNotFound("Lead");
   }
 
   // Get the activity first to check ownership

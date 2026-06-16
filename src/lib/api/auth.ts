@@ -140,12 +140,16 @@ export async function authenticateUser(): Promise<UserContext | null> {
   }
 }
 
-export function requireLeadAccess(auth: AuthContext, lead: { assigned_to: string | null }): boolean {
+export function requireLeadAccess(auth: AuthContext, lead: { assigned_to: string | null; branch_id?: string | null }): boolean {
   const p = auth.permissions;
   if (p.baseTier === "owner" || p.baseTier === "admin") return true;
-  if (!p.canEditLeads) return false;                              // read-only member (viewer)
-  if (p.leadScope === "own") return lead.assigned_to === auth.userId; // counselor: own only
-  return true;                                                    // branch manager: edit all visible leads
+  if (!p.canEditLeads) return false;
+  if (p.leadScope === "own") return lead.assigned_to === auth.userId;
+  if (p.leadScope === "team") {
+    if (!auth.branchId) return lead.assigned_to === auth.userId; // §4.1 NULL-branch fallback
+    return lead.branch_id === auth.branchId;
+  }
+  return true;
 }
 
 export function isCounselorOrAbove(auth: AuthContext): boolean {

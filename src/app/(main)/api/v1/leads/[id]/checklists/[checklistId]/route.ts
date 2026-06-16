@@ -43,7 +43,7 @@ export async function PATCH(
   // Verify lead exists, not soft-deleted, tenant scoped
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to")
+    .select("id, assigned_to, branch_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -51,9 +51,9 @@ export async function PATCH(
 
   if (!lead) return apiNotFound("Lead");
 
-  // Access check
+  // Access check (requireLeadAccess enforces branch scope for team-scoped members)
   if (!requireLeadAccess(auth, lead)) {
-    return apiForbidden();
+    return apiNotFound("Lead");
   }
 
   // Fetch existing checklist item
