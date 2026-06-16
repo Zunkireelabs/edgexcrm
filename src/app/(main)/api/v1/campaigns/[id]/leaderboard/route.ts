@@ -7,6 +7,8 @@ import { FEATURES } from "@/industries/_registry";
 import { refreshEspnResults } from "@/industries/education-consultancy/features/campaigns/lib/results-espn";
 import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { annotateIntegrity } from "@/industries/education-consultancy/features/campaigns/lib/integrity";
+import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
 import type { LeadSubmission } from "@/types/database";
 
 interface CampaignRow {
@@ -100,8 +102,9 @@ export async function GET(
     };
   }
 
-  // Run scoring engine
-  const standings = scoreSubmissions(submissions, resultsMap, config);
+  // Run scoring engine with profile fields
+  const leaderboardFields = config.leaderboard_fields ?? DEFAULT_LEADERBOARD_FIELDS;
+  const standings = annotateIntegrity(scoreSubmissions(submissions, resultsMap, config, leaderboardFields));
 
   // Pending matches = those still scheduled
   const pending_matches = espnResults
@@ -113,5 +116,6 @@ export async function GET(
     standings,
     results: espnResults,
     pending_matches,
+    leaderboard_fields: leaderboardFields,
   });
 }

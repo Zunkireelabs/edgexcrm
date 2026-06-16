@@ -9,8 +9,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Table,
   TableBody,
@@ -19,8 +27,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight } from "lucide-react";
+import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight, Pencil, AlertTriangle } from "lucide-react";
 import type { LeaderboardEntry } from "../lib/scoring";
+import type { IntegrityFlag } from "../lib/integrity";
 import { buildAgentPrompt } from "../lib/agent-prompt";
 import { CAMPAIGN_PUBLIC_BASE_URL } from "../lib/constants";
 
@@ -46,11 +55,17 @@ interface Campaign {
   public_token?: string | null;
 }
 
+interface LeaderboardEntryWithFlags extends LeaderboardEntry {
+  flags?: IntegrityFlag[];
+  profile: Record<string, string | null>;
+}
+
 interface LeaderboardData {
   campaign: Campaign;
-  standings: LeaderboardEntry[];
+  standings: LeaderboardEntryWithFlags[];
   results: EspnResult[];
   pending_matches: Array<{ match_id: string; match_label: string }>;
+  leaderboard_fields?: { key: string; label: string }[];
 }
 
 function outcomeLabel(outcome: string | null) {
@@ -83,6 +98,144 @@ const EXAMPLE_RESPONSE = JSON.stringify({
     pending_matches: [{ match_id: "espn-760416", match_label: "USA vs Canada" }],
   },
 }, null, 2);
+
+// --- Override Dialog ---
+
+interface OverrideDialogProps {
+  campaignId: string;
+  result: EspnResult | null;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}
+
+function OverrideDialog({ campaignId, result, open, onClose, onSaved }: OverrideDialogProps) {
+  const [outcome, setOutcome] = useState<string>("");
+  const [homeScore, setHomeScore] = useState<string>("");
+  const [awayScore, setAwayScore] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+  const [reverting, setReverting] = useState(false);
+
+  useEffect(() => {
+    if (result) {
+      setOutcome(result.outcome ?? "");
+      setHomeScore(result.home_score != null ? String(result.home_score) : "");
+      setAwayScore(result.away_score != null ? String(result.away_score) : "");
+    }
+  }, [result]);
+
+  async function handleSave() {
+    if (!result || !outcome) return;
+    setSaving(true);
+    try {
+      await fetch(`/api/v1/campaigns/${campaignId}/results/${result.match_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome,
+          home_score: homeScore !== "" ? parseInt(homeScore, 10) : null,
+          away_score: awayScore !== "" ? parseInt(awayScore, 10) : null,
+        }),
+      });
+      onSaved();
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRevert() {
+    if (!result) return;
+    setReverting(true);
+    try {
+      await fetch(`/api/v1/campaigns/${campaignId}/results/${result.match_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revert: true }),
+      });
+      onSaved();
+      onClose();
+    } finally {
+      setReverting(false);
+    }
+  }
+
+  if (!result) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Override Result</DialogTitle>
+        </DialogHeader>
+        <p className="text-xs text-muted-foreground -mt-2">{result.match_label || result.match_id}</p>
+
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="outcome-select" className="text-sm">Outcome</Label>
+            <Select value={outcome} onValueChange={setOutcome}>
+              <SelectTrigger id="outcome-select">
+                <SelectValue placeholder="Select outcome" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="team_a">Home win</SelectItem>
+                <SelectItem value="team_b">Away win</SelectItem>
+                <SelectItem value="draw">Draw</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="home-score" className="text-sm">Home score</Label>
+              <Input
+                id="home-score"
+                type="number"
+                min={0}
+                placeholder="—"
+                value={homeScore}
+                onChange={(e) => setHomeScore(e.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="away-score" className="text-sm">Away score</Label>
+              <Input
+                id="away-score"
+                type="number"
+                min={0}
+                placeholder="—"
+                value={awayScore}
+                onChange={(e) => setAwayScore(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <Button size="sm" onClick={handleSave} disabled={saving || !outcome}>
+              {saving ? "Saving…" : "Save override"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onClose} disabled={saving}>
+              Cancel
+            </Button>
+            {result.source === "manual" && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="ml-auto text-destructive border-destructive/40 hover:bg-destructive/10"
+                onClick={handleRevert}
+                disabled={reverting}
+              >
+                {reverting ? "Reverting…" : "Revert to ESPN"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// --- Gear Dialog ---
 
 function GearDialog({
   campaignId,
@@ -265,6 +418,8 @@ function GearDialog({
   );
 }
 
+// --- Main component ---
+
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [data, setData] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -272,6 +427,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
   const [gearOpen, setGearOpen] = useState(false);
+  const [overrideTarget, setOverrideTarget] = useState<EspnResult | null>(null);
 
   const loadLeaderboard = useCallback(() => {
     setLoading(true);
@@ -320,10 +476,13 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   if (!data) return null;
 
   const { campaign, standings, results, pending_matches } = data;
+  const leaderboardFields = data.leaderboard_fields ?? [];
 
   function handleGearUpdated(patch: { public_enabled: boolean; public_token: string | null }) {
     setData((prev) => prev ? { ...prev, campaign: { ...prev.campaign, ...patch } } : prev);
   }
+
+  const flaggedCount = standings.filter((e) => e.flags && e.flags.length > 0).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -372,6 +531,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
         onUpdated={handleGearUpdated}
       />
 
+      <OverrideDialog
+        campaignId={campaignId}
+        result={overrideTarget}
+        open={overrideTarget !== null}
+        onClose={() => setOverrideTarget(null)}
+        onSaved={loadLeaderboard}
+      />
+
       {/* Pending banner */}
       {pending_matches.length > 0 && (
         <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
@@ -395,12 +562,13 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 <TableHead>Outcome</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead className="w-16">Locked</TableHead>
+                <TableHead className="w-16">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {results.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-6">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-6">
                     No results yet. Click &ldquo;Refresh results&rdquo; to fetch from ESPN.
                   </TableCell>
                 </TableRow>
@@ -422,6 +590,17 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                     <TableCell>
                       {r.locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
                     </TableCell>
+                    <TableCell>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-7 w-7"
+                        title="Override result"
+                        onClick={() => setOverrideTarget(r)}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -433,6 +612,14 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       {/* Leaderboard table */}
       <section>
         <h2 className="text-sm font-semibold mb-3">Leaderboard</h2>
+
+        {flaggedCount > 0 && (
+          <div className="flex items-center gap-2 mb-3 text-sm text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>{flaggedCount} entrant{flaggedCount !== 1 ? "s" : ""} flagged for review (shared phone/name).</span>
+          </div>
+        )}
+
         <div className="rounded-md border overflow-x-auto">
           <Table>
             <TableHeader>
@@ -441,13 +628,16 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Score</TableHead>
                 <TableHead className="text-right">Accuracy</TableHead>
+                {leaderboardFields.map((f) => (
+                  <TableHead key={f.key}>{f.label}</TableHead>
+                ))}
                 <TableHead>Contact</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {standings.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-6">
+                  <TableCell colSpan={5 + leaderboardFields.length} className="text-center text-muted-foreground text-sm py-6">
                     No standings yet.
                   </TableCell>
                 </TableRow>
@@ -463,13 +653,36 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                         onClick={() => setExpandedRow(isExpanded ? null : entry.email)}
                       >
                         <TableCell className="font-mono text-sm font-semibold">{entry.rank}</TableCell>
-                        <TableCell className="font-medium text-sm">{entry.name}</TableCell>
+                        <TableCell className="font-medium text-sm">
+                          <span className="flex items-center gap-1.5">
+                            {entry.name}
+                            {entry.flags && entry.flags.length > 0 && (
+                              <span title={entry.flags.map((f) => f.detail).join("; ")}>
+                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                              </span>
+                            )}
+                          </span>
+                        </TableCell>
                         <TableCell className="text-right text-sm tabular-nums">
                           {entry.correct}/{entry.scored}
                         </TableCell>
                         <TableCell className="text-right text-sm tabular-nums">
                           {entry.scored > 0 ? `${entry.pct}%` : "—"}
                         </TableCell>
+                        {leaderboardFields.map((f) => {
+                          const val = entry.profile?.[f.key];
+                          return (
+                            <TableCell key={f.key}>
+                              {val === "yes" ? (
+                                <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">Yes</Badge>
+                              ) : val === "no" ? (
+                                <Badge variant="secondary" className="text-xs">No</Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">—</span>
+                              )}
+                            </TableCell>
+                          );
+                        })}
                         <TableCell className="text-xs text-muted-foreground">
                           <div>{entry.email}</div>
                           {entry.phone && <div>{entry.phone}</div>}
@@ -478,7 +691,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                       {isExpanded && (
                         <TableRow key={`${entry.email}-picks`} className={rowBg}>
                           <TableCell />
-                          <TableCell colSpan={4} className="pb-3 pt-0">
+                          <TableCell colSpan={4 + leaderboardFields.length} className="pb-3 pt-0">
                             <div className="rounded-md border bg-muted/30 text-xs">
                               <table className="w-full">
                                 <thead>
