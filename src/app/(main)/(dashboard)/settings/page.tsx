@@ -8,6 +8,7 @@ import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-m
 import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-card";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
 import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
+import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
 import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
@@ -108,6 +109,7 @@ export default async function SettingsPage() {
         />
       )}
       <PositionsManager navCatalog={navCatalog} widgetCatalog={widgetCatalog} />
+      <BranchesManager maxBranches={tenantData.entitlements.maxBranches} />
       <EmailRulesManager tenantId={tenantData.tenant.id} />
       <EmailSenderCard />
       <ChannelsCard />

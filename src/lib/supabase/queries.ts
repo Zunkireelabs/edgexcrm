@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 
@@ -346,6 +346,16 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
     email: userMap.get(m.user_id) || "Unknown",
     created_at: m.created_at,
   }));
+}
+
+export async function getBranches(tenantId: string): Promise<Branch[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("branches")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("sort_order", { ascending: true });
+  return (data as Branch[]) ?? [];
 }
 
 export async function getLeadChecklists(leadId: string): Promise<LeadChecklist[]> {
