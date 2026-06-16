@@ -1,4 +1,5 @@
 import { normalizeEmail } from "@/lib/leads/dedup";
+import type { IntegrityFlag } from "./integrity";
 
 export interface ScoringSubmission {
   email: string | null;
@@ -31,6 +32,7 @@ export interface CampaignConfig {
   };
   exclude_domains?: string[];
   exclude_emails?: string[];
+  leaderboard_fields?: { key: string; label: string }[];
 }
 
 export interface LeaderboardPick {
@@ -50,6 +52,8 @@ export interface LeaderboardEntry {
   scored: number;
   pct: number;
   picks: LeaderboardPick[];
+  profile: Record<string, string | null>;
+  flags?: IntegrityFlag[];
 }
 
 const VALID_MATCH_PREFIX = "espn-";
@@ -68,7 +72,8 @@ type RawPick = {
 export function scoreSubmissions(
   submissions: ScoringSubmission[],
   results: Record<string, MatchResult>,
-  config: CampaignConfig
+  config: CampaignConfig,
+  profileFields: { key: string; label: string }[] = []
 ): LeaderboardEntry[] {
   const matchIdField = config.fields.match_id;
   const predictionField = config.fields.prediction;
@@ -104,6 +109,29 @@ export function scoreSubmissions(
         prediction,
         createdAt: sub.created_at,
       });
+    }
+  }
+
+  // Profile fields — latest non-empty value per person per key (across ALL submissions)
+  const profileLatest = new Map<string, Record<string, { value: string; createdAt: string }>>();
+  if (profileFields.length > 0) {
+    for (const sub of submissions) {
+      const normEmail = normalizeEmail(sub.email) ?? normalizeEmail(sub.normalized_email);
+      if (!normEmail) continue;
+      for (const { key } of profileFields) {
+        const raw = sub.custom_fields[key];
+        const value = raw != null ? String(raw).trim() : "";
+        if (!value) continue;
+        let personProfile = profileLatest.get(normEmail);
+        if (!personProfile) {
+          personProfile = {};
+          profileLatest.set(normEmail, personProfile);
+        }
+        const existing = personProfile[key];
+        if (!existing || sub.created_at > existing.createdAt) {
+          personProfile[key] = { value, createdAt: sub.created_at };
+        }
+      }
     }
   }
 
@@ -166,7 +194,12 @@ export function scoreSubmissions(
     }
 
     const pct = scored > 0 ? Math.round((correct / scored) * 100) : 0;
-    entries.push({ name, email: person.normalizedEmail, phone: person.phone, correct, scored, pct, picks });
+    const profile: Record<string, string | null> = {};
+    const personProfile = profileLatest.get(person.normalizedEmail);
+    for (const { key } of profileFields) {
+      profile[key] = personProfile?.[key]?.value ?? null;
+    }
+    entries.push({ name, email: person.normalizedEmail, phone: person.phone, correct, scored, pct, picks, profile });
   }
 
   // Step 5: Rank — most correct desc, accuracy desc, name asc
