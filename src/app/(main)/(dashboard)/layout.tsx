@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/queries";
+import { cookies } from "next/headers";
+import { getCurrentUserTenant, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
@@ -32,7 +33,14 @@ export default async function DashboardLayout({
     );
   }
 
-  const formConfigs = await getFormConfigsForTenant(tenantData.tenant.id);
+  const maxBranches = tenantData.entitlements.maxBranches;
+
+  const [formConfigs, branches, cookieStore] = await Promise.all([
+    getFormConfigsForTenant(tenantData.tenant.id),
+    maxBranches > 1 ? getBranches(tenantData.tenant.id) : Promise.resolve([]),
+    cookies(),
+  ]);
+
   const industrySidebarItems = getIndustrySidebarItems(
     tenantData.tenant.industry_id,
     tenantData.role,
@@ -42,6 +50,9 @@ export default async function DashboardLayout({
     tenantData.permissions.allowedNavKeys === null
       ? null
       : [...tenantData.permissions.allowedNavKeys];
+
+  const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+  const selectedBranchId = branchCookieVal === "all" ? null : branchCookieVal;
 
   return (
     <AIAssistantProvider>
@@ -53,6 +64,11 @@ export default async function DashboardLayout({
         formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
         industrySidebarItems={industrySidebarItems}
         allowedNavKeys={allowedNavKeys}
+        branches={branches}
+        maxBranches={maxBranches}
+        userBranchId={tenantData.branchId}
+        leadScope={tenantData.permissions.leadScope}
+        selectedBranchId={selectedBranchId}
       >
         {children}
       </DashboardShell>

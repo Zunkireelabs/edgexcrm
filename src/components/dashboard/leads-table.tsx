@@ -92,7 +92,6 @@ interface LeadsTableProps {
   industryId?: string | null;
   branches?: Branch[];
   maxBranches?: number;
-  activeBranchId?: string | null;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -115,7 +114,6 @@ export function LeadsTable({
   industryId,
   branches = [],
   maxBranches = 1,
-  activeBranchId,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -788,26 +786,6 @@ export function LeadsTable({
                   value: userId,
                   label: email.split("@")[0],
                   description: email,
-                })),
-              ]}
-            />
-          )}
-
-          {/* Branch Switcher — Enterprise admin only */}
-          {isAdmin && showBranches && branches.length > 0 && (
-            <FilterDropdown
-              label="All Branches"
-              value={activeBranchId ?? "all"}
-              onChange={(val) => {
-                router.push(val === "all" ? "/leads" : `/leads?branch_id=${val}`);
-              }}
-              icon={<Building2 className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Branches", description: "Show leads from all branches" },
-                ...branches.map((b) => ({
-                  value: b.id,
-                  label: b.name,
-                  description: `Leads in ${b.name}`,
                 })),
               ]}
             />

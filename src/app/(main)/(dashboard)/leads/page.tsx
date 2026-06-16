@@ -1,26 +1,27 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import type { TenantEntity, Industry } from "@/types/database";
 
-interface LeadsPageProps {
-  searchParams: Promise<{ branch_id?: string }>;
-}
-
-export default async function LeadsPage({ searchParams }: LeadsPageProps) {
+export default async function LeadsPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const params = await searchParams;
-  const serviceClient = await createServiceClient();
+  const [serviceClient, cookieStore] = await Promise.all([
+    createServiceClient(),
+    cookies(),
+  ]);
 
-  // Build base scope; for all-scope admins apply the URL ?branch_id= switcher
+  const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+
+  // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
-  if (tenantData.permissions.leadScope === "all" && params.branch_id) {
-    scope.branchId = params.branch_id;
+  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
+    scope.branchId = branchCookieVal;
   }
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
@@ -73,7 +74,6 @@ export default async function LeadsPage({ searchParams }: LeadsPageProps) {
         industryId={tenantData.tenant.industry_id}
         branches={branches}
         maxBranches={tenantData.entitlements.maxBranches}
-        activeBranchId={params.branch_id ?? null}
       />
     </div>
   );
