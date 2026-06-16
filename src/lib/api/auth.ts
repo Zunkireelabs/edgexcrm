@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
+import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
 
 export interface AuthContext {
@@ -12,6 +13,8 @@ export interface AuthContext {
   industryId: string | null;
   positionId: string | null;
   permissions: ResolvedPermissions;
+  plan: string;
+  entitlements: Entitlements;
 }
 
 export async function authenticateRequest(): Promise<AuthContext | null> {
@@ -43,7 +46,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role, position_id, tenants(industry_id), positions(permissions)")
+      .select("tenant_id, role, position_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions)")
       .eq("user_id", user.id)
       .single<{
         tenant_id: string;
@@ -54,8 +57,8 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
         // tenants.id), but may return an array if the schema cache is
         // stale or a second FK gets introduced. Accept both shapes.
         tenants:
-          | { industry_id: string | null }
-          | { industry_id: string | null }[]
+          | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
+          | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
           | null;
         positions:
           | { permissions: PositionPermissions }
@@ -82,6 +85,11 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       industryId: tenantsEmbed?.industry_id ?? null,
       positionId: membership.position_id ?? null,
       permissions: resolvePermissions(membership.role as UserRole, positionPermissions),
+      plan: tenantsEmbed?.plan ?? "starter",
+      entitlements: resolveEntitlements({
+        plan: tenantsEmbed?.plan,
+        entitlement_overrides: tenantsEmbed?.entitlement_overrides,
+      }),
     };
   } catch {
     return null;

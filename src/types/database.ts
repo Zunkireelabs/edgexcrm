@@ -52,6 +52,8 @@ export interface Tenant {
   primary_color: string;
   config: TenantConfig;
   industry_id: IndustryId | null;
+  plan: string;
+  entitlement_overrides: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }

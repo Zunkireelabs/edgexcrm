@@ -1,6 +1,7 @@
 import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
+import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -9,6 +10,7 @@ export async function getCurrentUserTenant(): Promise<{
   positionId: string | null;
   positionName: string | null;
   permissions: ResolvedPermissions;
+  entitlements: Entitlements;
 } | null> {
   const supabase = await createClient();
   const {
@@ -47,6 +49,7 @@ export async function getCurrentUserTenant(): Promise<{
     positionId: (membership.position_id as string | null) ?? null,
     positionName: (positionEmbed?.name ?? null) as string | null,
     permissions,
+    entitlements: resolveEntitlements(tenant as Tenant),
   };
 }
 
