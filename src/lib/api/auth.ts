@@ -12,6 +12,7 @@ export interface AuthContext {
   role: UserRole;
   industryId: string | null;
   positionId: string | null;
+  branchId: string | null;
   permissions: ResolvedPermissions;
   plan: string;
   entitlements: Entitlements;
@@ -46,12 +47,13 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role, position_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions)")
+      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions)")
       .eq("user_id", user.id)
       .single<{
         tenant_id: string;
         role: string;
         position_id: string | null;
+        branch_id: string | null;
         // PostgREST returns embedded FK relations as an object for
         // many-to-one (the case here: tenant_users.tenant_id ->
         // tenants.id), but may return an array if the schema cache is
@@ -84,6 +86,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       role: membership.role as UserRole,
       industryId: tenantsEmbed?.industry_id ?? null,
       positionId: membership.position_id ?? null,
+      branchId: membership.branch_id ?? null,
       permissions: resolvePermissions(membership.role as UserRole, positionPermissions),
       plan: tenantsEmbed?.plan ?? "starter",
       entitlements: resolveEntitlements({

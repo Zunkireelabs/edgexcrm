@@ -13,7 +13,7 @@ export default async function LeadsPage() {
   const serviceClient = await createServiceClient();
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] = await Promise.all([
-    getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId)),
+    getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId)),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),

@@ -53,7 +53,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
   const [stages, leads, teamMembers, industryResult, entitiesResult] = await Promise.all([
     getPipelineStages(tenantData.tenant.id, selectedPipelineId),
     getLeadsForPipeline(tenantData.tenant.id, {
-      ...leadQueryScope(tenantData.permissions, tenantData.userId),
+      ...leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId),
       pipelineId: selectedPipelineId,
     }),
     getTeamMembers(tenantData.tenant.id),

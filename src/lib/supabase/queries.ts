@@ -11,6 +11,7 @@ export async function getCurrentUserTenant(): Promise<{
   positionName: string | null;
   permissions: ResolvedPermissions;
   entitlements: Entitlements;
+  branchId: string | null;
 } | null> {
   const supabase = await createClient();
   const {
@@ -20,7 +21,7 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, positions(permissions, name)")
+    .select("tenant_id, role, position_id, branch_id, positions(permissions, name)")
     .eq("user_id", user.id)
     .single();
 
@@ -50,12 +51,13 @@ export async function getCurrentUserTenant(): Promise<{
     positionName: (positionEmbed?.name ?? null) as string | null,
     permissions,
     entitlements: resolveEntitlements(tenant as Tenant),
+    branchId: (membership.branch_id as string | null) ?? null,
   };
 }
 
 export async function getLeads(
   tenantId: string,
-  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; limit?: number }
+  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; limit?: number; branchId?: string | null }
 ): Promise<Lead[]> {
   const supabase = await createClient();
   let query = supabase
@@ -68,6 +70,7 @@ export async function getLeads(
 
   if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
   if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
+  if (scope?.branchId) query = query.eq("branch_id", scope.branchId);
 
   const { data, error } = await query.order("last_activity_at", { ascending: false });
 
@@ -248,7 +251,7 @@ export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | n
 
 export async function getLeadsForPipeline(
   tenantId: string,
-  options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string }
+  options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string; branchId?: string | null }
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
@@ -272,6 +275,9 @@ export async function getLeadsForPipeline(
 
   if (options?.restrictToSelf && options.userId) {
     query = query.eq("assigned_to", options.userId);
+  }
+  if (options?.branchId) {
+    query = query.eq("branch_id", options.branchId);
   }
 
   const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
