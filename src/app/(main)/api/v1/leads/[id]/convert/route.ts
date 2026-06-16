@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -86,16 +86,8 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (leadRow.converted_at) return apiError("INVALID_STATE", "Lead already converted", 409);
 
   // Counselor: own-only
-  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) {
-    return apiForbidden();
-  }
-  // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
-  if (auth.permissions.leadScope === "team") {
-    const allowed = auth.branchId
-      ? leadRow.branch_id === auth.branchId
-      : leadRow.assigned_to === auth.userId;
-    if (!allowed) return apiNotFound("Lead");
-  }
+  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) return apiForbidden();
+  if (!requireLeadBranchAccess(auth, leadRow)) return apiNotFound("Lead");
 
   // Resolve account
   let resolvedAccountId: string;

@@ -103,6 +103,14 @@ export function requireAdmin(auth: AuthContext): boolean {
   return auth.role === "owner" || auth.role === "admin";
 }
 
+export function requireLeadBranchAccess(
+  auth: AuthContext,
+  lead: { assigned_to: string | null; branch_id?: string | null }
+): boolean {
+  if (auth.permissions.leadScope !== "team") return true;
+  return auth.branchId ? lead.branch_id === auth.branchId : lead.assigned_to === auth.userId;
+}
+
 export interface UserContext {
   userId: string;
   email: string;

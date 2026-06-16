@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -40,13 +41,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return apiNotFound("Lead");
     }
 
-    // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
-    if (auth.permissions.leadScope === "team") {
-      const allowed = auth.branchId
-        ? lead.branch_id === auth.branchId
-        : lead.assigned_to === auth.userId;
-      if (!allowed) return apiNotFound("Lead");
-    }
+    // Counselor: own-only
+    if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+    if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
     // Get cached insights
     const { data: insights } = await supabase
@@ -110,14 +107,9 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return apiNotFound("Lead");
     }
 
-    // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
-    if (auth.permissions.leadScope === "team") {
-      const leadRow = lead as Lead;
-      const allowed = auth.branchId
-        ? leadRow.branch_id === auth.branchId
-        : leadRow.assigned_to === auth.userId;
-      if (!allowed) return apiNotFound("Lead");
-    }
+    // Counselor: own-only
+    if (shouldRestrictToSelf(auth.permissions) && (lead as Lead).assigned_to !== auth.userId) return apiNotFound("Lead");
+    if (!requireLeadBranchAccess(auth, lead as Lead)) return apiNotFound("Lead");
 
     // Check for valid cached insights (unless force regenerate)
     if (!forceRegenerate) {

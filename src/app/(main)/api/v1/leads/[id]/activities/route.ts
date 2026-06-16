@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -37,13 +38,9 @@ export async function GET(
     return apiNotFound("Lead");
   }
 
-  // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
-  if (auth.permissions.leadScope === "team") {
-    const allowed = auth.branchId
-      ? lead.branch_id === auth.branchId
-      : lead.assigned_to === auth.userId;
-    if (!allowed) return apiNotFound("Lead");
-  }
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
   // Get query params for filtering
   const searchParams = request.nextUrl.searchParams;
@@ -131,13 +128,9 @@ export async function POST(
     return apiNotFound("Lead");
   }
 
-  // Branch manager: branch-only (§4.1: NULL branchId falls back to own-only)
-  if (auth.permissions.leadScope === "team") {
-    const allowed = auth.branchId
-      ? lead.branch_id === auth.branchId
-      : lead.assigned_to === auth.userId;
-    if (!allowed) return apiNotFound("Lead");
-  }
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
   // Create the activity
   const { data: activity, error } = await supabase
