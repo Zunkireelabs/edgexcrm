@@ -1,8 +1,8 @@
 # Campaigns Feature Brief — Prediction Leaderboard (Admizz / education_consultancy)
 
-**Status:** ✅ Phase 1 + 1.5 + 1.6 **SHIPPED TO PRODUCTION** 2026-06-15 (edgex). Call sign `CAMPAIGN-KICKOFF`. Migs 049/050 on shared DB. Public URL live: `https://edgex.zunkireelabs.com/api/public/campaigns/<token>/leaderboard`. **Phase 2 still pending** (admin result override UI + integrity flags) — brief stays active for it.
+**Status:** ✅ Phase 1 + 1.5 + 1.6 + **Phase 2 ALL SHIPPED TO PRODUCTION** (Phase 1/1.5/1.6 on 2026-06-15; Phase 2 on 2026-06-16, `main` @ `7e6133c`). Call sign `CAMPAIGN-KICKOFF`. Migs 049/050 on shared DB; **Phase 2 added no migration / no DB writes**. Public URL live: `https://edgex.zunkireelabs.com/api/public/campaigns/<token>/leaderboard`. **Feature complete — brief retained for reference; safe to archive.** Phase 2 shipped: admin manual result override (`PATCH /api/v1/campaigns/[id]/results/[matchId]` → `source=manual, locked=true`, plus a "Revert to ESPN" mode → `source=espn, locked=false`), admin-only integrity-flag overlay (`annotateIntegrity()` — shared_phone/shared_name clusters, flag-never-remove, never on the public path), and a config-driven **Study Abroad Interest** leaderboard column.
 **Author:** Opus (planning) · **Executor:** Sonnet (code) · **Reviewer:** Opus · **Smoke:** Sadin
-**Created:** 2026-06-15 · **Updated:** 2026-06-15
+**Created:** 2026-06-15 · **Updated:** 2026-06-16
 
 ---
 
