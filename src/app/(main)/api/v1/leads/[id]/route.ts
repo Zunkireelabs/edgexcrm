@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
-import { shouldRestrictToSelf, canAccessPipeline } from "@/lib/api/permissions";
+import { canAccessPipeline, leadQueryScope } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -27,6 +27,7 @@ const UPDATABLE_FIELDS = [
   "stage_id",
   "pipeline_id",
   "assigned_to",
+  "branch_id",
   "first_name",
   "last_name",
   "email",
@@ -52,7 +53,9 @@ const UPDATABLE_FIELDS = [
   "entity_id",
 ] as const;
 
-const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id"];
+// Blocked for plain counselors/viewers but NOT for team-scoped branch managers
+// (who have their own §4.2 guard below).
+const ADMIN_ONLY_FIELDS = ["assigned_to", "owner_id", "branch_id"];
 
 export async function GET(
   _request: NextRequest,
@@ -83,8 +86,13 @@ export async function GET(
     return apiNotFound("Lead");
   }
 
-  // Counselor scoping: can only view assigned leads
-  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) {
+  // Scope enforcement: build scope object (handles §4.1 NULL-branch fallback)
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
+  if (scope.restrictToSelf && lead.assigned_to !== auth.userId) {
+    return apiNotFound("Lead");
+  }
+  // Branch-manager scope: team-scoped users may only view leads in their branch
+  if (scope.branchId && lead.branch_id !== scope.branchId) {
     return apiNotFound("Lead");
   }
 
@@ -143,8 +151,9 @@ export async function PATCH(
     return apiForbidden();
   }
 
-  // Counselor cannot update admin-only fields
-  if (auth.permissions.baseTier === "member") {
+  // Plain counselors/viewers cannot update admin-only fields.
+  // Team-scoped branch managers CAN (subject to the §4.2 guard that follows).
+  if (auth.permissions.baseTier === "member" && auth.permissions.leadScope !== "team") {
     for (const field of ADMIN_ONLY_FIELDS) {
       if (body[field] !== undefined) {
         return apiForbidden();
@@ -238,6 +247,50 @@ export async function PATCH(
       return apiValidationError({
         entity_id: ["Entity not found in this tenant"],
       });
+    }
+  }
+
+  // Validate branch_id: must belong to this tenant if provided (null clears it)
+  if (body.branch_id !== undefined && body.branch_id !== null) {
+    const { data: branchCheck } = await supabase
+      .from("branches")
+      .select("id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.branch_id as string)
+      .single();
+
+    if (!branchCheck) {
+      return apiValidationError({
+        branch_id: ["Branch not found in this tenant"],
+      });
+    }
+  }
+
+  // §4.2 Branch-manager assignment guard: a team-scoped non-admin can only set
+  // assigned_to / branch_id when the lead is already in their branch, and the
+  // target user (if assigning) must also be in their branch. Admins bypass.
+  if (auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member") {
+    const touchingBranchFields =
+      body.assigned_to !== undefined || body.branch_id !== undefined;
+    if (touchingBranchFields) {
+      if (!auth.branchId || existingLead.branch_id !== auth.branchId) {
+        return apiForbidden();
+      }
+      if (body.assigned_to !== undefined && body.assigned_to !== null) {
+        const { data: targetMember } = await supabase
+          .from("tenant_users")
+          .select("branch_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("user_id", body.assigned_to as string)
+          .single();
+        if (!targetMember || targetMember.branch_id !== auth.branchId) {
+          return apiForbidden();
+        }
+      }
+      // Branch manager may only set branch_id to their own branch (or clear it)
+      if (body.branch_id !== undefined && body.branch_id !== null && body.branch_id !== auth.branchId) {
+        return apiForbidden();
+      }
     }
   }
 

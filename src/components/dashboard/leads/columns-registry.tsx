@@ -16,6 +16,7 @@ export interface LeadColumnCtx {
   memberMap: Record<string, string>;
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
+  branchMap: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
   selectedIds: Set<string>;
@@ -504,6 +505,24 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
+  // ── branch (Enterprise plan only — filtered by maxBranches in getLeadColumns)
+  {
+    key: "branch",
+    label: "Branch",
+    group: "standard",
+    defaultVisible: true,
+    renderTh: () => (
+      <th key="branch" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[100px]">
+        Branch
+      </th>
+    ),
+    renderTd: (lead, ctx) => (
+      <td key="branch" className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
+        {lead.branch_id ? (ctx.branchMap[lead.branch_id] ?? "—") : <span className="text-gray-400">—</span>}
+      </td>
+    ),
+  },
+
   // ─── IT Agency columns (industry-gated) ─────────────────────────────────────
 
   // ── company
@@ -665,8 +684,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
 export function getLeadColumns(
   industryId: string | null | undefined,
   customFieldKeys: string[] = [],
+  maxBranches = 1,
 ): LeadColumn[] {
   const staticCols = STATIC_COLUMNS.filter((col) => {
+    if (col.key === "branch") return maxBranches > 1;
     if (!col.industries) return true;
     return industryId != null && col.industries.includes(industryId);
   });
@@ -695,8 +716,8 @@ export function getLeadColumns(
  * Returns the keys that should be visible by default for a given industry.
  * Matches today's hardcoded column set exactly.
  */
-export function getDefaultVisibleKeys(industryId: string | null | undefined): string[] {
-  const cols = getLeadColumns(industryId, []);
+export function getDefaultVisibleKeys(industryId: string | null | undefined, maxBranches = 1): string[] {
+  const cols = getLeadColumns(industryId, [], maxBranches);
   return cols.filter((c) => c.defaultVisible).map((c) => c.key);
 }
 

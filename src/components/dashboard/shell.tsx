@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Tenant } from "@/types/database";
+import type { Tenant, Branch } from "@/types/database";
 import type { User } from "@supabase/supabase-js";
 import {
   Sheet,
@@ -50,6 +50,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
+import { BranchSwitcher } from "./branch-switcher";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
@@ -193,6 +194,11 @@ interface DashboardShellProps {
   formConfigs?: FormSummary[];
   industrySidebarItems?: readonly SidebarEntry[];
   allowedNavKeys?: string[] | null;
+  branches?: Branch[];
+  maxBranches?: number;
+  userBranchId?: string | null;
+  leadScope?: "all" | "own" | "team";
+  selectedBranchId?: string | null;
   children: React.ReactNode;
 }
 
@@ -204,6 +210,11 @@ export function DashboardShell({
   formConfigs = [],
   industrySidebarItems = [],
   allowedNavKeys = null,
+  branches = [],
+  maxBranches = 1,
+  userBranchId = null,
+  leadScope = "all",
+  selectedBranchId = null,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -466,6 +477,15 @@ export function DashboardShell({
               <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
               <span className="text-sm font-medium hidden sm:inline">Assistant</span>
             </button>
+
+            {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
+            <BranchSwitcher
+              branches={branches}
+              maxBranches={maxBranches}
+              userBranchId={userBranchId}
+              leadScope={leadScope}
+              selectedBranchId={selectedBranchId}
+            />
 
             {/* Notifications Dropdown */}
             <NotificationsDropdown />

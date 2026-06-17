@@ -16,6 +16,7 @@ export default async function TeamPage() {
         tenantId={tenantData.tenant.id}
         userId={tenantData.userId}
         industryId={tenantData.tenant.industry_id ?? undefined}
+        maxBranches={tenantData.entitlements.maxBranches}
       />
     </div>
   );

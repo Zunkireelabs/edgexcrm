@@ -20,12 +20,14 @@ import {
 } from "@/components/ui/select";
 import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import type { Branch } from "@/types/database";
 
 interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   position_id: string | null;
+  branch_id: string | null;
   email: string;
   default_hourly_rate: number | null;
   created_at: string;
@@ -53,6 +55,7 @@ interface TeamManagementProps {
   tenantId: string;
   userId: string;
   industryId?: string;
+  maxBranches?: number;
 }
 
 const roleColors: Record<string, string> = {
@@ -62,10 +65,11 @@ const roleColors: Record<string, string> = {
   viewer: "bg-gray-100 text-gray-800",
 };
 
-export function TeamManagement({ role, userId, industryId }: TeamManagementProps) {
+export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: TeamManagementProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [inviteEmail, setInviteEmail] = useState("");
@@ -81,6 +85,12 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
   const [editingPositionFor, setEditingPositionFor] = useState<string | null>(null);
   const [savingPosition, setSavingPosition] = useState(false);
 
+  // Branch editing state
+  const [editingBranchFor, setEditingBranchFor] = useState<string | null>(null);
+  const [savingBranch, setSavingBranch] = useState(false);
+
+  const showBranches = maxBranches > 1;
+
   const isAdmin = role === "owner" || role === "admin";
   const showRates = industryId === "it_agency";
 
@@ -88,13 +98,17 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
   const positionMap = new Map(positions.map((p) => [p.id, p]));
   const assignablePositions = positions.filter((p) => p.base_tier !== "owner");
 
+  // Build branch map for lookups
+  const branchMap = new Map(branches.map((b) => [b.id, b.name]));
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [membersRes, invitesRes, positionsRes] = await Promise.all([
+      const [membersRes, invitesRes, positionsRes, branchesRes] = await Promise.all([
         fetch("/api/v1/team"),
         isAdmin ? fetch("/api/v1/invites") : Promise.resolve(null),
         fetch("/api/v1/positions"),
+        showBranches ? fetch("/api/v1/branches") : Promise.resolve(null),
       ]);
 
       if (membersRes.ok) {
@@ -111,12 +125,17 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
         const posJson = await positionsRes.json();
         setPositions(posJson.data || []);
       }
+
+      if (branchesRes?.ok) {
+        const branchJson = await branchesRes.json();
+        setBranches(branchJson.data || []);
+      }
     } catch {
       toast.error("Failed to load team data");
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [isAdmin, showBranches]);
 
   useEffect(() => {
     fetchData();
@@ -173,6 +192,30 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
       toast.error(err instanceof Error ? err.message : "Failed to update position");
     } finally {
       setSavingPosition(false);
+    }
+  }
+
+  async function saveBranch(memberUserId: string, branchId: string | null) {
+    setSavingBranch(true);
+    try {
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, branch_id: branchId }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || "Failed to update branch");
+      }
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === memberUserId ? { ...m, branch_id: branchId } : m)),
+      );
+      toast.success("Branch updated");
+      setEditingBranchFor(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update branch");
+    } finally {
+      setSavingBranch(false);
     }
   }
 
@@ -388,6 +431,55 @@ export function TeamManagement({ role, userId, industryId }: TeamManagementProps
                         </Button>
                       )}
                     </div>
+                  )}
+                  {/* Branch picker — Enterprise only */}
+                  {showBranches && isAdmin && member.role !== "owner" && (
+                    editingBranchFor === member.user_id ? (
+                      <div className="flex items-center gap-1">
+                        <Select
+                          defaultValue={member.branch_id ?? "__none__"}
+                          onValueChange={(v) => {
+                            saveBranch(member.user_id, v === "__none__" ? null : v);
+                          }}
+                          disabled={savingBranch}
+                        >
+                          <SelectTrigger className="h-7 w-36 text-xs">
+                            <SelectValue placeholder="No branch" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">No branch</SelectItem>
+                            {branches.map((b) => (
+                              <SelectItem key={b.id} value={b.id}>
+                                {b.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setEditingBranchFor(null)}
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground">
+                          {member.branch_id ? (branchMap.get(member.branch_id) ?? "—") : "No branch"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => setEditingBranchFor(member.user_id)}
+                          title="Change branch"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    )
                   )}
                   {isAdmin && member.user_id !== userId && member.role !== "owner" && (
                     <Button

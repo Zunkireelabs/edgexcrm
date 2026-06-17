@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -29,7 +29,7 @@ export async function GET(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to")
+    .select("id, assigned_to, branch_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -37,9 +37,9 @@ export async function GET(
 
   if (!lead) return apiNotFound("Lead");
 
-  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) {
-    return apiNotFound("Lead");
-  }
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
   const { data, error } = await supabase
     .from("lead_submissions")

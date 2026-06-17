@@ -319,6 +319,7 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       owner_id: null,
       salutation: null,
       company_email: null,
+      branch_id: null,
       last_activity_at: otherLead.created_at,
       updated_at: otherLead.created_at,
     };

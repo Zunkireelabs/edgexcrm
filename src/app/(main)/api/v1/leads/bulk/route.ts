@@ -32,9 +32,15 @@ export async function PATCH(request: NextRequest) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!requireAdmin(auth)) return apiForbidden();
 
-  let body: { ids?: string[]; assigned_to?: string | null };
+  const isAdmin = requireAdmin(auth);
+  const isTeamScoped =
+    auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
+  if (!isAdmin && !isTeamScoped) return apiForbidden();
+  // §4.1: team-scoped member with no branchId has no branch scope — disallow bulk ops
+  if (isTeamScoped && !auth.branchId) return apiForbidden();
+
+  let body: { ids?: string[]; assigned_to?: string | null; branch_id?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -62,13 +68,20 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Validate branch_id if provided (can be null to clear)
+  if (body.branch_id !== undefined && body.branch_id !== null) {
+    if (!UUID_REGEX.test(body.branch_id)) {
+      return apiValidationError({ branch_id: ["Invalid UUID format"] });
+    }
+  }
+
   const supabase = await createServiceClient();
 
   // If assigning to someone, verify they are a tenant member
   if (body.assigned_to) {
     const { data: member } = await supabase
       .from("tenant_users")
-      .select("id")
+      .select("id, branch_id")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to)
       .single();
@@ -76,12 +89,34 @@ export async function PATCH(request: NextRequest) {
     if (!member) {
       return apiValidationError({ assigned_to: ["User is not a member of this tenant"] });
     }
+
+    // §4.2: branch manager may only assign to users in their own branch
+    if (isTeamScoped && member.branch_id !== auth.branchId) {
+      return apiForbidden();
+    }
+  }
+
+  // Validate branch_id belongs to tenant if provided
+  if (body.branch_id !== undefined && body.branch_id !== null) {
+    const { data: branchCheck } = await supabase
+      .from("branches")
+      .select("id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.branch_id)
+      .single();
+    if (!branchCheck) {
+      return apiValidationError({ branch_id: ["Branch not found in this tenant"] });
+    }
+    // §4.2: branch manager may only route leads to their own branch
+    if (isTeamScoped && body.branch_id !== auth.branchId) {
+      return apiForbidden();
+    }
   }
 
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
-    .select("id, assigned_to")
+    .select("id, assigned_to, branch_id")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -92,27 +127,36 @@ export async function PATCH(request: NextRequest) {
     return apiServiceUnavailable("Failed to verify leads");
   }
 
-  const existingMap = new Map(existingLeads?.map((l) => [l.id, l.assigned_to]) || []);
+  const existingMap = new Map(
+    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id }])
+  );
   const notFoundIds = body.ids.filter((id) => !existingMap.has(id));
 
   if (notFoundIds.length > 0) {
     log.info({ notFoundIds }, "Some leads not found for bulk update");
   }
 
-  // Only update leads that exist
-  const idsToUpdate = body.ids.filter((id) => existingMap.has(id));
+  // §4.2: branch manager can only update leads already in their branch
+  let idsToUpdate = body.ids.filter((id) => existingMap.has(id));
+  if (isTeamScoped) {
+    idsToUpdate = idsToUpdate.filter((id) => existingMap.get(id)?.branch_id === auth.branchId);
+  }
 
   if (idsToUpdate.length === 0) {
     return apiValidationError({ ids: ["No valid leads found to update"] });
   }
 
+  // Build bulk update payload
+  const bulkUpdatePayload: Record<string, unknown> = {
+    updated_at: new Date().toISOString(),
+  };
+  if (body.assigned_to !== undefined) bulkUpdatePayload.assigned_to = body.assigned_to ?? null;
+  if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
+
   // Update all leads
   const { error: updateError } = await supabase
     .from("leads")
-    .update({
-      assigned_to: body.assigned_to ?? null,
-      updated_at: new Date().toISOString(),
-    })
+    .update(bulkUpdatePayload)
     .eq("tenant_id", auth.tenantId)
     .in("id", idsToUpdate);
 
@@ -128,29 +172,40 @@ export async function PATCH(request: NextRequest) {
 
   // Create audit logs and events for each updated lead
   Promise.all(
-    idsToUpdate.flatMap((id) => [
-      createAuditLog({
-        tenantId: auth.tenantId,
-        userId: auth.userId,
-        action: "lead.updated",
-        entityType: "lead",
-        entityId: id,
-        changes: {
-          assigned_to: { old: existingMap.get(id) || null, new: body.assigned_to ?? null },
-        },
-        ipAddress: ip,
-        userAgent,
-        requestId,
-      }),
-      emitEvent({
-        tenantId: auth.tenantId,
-        type: body.assigned_to ? "lead.assigned" : "lead.unassigned",
-        entityType: "lead",
-        entityId: id,
-        payload: { assigned_to: body.assigned_to ?? null },
-        requestId,
-      }),
-    ])
+    idsToUpdate.flatMap((id) => {
+      const prev = existingMap.get(id);
+      const changes: Record<string, { old: unknown; new: unknown }> = {};
+      if (body.assigned_to !== undefined) {
+        changes.assigned_to = { old: prev?.assigned_to ?? null, new: body.assigned_to ?? null };
+      }
+      if (body.branch_id !== undefined) {
+        changes.branch_id = { old: prev?.branch_id ?? null, new: body.branch_id ?? null };
+      }
+      return [
+        createAuditLog({
+          tenantId: auth.tenantId,
+          userId: auth.userId,
+          action: "lead.updated",
+          entityType: "lead",
+          entityId: id,
+          changes,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        }),
+        emitEvent({
+          tenantId: auth.tenantId,
+          type: body.assigned_to ? "lead.assigned" : "lead.unassigned",
+          entityType: "lead",
+          entityId: id,
+          payload: {
+            assigned_to: body.assigned_to ?? null,
+            ...(body.branch_id !== undefined && { branch_id: body.branch_id ?? null }),
+          },
+          requestId,
+        }),
+      ];
+    })
   );
 
   const bulkNotifications = [];
@@ -195,10 +250,12 @@ export async function PATCH(request: NextRequest) {
 
   // Notify previous assignees who lost their leads (group by previous assignee, self-suppressed)
   const previousAssignees = new Map<string, number>();
-  for (const id of idsToUpdate) {
-    const prevAssignee = existingMap.get(id);
-    if (prevAssignee && prevAssignee !== body.assigned_to) {
-      previousAssignees.set(prevAssignee, (previousAssignees.get(prevAssignee) || 0) + 1);
+  if (body.assigned_to !== undefined) {
+    for (const id of idsToUpdate) {
+      const prevAssignee = existingMap.get(id)?.assigned_to;
+      if (prevAssignee && prevAssignee !== body.assigned_to) {
+        previousAssignees.set(prevAssignee, (previousAssignees.get(prevAssignee) || 0) + 1);
+      }
     }
   }
 
@@ -218,7 +275,8 @@ export async function PATCH(request: NextRequest) {
   return apiSuccess({
     updated: idsToUpdate.length,
     ids: idsToUpdate,
-    assigned_to: body.assigned_to ?? null,
+    ...(body.assigned_to !== undefined && { assigned_to: body.assigned_to ?? null }),
+    ...(body.branch_id !== undefined && { branch_id: body.branch_id ?? null }),
     notFound: notFoundIds,
   });
 }

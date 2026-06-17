@@ -14,9 +14,10 @@ interface OrgStructureContentProps {
   tenantId: string;
   userId: string;
   industryId?: string;
+  maxBranches?: number;
 }
 
-export function OrgStructureContent({ role, tenantId, userId, industryId }: OrgStructureContentProps) {
+export function OrgStructureContent({ role, tenantId, userId, industryId, maxBranches = 1 }: OrgStructureContentProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("editor");
   const [prevViewMode, setPrevViewMode] = useState<ViewMode>("editor");
   const [layers, setLayers] = useState<OrgLayerWithPositions[]>([]);
@@ -172,6 +173,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId }: OrgS
           tenantId={tenantId}
           userId={userId}
           industryId={industryId}
+          maxBranches={maxBranches}
         />
       )}
     </div>

@@ -31,7 +31,7 @@ export async function GET() {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -45,6 +45,7 @@ export async function GET() {
     user_id: string;
     role: string;
     position_id: string | null;
+    branch_id: string | null;
     default_hourly_rate: number | null;
     created_at: string;
   }>;
@@ -62,6 +63,7 @@ export async function GET() {
     user_id: m.user_id,
     role: m.role,
     position_id: m.position_id,
+    branch_id: m.branch_id,
     email: userMap.get(m.user_id) || "Unknown",
     default_hourly_rate: m.default_hourly_rate,
     created_at: m.created_at,
@@ -129,7 +131,7 @@ export async function PATCH(request: Request) {
   if (!auth) return apiUnauthorized();
   if (!requireAdmin(auth)) return apiForbidden();
 
-  let body: { user_id: string; default_hourly_rate?: number | null; position_id?: string | null };
+  let body: { user_id: string; default_hourly_rate?: number | null; position_id?: string | null; branch_id?: string | null };
   try {
     body = await request.json();
   } catch {
@@ -216,6 +218,20 @@ export async function PATCH(request: Request) {
     patch.role = newRole;
   }
 
+  if (body.branch_id !== undefined) {
+    if (body.branch_id === null) {
+      patch.branch_id = null;
+    } else {
+      const { data: branchData } = await db
+        .from("branches")
+        .select("id")
+        .eq("id", body.branch_id)
+        .maybeSingle();
+      if (!branchData) return apiNotFound("Branch");
+      patch.branch_id = body.branch_id;
+    }
+  }
+
   if (Object.keys(patch).length === 0) {
     return apiNotFound("Team member"); // nothing to update
   }
@@ -224,7 +240,7 @@ export async function PATCH(request: Request) {
     .from("tenant_users")
     .update(patch)
     .eq("user_id", body.user_id)
-    .select("id, user_id, role, position_id, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at")
     .single();
 
   if (error) {

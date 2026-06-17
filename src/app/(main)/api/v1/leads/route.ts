@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { shouldRestrictToSelf, canSeeNav } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiPaginated,
@@ -95,9 +95,16 @@ export async function GET(request: NextRequest) {
     query = query.is("converted_at", null);
   }
 
-  // Counselor scoping: force assigned_to filter
-  if (shouldRestrictToSelf(auth.permissions)) {
-    assignedTo = auth.userId;
+  // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
+  if (scope.restrictToSelf) assignedTo = auth.userId;
+  if (scope.branchId) query = query.eq("branch_id", scope.branchId);
+
+  // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
+  // team/own users cannot widen or redirect their scope via this param.
+  const adminBranchFilter = searchParams.get("branch_id");
+  if (adminBranchFilter && auth.permissions.leadScope === "all") {
+    query = query.eq("branch_id", adminBranchFilter);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
