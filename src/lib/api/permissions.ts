@@ -82,12 +82,22 @@ export interface LeadQueryScope {
   restrictToSelf: boolean;
   userId: string;
   pipelineIds: string[] | null; // null = all pipelines
+  branchId: string | null;      // null = no branch filter
 }
-export function leadQueryScope(p: ResolvedPermissions, userId: string): LeadQueryScope {
+export function leadQueryScope(
+  p: ResolvedPermissions,
+  userId: string,
+  branchId?: string | null,
+): LeadQueryScope {
+  // §4.1 critical guard: team-scoped user with NO branchId MUST fall back to own-only,
+  // never all — otherwise the null-branch path leaks the entire tenant.
+  const restrictToSelf = p.leadScope === "own" || (p.leadScope === "team" && !branchId);
+  const effectiveBranchId = p.leadScope === "team" && branchId ? branchId : null;
   return {
-    restrictToSelf: p.leadScope === "own",
+    restrictToSelf,
     userId,
     pipelineIds: p.pipelineAccess === "all" ? null : [...p.pipelineAccess.ids],
+    branchId: effectiveBranchId,
   };
 }
 

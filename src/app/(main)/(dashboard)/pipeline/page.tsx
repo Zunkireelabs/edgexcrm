@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import {
   getCurrentUserTenant,
   getPipelineStages,
@@ -22,7 +23,11 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
   if (!canSeeNav(tenantData.permissions, "/pipeline")) redirect("/dashboard");
 
   const params = await searchParams;
-  const serviceClient = await createServiceClient();
+  const [serviceClient, cookieStore] = await Promise.all([
+    createServiceClient(),
+    cookies(),
+  ]);
+  const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
 
   // Fetch all pipelines first
   const pipelines = await getPipelines(tenantData.tenant.id);
@@ -50,10 +55,16 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     );
   }
 
+  const pipelineScope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
+  // Admin cookie override: all-scope users can filter by a specific branch from the header
+  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
+    pipelineScope.branchId = branchCookieVal;
+  }
+
   const [stages, leads, teamMembers, industryResult, entitiesResult] = await Promise.all([
     getPipelineStages(tenantData.tenant.id, selectedPipelineId),
     getLeadsForPipeline(tenantData.tenant.id, {
-      ...leadQueryScope(tenantData.permissions, tenantData.userId),
+      ...pipelineScope,
       pipelineId: selectedPipelineId,
     }),
     getTeamMembers(tenantData.tenant.id),

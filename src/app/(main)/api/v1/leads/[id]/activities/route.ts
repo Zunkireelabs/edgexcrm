@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiValidationError,
@@ -27,7 +28,7 @@ export async function GET(
   // Verify lead exists and belongs to tenant
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, assigned_to, branch_id")
     .eq("id", leadId)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -36,6 +37,10 @@ export async function GET(
   if (leadError || !lead) {
     return apiNotFound("Lead");
   }
+
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
   // Get query params for filtering
   const searchParams = request.nextUrl.searchParams;
@@ -113,7 +118,7 @@ export async function POST(
   // Verify lead exists and belongs to tenant
   const { data: lead, error: leadError } = await supabase
     .from("leads")
-    .select("id")
+    .select("id, assigned_to, branch_id")
     .eq("id", leadId)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -122,6 +127,10 @@ export async function POST(
   if (leadError || !lead) {
     return apiNotFound("Lead");
   }
+
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
+  if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
 
   // Create the activity
   const { data: activity, error } = await supabase

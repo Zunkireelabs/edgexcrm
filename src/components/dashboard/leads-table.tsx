@@ -45,6 +45,7 @@ import {
   Columns3,
   MoreHorizontal,
   Pencil,
+  Building2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,7 +58,7 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
-import type { Lead, PipelineStage, UserRole, TenantEntity } from "@/types/database";
+import type { Lead, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
   getLeadColumns,
@@ -89,6 +90,8 @@ interface LeadsTableProps {
   entityLabel?: string;
   currentUserId?: string;
   industryId?: string | null;
+  branches?: Branch[];
+  maxBranches?: number;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -109,6 +112,8 @@ export function LeadsTable({
   entityLabel,
   currentUserId = "",
   industryId,
+  branches = [],
+  maxBranches = 1,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -132,6 +137,9 @@ export function LeadsTable({
   const [assignTo, setAssignTo] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
+  const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
+  const [assignToBranch, setAssignToBranch] = useState<string>("");
+  const [isAssigningBranch, setIsAssigningBranch] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -143,6 +151,7 @@ export function LeadsTable({
   const isAdmin = role === "admin" || role === "owner";
   const canCreateLead = role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
+  const showBranches = maxBranches > 1;
 
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
@@ -398,6 +407,39 @@ export function LeadsTable({
     }
   }
 
+  async function handleBulkAssignBranch() {
+    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    if (idsToAssign.length === 0) {
+      toast.error("No leads selected");
+      return;
+    }
+    setIsAssigningBranch(true);
+    try {
+      const response = await fetch("/api/v1/leads/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ids: idsToAssign,
+          branch_id: assignToBranch === "__unassign__" ? null : assignToBranch,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error?.message || "Failed to assign branch");
+      }
+      const action = assignToBranch === "__unassign__" ? "Unrouted" : "Assigned";
+      toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      setBranchAssignDialogOpen(false);
+      setAssignToBranch("");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to assign branch");
+    } finally {
+      setIsAssigningBranch(false);
+    }
+  }
+
   function exportCSV() {
     const exportCols = visibleColumns.filter((c) => c.key !== "actions");
     const headers = exportCols.map((c) => c.label);
@@ -495,15 +537,15 @@ export function LeadsTable({
 
   // Full column catalog for this industry + discovered custom fields.
   const allColumns = useMemo(
-    () => getLeadColumns(industryId, customFieldKeys),
-    [industryId, customFieldKeys],
+    () => getLeadColumns(industryId, customFieldKeys, maxBranches),
+    [industryId, customFieldKeys, maxBranches],
   );
 
   // Default middle visible keys (anchors name + actions always implicit).
   const defaultMiddleKeys = useMemo(() => {
-    const defaults = getDefaultVisibleKeys(industryId);
+    const defaults = getDefaultVisibleKeys(industryId, maxBranches);
     return defaults.filter((k) => k !== "name" && k !== "actions");
-  }, [industryId]);
+  }, [industryId, maxBranches]);
 
   // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
@@ -560,11 +602,17 @@ export function LeadsTable({
     [entities],
   );
 
+  const branchMap = useMemo(
+    () => Object.fromEntries(branches.map((b) => [b.id, b.name])),
+    [branches],
+  );
+
   const columnCtx: LeadColumnCtx = useMemo(
     () => ({
       memberMap,
       formMap,
       entityMap,
+      branchMap,
       stages,
       industryId,
       selectedIds,
@@ -591,7 +639,7 @@ export function LeadsTable({
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
     }),
-    [memberMap, formMap, entityMap, stages, industryId, selectedIds, unreadLeadIds],
+    [memberMap, formMap, entityMap, branchMap, stages, industryId, selectedIds, unreadLeadIds],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -903,6 +951,15 @@ export function LeadsTable({
                 Assign
               </button>
             )}
+            {isAdmin && showBranches && branches.length > 0 && (
+              <button
+                onClick={() => setBranchAssignDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <Building2 className="h-4 w-4" />
+                Branch
+              </button>
+            )}
             {isAdmin && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
@@ -1171,6 +1228,56 @@ export function LeadsTable({
               disabled={isAssigning || !assignTo}
             >
               {isAssigning ? "Assigning..." : assignTo === "unassign" ? "Unassign" : "Assign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Branch Assign Dialog */}
+      <Dialog open={branchAssignDialogOpen} onOpenChange={(open) => {
+        setBranchAssignDialogOpen(open);
+        if (!open) setAssignToBranch("");
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
+            <DialogDescription>
+              Select a branch to assign the selected leads to, or remove their branch routing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Select value={assignToBranch} onValueChange={setAssignToBranch}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select branch..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__unassign__">
+                  <span className="text-muted-foreground">Remove branch (unroute)</span>
+                </SelectItem>
+                {branches.map((b) => (
+                  <SelectItem key={b.id} value={b.id}>
+                    {b.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setBranchAssignDialogOpen(false);
+                setAssignToBranch("");
+              }}
+              disabled={isAssigningBranch}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkAssignBranch}
+              disabled={isAssigningBranch || !assignToBranch}
+            >
+              {isAssigningBranch ? "Assigning…" : assignToBranch === "__unassign__" ? "Remove Branch" : "Assign"}
             </Button>
           </DialogFooter>
         </DialogContent>

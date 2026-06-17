@@ -52,6 +52,8 @@ export interface Tenant {
   primary_color: string;
   config: TenantConfig;
   industry_id: IndustryId | null;
+  plan: string;
+  entitlement_overrides: Record<string, unknown>;
   created_at: string;
   updated_at: string;
 }
@@ -104,6 +106,17 @@ export interface TenantUser {
   user_id: string;
   role: UserRole;
   default_hourly_rate: number | null;
+  branch_id: string | null;
+  created_at: string;
+}
+
+export interface Branch {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  manager_user_id: string | null;
+  sort_order: number;
   created_at: string;
 }
 
@@ -153,6 +166,7 @@ export interface Lead {
   owner_id: string | null;
   salutation: string | null;
   company_email: string | null;
+  branch_id: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;

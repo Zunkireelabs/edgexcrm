@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
-import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
+import { cookies } from "next/headers";
+import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
@@ -10,37 +11,48 @@ export default async function LeadsPage() {
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const serviceClient = await createServiceClient();
-
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] = await Promise.all([
-    getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId)),
-    getTeamMembers(tenantData.tenant.id),
-    getPipelineStages(tenantData.tenant.id),
-    getFormConfigsForTenant(tenantData.tenant.id),
-    // Fetch industry if tenant has one
-    tenantData.tenant.industry_id
-      ? serviceClient
-          .from("industries")
-          .select("*")
-          .eq("id", tenantData.tenant.industry_id)
-          .single()
-      : Promise.resolve({ data: null }),
-    // Fetch tenant entities
-    serviceClient
-      .from("tenant_entities")
-      .select("*")
-      .eq("tenant_id", tenantData.tenant.id)
-      .eq("is_active", true)
-      .order("position", { ascending: true }),
+  const [serviceClient, cookieStore] = await Promise.all([
+    createServiceClient(),
+    cookies(),
   ]);
 
-  const memberMap = Object.fromEntries(
-    teamMembers.map((m) => [m.user_id, m.email])
-  );
+  const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
 
-  const formMap = Object.fromEntries(
-    formConfigs.map((f) => [f.id, f.name])
-  );
+  // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
+  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
+    scope.branchId = branchCookieVal;
+  }
+
+  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
+    await Promise.all([
+      getLeads(tenantData.tenant.id, scope),
+      getTeamMembers(tenantData.tenant.id),
+      getPipelineStages(tenantData.tenant.id),
+      getFormConfigsForTenant(tenantData.tenant.id),
+      // Fetch industry if tenant has one
+      tenantData.tenant.industry_id
+        ? serviceClient
+            .from("industries")
+            .select("*")
+            .eq("id", tenantData.tenant.industry_id)
+            .single()
+        : Promise.resolve({ data: null }),
+      // Fetch tenant entities
+      serviceClient
+        .from("tenant_entities")
+        .select("*")
+        .eq("tenant_id", tenantData.tenant.id)
+        .eq("is_active", true)
+        .order("position", { ascending: true }),
+      // Fetch branches (empty array for single-branch tenants)
+      tenantData.entitlements.maxBranches > 1
+        ? getBranches(tenantData.tenant.id)
+        : Promise.resolve([]),
+    ]);
+
+  const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
+  const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -60,6 +72,8 @@ export default async function LeadsPage() {
         entityLabel={industry?.entity_type_label}
         currentUserId={tenantData.userId}
         industryId={tenantData.tenant.industry_id}
+        branches={branches}
+        maxBranches={tenantData.entitlements.maxBranches}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -69,12 +69,13 @@ export async function POST(request: NextRequest, { params }: Props) {
     account_id: string | null;
     assigned_to: string | null;
     converted_at: string | null;
+    branch_id: string | null;
   };
 
   // Fetch lead with tenant filter auto-injected
   const { data: leadData } = await db
     .from("leads")
-    .select("id, first_name, last_name, email, phone, account_id, assigned_to, converted_at")
+    .select("id, first_name, last_name, email, phone, account_id, assigned_to, converted_at, branch_id")
     .eq("id", id)
     .is("deleted_at", null)
     .maybeSingle();
@@ -84,10 +85,9 @@ export async function POST(request: NextRequest, { params }: Props) {
 
   if (leadRow.converted_at) return apiError("INVALID_STATE", "Lead already converted", 409);
 
-  // Counselor can only convert their own lead
-  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) {
-    return apiForbidden();
-  }
+  // Counselor: own-only
+  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) return apiForbidden();
+  if (!requireLeadBranchAccess(auth, leadRow)) return apiNotFound("Lead");
 
   // Resolve account
   let resolvedAccountId: string;

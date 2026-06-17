@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
@@ -15,8 +16,18 @@ export default async function DashboardPage() {
 
   const { permissions } = tenantData;
 
+  const cookieStore = await cookies();
+  const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+
+  // Fix: pass branchId so branch managers (leadScope "team") are correctly scoped
+  const scope = leadQueryScope(permissions, tenantData.userId, tenantData.branchId);
+  // Admin cookie override: all-scope users can filter by a specific branch from the header
+  if (permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
+    scope.branchId = branchCookieVal;
+  }
+
   const [leads, teamMembers, stages, formConfigs] = await Promise.all([
-    getLeads(tenantData.tenant.id, leadQueryScope(permissions, tenantData.userId)),
+    getLeads(tenantData.tenant.id, scope),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),
