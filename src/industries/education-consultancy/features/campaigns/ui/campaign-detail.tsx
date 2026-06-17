@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +44,7 @@ interface EspnResult {
   status: "scheduled" | "final";
   source?: "espn" | "manual";
   locked?: boolean;
+  match_date: string | null;
 }
 
 interface Campaign {
@@ -426,8 +427,63 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
+  const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const [gearOpen, setGearOpen] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<EspnResult | null>(null);
+
+  const sortedResults = useMemo(() => {
+    if (!data) return [];
+    return [...data.results].sort((a, b) => {
+      if (a.match_date && b.match_date) {
+        return new Date(b.match_date).getTime() - new Date(a.match_date).getTime();
+      }
+      if (a.match_date && !b.match_date) return -1;
+      if (!a.match_date && b.match_date) return 1;
+      const aId = parseInt(a.match_id.replace("espn-", ""), 10);
+      const bId = parseInt(b.match_id.replace("espn-", ""), 10);
+      return bId - aId;
+    });
+  }, [data]);
+
+  const matchPredictors = useMemo(() => {
+    const map = new Map<string, Array<{
+      name: string;
+      email: string;
+      phone: string | null;
+      prediction: string;
+      correct: boolean | null;
+      profile: Record<string, string | null>;
+      flags: IntegrityFlag[];
+    }>>();
+    if (!data) return map;
+    for (const entry of data.standings) {
+      for (const pick of entry.picks) {
+        const correct =
+          pick.status === "final" && pick.outcome !== null
+            ? pick.prediction === pick.outcome
+            : null;
+        if (!map.has(pick.match_id)) map.set(pick.match_id, []);
+        map.get(pick.match_id)!.push({
+          name: entry.name,
+          email: entry.email,
+          phone: entry.phone,
+          prediction: pick.prediction,
+          correct,
+          profile: entry.profile ?? {},
+          flags: entry.flags ?? [],
+        });
+      }
+    }
+    map.forEach((predictors) => {
+      predictors.sort((a, b) => {
+        const aYes = a.profile["study_abroad_interest"] === "yes" ? 0 : 1;
+        const bYes = b.profile["study_abroad_interest"] === "yes" ? 0 : 1;
+        if (aYes !== bYes) return aYes - bYes;
+        return a.name.localeCompare(b.name);
+      });
+    });
+    return map;
+  }, [data]);
 
   const loadLeaderboard = useCallback(() => {
     setLoading(true);
@@ -475,7 +531,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
   if (!data) return null;
 
-  const { campaign, standings, results, pending_matches } = data;
+  const { campaign, standings, pending_matches } = data;
   const leaderboardFields = data.leaderboard_fields ?? [];
 
   function handleGearUpdated(patch: { public_enabled: boolean; public_token: string | null }) {
@@ -566,43 +622,123 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {results.length === 0 ? (
+              {sortedResults.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-6">
                     No results yet. Click &ldquo;Refresh results&rdquo; to fetch from ESPN.
                   </TableCell>
                 </TableRow>
               ) : (
-                results.map((r) => (
-                  <TableRow key={r.match_id}>
-                    <TableCell className="font-medium text-sm">{r.match_label || r.match_id}</TableCell>
-                    <TableCell className="text-sm">
-                      {r.status === "final" && r.home_score != null
-                        ? `${r.home_score}–${r.away_score}`
-                        : <span className="text-muted-foreground">Pending</span>}
-                    </TableCell>
-                    <TableCell className="text-sm">{outcomeLabel(r.outcome)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
-                        {r.source ?? "espn"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      {r.locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7"
-                        title="Override result"
-                        onClick={() => setOverrideTarget(r)}
+                sortedResults.map((r) => {
+                  const isMatchExpanded = expandedMatch === r.match_id;
+                  return (
+                    <>
+                      <TableRow
+                        key={r.match_id}
+                        className="cursor-pointer"
+                        onClick={() => setExpandedMatch(isMatchExpanded ? null : r.match_id)}
                       >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))
+                        <TableCell className="font-medium text-sm">
+                          <span className="flex items-center gap-1.5">
+                            {isMatchExpanded
+                              ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                              : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />}
+                            {r.match_label || r.match_id}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {r.status === "final" && r.home_score != null
+                            ? `${r.home_score}–${r.away_score}`
+                            : <span className="text-muted-foreground">Pending</span>}
+                        </TableCell>
+                        <TableCell className="text-sm">{outcomeLabel(r.outcome)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {r.source ?? "espn"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          {r.locked && <Lock className="h-3.5 w-3.5 text-muted-foreground" />}
+                        </TableCell>
+                        <TableCell>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7"
+                            title="Override result"
+                            onClick={(e) => { e.stopPropagation(); setOverrideTarget(r); }}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                      {isMatchExpanded && (
+                        <TableRow key={`${r.match_id}-predictors`}>
+                          <TableCell colSpan={6} className="pb-3 pt-0">
+                            <div className="rounded-md border bg-muted/30 text-xs">
+                              <table className="w-full">
+                                <thead>
+                                  <tr className="border-b">
+                                    <th className="text-left p-2 font-medium">Name</th>
+                                    <th className="text-left p-2 font-medium">Pick</th>
+                                    <th className="text-left p-2 font-medium">✓</th>
+                                    <th className="text-left p-2 font-medium">Study Abroad Interest</th>
+                                    <th className="text-left p-2 font-medium">Contact</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(matchPredictors.get(r.match_id) ?? []).length === 0 ? (
+                                    <tr>
+                                      <td colSpan={5} className="p-2 text-center text-muted-foreground">
+                                        No predictions for this match.
+                                      </td>
+                                    </tr>
+                                  ) : (
+                                    (matchPredictors.get(r.match_id) ?? []).map((predictor, idx) => (
+                                      <tr key={`${predictor.email}-${idx}`} className="border-b last:border-0">
+                                        <td className="p-2">
+                                          <span className="flex items-center gap-1.5">
+                                            {predictor.name}
+                                            {predictor.flags.length > 0 && (
+                                              <span title={predictor.flags.map((f) => f.detail).join("; ")}>
+                                                <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                              </span>
+                                            )}
+                                          </span>
+                                        </td>
+                                        <td className="p-2">{predictionLabel(predictor.prediction)}</td>
+                                        <td className="p-2">
+                                          {predictor.correct === null
+                                            ? "—"
+                                            : predictor.correct
+                                            ? <span className="text-green-600">✓</span>
+                                            : <span className="text-red-500">✗</span>}
+                                        </td>
+                                        <td className="p-2">
+                                          {predictor.profile["study_abroad_interest"] === "yes" ? (
+                                            <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">Yes</Badge>
+                                          ) : predictor.profile["study_abroad_interest"] === "no" ? (
+                                            <Badge variant="secondary" className="text-xs">No</Badge>
+                                          ) : (
+                                            <span className="text-muted-foreground">—</span>
+                                          )}
+                                        </td>
+                                        <td className="p-2 text-muted-foreground">
+                                          <div>{predictor.email}</div>
+                                          {predictor.phone && <div>{predictor.phone}</div>}
+                                        </td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  );
+                })
               )}
             </TableBody>
           </Table>
