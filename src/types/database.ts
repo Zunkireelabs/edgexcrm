@@ -120,6 +120,18 @@ export interface Branch {
   created_at: string;
 }
 
+export interface LeadBranch {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  branch_id: string;
+  assigned_to: string | null;
+  is_origin: boolean;
+  shared_by: string | null;
+  shared_at: string;
+  created_at: string;
+}
+
 export interface Lead {
   id: string;
   tenant_id: string;
