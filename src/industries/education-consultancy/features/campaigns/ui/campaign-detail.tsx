@@ -714,22 +714,21 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                               <span className="font-normal text-muted-foreground">No eligible winner yet</span>
                                             )}
                                           </span>
-                                          <div onClick={(e) => e.stopPropagation()}>
-                                            <Select
-                                              value={r.winner?.email ?? "__auto__"}
-                                              onValueChange={(v) => handleSetWinner(r.match_id, v === "__auto__" ? null : v)}
-                                            >
-                                              <SelectTrigger className="h-7 text-xs w-36">
-                                                Change winner
-                                              </SelectTrigger>
-                                              <SelectContent>
-                                                <SelectItem value="__auto__">Use auto pick</SelectItem>
-                                                {(matchPredictors.get(r.match_id) ?? []).map((p) => (
-                                                  <SelectItem key={p.email} value={p.email}>{p.name}</SelectItem>
-                                                ))}
-                                              </SelectContent>
-                                            </Select>
-                                          </div>
+                                          <select
+                                            value={r.winner?.email ?? "__auto__"}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) =>
+                                              handleSetWinner(r.match_id, e.target.value === "__auto__" ? null : e.target.value)
+                                            }
+                                            className="h-7 rounded-md border bg-background px-2 text-xs"
+                                          >
+                                            <option value="__auto__">Use auto pick</option>
+                                            {(matchPredictors.get(r.match_id) ?? []).map((p) => (
+                                              <option key={p.email} value={p.email}>
+                                                {p.name}
+                                              </option>
+                                            ))}
+                                          </select>
                                           <span className="text-muted-foreground">Internal only — does not change the match result or the public leaderboard.</span>
                                         </div>
                                       </td>
