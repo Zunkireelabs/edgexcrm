@@ -95,7 +95,7 @@ const EXAMPLE_RESPONSE = JSON.stringify({
       { rank: 2, name: "Participant", correct: 7, scored: 12, pct: 58 },
     ],
     results: [
-      { match_label: "Mexico vs South Africa", score: "2–1", outcome: "team_a", status: "final" },
+      { match_label: "Mexico vs South Africa", score: "2–1", outcome: "team_a", status: "final", winner: "Milan K." },
     ],
     pending_matches: [{ match_id: "espn-760416", match_label: "USA vs Canada" }],
   },
