@@ -41,6 +41,7 @@ export interface LeaderboardPick {
   prediction: string;
   outcome: "team_a" | "team_b" | "draw" | null;
   status: "scheduled" | "final";
+  created_at: string;
 }
 
 export interface LeaderboardEntry {
@@ -190,6 +191,7 @@ export function scoreSubmissions(
         prediction: pick.prediction,
         outcome: result.outcome,
         status: result.status,
+        created_at: pick.createdAt,
       });
     }
 
@@ -210,4 +212,38 @@ export function scoreSubmissions(
   });
 
   return entries.map((e, i) => ({ ...e, rank: i + 1 }));
+}
+
+/**
+ * Per-match auto-winner. Final matches only. Eligible = predicted correctly AND
+ * study_abroad_interest === "yes". Tie → earliest submission, then name A→Z.
+ * Returns Map<match_id, winnerEmail>. Matches with no eligible predictor are absent.
+ */
+export function pickMatchWinners(
+  entries: LeaderboardEntry[],
+  results: Record<string, MatchResult>
+): Map<string, string> {
+  const candidates = new Map<string, Array<{ email: string; name: string; created_at: string }>>();
+
+  for (const entry of entries) {
+    if (entry.profile["study_abroad_interest"] !== "yes") continue;
+    for (const pick of entry.picks) {
+      const result = results[pick.match_id];
+      if (!result || result.status !== "final" || result.outcome === null) continue;
+      if (pick.prediction !== result.outcome) continue;
+      if (!candidates.has(pick.match_id)) candidates.set(pick.match_id, []);
+      candidates.get(pick.match_id)!.push({ email: entry.email, name: entry.name, created_at: pick.created_at });
+    }
+  }
+
+  const winners = new Map<string, string>();
+  for (const [matchId, list] of candidates) {
+    list.sort((a, b) => {
+      const timeDiff = a.created_at.localeCompare(b.created_at);
+      if (timeDiff !== 0) return timeDiff;
+      return a.name.localeCompare(b.name);
+    });
+    winners.set(matchId, list[0].email);
+  }
+  return winners;
 }

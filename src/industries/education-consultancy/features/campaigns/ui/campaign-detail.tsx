@@ -27,7 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight, Pencil, AlertTriangle } from "lucide-react";
+import { RefreshCw, AlertCircle, Lock, Trophy, Settings, Copy, Check, ChevronDown, ChevronRight, Pencil, AlertTriangle, Star, RotateCcw } from "lucide-react";
 import type { LeaderboardEntry } from "../lib/scoring";
 import type { IntegrityFlag } from "../lib/integrity";
 import { buildAgentPrompt } from "../lib/agent-prompt";
@@ -45,6 +45,7 @@ interface EspnResult {
   source?: "espn" | "manual";
   locked?: boolean;
   match_date: string | null;
+  winner?: { email: string; name: string; source: "auto" | "manual" } | null;
 }
 
 interface Campaign {
@@ -512,6 +513,15 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     }
   };
 
+  const handleSetWinner = async (matchId: string, email: string | null) => {
+    await fetch(`/api/v1/campaigns/${campaignId}/results/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ set_winner: email }),
+    });
+    loadLeaderboard();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
@@ -684,12 +694,72 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                     <th className="text-left p-2 font-medium">✓</th>
                                     <th className="text-left p-2 font-medium">Study Abroad Interest</th>
                                     <th className="text-left p-2 font-medium">Contact</th>
+                                    <th className="text-left p-2 font-medium w-16"></th>
                                   </tr>
                                 </thead>
                                 <tbody>
+                                  {/* Winner row — pinned at top for final matches */}
+                                  {r.status === "final" && (() => {
+                                    if (r.winner) {
+                                      const wp = (matchPredictors.get(r.match_id) ?? []).find(
+                                        (p) => p.email === r.winner!.email
+                                      );
+                                      return (
+                                        <tr key="winner-row" className="border-b bg-yellow-50 dark:bg-yellow-950">
+                                          <td className="p-2">
+                                            <span className="flex items-center gap-1.5">
+                                              <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                                              <span className="font-medium">{r.winner.name}</span>
+                                              <Badge className="text-xs">Winner</Badge>
+                                              <Badge variant="outline" className="text-xs capitalize">{r.winner.source}</Badge>
+                                            </span>
+                                          </td>
+                                          <td className="p-2">{wp ? predictionLabel(wp.prediction) : "—"}</td>
+                                          <td className="p-2">
+                                            {wp?.correct === null || wp?.correct === undefined
+                                              ? "—"
+                                              : wp.correct
+                                              ? <span className="text-green-600">✓</span>
+                                              : <span className="text-red-500">✗</span>}
+                                          </td>
+                                          <td className="p-2">
+                                            {wp?.profile["study_abroad_interest"] === "yes" ? (
+                                              <Badge variant="default" className="text-xs bg-green-600 hover:bg-green-700">Yes</Badge>
+                                            ) : wp?.profile["study_abroad_interest"] === "no" ? (
+                                              <Badge variant="secondary" className="text-xs">No</Badge>
+                                            ) : (
+                                              <span className="text-muted-foreground">—</span>
+                                            )}
+                                          </td>
+                                          <td className="p-2 text-muted-foreground">
+                                            <div>{r.winner.email}</div>
+                                            {wp?.phone && <div>{wp.phone}</div>}
+                                          </td>
+                                          <td className="p-2">
+                                            {r.winner.source === "manual" && (
+                                              <button
+                                                title="Reset to auto"
+                                                className="p-1 rounded hover:bg-yellow-100 dark:hover:bg-yellow-900 text-muted-foreground hover:text-foreground transition-colors"
+                                                onClick={(e) => { e.stopPropagation(); handleSetWinner(r.match_id, null); }}
+                                              >
+                                                <RotateCcw className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
+                                          </td>
+                                        </tr>
+                                      );
+                                    }
+                                    return (
+                                      <tr key="no-winner-row" className="border-b">
+                                        <td colSpan={6} className="p-2 text-muted-foreground italic">
+                                          No eligible winner
+                                        </td>
+                                      </tr>
+                                    );
+                                  })()}
                                   {(matchPredictors.get(r.match_id) ?? []).length === 0 ? (
                                     <tr>
-                                      <td colSpan={5} className="p-2 text-center text-muted-foreground">
+                                      <td colSpan={6} className="p-2 text-center text-muted-foreground">
                                         No predictions for this match.
                                       </td>
                                     </tr>
@@ -726,6 +796,17 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                         <td className="p-2 text-muted-foreground">
                                           <div>{predictor.email}</div>
                                           {predictor.phone && <div>{predictor.phone}</div>}
+                                        </td>
+                                        <td className="p-2">
+                                          {r.status === "final" && (
+                                            <button
+                                              title="Set as winner"
+                                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                                              onClick={(e) => { e.stopPropagation(); handleSetWinner(r.match_id, predictor.email); }}
+                                            >
+                                              <Star className="h-3.5 w-3.5" />
+                                            </button>
+                                          )}
                                         </td>
                                       </tr>
                                     ))
