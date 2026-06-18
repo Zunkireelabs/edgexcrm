@@ -16,6 +16,7 @@ export interface EspnResult {
   source: "espn" | "manual";
   locked: boolean;
   match_date: string | null;
+  winner_email: string | null;
 }
 
 interface EspnCompetitor {
@@ -160,7 +161,7 @@ export async function refreshEspnResults(
   // Return all current results for this campaign
   const { data: allResults, error: allResultsErr } = await supabase
     .from("campaign_results")
-    .select("match_id, match_label, home_team, away_team, home_score, away_score, outcome, status, source, locked, match_date")
+    .select("match_id, match_label, home_team, away_team, home_score, away_score, outcome, status, source, locked, match_date, winner_email")
     .eq("campaign_id", campaignId);
   if (allResultsErr) log.error({ error: allResultsErr }, "Failed to load campaign_results");
 

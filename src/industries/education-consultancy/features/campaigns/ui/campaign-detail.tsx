@@ -45,6 +45,7 @@ interface EspnResult {
   source?: "espn" | "manual";
   locked?: boolean;
   match_date: string | null;
+  winner?: { email: string; name: string; source: "auto" | "manual" } | null;
 }
 
 interface Campaign {
@@ -94,7 +95,7 @@ const EXAMPLE_RESPONSE = JSON.stringify({
       { rank: 2, name: "Participant", correct: 7, scored: 12, pct: 58 },
     ],
     results: [
-      { match_label: "Mexico vs South Africa", score: "2–1", outcome: "team_a", status: "final" },
+      { match_label: "Mexico vs South Africa", score: "2–1", outcome: "team_a", status: "final", winner: "Milan K." },
     ],
     pending_matches: [{ match_id: "espn-760416", match_label: "USA vs Canada" }],
   },
@@ -512,6 +513,15 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     }
   };
 
+  const handleSetWinner = async (matchId: string, email: string | null) => {
+    await fetch(`/api/v1/campaigns/${campaignId}/results/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ set_winner: email }),
+    });
+    loadLeaderboard();
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-muted-foreground text-sm">
@@ -687,6 +697,43 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                   </tr>
                                 </thead>
                                 <tbody>
+                                  {/* Winner banner — final matches only */}
+                                  {r.status === "final" && (
+                                    <tr key="winner-banner" className={`border-b ${r.winner ? "bg-yellow-50 dark:bg-yellow-950" : ""}`}>
+                                      <td colSpan={5} className="p-2">
+                                        <div className="flex items-center gap-3 flex-wrap">
+                                          <span className="flex items-center gap-1.5 font-medium shrink-0">
+                                            <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
+                                            Winner:
+                                            {r.winner ? (
+                                              <>
+                                                <span>{r.winner.name}</span>
+                                                <Badge variant="outline" className="text-xs capitalize">{r.winner.source}</Badge>
+                                              </>
+                                            ) : (
+                                              <span className="font-normal text-muted-foreground">No eligible winner yet</span>
+                                            )}
+                                          </span>
+                                          <select
+                                            value={r.winner?.email ?? "__auto__"}
+                                            onClick={(e) => e.stopPropagation()}
+                                            onChange={(e) =>
+                                              handleSetWinner(r.match_id, e.target.value === "__auto__" ? null : e.target.value)
+                                            }
+                                            className="h-7 rounded-md border bg-background px-2 text-xs"
+                                          >
+                                            <option value="__auto__">Use auto pick</option>
+                                            {(matchPredictors.get(r.match_id) ?? []).map((p) => (
+                                              <option key={p.email} value={p.email}>
+                                                {p.name}
+                                              </option>
+                                            ))}
+                                          </select>
+                                          <span className="text-muted-foreground">Internal only — does not change the match result or the public leaderboard.</span>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  )}
                                   {(matchPredictors.get(r.match_id) ?? []).length === 0 ? (
                                     <tr>
                                       <td colSpan={5} className="p-2 text-center text-muted-foreground">

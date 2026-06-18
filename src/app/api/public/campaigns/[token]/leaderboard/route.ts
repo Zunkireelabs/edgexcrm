@@ -6,8 +6,9 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { checkRateLimit, PUBLIC_READ_LIMIT } from "@/lib/api/rate-limit";
 import { apiRateLimited } from "@/lib/api/response";
-import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { scoreSubmissions, pickMatchWinners } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
 import type { LeadSubmission } from "@/types/database";
 
 const CORS_HEADERS = {
@@ -82,7 +83,7 @@ export async function GET(
   // Load stored results — DO NOT call ESPN
   const { data: storedResults } = await supabase
     .from("campaign_results")
-    .select("match_id, match_label, home_score, away_score, outcome, status, fetched_at")
+    .select("match_id, match_label, home_score, away_score, outcome, status, fetched_at, winner_email")
     .eq("campaign_id", campaign.id);
 
   const results = (storedResults ?? []) as Array<{
@@ -93,6 +94,7 @@ export async function GET(
     outcome: "team_a" | "team_b" | "draw" | null;
     status: "scheduled" | "final";
     fetched_at: string;
+    winner_email: string | null;
   }>;
 
   // Build results map for scoring
@@ -113,7 +115,7 @@ export async function GET(
 
   const submissions = (subsRaw ?? []) as unknown as LeadSubmission[];
 
-  const standings = scoreSubmissions(submissions, resultsMap, campaign.config);
+  const standings = scoreSubmissions(submissions, resultsMap, campaign.config, DEFAULT_LEADERBOARD_FIELDS);
 
   // Mask PII before returning
   const maskedStandings = standings.slice(0, cap).map(({ rank, name, correct, scored, pct }) => ({
@@ -128,12 +130,25 @@ export async function GET(
     .filter((r) => r.status === "scheduled")
     .map((r) => ({ match_id: r.match_id, match_label: r.match_label }));
 
-  const publicResults = results.map((r) => ({
-    match_label: r.match_label,
-    score: r.status === "final" && r.home_score != null ? `${r.home_score}–${r.away_score}` : null,
-    outcome: r.outcome,
-    status: r.status,
-  }));
+  const autoWinners = pickMatchWinners(standings, resultsMap);
+
+  const publicResults = results.map((r) => {
+    let winner: string | null = null;
+    if (r.status === "final") {
+      const effectiveEmail = r.winner_email ?? autoWinners.get(r.match_id) ?? null;
+      if (effectiveEmail) {
+        const entry = standings.find((e) => e.email === effectiveEmail);
+        if (entry) winner = maskName(entry.name);
+      }
+    }
+    return {
+      match_label: r.match_label,
+      score: r.status === "final" && r.home_score != null ? `${r.home_score}–${r.away_score}` : null,
+      outcome: r.outcome,
+      status: r.status,
+      winner,
+    };
+  });
 
   const updated_at = results.length > 0
     ? results.reduce((max, r) => (r.fetched_at > max ? r.fetched_at : max), results[0].fetched_at)
