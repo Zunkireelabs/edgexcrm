@@ -4,6 +4,7 @@ import type { UserRole } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
+import type { LeadMembership } from "@/lib/leads/branch-membership";
 
 export interface AuthContext {
   userId: string;
@@ -105,10 +106,12 @@ export function requireAdmin(auth: AuthContext): boolean {
 
 export function requireLeadBranchAccess(
   auth: AuthContext,
-  lead: { assigned_to: string | null; branch_id?: string | null }
+  lead: { assigned_to: string | null; branch_id?: string | null },
+  membership: LeadMembership,
 ): boolean {
   if (auth.permissions.leadScope !== "team") return true;
-  return auth.branchId ? lead.branch_id === auth.branchId : lead.assigned_to === auth.userId;
+  if (!auth.branchId) return membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId; // §4.1
+  return membership.some((m) => m.branch_id === auth.branchId);
 }
 
 export interface UserContext {
@@ -148,14 +151,19 @@ export async function authenticateUser(): Promise<UserContext | null> {
   }
 }
 
-export function requireLeadAccess(auth: AuthContext, lead: { assigned_to: string | null; branch_id?: string | null }): boolean {
+export function requireLeadAccess(
+  auth: AuthContext,
+  lead: { assigned_to: string | null; branch_id?: string | null },
+  membership: LeadMembership,
+): boolean {
   const p = auth.permissions;
   if (p.baseTier === "owner" || p.baseTier === "admin") return true;
   if (!p.canEditLeads) return false;
-  if (p.leadScope === "own") return lead.assigned_to === auth.userId;
+  const isAssignee = membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId;
+  if (p.leadScope === "own") return isAssignee;
   if (p.leadScope === "team") {
-    if (!auth.branchId) return lead.assigned_to === auth.userId; // §4.1 NULL-branch fallback
-    return lead.branch_id === auth.branchId;
+    if (!auth.branchId) return isAssignee; // §4.1 NULL-branch fallback
+    return membership.some((m) => m.branch_id === auth.branchId);
   }
   return true;
 }

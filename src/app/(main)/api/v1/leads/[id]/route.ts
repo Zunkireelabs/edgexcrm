@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { canAccessPipeline, leadQueryScope } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -86,13 +87,14 @@ export async function GET(
     return apiNotFound("Lead");
   }
 
-  // Scope enforcement: build scope object (handles §4.1 NULL-branch fallback)
+  // Scope enforcement: membership-based (handles §4.1 NULL-branch fallback)
+  const membership = await getLeadMembership(supabase, auth.tenantId, id);
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (scope.restrictToSelf && lead.assigned_to !== auth.userId) {
+  if (scope.restrictToSelf &&
+      !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
     return apiNotFound("Lead");
   }
-  // Branch-manager scope: team-scoped users may only view leads in their branch
-  if (scope.branchId && lead.branch_id !== scope.branchId) {
+  if (scope.branchId && !membership.some((m) => m.branch_id === scope.branchId)) {
     return apiNotFound("Lead");
   }
 
@@ -147,7 +149,8 @@ export async function PATCH(
   if (!canAccessPipeline(auth.permissions, existingLead.pipeline_id)) return apiForbidden();
 
   // Access check: admin or counselor with assignment
-  if (!requireLeadAccess(auth, existingLead)) {
+  const patchMembership = await getLeadMembership(supabase, auth.tenantId, id);
+  if (!requireLeadAccess(auth, existingLead, patchMembership)) {
     return apiForbidden();
   }
 
@@ -322,6 +325,11 @@ export async function PATCH(
   if (error) {
     log.error({ err: error }, "Failed to update lead");
     return apiServiceUnavailable("Failed to update lead");
+  }
+
+  // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
+  if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
+    await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
   }
 
   // Build audit diff

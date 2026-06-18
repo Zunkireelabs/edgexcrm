@@ -22,7 +22,7 @@ export default async function LeadDetailPage({
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
+  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId));
   if (!lead) notFound();
 
   const serviceClient = await createServiceClient();

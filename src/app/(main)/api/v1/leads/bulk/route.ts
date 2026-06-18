@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   apiSuccess,
   apiValidationError,
@@ -169,6 +170,18 @@ export async function PATCH(request: NextRequest) {
     { count: idsToUpdate.length, ids: idsToUpdate, assigned_to: body.assigned_to },
     "Bulk updated leads"
   );
+
+  // Keep lead_branches origin rows in sync for each updated lead
+  if (body.branch_id !== undefined || body.assigned_to !== undefined) {
+    await Promise.all(
+      idsToUpdate.map((lid) => {
+        const existing = existingMap.get(lid);
+        const newBranchId = body.branch_id !== undefined ? (body.branch_id ?? null) : (existing?.branch_id ?? null);
+        const newAssignedTo = body.assigned_to !== undefined ? (body.assigned_to ?? null) : (existing?.assigned_to ?? null);
+        return syncOriginMembership(supabase, auth.tenantId, lid, newBranchId, newAssignedTo);
+      })
+    );
+  }
 
   // Create audit logs and events for each updated lead
   Promise.all(

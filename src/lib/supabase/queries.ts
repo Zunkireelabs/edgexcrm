@@ -2,6 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
+import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -68,9 +69,14 @@ export async function getLeads(
     .is("converted_at", null)
     .limit(scope?.limit ?? 1000);
 
-  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
+  if (scope?.restrictToSelf && scope.userId) {
+    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
+    query = query.in("id", ids);
+  } else if (scope?.branchId) {
+    const ids = await leadIdsForBranch(supabase, tenantId, scope.branchId);
+    query = query.in("id", ids);
+  }
   if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
-  if (scope?.branchId) query = query.eq("branch_id", scope.branchId);
 
   const { data, error } = await query.order("last_activity_at", { ascending: false });
 
@@ -81,21 +87,31 @@ export async function getLeads(
 export async function getLead(
   leadId: string,
   tenantId: string,
-  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null }
+  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; branchId?: string | null }
 ): Promise<Lead | null> {
   const supabase = await createClient();
-  let query = supabase
+  const { data, error } = await supabase
     .from("leads")
     .select("*")
     .eq("id", leadId)
     .eq("tenant_id", tenantId)
-    .is("deleted_at", null);
-
-  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
-
-  const { data, error } = await query.single();
+    .is("deleted_at", null)
+    .single();
 
   if (error) return null;
+
+  // Membership-based scoping (fixes the prior gap where branchId was never checked in SSR).
+  if (scope && (scope.restrictToSelf || scope.branchId)) {
+    const membership = await getLeadMembership(supabase, tenantId, leadId);
+    if (scope.restrictToSelf && scope.userId) {
+      const isAssignee = membership.some((m) => m.assigned_to === scope.userId) || data?.assigned_to === scope.userId;
+      if (!isAssignee) return null;
+    }
+    if (scope.branchId) {
+      if (!membership.some((m) => m.branch_id === scope.branchId)) return null;
+    }
+  }
+
   // If pipeline access is restricted and this lead's pipeline isn't allowed, hide it.
   if (scope?.pipelineIds && data?.pipeline_id && !scope.pipelineIds.includes(data.pipeline_id)) {
     return null;
@@ -274,10 +290,11 @@ export async function getLeadsForPipeline(
   }
 
   if (options?.restrictToSelf && options.userId) {
-    query = query.eq("assigned_to", options.userId);
-  }
-  if (options?.branchId) {
-    query = query.eq("branch_id", options.branchId);
+    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, options.userId);
+    query = query.in("id", ids);
+  } else if (options?.branchId) {
+    const ids = await leadIdsForBranch(supabase, tenantId, options.branchId);
+    query = query.in("id", ids);
   }
 
   const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
