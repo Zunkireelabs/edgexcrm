@@ -2,6 +2,30 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type LeadMembership = { branch_id: string; assigned_to: string | null }[];
 
+// Minimal auth shape needed here — avoids circular import with auth.ts.
+interface BranchManageAuth {
+  permissions: { baseTier: "owner" | "admin" | "member"; leadScope: "all" | "own" | "team" };
+  branchId: string | null;
+}
+
+/**
+ * Can this user manage (share / per-branch-assign) lead branches?
+ * Owner/admin: always. Team-scoped member whose branch holds the lead: yes.
+ * Counselors (own-scope) and plain viewers: no.
+ */
+export function canManageLeadBranches(
+  auth: BranchManageAuth,
+  membership: LeadMembership,
+): boolean {
+  const { baseTier, leadScope } = auth.permissions;
+  if (baseTier === "owner" || baseTier === "admin") return true;
+  return (
+    leadScope === "team" &&
+    !!auth.branchId &&
+    membership.some((m) => m.branch_id === auth.branchId)
+  );
+}
+
 // Lead IDs that are MEMBERS of a branch (origin OR shared-in).
 export async function leadIdsForBranch(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

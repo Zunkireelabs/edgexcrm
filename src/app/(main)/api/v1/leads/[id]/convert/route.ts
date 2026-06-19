@@ -159,6 +159,17 @@ export async function POST(request: NextRequest, { params }: Props) {
     return apiError("INVALID_STATE", "Lead already converted", 409);
   }
 
+  // Resolve converter's branch name for attribution (null for admins without a branch)
+  let convertedInBranch: string | null = null;
+  if (auth.branchId) {
+    const { data: branchRow } = await db
+      .from("branches")
+      .select("name")
+      .eq("id", auth.branchId)
+      .maybeSingle();
+    convertedInBranch = (branchRow as { name?: string } | null)?.name ?? null;
+  }
+
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -166,7 +177,10 @@ export async function POST(request: NextRequest, { params }: Props) {
       action: "lead.converted",
       entityType: "lead",
       entityId: id,
-      changes: { converted_contact_id: { old: null, new: newContact.id } },
+      changes: {
+        converted_contact_id: { old: null, new: newContact.id },
+        converted_in_branch: { old: null, new: convertedInBranch },
+      },
       requestId,
     }),
     emitEvent({

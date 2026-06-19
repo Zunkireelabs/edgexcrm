@@ -1,5 +1,6 @@
 import { authenticateRequest } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { leadIdsVisibleToAssignee } from "@/lib/leads/branch-membership";
 import {
   apiUnauthorized,
   apiForbidden,
@@ -113,25 +114,28 @@ export async function POST(request: Request) {
   const effectiveContactId = body.contact_id ?? thread?.contact_id ?? null;
 
   if (effectiveLeadId && typeof effectiveLeadId === "string") {
-    let leadQuery = db
-      .from("leads")
-      .select("first_name, last_name")
-      .eq("id", effectiveLeadId);
-
-    // Counselor scoping: only interpolate from leads assigned to this user
+    // Counselor scoping: use membership-aware visibility (covers per-branch assignees)
+    let allowInterpolation = true;
     if (shouldRestrictToSelf(auth.permissions)) {
-      leadQuery = leadQuery.eq("assigned_to", auth.userId);
+      const visibleIds = await leadIdsVisibleToAssignee(db.raw(), auth.tenantId, auth.userId);
+      allowInterpolation = visibleIds.includes(effectiveLeadId);
     }
 
-    const { data: lead } = await leadQuery.single<{ first_name?: string; last_name?: string }>();
+    if (allowInterpolation) {
+      const { data: lead } = await db
+        .from("leads")
+        .select("first_name, last_name")
+        .eq("id", effectiveLeadId)
+        .single<{ first_name?: string; last_name?: string }>();
 
-    if (lead) {
-      const replace = (s: string) =>
-        s
-          .replace(/\{\{\s*first_name\s*\}\}/g, lead.first_name ?? "")
-          .replace(/\{\{\s*last_name\s*\}\}/g, lead.last_name ?? "");
-      subject = replace(subject);
-      bodyHtml = replace(bodyHtml);
+      if (lead) {
+        const replace = (s: string) =>
+          s
+            .replace(/\{\{\s*first_name\s*\}\}/g, lead.first_name ?? "")
+            .replace(/\{\{\s*last_name\s*\}\}/g, lead.last_name ?? "");
+        subject = replace(subject);
+        bodyHtml = replace(bodyHtml);
+      }
     }
   }
 
