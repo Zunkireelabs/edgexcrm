@@ -411,6 +411,21 @@ export async function getLeadActivity(leadId: string, tenantId: string): Promise
   return (data as LeadActivity[]) || [];
 }
 
+export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, entity_type, changes, user_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("entity_id", applicationId)
+    .eq("entity_type", "application")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return (data as LeadActivity[]) || [];
+}
+
 // ── Home-view query helpers ──────────────────────────────────────────────────
 
 export interface ScheduleActivity {

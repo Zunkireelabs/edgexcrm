@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragOverlay,
@@ -15,7 +16,6 @@ import {
 import { toast } from "sonner";
 import { ApplicationColumn } from "./application-column";
 import { ApplicationCard } from "./application-card";
-import { ApplicationDetailSheet } from "./application-detail-sheet";
 import type { Application, ApplicationStage } from "@/types/database";
 
 type ColumnsState = Record<string, Application[]>;
@@ -46,11 +46,11 @@ interface ApplicationsBoardProps {
 }
 
 export function ApplicationsBoard({ stages, applications, canManageApplications, onRefresh }: ApplicationsBoardProps) {
+  const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(applications, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
   const prevColumnsRef = useRef<ColumnsState | null>(null);
-  const [detailApp, setDetailApp] = useState<Application | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -157,15 +157,9 @@ export function ApplicationsBoard({ stages, applications, canManageApplications,
     prevColumnsRef.current = null;
   }, [columns, stageMap, onRefresh]);
 
-  const handleUpdated = useCallback((updated: Application) => {
-    setColumns((prev) => {
-      const next = { ...prev };
-      for (const sid of Object.keys(next)) {
-        next[sid] = next[sid].map((a) => (a.id === updated.id ? { ...a, ...updated } : a));
-      }
-      return next;
-    });
-  }, []);
+  const handleOpenDetail = useCallback((app: Application) => {
+    router.push(`/applications/${app.id}`);
+  }, [router]);
 
   if (!mounted) {
     return (
@@ -178,38 +172,28 @@ export function ApplicationsBoard({ stages, applications, canManageApplications,
   }
 
   return (
-    <>
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {stages.map((stage) => (
-            <ApplicationColumn
-              key={stage.id}
-              stage={stage}
-              applications={columns[stage.id] ?? []}
-              canDrag={canManageApplications}
-              onOpenDetail={setDetailApp}
-            />
-          ))}
-        </div>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+        {stages.map((stage) => (
+          <ApplicationColumn
+            key={stage.id}
+            stage={stage}
+            applications={columns[stage.id] ?? []}
+            canDrag={canManageApplications}
+            onOpenDetail={handleOpenDetail}
+          />
+        ))}
+      </div>
 
-        <DragOverlay>
-          {activeApp ? <ApplicationCard application={activeApp} disabled /> : null}
-        </DragOverlay>
-      </DndContext>
-
-      <ApplicationDetailSheet
-        application={detailApp}
-        canManage={canManageApplications}
-        open={detailApp !== null}
-        onOpenChange={(open) => { if (!open) setDetailApp(null); }}
-        onUpdated={handleUpdated}
-      />
-    </>
+      <DragOverlay>
+        {activeApp ? <ApplicationCard application={activeApp} disabled /> : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

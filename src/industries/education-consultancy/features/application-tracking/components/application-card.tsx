@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, GraduationCap, MapPin, Pencil } from "lucide-react";
+import { Calendar, GraduationCap, MapPin, ExternalLink } from "lucide-react";
 import type { Application } from "@/types/database";
 
 interface ApplicationCardProps {
@@ -52,6 +52,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
       } hover:border-primary/40 transition-colors`}
     >
       <div className="flex items-start justify-between gap-1">
+        {/* Student name → /leads/[id] */}
         <Link
           href={`/leads/${leadId}`}
           onClick={(e) => e.stopPropagation()}
@@ -59,15 +60,25 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
         >
           {getStudentName(application)}
         </Link>
-        {onOpenDetail && (
+        {/* Application detail link → /applications/[id] */}
+        {onOpenDetail ? (
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); onOpenDetail(application); }}
             className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-            title="View / Edit"
+            title="Open application"
           >
-            <Pencil className="h-3 w-3" />
+            <ExternalLink className="h-3 w-3" />
           </button>
+        ) : (
+          <Link
+            href={`/applications/${application.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            title="Open application"
+          >
+            <ExternalLink className="h-3 w-3" />
+          </Link>
         )}
       </div>
 
