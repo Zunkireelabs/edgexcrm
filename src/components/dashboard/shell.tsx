@@ -44,6 +44,7 @@ import {
   Handshake,
   ChartColumn,
   Megaphone,
+  GraduationCap,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -111,6 +112,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Handshake,
   ChartColumn,
   Megaphone,
+  GraduationCap,
 };
 
 function SidebarGroupRender({

@@ -50,6 +50,7 @@ interface PositionPermissions {
   pipelines: { mode: "all" } | { mode: "allow"; ids: string[] };
   leadScope: "all" | "own" | "team";
   canEditLeads?: boolean;
+  canManageApplications?: boolean;
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -85,6 +86,7 @@ function buildDefaultForm(navCatalog: NavItem[], widgetCatalog: WidgetItem[]) {
     pipelineIds: [] as string[],
     leadScope: "all" as "all" | "own",
     canEditLeads: false,
+    canManageApplications: false,
     widgetsMode: "all" as "all" | "allow",
     widgetKeys: [] as string[],
     _navCatalog: navCatalog,
@@ -104,6 +106,7 @@ function permissionsFromForm(form: FormState): PositionPermissions {
       : { mode: "allow", ids: form.pipelineIds },
     leadScope: form.leadScope,
     ...(form.base_tier === "member" ? { canEditLeads: form.leadScope === "own" ? true : form.canEditLeads } : {}),
+    ...(form.base_tier === "member" ? { canManageApplications: form.canManageApplications } : {}),
     dashboard: form.widgetsMode === "all"
       ? { widgets: { mode: "all" } }
       : { widgets: { mode: "allow", keys: form.widgetKeys } },
@@ -121,6 +124,7 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
     pipelineIds: p.pipelines.mode === "allow" ? p.pipelines.ids : [],
     leadScope: p.leadScope === "own" ? "own" : "all",
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
+    canManageApplications: p.canManageApplications === true,
     widgetsMode: p.dashboard.widgets.mode,
     widgetKeys: p.dashboard.widgets.mode === "allow" ? p.dashboard.widgets.keys : [],
     _navCatalog: navCatalog,
@@ -500,6 +504,28 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                     Unchecked → read-only viewer. Checked → branch manager: sees and edits all leads.
                   </p>
                 )}
+              </div>
+            )}
+
+            {/* Can manage applications (member tier only) */}
+            {form.base_tier === "member" && (
+              <div className="space-y-1.5">
+                <Label>Applications</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="can-manage-applications"
+                    checked={form.canManageApplications}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, canManageApplications: Boolean(c) }))
+                    }
+                  />
+                  <label htmlFor="can-manage-applications" className="text-sm cursor-pointer">
+                    Can manage applications
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Allows adding, editing, and deleting student applications.
+                </p>
               </div>
             )}
 

@@ -6,6 +6,7 @@ export interface PositionPermissions {
   pipelines: { mode: "all" } | { mode: "allow"; ids: string[] };  // pipelines.id values
   leadScope: "all" | "own" | "team";                              // "team" reserved → resolves as "all" in v1
   canEditLeads?: boolean;                                          // only meaningful for member+leadScope:all (branch manager). Absent ⇒ default per resolver.
+  canManageApplications?: boolean;                                 // controls write access to the Application Tracking feature. Absent ⇒ default per resolver.
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -16,6 +17,7 @@ export interface ResolvedPermissions {
   pipelineAccess: "all" | { ids: Set<string> };
   leadScope: "all" | "own" | "team";
   canEditLeads: boolean;
+  canManageApplications: boolean;
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
@@ -34,6 +36,7 @@ export function resolvePermissions(
       pipelineAccess: "all",
       leadScope: "all",
       canEditLeads: true,
+      canManageApplications: true,
       dashboardWidgets: null,
     };
   }
@@ -47,6 +50,7 @@ export function resolvePermissions(
       pipelineAccess: "all",
       leadScope,
       canEditLeads: role === "counselor", // counselors edit own; viewers don't
+      canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
       dashboardWidgets: null,
     };
   }
@@ -58,6 +62,7 @@ export function resolvePermissions(
     pipelineAccess: p.pipelines.mode === "all" ? "all" : { ids: new Set(p.pipelines.ids) },
     leadScope: p.leadScope, // "team" treated as "all" by callers in v1; see helpers below
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
+    canManageApplications: p.canManageApplications === true,
     dashboardWidgets:
       p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
   };
@@ -66,6 +71,9 @@ export function resolvePermissions(
 // ── Check helpers ──────────────────────────────────────────────────
 export function shouldRestrictToSelf(p: ResolvedPermissions): boolean {
   return p.leadScope === "own";
+}
+export function canManageApplications(p: ResolvedPermissions): boolean {
+  return p.canManageApplications;
 }
 export function canAccessPipeline(p: ResolvedPermissions, pipelineId: string): boolean {
   return p.pipelineAccess === "all" || p.pipelineAccess.ids.has(pipelineId);
@@ -154,6 +162,11 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canEditLeads (optional)
   if (p.canEditLeads !== undefined && typeof p.canEditLeads !== "boolean") {
     return "permissions.canEditLeads must be a boolean";
+  }
+
+  // canManageApplications (optional)
+  if (p.canManageApplications !== undefined && typeof p.canManageApplications !== "boolean") {
+    return "permissions.canManageApplications must be a boolean";
   }
 
   // dashboard

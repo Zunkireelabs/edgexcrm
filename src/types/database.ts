@@ -714,6 +714,48 @@ export interface LeadDuplicateSuggestion {
 }
 
 // ============================================================
+// Application Tracking (education_consultancy feature)
+// ============================================================
+
+export interface ApplicationStage {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  position: number;
+  color: string;
+  is_default: boolean;
+  terminal_type: "won" | "lost" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Application {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  university_name: string;
+  program_name: string;
+  intake_term: string | null;
+  country: string | null;
+  stage_id: string;
+  status: string;
+  offer_type: "conditional" | "unconditional" | null;
+  application_deadline: string | null;
+  application_fee_paid: boolean;
+  tuition_fee: number | null;
+  deposit_paid: boolean;
+  offer_letter_url: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Joined fields (present when fetched with select joins)
+  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;
+  application_stages?: ApplicationStage | null;
+}
+
 // Deals / Opportunities (it_agency feature)
 // ============================================================
 

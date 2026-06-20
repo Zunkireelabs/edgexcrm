@@ -20,6 +20,7 @@ import { useEmailThreads } from "@/industries/education-consultancy/features/ema
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
+import { ApplicationsPanel } from "@/industries/education-consultancy/features/application-tracking/components/applications-panel";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -32,6 +33,7 @@ interface LeadTabsProps {
   onNotesChange: (notes: LeadNote[]) => void;
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
+  canManageApplications?: boolean;
   currentUserId: string;
   industryId?: string | null;
   tenantName?: string;
@@ -45,7 +47,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, canManageApplications, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -100,6 +102,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           </TabsTrigger>
           {industryId === "travel_agency" && (
             <TabsTrigger value="itinerary">Itinerary</TabsTrigger>
+          )}
+          {industryId === "education_consultancy" && lead.lead_type === "prospect" && (
+            <TabsTrigger value="applications">Applications</TabsTrigger>
           )}
         </TabsList>
 
@@ -213,6 +218,14 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               tenantName={tenantName ?? ""}
               tenantLogoUrl={tenantLogoUrl}
               onSave={onSaveItinerary}
+            />
+          </TabsContent>
+        )}
+        {industryId === "education_consultancy" && lead.lead_type === "prospect" && (
+          <TabsContent value="applications" className="mt-0">
+            <ApplicationsPanel
+              leadId={lead.id}
+              canManageApplications={canManageApplications ?? isAdmin}
             />
           </TabsContent>
         )}
