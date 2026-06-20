@@ -17,6 +17,7 @@ import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
+import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 
 interface TeamMember {
   id: string;
@@ -524,7 +525,6 @@ export function LeadDetailV2({
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
-            canManageApplications={canManageApplications ?? isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}
@@ -546,13 +546,22 @@ export function LeadDetailV2({
 
         {/* Right Sidebar */}
         <div className="lg:col-span-full xl:col-span-1">
-          <ManagementPanel
-            ref={checklistRef}
-            lead={currentLead}
-            checklists={checklists}
-            isAdmin={isAdmin}
-            onChecklistsChange={handleChecklistsChange}
-          />
+          {tenant.industry_id === "education_consultancy" && currentLead.lead_type === "prospect" ? (
+            <div className="space-y-4">
+              <ApplicationsCard
+                leadId={currentLead.id}
+                canManage={canManageApplications ?? isAdmin}
+              />
+            </div>
+          ) : (
+            <ManagementPanel
+              ref={checklistRef}
+              lead={currentLead}
+              checklists={checklists}
+              isAdmin={isAdmin}
+              onChecklistsChange={handleChecklistsChange}
+            />
+          )}
         </div>
       </div>
 
