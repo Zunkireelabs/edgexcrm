@@ -10,6 +10,7 @@ import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
+import { resolveEntitlements } from "@/lib/api/entitlements";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
@@ -35,6 +36,8 @@ interface LeadDetailV2Props {
   userId: string;
   entity?: TenantEntity | null;
   industry?: Industry | null;
+  userBranchId?: string | null;
+  leadScope?: "all" | "own" | "team";
 }
 
 interface LeadDraft {
@@ -91,6 +94,8 @@ export function LeadDetailV2({
   userId,
   entity,
   industry,
+  userBranchId,
+  leadScope,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -120,6 +125,10 @@ export function LeadDetailV2({
   const isItAgency = tenant.industry_id === "it_agency";
 
   const isAdmin = role === "owner" || role === "admin";
+  const maxBranches = resolveEntitlements({
+    plan: tenant.plan,
+    entitlement_overrides: tenant.entitlement_overrides,
+  }).maxBranches;
   const currentStage = stages.find((s) => s.id === stageId);
 
   // Create email lookup map for activity display
@@ -468,6 +477,9 @@ export function LeadDetailV2({
             draft={draft}
             editErrors={editErrors}
             onDraftChange={updateDraft}
+            maxBranches={maxBranches}
+            userBranchId={userBranchId ?? null}
+            leadScope={leadScope ?? "all"}
             onLeadTypeChange={async (newType) => {
               try {
                 await fetch(`/api/v1/leads/${currentLead.id}`, {

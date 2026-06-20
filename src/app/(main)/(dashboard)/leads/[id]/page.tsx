@@ -65,6 +65,8 @@ export default async function LeadDetailPage({
       userId={tenantData.userId}
       entity={entity}
       industry={industry}
+      userBranchId={tenantData.branchId}
+      leadScope={tenantData.permissions.leadScope}
     />
   );
 }

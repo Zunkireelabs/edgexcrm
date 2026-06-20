@@ -700,6 +700,27 @@ function getSystemActivityDescription(
     return "Duplicate record merged";
   }
 
+  if (activity.action === "lead.branch_shared") {
+    const branch = changes.branch?.new as string | null;
+    const a = changes.assigned_to?.new;
+    const email = a ? teamMemberEmails[String(a)] : null;
+    return `Shared to ${branch || "a branch"}${email ? ` · assigned to ${email}` : ""}`;
+  }
+
+  if (activity.action === "lead.branch_revoked") {
+    const branch = changes.branch?.old as string | null;
+    return `Removed from ${branch || "a branch"}`;
+  }
+
+  if (activity.action === "lead.branch_assigned") {
+    const branch = changes.branch?.new as string | null;
+    const a = changes.assigned_to?.new;
+    const email = a ? teamMemberEmails[String(a)] : null;
+    return email
+      ? `Assigned ${email} in ${branch || "a branch"}`
+      : `Unassigned in ${branch || "a branch"}`;
+  }
+
   if (changes.status || changes.stage_id) {
     const newStatus = changes.status?.new || changes.stage_id?.new;
     return `Stage changed to "${newStatus}"`;

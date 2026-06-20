@@ -415,26 +415,27 @@ export function LeadsTable({
     }
     setIsAssigningBranch(true);
     try {
-      const response = await fetch("/api/v1/leads/bulk", {
-        method: "PATCH",
+      const response = await fetch("/api/v1/leads/bulk/share", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ids: idsToAssign,
-          branch_id: assignToBranch === "__unassign__" ? null : assignToBranch,
+          branch_ids: [assignToBranch],
         }),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to assign branch");
+        throw new Error(data.error?.message || "Failed to share leads");
       }
-      const action = assignToBranch === "__unassign__" ? "Unrouted" : "Assigned";
-      toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+      const count = data.data.shared as number;
+      const branchName = branches.find((b) => b.id === assignToBranch)?.name ?? "branch";
+      toast.success(`Shared ${count} lead${count !== 1 ? "s" : ""} to ${branchName}`);
       setSelectedIds(new Set());
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign branch");
+      toast.error(error instanceof Error ? error.message : "Failed to share leads");
     } finally {
       setIsAssigningBranch(false);
     }
@@ -1233,16 +1234,16 @@ export function LeadsTable({
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Branch Assign Dialog */}
+      {/* Bulk Branch Share Dialog */}
       <Dialog open={branchAssignDialogOpen} onOpenChange={(open) => {
         setBranchAssignDialogOpen(open);
         if (!open) setAssignToBranch("");
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
+            <DialogTitle>Share {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
             <DialogDescription>
-              Select a branch to assign the selected leads to, or remove their branch routing.
+              Add the selected leads to a branch (they stay in their current branches).
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -1251,9 +1252,6 @@ export function LeadsTable({
                 <SelectValue placeholder="Select branch..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__unassign__">
-                  <span className="text-muted-foreground">Remove branch (unroute)</span>
-                </SelectItem>
                 {branches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     {b.name}
@@ -1277,7 +1275,7 @@ export function LeadsTable({
               onClick={handleBulkAssignBranch}
               disabled={isAssigningBranch || !assignToBranch}
             >
-              {isAssigningBranch ? "Assigning…" : assignToBranch === "__unassign__" ? "Remove Branch" : "Assign"}
+              {isAssigningBranch ? "Sharing…" : "Share"}
             </Button>
           </DialogFooter>
         </DialogContent>

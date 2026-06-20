@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, getClientIp } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, canManageLeadBranches } from "@/lib/leads/branch-membership";
 import {
   apiSuccess,
@@ -207,4 +207,94 @@ export async function POST(
 
   const updated = await getLeadMembership(supabase, auth.tenantId, id);
   return apiSuccess({ membership: updated, added: newBranchIds });
+}
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const log = createRequestLogger({
+    requestId: crypto.randomUUID(),
+    method: "GET",
+    path: `/api/v1/leads/${id}/branches`,
+    ip: getClientIp(request),
+  });
+
+  const auth = await authenticateRequest();
+  if (!auth) return apiUnauthorized();
+  if (auth.entitlements.maxBranches <= 1) return apiForbidden();
+
+  const supabase = await createServiceClient();
+
+  const { data: lead } = await supabase
+    .from("leads")
+    .select("id, assigned_to, branch_id")
+    .eq("id", id)
+    .eq("tenant_id", auth.tenantId)
+    .is("deleted_at", null)
+    .single();
+  if (!lead) return apiNotFound("Lead");
+
+  const membership = await getLeadMembership(supabase, auth.tenantId, id);
+  if (!requireLeadAccess(auth, lead as { assigned_to: string | null; branch_id?: string | null }, membership)) {
+    return apiForbidden();
+  }
+
+  // Fetch full membership rows including is_origin
+  const { data: rows, error: rowsError } = await supabase
+    .from("lead_branches")
+    .select("branch_id, assigned_to, is_origin")
+    .eq("tenant_id", auth.tenantId)
+    .eq("lead_id", id);
+
+  if (rowsError) {
+    log.error({ err: rowsError }, "Failed to fetch lead branches");
+    return apiServiceUnavailable("Failed to fetch lead branches");
+  }
+
+  const branchIds = (rows ?? []).map((r: { branch_id: string }) => r.branch_id);
+
+  // Enrich with branch names (tenant-scoped)
+  const { data: branches } = await supabase
+    .from("branches")
+    .select("id, name")
+    .eq("tenant_id", auth.tenantId)
+    .in("id", branchIds);
+
+  const branchMap = new Map(
+    (branches ?? []).map((b: { id: string; name: string }) => [b.id, b.name]),
+  );
+
+  // Enrich with assignee emails — getUserById per distinct assigned_to
+  const distinctAssignees = [
+    ...new Set(
+      (rows ?? [])
+        .map((r: { assigned_to: string | null }) => r.assigned_to)
+        .filter((id): id is string => id !== null && id !== undefined),
+    ),
+  ];
+  const emailMap = new Map<string, string>();
+  await Promise.all(
+    distinctAssignees.map(async (userId) => {
+      const { data: u } = await supabase.auth.admin.getUserById(userId);
+      if (u?.user?.email) emailMap.set(userId, u.user.email);
+    }),
+  );
+
+  const enriched = (rows ?? [])
+    .map((r: { branch_id: string; assigned_to: string | null; is_origin: boolean }) => ({
+      branch_id: r.branch_id,
+      branch_name: branchMap.get(r.branch_id) ?? r.branch_id,
+      is_origin: r.is_origin,
+      assigned_to: r.assigned_to ?? null,
+      assigned_to_email: r.assigned_to ? (emailMap.get(r.assigned_to) ?? null) : null,
+    }))
+    .sort((a: { is_origin: boolean; branch_name: string }, b: { is_origin: boolean; branch_name: string }) => {
+      if (a.is_origin && !b.is_origin) return -1;
+      if (!a.is_origin && b.is_origin) return 1;
+      return a.branch_name.localeCompare(b.branch_name);
+    });
+
+  return apiSuccess({ memberships: enriched });
 }

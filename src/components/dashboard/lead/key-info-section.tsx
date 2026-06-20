@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { Lead, PipelineStage, TenantEntity, Industry } from "@/types/database";
+import { BranchesBlock } from "./branches-block";
 
 const INTAKE_SOURCES = [
   { value: "manual_entry", label: "Manual Entry" },
@@ -82,6 +83,9 @@ interface KeyInfoSectionProps {
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   onLeadTypeChange?: (newType: string) => void;
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
+  maxBranches?: number;
+  userBranchId?: string | null;
+  leadScope?: "all" | "own" | "team";
 }
 
 export function KeyInfoSection({
@@ -102,6 +106,9 @@ export function KeyInfoSection({
   onDraftChange,
   onLeadTypeChange,
   onSaveTripFields,
+  maxBranches,
+  userBranchId,
+  leadScope,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -250,6 +257,16 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+
+          {/* Branches */}
+          {maxBranches && maxBranches > 1 && (
+            <BranchesBlock
+              leadId={lead.id}
+              isAdmin={isAdmin}
+              userBranchId={userBranchId ?? null}
+              leadScope={leadScope ?? "all"}
+            />
+          )}
 
           {/* Entity (e.g., College, Service, Project Type).
               travel_agency has its own editable Package selector in the Trip
