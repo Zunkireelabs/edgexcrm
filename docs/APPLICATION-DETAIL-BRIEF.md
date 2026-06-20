@@ -114,6 +114,41 @@ no push, no PR merge; no DB writes this round). Opus reviews post-hoc + re-runs 
 
 ---
 
+## 11. Round 2 — Cleanup (post-Opus-review of `017a755`, 2026-06-20)
+
+Opus reviewed. **Gates green** (build exit 0; eslint 0 errors; not pushed). Route-shell scope guard is
+faithful to `requireLeadBranchAccess`; page/stepper/timeline/nav-rewire all correct; the board correctly
+dropped the sheet and now navigates to the page. Three minor cleanups before stage:
+
+### Fix 1 — Activity timeline must reflect edits/stage-changes in real time (the important one)
+Today `handleStageChange` inserts an **optimistic fake entry attributed to "system"** (no user), and a
+details **edit adds nothing** to the timeline until reload — so the page's headline feature looks
+half-broken. Fix:
+- Render the activity timeline **directly from the `activityTimeline` prop** — remove the `timeline`
+  `useState` and the optimistic fake-entry insertion in `handleStageChange`.
+- Import `useRouter` and call **`router.refresh()`** after a successful PATCH in **both** the stage-change
+  handler (`handleStageChange`, after the optimistic `setApplication`) and `saveEdit` (after `setApplication`).
+  `router.refresh()` re-runs the route shell → re-fetches `getApplicationActivity` + the application → passes
+  fresh props → the (now prop-driven) timeline shows the **real** `audit_logs` entries with correct
+  `user_id` attribution. Keep the optimistic `setApplication` for stepper/header snappiness.
+
+### Fix 2 — Delete orphaned dead code
+`src/industries/education-consultancy/features/application-tracking/components/application-detail-sheet.tsx`
+is no longer imported anywhere (board navigates to the page; the page reimplements the fields inline).
+`git rm` it. Confirm no remaining imports first.
+
+### Fix 3 — Remove the unused `role` prop
+The detail page receives `role` but never uses it. Drop it from `ApplicationDetailPageProps`, the
+`page.tsx` route-shell call site, and anywhere else it's threaded.
+
+### Round-2 gate (same stop-at-review)
+`npm run build` + `npx eslint --max-warnings 50` clean (paste output). No DB writes. Commit to
+`feature/application-detail-page` only — no push, no PR. Re-verify: advance a stage → timeline shows the real
+entry (attributed to you) within a moment; edit a field → timeline shows the update; deleting the orphaned
+sheet didn't break the board (board still opens the page).
+
+---
+
 ## 10. Sonnet handoff prompt (copy-paste)
 
 ```
