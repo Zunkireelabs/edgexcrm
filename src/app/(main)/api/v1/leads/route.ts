@@ -448,6 +448,22 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
+  // For education_consultancy new leads: set list_id to the tenant's intake list.
+  // Only applies to brand-new inserts — the update path strips list_id from its payload.
+  // Falls back to null silently if no intake list exists (edge tenant, older setup).
+  if (!body.list_id && tenant.industry_id === "education_consultancy") {
+    const { data: intakeList } = await supabase
+      .from("lead_lists")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_intake", true)
+      .limit(1)
+      .maybeSingle();
+    leadPayload.list_id = intakeList?.id ?? null;
+  } else {
+    leadPayload.list_id = (body.list_id as string | null) ?? null;
+  }
+
   // Normalised fields for identity resolution (used in both update + create paths)
   const normalizedEmail = normalizeEmail(leadPayload.email as string | null | undefined);
   const normalizedPhone = normalizePhone(leadPayload.phone as string | null | undefined);
@@ -566,7 +582,7 @@ async function handlePost(request: NextRequest) {
 
     // Normal update (no fold)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tenant_id: _tenantId, ...updatePayload } = leadPayload;
+    const { tenant_id: _tenantId, list_id: _listId, ...updatePayload } = leadPayload;
 
     const { data: updated, error } = await supabase
       .from("leads")

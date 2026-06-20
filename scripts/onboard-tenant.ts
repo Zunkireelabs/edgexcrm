@@ -9,6 +9,8 @@
  *   3. tenant_users       row linking the user as role 'owner'
  *   4. pipelines          one default pipeline ("Default")
  *   5. pipeline_stages    seeded from the industry's default_pipeline_stages
+ *   6. lead_lists         4 system lists (Pre-qualified/Qualified/Prospects/Archived)
+ *                         — education_consultancy tenants only
  *
  * Usage:
  *   # dry-run (default, NO writes) — prints exactly what would be created
@@ -178,6 +180,13 @@ async function main() {
       `${s.is_default ? "  [default]" : ""}${s.is_terminal ? `  [terminal:${tt}]` : ""}`
     );
   }
+  if (industry.id === "education_consultancy") {
+    console.log(`Lead lists (education_consultancy):`);
+    console.log(`    1  Pre-qualified  [is_intake, is_system]`);
+    console.log(`    2  Qualified      [is_system]`);
+    console.log(`    3  Prospects      [is_system]`);
+    console.log(`    4  Archived       [is_archive, is_system]`);
+  }
   console.log("──────────────────────────────────────────────────────────────\n");
 
   if (!APPLY) {
@@ -242,6 +251,22 @@ async function main() {
     const { error: sErr } = await supabase.from("pipeline_stages").insert(stageRows);
     if (sErr) throw new Error(`pipeline_stages insert failed: ${sErr.message}`);
     console.log(`✓ ${stageRows.length} stages created`);
+
+    // 6. lead_lists — education_consultancy only.
+    // Mirrors supabase/migrations/059_lead_lists.sql seed values exactly.
+    // NOTE: application_stages and positions also need seeding for education tenants
+    // but are not provisioned here yet — tracked in 057_application_tracking.sql notes.
+    if (industry.id === "education_consultancy") {
+      const listRows = [
+        { tenant_id: tenantId, name: "Pre-qualified", slug: "pre-qualified", sort_order: 1, is_system: true, is_intake: true,  is_archive: false, access: { mode: "all" } },
+        { tenant_id: tenantId, name: "Qualified",     slug: "qualified",     sort_order: 2, is_system: true, is_intake: false, is_archive: false, access: { mode: "all" } },
+        { tenant_id: tenantId, name: "Prospects",     slug: "prospects",     sort_order: 3, is_system: true, is_intake: false, is_archive: false, access: { mode: "all" } },
+        { tenant_id: tenantId, name: "Archived",      slug: "archived",      sort_order: 4, is_system: true, is_intake: false, is_archive: true,  access: { mode: "all" } },
+      ];
+      const { error: lErr } = await supabase.from("lead_lists").insert(listRows);
+      if (lErr) throw new Error(`lead_lists insert failed: ${lErr.message}`);
+      console.log(`✓ 4 system lead lists created`);
+    }
 
     console.log("\n✅ Onboarding complete.");
     console.log(`   Tenant:  ${NAME} (${tenantId})`);
