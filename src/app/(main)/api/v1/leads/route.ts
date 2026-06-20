@@ -440,6 +440,10 @@ async function handlePost(request: NextRequest) {
     owner_id: body.owner_id || null,
     salutation: body.salutation || null,
     company_email: body.company_email || null,
+    // Education-only structured fields
+    destinations: Array.isArray(body.destinations) ? body.destinations : [],
+    field_of_study: (body.field_of_study as string | null | undefined) || null,
+    degree_level: (body.degree_level as string | null | undefined) || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
