@@ -20,6 +20,7 @@ import { useEmailThreads } from "@/industries/education-consultancy/features/ema
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
+import { ApplicationsPanel } from "@/industries/education-consultancy/features/application-tracking/components/applications-panel";
 
 interface LeadTabsProps {
   lead: Lead;
@@ -100,6 +101,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           </TabsTrigger>
           {industryId === "travel_agency" && (
             <TabsTrigger value="itinerary">Itinerary</TabsTrigger>
+          )}
+          {industryId === "education_consultancy" && lead.lead_type === "prospect" && (
+            <TabsTrigger value="applications">Applications</TabsTrigger>
           )}
         </TabsList>
 
@@ -214,6 +218,11 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               tenantLogoUrl={tenantLogoUrl}
               onSave={onSaveItinerary}
             />
+          </TabsContent>
+        )}
+        {industryId === "education_consultancy" && lead.lead_type === "prospect" && (
+          <TabsContent value="applications" className="mt-0">
+            <ApplicationsPanel leadId={lead.id} isAdmin={isAdmin} />
           </TabsContent>
         )}
       </Tabs>

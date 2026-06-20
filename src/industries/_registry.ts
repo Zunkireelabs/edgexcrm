@@ -36,6 +36,7 @@ export const FEATURES = {
   EMAIL: "email",
   INSIGHTS: "insights",
   CAMPAIGNS: "campaigns",
+  APPLICATION_TRACKING: "application-tracking",
   // Industry-scoped (it_agency)
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",

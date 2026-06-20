@@ -6,6 +6,7 @@ import { contactsMeta } from "./features/contacts/meta";
 import { emailMeta } from "./features/email/meta";
 import { insightsMeta } from "./features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
+import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -17,6 +18,7 @@ export const manifest: IndustryManifest = {
     { meta: contactsMeta },
     { meta: emailMeta },
     { meta: campaignsMeta },
+    { meta: applicationTrackingMeta },
   ],
   sidebar: [
     {
@@ -53,6 +55,12 @@ export const manifest: IndustryManifest = {
       label: "Campaigns",
       icon: "Megaphone",
       minRoles: ["owner", "admin"],
+    },
+    {
+      featureId: FEATURES.APPLICATION_TRACKING,
+      href: "/applications",
+      label: "Applications",
+      icon: "GraduationCap",
     },
   ],
   ai: aiConfig,
