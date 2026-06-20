@@ -209,7 +209,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
     industries: ["education_consultancy"],
     defaultVisible: true,
     renderTh: () => (
-      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[110px]">
+      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[160px]">
         List
       </th>
     ),
@@ -220,7 +220,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       return (
         <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
           {ctx.leadLists && ctx.leadLists.length > 0 && ctx.onListMove ? (
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex flex-col gap-0.5 items-start">
               <MoveToListSelector
                 leadId={lead.id}
                 currentListId={lead.list_id ?? null}
