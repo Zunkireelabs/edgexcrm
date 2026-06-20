@@ -266,6 +266,50 @@ validation error (and trim). (STATUS-BOARD code-review rule: "PATCH preserves PO
 
 ---
 
+## 12. Round 3 — Fixback (post-Opus-review of `26429df`, 2026-06-20)
+
+Opus reviewed Round 2 (`26429df`). **Gates green** (build exit 0; eslint 0 errors / 31 warnings; migrations
+057+058 NOT on shared DB; not pushed). Permission model, all four write routes (canManageApplications +
+parent-lead scope), the edit sheet (all controls gated by `canManage`), and the PATCH invariant are all
+correct. **Two scope fixes remain** — the board's *read* path is broader/narrower than the rest of the app
+(writes are already correctly scoped, so this is read-visibility only):
+
+### Fix 5 — Board SSR read-scope must match the leads list exactly
+
+`src/app/(main)/(dashboard)/applications/page.tsx` currently filters only when `leadScope === 'own'`, and
+only by `leads.assigned_to`. Problems: (a) **branch managers (`leadScope:'team'`) see ALL tenant
+applications** — but the leads list *is* branch-scoped for them; (b) **counselors who are per-branch
+assignees** via the live lead-branch-sharing feature (`lead_branches.assigned_to`, not `leads.assigned_to`)
+**miss those applications on the board**, though they appear on the per-lead tab.
+
+Build the actor's **accessible-lead-id set the same way the leads list SSR does**, then filter
+`applications.lead_id IN (set)`. Reference the leads list page's scoping (it uses `leadQueryScope(p, userId, branchId)`
+from `src/lib/api/permissions.ts` + `lead_branches`/`getLeadMembership`). Required behavior by scope:
+- `leadScope:'all'` (owner/admin/viewer) → no lead filter (all tenant applications).
+- `leadScope:'own'` (counselor) → lead set = `leads.assigned_to === userId` **UNION** `lead_branches.assigned_to === userId` (the per-branch-assignee leads). Filter applications to that set (empty set → no rows).
+- `leadScope:'team'` (branch manager) → lead set = leads in the manager's branch (via `lead_branches`/branch membership for `auth.branchId`), with the **null-branch → restrict-to-self** fallback (the §4.1 guard `leadQueryScope` already applies). Filter applications to that set.
+
+Find how `src/app/(main)/(dashboard)/leads/` (the leads list SSR) translates `leadQueryScope` into its query
+and mirror that exact accessible-lead-set construction — do not invent a parallel scheme. Keep `stages`
+fetch unchanged.
+
+### Fix 6 — Board drag gated by `canManageApplications`, not `isAdmin`
+
+`src/industries/education-consultancy/features/application-tracking/components/applications-board.tsx` still
+gates drag-to-advance on `isAdmin = role === "owner"||"admin"` (`canDrag={isAdmin}`, `if (!isAdmin) return`).
+A counselor/executive with manage rights can edit stage via the detail sheet but can't drag. Replace the
+`isAdmin` drag gate with the `canManageApplications` prop the board already receives. Remove the now-dead
+`isAdmin` local if nothing else uses it.
+
+### Round-3 gate (same stop-at-review rules)
+- `npm run build` + `npx eslint --max-warnings 50` clean — paste real output.
+- No migration change this round; nothing applied to shared Supabase.
+- Commit to `feature/application-tracking` only — no push, no PR, no promotion.
+- Re-verify: counselor sees only own + per-branch-assignee leads' applications on the board AND can drag;
+  branch manager sees only their branch's; owner/admin/viewer see all.
+
+---
+
 ## 10. Sonnet handoff prompt (copy-paste)
 
 ```
