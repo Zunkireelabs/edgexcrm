@@ -79,10 +79,10 @@ export function MoveToListSelector({
       <PopoverTrigger asChild>
         <button
           disabled={disabled || saving}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {label}
-          <ChevronDown className="w-3 h-3" />
+          <span className="whitespace-nowrap">{label}</span>
+          <ChevronDown className="w-3 h-3 shrink-0" />
         </button>
       </PopoverTrigger>
 
