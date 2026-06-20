@@ -55,7 +55,10 @@ import { BranchSwitcher } from "./branch-switcher";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
+import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
+import { Suspense } from "react";
+import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -201,6 +204,7 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
+  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   children: React.ReactNode;
 }
 
@@ -217,6 +221,7 @@ export function DashboardShell({
   userBranchId = null,
   leadScope = "all",
   selectedBranchId = null,
+  leadLists = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -339,6 +344,22 @@ export function DashboardShell({
               .filter((i) => navAllowed(i.href))
               .filter((i) => !(isEducation && i.href === "/dashboard"))
               .flatMap((item) => {
+                // Education with lead lists: replace flat "All Leads" with the dynamic group
+                if (item.href === "/leads" && isEducation && leadLists.length > 0) {
+                  return [
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-500">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={leadLists}
+                        onNavigate={() => setMobileOpen(false)}
+                      />
+                    </Suspense>,
+                  ];
+                }
                 const node = renderNavItem(
                   item.href === "/leads"
                     ? { ...item, badge: counts.unread_leads || undefined }

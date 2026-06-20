@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
@@ -56,9 +56,28 @@ export async function getCurrentUserTenant(): Promise<{
   };
 }
 
+export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("lead_lists")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("sort_order", { ascending: true });
+  if (error) throw error;
+  return (data as LeadList[]) || [];
+}
+
 export async function getLeads(
   tenantId: string,
-  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; limit?: number; branchId?: string | null }
+  scope?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    limit?: number;
+    branchId?: string | null;
+    listId?: string | null;
+    excludeListIds?: string[];
+  }
 ): Promise<Lead[]> {
   const supabase = await createClient();
   let query = supabase
@@ -77,6 +96,13 @@ export async function getLeads(
     query = query.in("id", ids);
   }
   if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
+
+  if (scope?.listId) {
+    query = query.eq("list_id", scope.listId);
+  } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+    // Master view for education: show leads not in any archive list (NULL list_id is included)
+    query = query.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+  }
 
   const { data, error } = await query.order("last_activity_at", { ascending: false });
 

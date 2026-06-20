@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
-import { canAccessPipeline, leadQueryScope } from "@/lib/api/permissions";
+import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import {
   apiSuccess,
   apiValidationError,
@@ -52,6 +54,11 @@ const UPDATABLE_FIELDS = [
   "salutation",
   "company_email",
   "entity_id",
+  "list_id",
+  "archive_reason",
+  "destinations",
+  "field_of_study",
+  "degree_level",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -297,11 +304,46 @@ export async function PATCH(
     }
   }
 
+  // Validate list_id: must belong to this tenant and be accessible to the caller
+  if (body.list_id !== undefined && body.list_id !== null) {
+    const isEducation = auth.industryId === "education_consultancy";
+    if (!isEducation || !getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+      return apiForbidden();
+    }
+    const { data: listCheck } = await supabase
+      .from("lead_lists")
+      .select("id, slug, is_archive, access")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.list_id as string)
+      .maybeSingle();
+    if (!listCheck) {
+      return apiValidationError({ list_id: ["List not found in this tenant"] });
+    }
+    const accessible = canAccessList(
+      auth.permissions,
+      listCheck.access as { mode: string; positionIds?: string[] },
+      auth.positionId,
+    );
+    if (!accessible) return apiForbidden();
+  }
+
   // Build update payload from whitelist
   const updatePayload: Record<string, unknown> = {};
   for (const field of UPDATABLE_FIELDS) {
     if (body[field] !== undefined) {
       updatePayload[field] = body[field];
+    }
+  }
+
+  // Mirror lead_type on list move (keeps existing education UI working during transition)
+  if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
+    const { data: targetList } = await supabase
+      .from("lead_lists")
+      .select("slug")
+      .eq("id", updatePayload.list_id as string)
+      .maybeSingle();
+    if (targetList) {
+      updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
     }
   }
 
@@ -348,6 +390,9 @@ export async function PATCH(
   const assignedChanged =
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to !== updated.assigned_to;
+  const listChanged =
+    updatePayload.list_id !== undefined &&
+    (existingLead as Record<string, unknown>).list_id !== updated.list_id;
 
   Promise.all([
     createAuditLog({
@@ -386,6 +431,22 @@ export async function PATCH(
             payload: {
               old_assigned_to: existingLead.assigned_to,
               new_assigned_to: updated.assigned_to,
+            },
+            requestId,
+          }),
+        ]
+      : []),
+    ...(listChanged
+      ? [
+          emitEvent({
+            tenantId: auth.tenantId,
+            type: "lead.list_changed",
+            entityType: "lead",
+            entityId: id,
+            payload: {
+              old_list_id: (existingLead as Record<string, unknown>).list_id,
+              new_list_id: updated.list_id,
+              archive_reason: updated.archive_reason ?? null,
             },
             requestId,
           }),

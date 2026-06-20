@@ -1,10 +1,13 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
-import { getIndustrySidebarItems } from "@/industries/_loader";
+import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { canAccessList } from "@/lib/api/permissions";
+import type { LeadList } from "@/types/database";
 
 export default async function DashboardLayout({
   children,
@@ -34,12 +37,24 @@ export default async function DashboardLayout({
   }
 
   const maxBranches = tenantData.entitlements.maxBranches;
+  const isEducation = tenantData.tenant.industry_id === "education_consultancy";
+  const hasLeadLists = isEducation && getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
 
-  const [formConfigs, branches, cookieStore] = await Promise.all([
+  const [formConfigs, branches, cookieStore, allLeadLists] = await Promise.all([
     getFormConfigsForTenant(tenantData.tenant.id),
     maxBranches > 1 ? getBranches(tenantData.tenant.id) : Promise.resolve([]),
     cookies(),
+    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([]),
   ]);
+
+  // Filter lead lists by caller's per-list access
+  const leadLists = (allLeadLists as LeadList[]).filter((l) =>
+    canAccessList(
+      tenantData.permissions,
+      l.access as { mode: string; positionIds?: string[] },
+      tenantData.positionId,
+    )
+  );
 
   const industrySidebarItems = getIndustrySidebarItems(
     tenantData.tenant.industry_id,
@@ -69,6 +84,7 @@ export default async function DashboardLayout({
         userBranchId={tenantData.branchId}
         leadScope={tenantData.permissions.leadScope}
         selectedBranchId={selectedBranchId}
+        leadLists={leadLists}
       >
         {children}
       </DashboardShell>

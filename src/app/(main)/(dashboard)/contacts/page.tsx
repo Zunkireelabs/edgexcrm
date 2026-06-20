@@ -25,6 +25,11 @@ export default async function ContactsRoutePage() {
     );
   }
 
+  // education_consultancy with lead-lists active → redirect to the Prospects list
+  if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.LEAD_LISTS)) {
+    redirect("/leads?list=prospects");
+  }
+
   // education_consultancy → existing ProspectsView (unchanged)
   if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.CONTACTS)) {
     const supabase = await createServiceClient();

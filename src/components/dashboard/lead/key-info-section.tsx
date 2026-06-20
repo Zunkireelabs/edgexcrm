@@ -18,8 +18,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import type { Lead, PipelineStage, TenantEntity, Industry } from "@/types/database";
+import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
+import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 
 const INTAKE_SOURCES = [
   { value: "manual_entry", label: "Manual Entry" },
@@ -82,6 +83,8 @@ interface KeyInfoSectionProps {
   editErrors?: { email?: string; phone?: string; general?: string };
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   onLeadTypeChange?: (newType: string) => void;
+  onListChange?: (listId: string, archiveReason?: string) => Promise<void>;
+  leadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
   maxBranches?: number;
   userBranchId?: string | null;
@@ -105,6 +108,8 @@ export function KeyInfoSection({
   draft,
   onDraftChange,
   onLeadTypeChange,
+  onListChange,
+  leadLists,
   onSaveTripFields,
   maxBranches,
   userBranchId,
@@ -146,27 +151,38 @@ export function KeyInfoSection({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
-          {/* Lead Type — education_consultancy only */}
+          {/* Lead Type / List — education_consultancy only */}
           {industryId === "education_consultancy" && (
             <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Lead Type</p>
-              <div className="flex gap-1.5">
-                {["lead", "prospect"].map((t) => (
-                  <button
-                    key={t}
-                    onClick={() => { setLeadType(t); onLeadTypeChange?.(t); }}
-                    className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
-                      leadType === t
-                        ? t === "prospect"
-                          ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
-                          : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
-                        : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                    }`}
-                  >
-                    {t.charAt(0).toUpperCase() + t.slice(1)}
-                  </button>
-                ))}
-              </div>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
+              </p>
+              {leadLists && leadLists.length > 0 && onListChange ? (
+                <MoveToListSelector
+                  leadId={lead.id}
+                  currentListId={(lead as { list_id?: string | null }).list_id ?? null}
+                  lists={leadLists}
+                  onMove={onListChange}
+                />
+              ) : (
+                <div className="flex gap-1.5">
+                  {["lead", "prospect"].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setLeadType(t); onLeadTypeChange?.(t); }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        leadType === t
+                          ? t === "prospect"
+                            ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
+                            : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
+                          : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                      }`}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

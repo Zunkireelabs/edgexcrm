@@ -58,7 +58,7 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
-import type { Lead, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
+import type { Lead, LeadList, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
   getLeadColumns,
@@ -92,6 +92,7 @@ interface LeadsTableProps {
   industryId?: string | null;
   branches?: Branch[];
   maxBranches?: number;
+  leadLists?: LeadList[];
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -114,6 +115,7 @@ export function LeadsTable({
   industryId,
   branches = [],
   maxBranches = 1,
+  leadLists = [],
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -639,8 +641,45 @@ export function LeadsTable({
         setLocalLeads((prev) =>
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
+      leadLists: leadLists.length > 0 ? leadLists : undefined,
+      onListMove: leadLists.length > 0
+        ? async (leadId: string, listId: string, archiveReason?: string) => {
+            // Optimistic update
+            const targetList = leadLists.find((l) => l.id === listId);
+            setLocalLeads((prev) =>
+              prev.map((l) =>
+                l.id === leadId
+                  ? {
+                      ...l,
+                      list_id: listId,
+                      lead_type: targetList?.slug === "prospects" ? "prospect" : "lead",
+                      ...(archiveReason ? { archive_reason: archiveReason } : {}),
+                    }
+                  : l
+              )
+            );
+            try {
+              const res = await fetch(`/api/v1/leads/${leadId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ list_id: listId, ...(archiveReason ? { archive_reason: archiveReason } : {}) }),
+              });
+              if (!res.ok) throw new Error("Failed to move lead");
+            } catch {
+              // Revert on failure
+              setLocalLeads((prev) =>
+                prev.map((l) =>
+                  l.id === leadId
+                    ? { ...leads.find((orig) => orig.id === leadId) ?? l }
+                    : l
+                )
+              );
+            }
+          }
+        : undefined,
     }),
-    [memberMap, formMap, entityMap, branchMap, stages, industryId, selectedIds, unreadLeadIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memberMap, formMap, entityMap, branchMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
