@@ -6,6 +6,7 @@ import { Eye } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
 // Column width constants — kept in sync with leads-table.tsx
@@ -212,23 +213,40 @@ const STATIC_COLUMNS: LeadColumn[] = [
         List
       </th>
     ),
-    renderTd: (lead, ctx) => (
-      <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-        {ctx.leadLists && ctx.leadLists.length > 0 && ctx.onListMove ? (
-          <MoveToListSelector
-            leadId={lead.id}
-            currentListId={lead.list_id ?? null}
-            lists={ctx.leadLists}
-            onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
-          />
-        ) : (
-          <LeadTypeToggle
-            lead={lead}
-            onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
-          />
-        )}
-      </td>
-    ),
+    renderTd: (lead, ctx) => {
+      const intakeList = ctx.leadLists?.find((l) => l.is_intake);
+      const qualifiedList = ctx.leadLists?.find((l) => l.slug === "qualified");
+      const isInIntake = intakeList && lead.list_id === intakeList.id;
+      return (
+        <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+          {ctx.leadLists && ctx.leadLists.length > 0 && ctx.onListMove ? (
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <MoveToListSelector
+                leadId={lead.id}
+                currentListId={lead.list_id ?? null}
+                lists={ctx.leadLists}
+                onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
+              />
+              {isInIntake && qualifiedList && (
+                <QualifyRowButton
+                  leadId={lead.id}
+                  currentDestinations={(lead as { destinations?: string[] }).destinations ?? []}
+                  currentFieldOfStudy={(lead as { field_of_study?: string | null }).field_of_study ?? null}
+                  currentDegreeLevel={(lead as { degree_level?: string | null }).degree_level ?? null}
+                  qualifiedList={qualifiedList}
+                  onQualified={(listId) => ctx.onListMove!(lead.id, listId)}
+                />
+              )}
+            </div>
+          ) : (
+            <LeadTypeToggle
+              lead={lead}
+              onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
+            />
+          )}
+        </td>
+      );
+    },
   },
 
   // ── email

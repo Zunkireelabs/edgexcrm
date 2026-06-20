@@ -1,15 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building } from "lucide-react";
+import { ChevronDown, UserCircle, Building, ArrowRight } from "lucide-react";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
+import {
+  DESTINATIONS,
+  FIELDS_OF_STUDY,
+  DEGREE_LEVELS,
+} from "@/industries/education-consultancy/features/lead-lists/taxonomies";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -86,6 +92,8 @@ interface KeyInfoSectionProps {
   onListChange?: (listId: string, archiveReason?: string) => Promise<void>;
   leadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
+  onSaveStudyFields?: (fields: Record<string, unknown>) => Promise<void>;
+  onQualify?: () => void;
   maxBranches?: number;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
@@ -111,6 +119,8 @@ export function KeyInfoSection({
   onListChange,
   leadLists,
   onSaveTripFields,
+  onSaveStudyFields,
+  onQualify,
   maxBranches,
   userBranchId,
   leadScope,
@@ -158,12 +168,32 @@ export function KeyInfoSection({
                 {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
               </p>
               {leadLists && leadLists.length > 0 && onListChange ? (
-                <MoveToListSelector
-                  leadId={lead.id}
-                  currentListId={(lead as { list_id?: string | null }).list_id ?? null}
-                  lists={leadLists}
-                  onMove={onListChange}
-                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <MoveToListSelector
+                    leadId={lead.id}
+                    currentListId={(lead as { list_id?: string | null }).list_id ?? null}
+                    lists={leadLists}
+                    onMove={onListChange}
+                  />
+                  {/* Qualify CTA — only when lead is in the intake (Pre-qualified) list */}
+                  {(() => {
+                    const intakeList = leadLists.find((l) => l.is_intake);
+                    const leadWithList = lead as { list_id?: string | null };
+                    if (intakeList && leadWithList.list_id === intakeList.id && onQualify) {
+                      return (
+                        <button
+                          type="button"
+                          onClick={onQualify}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                        >
+                          Qualify
+                          <ArrowRight className="w-3 h-3" />
+                        </button>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (
@@ -184,6 +214,15 @@ export function KeyInfoSection({
                 </div>
               )}
             </div>
+          )}
+
+          {/* Study Interest — education_consultancy only */}
+          {industryId === "education_consultancy" && (
+            <StudyInterestPanel
+              lead={lead}
+              isAdmin={isAdmin}
+              onSave={onSaveStudyFields}
+            />
           )}
 
           {/* Stage */}
@@ -583,6 +622,195 @@ export function KeyInfoSection({
         </div>
       )}
     </div>
+  );
+}
+
+// ── Study Interest panel (education_consultancy only) ─────────────────────
+
+interface StudyInterestPanelProps {
+  lead: Lead;
+  isAdmin: boolean;
+  onSave?: (fields: Record<string, unknown>) => Promise<void>;
+}
+
+function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) {
+  const leadWithEdu = lead as {
+    destinations?: string[] | null;
+    field_of_study?: string | null;
+    degree_level?: string | null;
+  };
+
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [destOpen, setDestOpen] = useState(false);
+  const [draftDests, setDraftDests] = useState<string[]>(leadWithEdu.destinations ?? []);
+  const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
+  const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
+
+  function openEdit() {
+    setDraftDests(leadWithEdu.destinations ?? []);
+    setDraftField(leadWithEdu.field_of_study ?? "");
+    setDraftDegree(leadWithEdu.degree_level ?? "");
+    setDestOpen(false);
+    setEditing(true);
+  }
+
+  function toggleDest(d: string) {
+    setDraftDests((prev) =>
+      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
+    );
+  }
+
+  async function handleSave() {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave({
+        destinations: draftDests,
+        field_of_study: draftField || null,
+        degree_level: draftDegree || null,
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasAny =
+    (leadWithEdu.destinations?.length ?? 0) > 0 ||
+    leadWithEdu.field_of_study ||
+    leadWithEdu.degree_level;
+
+  return (
+    <>
+      <div className="border-t border-border" />
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+          Study Interest
+        </p>
+        {isAdmin && !editing && (
+          <button
+            type="button"
+            onClick={openEdit}
+            className="text-[10px] text-primary hover:underline"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          {/* Destinations multi-select */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Interested Destinations</p>
+            <button
+              type="button"
+              onClick={() => setDestOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-2 py-1.5 border border-input rounded text-xs bg-background"
+            >
+              <span className={draftDests.length === 0 ? "text-muted-foreground" : ""}>
+                {draftDests.length === 0 ? "Select destinations" : draftDests.join(", ")}
+              </span>
+              <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${destOpen ? "rotate-180" : ""}`} />
+            </button>
+            {destOpen && (
+              <div className="mt-1 border border-input rounded p-2 grid grid-cols-2 gap-1 bg-background">
+                {DESTINATIONS.map((dest) => (
+                  <div key={dest} className="flex items-center gap-1.5">
+                    <Checkbox
+                      id={`kd-${dest}`}
+                      checked={draftDests.includes(dest)}
+                      onCheckedChange={() => toggleDest(dest)}
+                    />
+                    <label htmlFor={`kd-${dest}`} className="text-xs cursor-pointer">{dest}</label>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* Field of Study */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Field of Study</p>
+            <Select
+              value={draftField || "__none__"}
+              onValueChange={(v) => setDraftField(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select field" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground">Select field</span>
+                </SelectItem>
+                {FIELDS_OF_STUDY.map((f) => (
+                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* Degree Level */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Degree Level</p>
+            <Select
+              value={draftDegree || "__none__"}
+              onValueChange={(v) => setDraftDegree(v === "__none__" ? "" : v)}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground">Select level</span>
+                </SelectItem>
+                {DEGREE_LEVELS.map((d) => (
+                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : hasAny ? (
+        <div className="space-y-2">
+          {(leadWithEdu.destinations?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-xs text-muted-foreground">Destinations</p>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {(leadWithEdu.destinations ?? []).map((d) => (
+                  <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">
+                    {d}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+          {leadWithEdu.field_of_study && (
+            <InfoRow label="Field of Study" value={leadWithEdu.field_of_study} />
+          )}
+          {leadWithEdu.degree_level && (
+            <InfoRow label="Degree Level" value={leadWithEdu.degree_level} />
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground italic">
+          No study details yet.{isAdmin ? " Click Edit to add." : ""}
+        </p>
+      )}
+    </>
   );
 }
 

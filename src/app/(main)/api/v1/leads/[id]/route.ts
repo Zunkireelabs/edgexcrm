@@ -336,15 +336,27 @@ export async function PATCH(
   }
 
   // Mirror lead_type on list move (keeps existing education UI working during transition)
+  // Also resolve list names for the audit log so the activity timeline can render them.
+  let newListName: string | null = null;
+  let oldListName: string | null = null;
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")
-      .select("slug")
+      .select("id, slug, name")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
+      newListName = targetList.name;
     }
+  }
+  if ((existingLead as Record<string, unknown>).list_id) {
+    const { data: oldList } = await supabase
+      .from("lead_lists")
+      .select("name")
+      .eq("id", (existingLead as Record<string, unknown>).list_id as string)
+      .maybeSingle();
+    if (oldList) oldListName = oldList.name;
   }
 
   // Recompute normalized_email when email changes to keep dedup keying accurate
@@ -377,10 +389,24 @@ export async function PATCH(
   // Build audit diff
   const changes: Record<string, { old: unknown; new: unknown }> = {};
   for (const field of Object.keys(updatePayload)) {
+    // Skip lead_type — it's an implementation detail mirrored from list moves
+    if (field === "lead_type" && updatePayload.list_id !== undefined) continue;
     const oldVal = (existingLead as Record<string, unknown>)[field];
     const newVal = (updated as Record<string, unknown>)[field];
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
       changes[field] = { old: oldVal, new: newVal };
+    }
+  }
+
+  // Replace UUID list_id diff with human-readable list names for the activity timeline
+  const listChanged =
+    updatePayload.list_id !== undefined &&
+    (existingLead as Record<string, unknown>).list_id !== updated.list_id;
+  if (listChanged && newListName !== null) {
+    delete changes.list_id;
+    changes.list = { old: oldListName, new: newListName };
+    if (updated.archive_reason) {
+      changes.archive_reason = { old: null, new: updated.archive_reason };
     }
   }
 
@@ -390,9 +416,6 @@ export async function PATCH(
   const assignedChanged =
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to !== updated.assigned_to;
-  const listChanged =
-    updatePayload.list_id !== undefined &&
-    (existingLead as Record<string, unknown>).list_id !== updated.list_id;
 
   Promise.all([
     createAuditLog({

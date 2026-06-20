@@ -26,13 +26,19 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import type { PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
+import {
+  DESTINATIONS,
+  FIELDS_OF_STUDY,
+  DEGREE_LEVELS,
+} from "@/industries/education-consultancy/features/lead-lists/taxonomies";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 interface TeamMember {
@@ -77,6 +83,10 @@ interface FormData {
   ownerId: string;
   salutation: string;
   companyEmail: string;
+  // education_consultancy only
+  destinations: string[];
+  fieldOfStudy: string;
+  degreeLevel: string;
 }
 
 interface FormErrors {
@@ -142,7 +152,60 @@ const initialFormData: FormData = {
   ownerId: "",
   salutation: "",
   companyEmail: "",
+  destinations: [],
+  fieldOfStudy: "",
+  degreeLevel: "",
 };
+
+function DestinationsField({
+  selected,
+  onToggle,
+  disabled,
+}: {
+  selected: string[];
+  onToggle: (dest: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-gray-600">
+        Interested Destination
+        <span className="ml-1 text-gray-400">(optional)</span>
+      </Label>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background hover:bg-accent transition-colors"
+      >
+        <span className={selected.length === 0 ? "text-muted-foreground" : ""}>
+          {selected.length === 0
+            ? "Select destinations"
+            : selected.join(", ")}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
+          {DESTINATIONS.map((dest) => (
+            <div key={dest} className="flex items-center gap-2">
+              <Checkbox
+                id={`dest-${dest}`}
+                checked={selected.includes(dest)}
+                disabled={disabled}
+                onCheckedChange={() => onToggle(dest)}
+              />
+              <label htmlFor={`dest-${dest}`} className="text-xs cursor-pointer select-none">
+                {dest}
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AddLeadSheet({
   open,
@@ -191,6 +254,17 @@ export function AddLeadSheet({
     }
   };
 
+  const toggleDestination = (dest: string) => {
+    setFormData((prev) => {
+      const current = prev.destinations;
+      const next = current.includes(dest)
+        ? current.filter((d) => d !== dest)
+        : [...current, dest];
+      return { ...prev, destinations: next };
+    });
+    setIsDirty(true);
+  };
+
   const validate = (): boolean => {
     const newErrors: FormErrors = validateLeadIdentity({
       email: formData.email,
@@ -235,6 +309,9 @@ export function AddLeadSheet({
         owner_id: industryId === "it_agency" ? (formData.ownerId || null) : undefined,
         salutation: industryId === "it_agency" ? (formData.salutation || null) : undefined,
         company_email: industryId === "it_agency" ? (formData.companyEmail || null) : undefined,
+        destinations: industryId === "education_consultancy" ? formData.destinations : undefined,
+        field_of_study: industryId === "education_consultancy" ? (formData.fieldOfStudy || null) : undefined,
+        degree_level: industryId === "education_consultancy" ? (formData.degreeLevel || null) : undefined,
         is_final: true,
         step: 1,
       };
@@ -844,6 +921,55 @@ export function AddLeadSheet({
                   {tag.charAt(0).toUpperCase() + tag.slice(1)}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Study Interest — education_consultancy only */}
+        {industryId === "education_consultancy" && (
+          <DestinationsField
+            selected={formData.destinations}
+            onToggle={toggleDestination}
+            disabled={isSubmitting}
+          />
+        )}
+        {industryId === "education_consultancy" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Field of Study</Label>
+              <Select
+                value={formData.fieldOfStudy || "__none__"}
+                onValueChange={(v) => updateField("fieldOfStudy", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select field</SelectItem>
+                  {FIELDS_OF_STUDY.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Select
+                value={formData.degreeLevel || "__none__"}
+                onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select level</SelectItem>
+                  {DEGREE_LEVELS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}

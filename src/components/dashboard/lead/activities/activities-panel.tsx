@@ -721,6 +721,14 @@ function getSystemActivityDescription(
       : `Unassigned in ${branch || "a branch"}`;
   }
 
+  if (changes.list) {
+    const from = changes.list.old as string | null;
+    const to = changes.list.new as string | null;
+    const reason = changes.archive_reason?.new as string | null;
+    if (reason) return `Archived · ${reason}`;
+    return from ? `Moved from "${from}" to "${to}"` : `Added to "${to}"`;
+  }
+
   if (changes.status || changes.stage_id) {
     const newStatus = changes.status?.new || changes.stage_id?.new;
     return `Stage changed to "${newStatus}"`;
