@@ -78,36 +78,52 @@ export function ApplicationsCard({ leadId, canManage }: ApplicationsCardProps) {
           ) : applications.length === 0 ? (
             <p className="text-xs text-muted-foreground text-center py-2">No applications yet.</p>
           ) : (
-            <div className="space-y-0.5">
+            <div className="space-y-2">
               {applications.map((app) => {
                 const stage =
                   (app.application_stages as ApplicationStage | null) ??
                   stages.find((s) => s.id === app.stage_id) ??
                   null;
+                const intakeCountry = [app.intake_term, app.country]
+                  .filter(Boolean)
+                  .join(" · ");
                 return (
                   <Link
                     key={app.id}
                     href={`/applications/${app.id}`}
-                    className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 -mx-2 hover:bg-muted/50 transition-colors"
+                    className="block border rounded-md p-3 hover:bg-muted/30 transition-colors"
                   >
-                    <span className="text-sm font-medium truncate min-w-0">
-                      {app.university_name}
-                    </span>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {app.intake_term && (
-                        <span className="text-xs text-muted-foreground hidden sm:inline">
-                          {app.intake_term}
-                        </span>
-                      )}
-                      {stage && (
-                        <StatusBadge
-                          slug={stage.slug}
-                          name={stage.name}
-                          color={stage.color}
-                          terminalType={stage.terminal_type}
-                        />
-                      )}
-                    </div>
+                    <p className="text-sm font-medium">{app.university_name}</p>
+                    {app.program_name && (
+                      <p className="text-sm text-muted-foreground mt-0.5">
+                        {app.program_name}
+                      </p>
+                    )}
+                    {intakeCountry && (
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {intakeCountry}
+                      </p>
+                    )}
+                    {(stage || app.application_deadline) && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {stage && (
+                          <StatusBadge
+                            slug={stage.slug}
+                            name={stage.name}
+                            color={stage.color}
+                            terminalType={stage.terminal_type}
+                          />
+                        )}
+                        {app.application_deadline && (
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(app.application_deadline).toLocaleDateString(
+                              undefined,
+                              { month: "short", day: "numeric", year: "numeric" }
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </Link>
                 );
               })}
