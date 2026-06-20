@@ -356,6 +356,7 @@ export function DashboardShell({
                       <LeadListsNavGroup
                         lists={leadLists}
                         onNavigate={() => setMobileOpen(false)}
+                        isAdmin={role === "owner" || role === "admin"}
                       />
                     </Suspense>,
                   ];

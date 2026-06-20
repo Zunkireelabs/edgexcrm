@@ -3,15 +3,16 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
-import { ChevronDown, Users } from "lucide-react";
+import { ChevronDown, Users, Settings2 } from "lucide-react";
 import type { LeadList } from "@/types/database";
 
 interface LeadListsNavGroupProps {
   lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   onNavigate: () => void;
+  isAdmin?: boolean;
 }
 
-export function LeadListsNavGroup({ lists, onNavigate }: LeadListsNavGroupProps) {
+export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadListsNavGroupProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentList = searchParams.get("list");
@@ -53,9 +54,9 @@ export function LeadListsNavGroup({ lists, onNavigate }: LeadListsNavGroupProps)
         )}
       </div>
 
-      {expanded && lists.length > 0 && (
+      {(expanded && lists.length > 0) || isAdmin ? (
         <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300 space-y-1">
-          {lists.map((list) => {
+          {expanded && lists.map((list) => {
             const active = isOnLeads && currentList === list.slug;
             return (
               <Link
@@ -72,8 +73,18 @@ export function LeadListsNavGroup({ lists, onNavigate }: LeadListsNavGroupProps)
               </Link>
             );
           })}
+          {isAdmin && (
+            <Link
+              href="/settings#lead-lists"
+              onClick={onNavigate}
+              className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-[#ebebeb] transition-colors"
+            >
+              <Settings2 className="w-3.5 h-3.5 shrink-0" />
+              Manage lists
+            </Link>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
