@@ -100,7 +100,6 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       fullLead={fullLead}
       activityTimeline={activityTimeline}
       canManageApplications={tenantData.permissions.canManageApplications}
-      role={tenantData.role}
     />
   );
 }

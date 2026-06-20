@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -73,20 +73,18 @@ interface ApplicationDetailPageProps {
   fullLead: Lead | null;
   activityTimeline: LeadActivity[];
   canManageApplications: boolean;
-  role: string;
 }
 
 export function ApplicationDetailPage({
   application: initialApplication,
   stages,
   fullLead,
-  activityTimeline: initialTimeline,
+  activityTimeline,
   canManageApplications,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
 
   const [application, setApplication] = useState<Application>(initialApplication);
-  const [timeline, setTimeline] = useState<LeadActivity[]>(initialTimeline);
   const [teamMemberEmails, setTeamMemberEmails] = useState<Record<string, string>>({});
 
   const [editing, setEditing] = useState(false);
@@ -174,26 +172,13 @@ export function ApplicationDetailPage({
       setApplication(data as Application);
       setEditing(false);
       toast.success("Application saved");
-      refreshTimeline();
+      router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save");
     } finally {
       setSaving(false);
     }
   }
-
-  const refreshTimeline = useCallback(async () => {
-    try {
-      // Re-fetch the application to get the latest stage info too
-      const res = await fetch(`/api/v1/applications/${application.id}`);
-      if (res.ok) {
-        const { data } = await res.json();
-        setApplication(data as Application);
-      }
-    } catch {
-      // non-fatal
-    }
-  }, [application.id]);
 
   function handleStageChange(newStageId: string, newStatus: string) {
     setApplication((prev) => ({
@@ -202,16 +187,7 @@ export function ApplicationDetailPage({
       status: newStatus,
       application_stages: stages.find((s) => s.id === newStageId) ?? prev.application_stages,
     }));
-    // Optimistically add to timeline
-    const newEntry: LeadActivity = {
-      id: crypto.randomUUID(),
-      action: "application.stage_changed",
-      entity_type: "application",
-      changes: { patch: { old: {}, new: { status: newStatus } } },
-      user_id: null,
-      created_at: new Date().toISOString(),
-    };
-    setTimeline((prev) => [newEntry, ...prev]);
+    router.refresh();
   }
 
   async function handleDelete() {
@@ -387,7 +363,7 @@ export function ApplicationDetailPage({
                 Activity
               </p>
               <ApplicationActivityTimeline
-                timeline={timeline}
+                timeline={activityTimeline}
                 teamMemberEmails={teamMemberEmails}
               />
             </CardContent>
