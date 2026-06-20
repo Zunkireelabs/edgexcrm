@@ -396,14 +396,16 @@ export async function POST(
   }
 
   // ── 11. Insert lead ──
-  // Resolve the tenant's default branch for branch inheritance on new inserts.
-  // Part B (migration 060) adds is_default to branches and wires this lookup.
-  // Until then, branch_id stays null for public-form leads.
-  // TODO(branch-on-create Part B): replace null with default-branch lookup:
-  //   const { data: dflt } = await supabase.from("branches").select("id")
-  //     .eq("tenant_id", tenant.id).eq("is_default", true).limit(1).maybeSingle();
-  //   const publicFormBranchId = dflt?.id ?? null;
-  const publicFormBranchId: string | null = null;
+  // Resolve the tenant's default branch for branch inheritance on new public-form inserts.
+  // Uses the is_default column added in migration 060.
+  const { data: defaultBranch } = await supabase
+    .from("branches")
+    .select("id")
+    .eq("tenant_id", tenant.id)
+    .eq("is_default", true)
+    .limit(1)
+    .maybeSingle();
+  const publicFormBranchId: string | null = defaultBranch?.id ?? null;
 
   const leadPayload = {
     tenant_id: tenant.id,

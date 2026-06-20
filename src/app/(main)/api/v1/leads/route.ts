@@ -282,9 +282,22 @@ async function handlePost(request: NextRequest) {
   const dashAuth = await authenticateRequest();
 
   // Precedence: 1. explicit body branch_id  2. active branch cookie  3. creator's branch
-  // Step 4 (tenant default branch via is_default column) is wired in Part B.
+  //             4. tenant default branch (is_default = true)
   const explicitBranchId = (body.branch_id as string | null | undefined) || null;
-  const creationBranchId = explicitBranchId ?? cookieBranchId ?? (dashAuth?.branchId ?? null);
+  const step123BranchId = explicitBranchId ?? cookieBranchId ?? (dashAuth?.branchId ?? null);
+
+  // Step 4: fall back to the tenant's default branch when none of steps 1–3 resolved.
+  let creationBranchId = step123BranchId;
+  if (!creationBranchId) {
+    const { data: defaultBranch } = await supabase
+      .from("branches")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_default", true)
+      .limit(1)
+      .maybeSingle();
+    creationBranchId = defaultBranch?.id ?? null;
+  }
   // ── End branch resolution ────────────────────────────────────────────────
 
   // Validate assigned_to: must belong to this tenant if provided
