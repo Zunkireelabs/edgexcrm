@@ -85,9 +85,9 @@ ON CONFLICT (tenant_id, slug) DO NOTHING;
 
 UPDATE leads l
 SET list_id = ll.id
-FROM lead_lists ll
-JOIN tenants t ON t.id = l.tenant_id
+FROM lead_lists ll, tenants t
 WHERE ll.tenant_id = l.tenant_id
+  AND t.id = l.tenant_id
   AND ll.slug = 'prospects'
   AND l.list_id IS NULL
   AND l.lead_type = 'prospect'
@@ -96,9 +96,9 @@ WHERE ll.tenant_id = l.tenant_id
 
 UPDATE leads l
 SET list_id = ll.id
-FROM lead_lists ll
-JOIN tenants t ON t.id = l.tenant_id
+FROM lead_lists ll, tenants t
 WHERE ll.tenant_id = l.tenant_id
+  AND t.id = l.tenant_id
   AND ll.slug = 'pre-qualified'
   AND l.list_id IS NULL
   AND t.industry_id = 'education_consultancy'
