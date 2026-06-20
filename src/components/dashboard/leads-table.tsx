@@ -120,6 +120,12 @@ export function LeadsTable({
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
   const [localLeads, setLocalLeads] = useState(leads);
+  // Re-sync when the server sends a new lead set — list switch (?list=…),
+  // branch switch (router.refresh), etc. Without this the table shows stale
+  // rows until a manual page reload.
+  useEffect(() => {
+    setLocalLeads(leads);
+  }, [leads]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
