@@ -29,7 +29,7 @@ import {
 import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import type { PipelineStage, TenantEntity, UserRole } from "@/types/database";
+import type { Branch, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
@@ -59,6 +59,9 @@ interface AddLeadSheetProps {
   role: UserRole;
   currentUserId: string;
   industryId?: string | null;
+  branches?: Branch[];
+  selectedBranchId?: string | null;
+  userBranchId?: string | null;
 }
 
 interface FormData {
@@ -71,6 +74,7 @@ interface FormData {
   stageId: string;
   assignedTo: string;
   entityId: string;
+  branchId: string;
   intakeSource: string;
   intakeMedium: string;
   intakeCampaign: string;
@@ -140,6 +144,7 @@ const initialFormData: FormData = {
   stageId: "",
   assignedTo: "",
   entityId: "",
+  branchId: "",
   intakeSource: "manual_entry",
   intakeMedium: "dashboard",
   intakeCampaign: "",
@@ -219,6 +224,9 @@ export function AddLeadSheet({
   role,
   currentUserId,
   industryId,
+  branches = [],
+  selectedBranchId = null,
+  userBranchId = null,
 }: AddLeadSheetProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -238,13 +246,15 @@ export function AddLeadSheet({
         stageId: defaultStage?.id || "",
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
+        // Non-admins locked to their branch; admins default to active branch from switcher
+        branchId: (!isAdmin && userBranchId) ? userBranchId : (selectedBranchId || ""),
       });
       setErrors({});
       setIsDirty(false);
       setSourceOpen(false);
       setNotesOpen(false);
     }
-  }, [open, defaultStage?.id, role, currentUserId]);
+  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -295,6 +305,7 @@ export function AddLeadSheet({
         stage_id: formData.stageId || undefined,
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
+        branch_id: formData.branchId || null,
         intake_source: formData.intakeSource || "manual_entry",
         intake_medium: "dashboard",
         tags: industryId === "education_consultancy" ? [formData.tag || "student"] : [],
@@ -500,6 +511,35 @@ export function AddLeadSheet({
           </Select>
         </div>
       </div>
+
+      {/* Branch picker — only for tenants with >1 branch */}
+      {branches.length > 1 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="branchId" className="text-xs text-gray-600">
+            Branch
+            {!isAdmin && userBranchId && (
+              <span className="ml-1 text-gray-400">(auto)</span>
+            )}
+          </Label>
+          <Select
+            value={formData.branchId || "__none__"}
+            onValueChange={(v) => updateField("branchId", v === "__none__" ? "" : v)}
+            disabled={isSubmitting || (!isAdmin && !!userBranchId)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="No branch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No branch</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {entities.length > 0 && (
         <div className="space-y-1.5">

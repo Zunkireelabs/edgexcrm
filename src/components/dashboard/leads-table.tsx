@@ -92,6 +92,8 @@ interface LeadsTableProps {
   industryId?: string | null;
   branches?: Branch[];
   maxBranches?: number;
+  selectedBranchId?: string | null;
+  userBranchId?: string | null;
   leadLists?: LeadList[];
 }
 
@@ -115,6 +117,8 @@ export function LeadsTable({
   industryId,
   branches = [],
   maxBranches = 1,
+  selectedBranchId = null,
+  userBranchId = null,
   leadLists = [],
 }: LeadsTableProps) {
   const router = useRouter();
@@ -1359,6 +1363,9 @@ export function LeadsTable({
           role={role}
           currentUserId={currentUserId}
           industryId={industryId}
+          branches={branches}
+          selectedBranchId={selectedBranchId}
+          userBranchId={userBranchId}
         />
       )}
 
