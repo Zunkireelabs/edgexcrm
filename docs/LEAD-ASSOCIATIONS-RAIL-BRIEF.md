@@ -131,3 +131,56 @@ STOP AT REVIEW: commit to feature/lead-associations-rail only — NO push, NO PR
 the brief (education prospect → Applications card in rail, no tab, no checklist; education non-prospect →
 checklist stays; non-education → unchanged). Then hand back for Opus review.
 ```
+
+---
+
+## 10. Round 2 — UI: richer Applications card (Sadin-approved, 2026-06-20)
+
+Sonnet built the rail (`bd85c73`, gates green). The card rows are a **single cramped line**
+(`university_name` truncated + intake + badge). Sadin wants each application shown as a **HubSpot-style
+mini detail card** with more fields visible. **Single-component change to `applications-card.tsx`** — no
+data/logic change (data is already fetched).
+
+Replace the one-line `<Link>` row with a **bordered mini-card per application**, stacked `space-y-2`, the
+whole card linking to `/applications/[id]` (`hover:bg-muted/30`, `border rounded-md p-3`, our design
+language). Per application show:
+
+```
+┌───────────────────────────────────────┐
+│ University of Sydney            →      │  app.university_name — full title, no truncate (allow wrap), font-medium
+│ MSc Data Science                       │  app.program_name — text-sm text-muted-foreground
+│ Fall 2026 · Australia                  │  app.intake_term · app.country — text-xs muted (join with " · " only when both present; omit gracefully if either missing)
+│ ● Conditional Offer    Sep 15, 2026    │  <StatusBadge .../> + app.application_deadline formatted (toLocaleDateString month-short/day/year) when set
+└───────────────────────────────────────┘
+```
+
+Keep unchanged: the header (`Applications (N)` + Add button), loading spinner, empty state, and the
+`AddApplicationToLeadSheet`. Stage object resolution stays as-is (`app.application_stages ?? stages.find(...)`).
+No "View all" footer (the card lists all of the student's applications; the per-student tab is gone).
+
+### Round-2 gate (same stop-at-review)
+`npm run build` + `npx eslint --max-warnings 50` clean (paste output). No DB writes. Commit to
+`feature/lead-associations-rail` only — no push, no PR. Re-verify: the rail card shows university +
+program + intake·country + stage badge + deadline per application; clicking a card opens `/applications/[id]`.
+
+### Sonnet handoff prompt (Round 2)
+
+```
+Round 2 UI refinement for the Lead Associations Rail. Spec: §10 "Round 2 — UI: richer Applications card"
+in docs/LEAD-ASSOCIATIONS-RAIL-BRIEF.md (committed on this branch) — read it. You are on
+feature/lead-associations-rail.
+
+Single change: in
+src/industries/education-consultancy/features/application-tracking/components/applications-card.tsx,
+replace the cramped one-line row with a bordered mini-card per application (stacked space-y-2, the whole
+card a <Link> to /applications/[id], border rounded-md p-3 hover:bg-muted/30 — our design language). Per
+application show, on separate lines: university_name (full title, font-medium, NO truncate — allow wrap);
+program_name (text-sm muted); intake_term · country (text-xs muted, join with " · " only when both present,
+omit gracefully if either missing); and a row with the StatusBadge + the application_deadline formatted
+(toLocaleDateString month:'short',day:'numeric',year:'numeric') when set. Keep the header (Applications (N)
++ Add), loading spinner, empty state, AddApplicationToLeadSheet, and stage resolution unchanged. No data or
+logic changes.
+
+STOP AT REVIEW: commit to feature/lead-associations-rail only — NO push, NO PR, NO DB writes. Run
+`npm run build` and `npx eslint --max-warnings 50` and paste the real output. Then hand back for Opus review.
+```
