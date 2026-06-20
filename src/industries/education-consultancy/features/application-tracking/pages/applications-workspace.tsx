@@ -8,10 +8,9 @@ import { FilterDropdown } from "@/components/ui/filter-dropdown";
 import { ApplicationsBoard } from "../components/applications-board";
 import { ApplicationsTable } from "../components/applications-table";
 import { AddApplicationSheet } from "../components/add-application-sheet";
-import type { Application, ApplicationStage, UserRole } from "@/types/database";
+import type { Application, ApplicationStage } from "@/types/database";
 
 interface ApplicationsWorkspaceProps {
-  role: UserRole;
   stages: ApplicationStage[];
   applications: Application[];
   canManageApplications: boolean;
@@ -32,7 +31,6 @@ const SORT_OPTIONS = [
 ];
 
 export function ApplicationsWorkspace({
-  role,
   stages: initialStages,
   applications: initialApplications,
   canManageApplications,
@@ -219,7 +217,6 @@ export function ApplicationsWorkspace({
           <ApplicationsBoard
             stages={stages}
             applications={filteredApplications}
-            role={role}
             canManageApplications={canManageApplications}
             onRefresh={handleRefresh}
           />

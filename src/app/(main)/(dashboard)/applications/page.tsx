@@ -3,9 +3,10 @@ import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { leadQueryScope } from "@/lib/api/permissions";
+import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
 import { ApplicationsWorkspace } from "@/industries/education-consultancy/features/application-tracking/pages/applications-workspace";
-import type { ApplicationStage, Application, UserRole } from "@/types/database";
+import type { ApplicationStage, Application } from "@/types/database";
 
 export default async function ApplicationsRoute() {
   const tenantData = await getCurrentUserTenant();
@@ -14,19 +15,22 @@ export default async function ApplicationsRoute() {
 
   const supabase = await createServiceClient();
 
-  // Fix 3: scope the SSR fetch by leadScope — counselors only see their own leads' applications
-  const restrictToOwn = shouldRestrictToSelf(tenantData.permissions);
+  // Fix 5: build the accessible-lead-id set the same way getLeads() does,
+  // mirroring leadQueryScope + leadIdsVisibleToAssignee / leadIdsForBranch.
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null);
 
+  // leadIds: null = no filter (all tenant apps); [] = no accessible leads (return empty)
   let leadIds: string[] | null = null;
-  if (restrictToOwn) {
-    const { data: assignedLeads } = await supabase
-      .from("leads")
-      .select("id")
-      .eq("tenant_id", tenantData.tenant.id)
-      .eq("assigned_to", tenantData.userId)
-      .is("deleted_at", null);
-    leadIds = (assignedLeads ?? []).map((l) => l.id);
+
+  if (scope.restrictToSelf && scope.userId) {
+    // 'own' scope (counselor) or 'team' with no branch (null-branch fallback):
+    // leads.assigned_to === userId UNION lead_branches.assigned_to === userId
+    leadIds = await leadIdsVisibleToAssignee(supabase, tenantData.tenant.id, scope.userId);
+  } else if (scope.branchId) {
+    // 'team' scope with a branch: leads in that branch (via lead_branches)
+    leadIds = await leadIdsForBranch(supabase, tenantData.tenant.id, scope.branchId);
   }
+  // else: leadScope 'all' → leadIds stays null → no filter
 
   const [stagesResult, applicationsResult] = await Promise.all([
     supabase
@@ -50,15 +54,13 @@ export default async function ApplicationsRoute() {
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];
   const applications = (applicationsResult.data ?? []) as Application[];
-  const canManageApplications = tenantData.permissions.canManageApplications;
 
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
       <ApplicationsWorkspace
-        role={tenantData.role as UserRole}
         stages={stages}
         applications={applications}
-        canManageApplications={canManageApplications}
+        canManageApplications={tenantData.permissions.canManageApplications}
       />
     </div>
   );

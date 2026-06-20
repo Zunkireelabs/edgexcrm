@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { ApplicationColumn } from "./application-column";
 import { ApplicationCard } from "./application-card";
 import { ApplicationDetailSheet } from "./application-detail-sheet";
-import type { Application, ApplicationStage, UserRole } from "@/types/database";
+import type { Application, ApplicationStage } from "@/types/database";
 
 type ColumnsState = Record<string, Application[]>;
 
@@ -41,20 +41,16 @@ function findAppColumn(columns: ColumnsState, appId: string): string | null {
 interface ApplicationsBoardProps {
   stages: ApplicationStage[];
   applications: Application[];
-  role: UserRole;
   canManageApplications: boolean;
   onRefresh: () => void;
 }
 
-export function ApplicationsBoard({ stages, applications, role, canManageApplications, onRefresh }: ApplicationsBoardProps) {
+export function ApplicationsBoard({ stages, applications, canManageApplications, onRefresh }: ApplicationsBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(applications, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
   const prevColumnsRef = useRef<ColumnsState | null>(null);
   const [detailApp, setDetailApp] = useState<Application | null>(null);
-
-  // Keep role-based isAdmin for backward compat (drag still gated here)
-  const isAdmin = role === "owner" || role === "admin";
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -73,7 +69,7 @@ export function ApplicationsBoard({ stages, applications, role, canManageApplica
     : null;
 
   function handleDragStart(event: DragStartEvent) {
-    if (!isAdmin) return;
+    if (!canManageApplications) return;
     setActiveId(event.active.id as string);
     prevColumnsRef.current = JSON.parse(JSON.stringify(columns));
   }
@@ -196,7 +192,7 @@ export function ApplicationsBoard({ stages, applications, role, canManageApplica
               key={stage.id}
               stage={stage}
               applications={columns[stage.id] ?? []}
-              canDrag={isAdmin}
+              canDrag={canManageApplications}
               onOpenDetail={setDetailApp}
             />
           ))}
