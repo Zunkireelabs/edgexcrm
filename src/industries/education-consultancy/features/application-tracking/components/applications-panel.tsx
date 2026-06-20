@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, Trash2, Pencil } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "./status-badge";
-import { ApplicationDetailSheet } from "./application-detail-sheet";
 import type { Application, ApplicationStage } from "@/types/database";
 
 interface ApplicationsPanelProps {
@@ -36,11 +36,11 @@ function formatDate(dateString: string | null): string {
 }
 
 export function ApplicationsPanel({ leadId, canManageApplications }: ApplicationsPanelProps) {
+  const router = useRouter();
   const [applications, setApplications] = useState<Application[]>([]);
   const [stages, setStages] = useState<ApplicationStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
-  const [detailApp, setDetailApp] = useState<Application | null>(null);
 
   const fetchApplications = useCallback(async () => {
     try {
@@ -84,10 +84,6 @@ export function ApplicationsPanel({ leadId, canManageApplications }: Application
     if (!res.ok) { toast.error("Failed to delete application"); return; }
     setApplications((prev) => prev.filter((a) => a.id !== applicationId));
     toast.success("Application deleted");
-  };
-
-  const handleUpdated = (updated: Application) => {
-    setApplications((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
   };
 
   if (loading) {
@@ -139,7 +135,7 @@ export function ApplicationsPanel({ leadId, canManageApplications }: Application
                   <tr
                     key={app.id}
                     className="hover:bg-muted/10 transition-colors cursor-pointer"
-                    onClick={() => setDetailApp(app)}
+                    onClick={() => router.push(`/applications/${app.id}`)}
                   >
                     <td className="px-4 py-3 font-medium">{app.university_name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{app.program_name}</td>
@@ -178,26 +174,16 @@ export function ApplicationsPanel({ leadId, canManageApplications }: Application
                       </td>
                     )}
                     <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                      <div className="flex items-center gap-1">
+                      {canManageApplications && (
                         <button
                           type="button"
-                          onClick={() => setDetailApp(app)}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          title="View / Edit"
+                          onClick={() => handleDelete(app.id)}
+                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          title="Delete"
                         >
-                          <Pencil className="h-3.5 w-3.5" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </button>
-                        {canManageApplications && (
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(app.id)}
-                            className="text-muted-foreground hover:text-destructive transition-colors"
-                            title="Delete"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
+                      )}
                     </td>
                   </tr>
                 );
@@ -218,13 +204,6 @@ export function ApplicationsPanel({ leadId, canManageApplications }: Application
         }}
       />
 
-      <ApplicationDetailSheet
-        application={detailApp}
-        canManage={canManageApplications}
-        open={detailApp !== null}
-        onOpenChange={(open) => { if (!open) setDetailApp(null); }}
-        onUpdated={handleUpdated}
-      />
     </div>
   );
 }

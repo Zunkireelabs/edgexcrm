@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { StatusBadge } from "./status-badge";
 import type { Application, ApplicationStage } from "@/types/database";
 
@@ -25,6 +26,7 @@ function getLeadId(app: Application): string {
 }
 
 export function ApplicationsTable({ applications, stages }: ApplicationsTableProps) {
+  const router = useRouter();
   const stageMap = new Map(stages.map((s) => [s.id, s]));
 
   if (applications.length === 0) {
@@ -55,8 +57,12 @@ export function ApplicationsTable({ applications, stages }: ApplicationsTablePro
             const leadId = getLeadId(app);
 
             return (
-              <tr key={app.id} className="hover:bg-muted/10 transition-colors">
-                <td className="px-4 py-3">
+              <tr
+                key={app.id}
+                className="hover:bg-muted/10 transition-colors cursor-pointer"
+                onClick={() => router.push(`/applications/${app.id}`)}
+              >
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                   <Link href={`/leads/${leadId}`} className="font-medium hover:text-primary transition-colors">
                     {getStudentName(app)}
                   </Link>
