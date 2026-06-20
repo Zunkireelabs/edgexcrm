@@ -7,6 +7,7 @@ import { emailMeta } from "./features/email/meta";
 import { insightsMeta } from "./features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
 import { applicationTrackingMeta } from "./features/application-tracking/meta";
+import { leadListsMeta } from "./features/lead-lists/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -19,6 +20,7 @@ export const manifest: IndustryManifest = {
     { meta: emailMeta },
     { meta: campaignsMeta },
     { meta: applicationTrackingMeta },
+    { meta: leadListsMeta },
   ],
   sidebar: [
     {
@@ -31,12 +33,8 @@ export const manifest: IndustryManifest = {
         { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
       ],
     },
-    {
-      featureId: FEATURES.CONTACTS,
-      href: "/contacts",
-      label: "Contacts",
-      icon: "Users",
-    },
+    // Contacts sidebar item removed for education_consultancy — /contacts redirects to
+    // /leads?list=prospects now that lead-lists is active.
     {
       featureId: FEATURES.CHECK_IN,
       href: "/check-in",

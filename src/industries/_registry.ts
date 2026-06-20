@@ -37,6 +37,7 @@ export const FEATURES = {
   INSIGHTS: "insights",
   CAMPAIGNS: "campaigns",
   APPLICATION_TRACKING: "application-tracking",
+  LEAD_LISTS: "lead-lists",
   // Industry-scoped (it_agency)
   TIME_TRACKING: "time-tracking",
   ACCOUNTS: "accounts",

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { leadQueryScope, canSeeNav } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav, canAccessList } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import {
   apiSuccess,
   apiPaginated,
@@ -83,8 +85,39 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get("search");
   let assignedTo = searchParams.get("assigned_to");
   const includeConverted = searchParams.get("include_converted") === "1";
+  const listSlug = searchParams.get("list");
 
   const supabase = await createServiceClient();
+
+  // Resolve ?list=slug for lead-lists feature (education only)
+  let resolvedListId: string | null = null;
+  let archiveListIds: string[] = [];
+  const isEducation = auth.industryId === "education_consultancy";
+  if (isEducation && getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+    const { data: lists } = await supabase
+      .from("lead_lists")
+      .select("id, slug, is_archive, access")
+      .eq("tenant_id", auth.tenantId);
+
+    if (lists) {
+      archiveListIds = lists.filter((l) => l.is_archive).map((l) => l.id);
+
+      if (listSlug) {
+        const targetList = lists.find((l) => l.slug === listSlug);
+        if (!targetList) {
+          log.info({ listSlug }, "List not found");
+          return apiForbidden();
+        }
+        const accessible = canAccessList(
+          auth.permissions,
+          targetList.access as { mode: string; positionIds?: string[] },
+          auth.positionId,
+        );
+        if (!accessible) return apiForbidden();
+        resolvedListId = targetList.id;
+      }
+    }
+  }
 
   let query = supabase
     .from("leads")
@@ -94,6 +127,14 @@ export async function GET(request: NextRequest) {
 
   if (!includeConverted) {
     query = query.is("converted_at", null);
+  }
+
+  // Apply list filter
+  if (resolvedListId) {
+    query = query.eq("list_id", resolvedListId);
+  } else if (isEducation && archiveListIds.length > 0) {
+    // Master view for education: exclude leads in archive lists
+    query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
   }
 
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)

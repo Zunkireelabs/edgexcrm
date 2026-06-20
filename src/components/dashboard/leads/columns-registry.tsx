@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
-import type { Lead, PipelineStage } from "@/types/database";
+import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
 // Column width constants — kept in sync with leads-table.tsx
 export const NAME_COLUMN_WIDTH = 180;
@@ -25,6 +26,8 @@ export interface LeadColumnCtx {
   onPreviewToggle: (id: string) => void;
   onTagUpdate: (leadId: string, tags: string[]) => void;
   onTypeUpdate: (leadId: string, type: string) => void;
+  leadLists?: LeadList[];
+  onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
 }
 
 export interface LeadColumn {
@@ -197,24 +200,33 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
-  // ── type (education_consultancy only, defaultVisible when showTags)
+  // ── type / list (education_consultancy only)
   {
     key: "lead_type",
-    label: "Type",
+    label: "List",
     group: "standard",
     industries: ["education_consultancy"],
     defaultVisible: true,
     renderTh: () => (
-      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[80px]">
-        Type
+      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[110px]">
+        List
       </th>
     ),
     renderTd: (lead, ctx) => (
       <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-        <LeadTypeToggle
-          lead={lead}
-          onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
-        />
+        {ctx.leadLists && ctx.leadLists.length > 0 && ctx.onListMove ? (
+          <MoveToListSelector
+            leadId={lead.id}
+            currentListId={lead.list_id ?? null}
+            lists={ctx.leadLists}
+            onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
+          />
+        ) : (
+          <LeadTypeToggle
+            lead={lead}
+            onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
+          />
+        )}
       </td>
     ),
   },

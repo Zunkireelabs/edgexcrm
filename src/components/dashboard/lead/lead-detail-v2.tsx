@@ -6,7 +6,7 @@ import Link from "next/link";
 import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
@@ -40,6 +40,7 @@ interface LeadDetailV2Props {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   canManageApplications?: boolean;
+  leadLists?: LeadList[];
 }
 
 interface LeadDraft {
@@ -99,6 +100,7 @@ export function LeadDetailV2({
   userBranchId,
   leadScope,
   canManageApplications,
+  leadLists,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -493,6 +495,30 @@ export function LeadDetailV2({
                 toast.success(`Changed to ${newType}`);
               } catch {
                 toast.error("Failed to update lead type");
+              }
+            }}
+            leadLists={leadLists}
+            onListChange={async (listId, archiveReason) => {
+              const prevLead = currentLead;
+              const targetList = leadLists?.find((l) => l.id === listId);
+              const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
+              setCurrentLead((prev) => ({
+                ...prev,
+                list_id: listId,
+                lead_type: newLeadType,
+                archive_reason: archiveReason ?? null,
+              } as Lead));
+              try {
+                const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ list_id: listId, archive_reason: archiveReason ?? null }),
+                });
+                if (!res.ok) throw new Error("Failed to move lead");
+                toast.success(`Moved to ${targetList?.name ?? "list"}`);
+              } catch {
+                setCurrentLead(prevLead);
+                toast.error("Failed to move lead");
               }
             }}
             onSaveTripFields={async (fields) => {

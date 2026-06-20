@@ -179,9 +179,31 @@ export interface Lead {
   salutation: string | null;
   company_email: string | null;
   branch_id: string | null;
+  // Lead Lists fields (education_consultancy — migration 059)
+  list_id: string | null;
+  destinations: string[];
+  field_of_study: string | null;
+  degree_level: string | null;
+  archive_reason: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface LeadList {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  sort_order: number;
+  is_system: boolean;
+  is_archive: boolean;
+  is_intake: boolean;
+  color: string | null;
+  access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
+  created_at: string;
+  updated_at: string;
+  count?: number;
 }
 
 // AI Insights Types

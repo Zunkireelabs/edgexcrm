@@ -84,6 +84,17 @@ export function canSeeNav(p: ResolvedPermissions, key: string): boolean {
 export function canSeeWidget(p: ResolvedPermissions, key: string): boolean {
   return p.dashboardWidgets === null || p.dashboardWidgets.has(key);
 }
+export function canAccessList(
+  p: ResolvedPermissions,
+  listAccess: { mode: string; positionIds?: string[] },
+  positionId: string | null,
+): boolean {
+  if (p.baseTier === "owner" || p.baseTier === "admin") return true;
+  if (listAccess.mode === "all") return true;
+  return listAccess.mode === "allow" &&
+    positionId != null &&
+    (listAccess.positionIds ?? []).includes(positionId);
+}
 
 /** Shape passed to SSR query helpers so they can scope leads by position. */
 export interface LeadQueryScope {
@@ -91,6 +102,8 @@ export interface LeadQueryScope {
   userId: string;
   pipelineIds: string[] | null; // null = all pipelines
   branchId: string | null;      // null = no branch filter
+  listId?: string | null;          // filter to one list (lead-lists feature)
+  excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
 }
 export function leadQueryScope(
   p: ResolvedPermissions,

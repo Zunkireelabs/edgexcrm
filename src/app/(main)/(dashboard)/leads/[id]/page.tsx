@@ -6,11 +6,14 @@ import {
   getLeadChecklists,
   getLeadActivity,
   getPipelineStages,
+  getLeadListsByTenant,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
-import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
-import type { TenantEntity, Industry } from "@/types/database";
+import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import type { TenantEntity, Industry, LeadList } from "@/types/database";
 
 export default async function LeadDetailPage({
   params,
@@ -27,7 +30,10 @@ export default async function LeadDetailPage({
 
   const serviceClient = await createServiceClient();
 
-  const [notes, checklists, activities, stages, entityResult, industryResult] = await Promise.all([
+  const isEducation = tenantData.tenant.industry_id === "education_consultancy";
+  const hasLeadLists = isEducation && getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+
+  const [notes, checklists, activities, stages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
@@ -48,10 +54,21 @@ export default async function LeadDetailPage({
           .eq("id", tenantData.tenant.industry_id)
           .single()
       : Promise.resolve({ data: null }),
+    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([] as LeadList[]),
   ]);
 
   const entity = entityResult.data as TenantEntity | null;
   const industry = industryResult.data as Industry | null;
+
+  const accessibleLists = hasLeadLists
+    ? (allLists as LeadList[]).filter((l) =>
+        canAccessList(
+          tenantData.permissions,
+          l.access as { mode: string; positionIds?: string[] },
+          tenantData.positionId,
+        )
+      )
+    : [];
 
   return (
     <LeadDetailV2
@@ -68,6 +85,7 @@ export default async function LeadDetailPage({
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
       canManageApplications={tenantData.permissions.canManageApplications}
+      leadLists={accessibleLists}
     />
   );
 }
