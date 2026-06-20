@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Plus, Loader2, Trash2 } from "lucide-react";
+import { Plus, Loader2, Trash2, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,11 +22,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "./status-badge";
+import { ApplicationDetailSheet } from "./application-detail-sheet";
 import type { Application, ApplicationStage } from "@/types/database";
 
 interface ApplicationsPanelProps {
   leadId: string;
-  isAdmin: boolean;
+  canManageApplications: boolean;
 }
 
 function formatDate(dateString: string | null): string {
@@ -34,11 +35,12 @@ function formatDate(dateString: string | null): string {
   return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
+export function ApplicationsPanel({ leadId, canManageApplications }: ApplicationsPanelProps) {
   const [applications, setApplications] = useState<Application[]>([]);
   const [stages, setStages] = useState<ApplicationStage[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [detailApp, setDetailApp] = useState<Application | null>(null);
 
   const fetchApplications = useCallback(async () => {
     try {
@@ -84,6 +86,10 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
     toast.success("Application deleted");
   };
 
+  const handleUpdated = (updated: Application) => {
+    setApplications((prev) => prev.map((a) => (a.id === updated.id ? { ...a, ...updated } : a)));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-10">
@@ -96,7 +102,7 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Applications ({applications.length})</h3>
-        {isAdmin && (
+        {canManageApplications && (
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add Application
@@ -107,7 +113,7 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
       {applications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-10 text-center border rounded-lg bg-muted/20">
           <p className="text-sm text-muted-foreground">No applications yet.</p>
-          {isAdmin && (
+          {canManageApplications && (
             <p className="text-xs text-muted-foreground mt-1">Click &ldquo;Add Application&rdquo; to start tracking.</p>
           )}
         </div>
@@ -122,15 +128,19 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
                 <th className="px-4 py-3 text-left font-medium">Country</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-left font-medium">Deadline</th>
-                {isAdmin && <th className="px-4 py-3 text-left font-medium">Stage</th>}
-                {isAdmin && <th className="px-4 py-3" />}
+                {canManageApplications && <th className="px-4 py-3 text-left font-medium">Stage</th>}
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {applications.map((app) => {
                 const stage = app.application_stages as ApplicationStage | null;
                 return (
-                  <tr key={app.id} className="hover:bg-muted/10 transition-colors">
+                  <tr
+                    key={app.id}
+                    className="hover:bg-muted/10 transition-colors cursor-pointer"
+                    onClick={() => setDetailApp(app)}
+                  >
                     <td className="px-4 py-3 font-medium">{app.university_name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{app.program_name}</td>
                     <td className="px-4 py-3 text-muted-foreground">{app.intake_term ?? "—"}</td>
@@ -150,8 +160,8 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
                     <td className="px-4 py-3 text-muted-foreground text-xs">
                       {formatDate(app.application_deadline)}
                     </td>
-                    {isAdmin && (
-                      <td className="px-4 py-3">
+                    {canManageApplications && (
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <Select
                           value={app.stage_id}
                           onValueChange={(v) => handleStageChange(app.id, v)}
@@ -167,17 +177,28 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
                         </Select>
                       </td>
                     )}
-                    {isAdmin && (
-                      <td className="px-4 py-3">
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1">
                         <button
                           type="button"
-                          onClick={() => handleDelete(app.id)}
-                          className="text-muted-foreground hover:text-destructive transition-colors"
+                          onClick={() => setDetailApp(app)}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="View / Edit"
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </button>
-                      </td>
-                    )}
+                        {canManageApplications && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(app.id)}
+                            className="text-muted-foreground hover:text-destructive transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}
@@ -195,6 +216,14 @@ export function ApplicationsPanel({ leadId, isAdmin }: ApplicationsPanelProps) {
           setAddOpen(false);
           fetchApplications();
         }}
+      />
+
+      <ApplicationDetailSheet
+        application={detailApp}
+        canManage={canManageApplications}
+        open={detailApp !== null}
+        onOpenChange={(open) => { if (!open) setDetailApp(null); }}
+        onUpdated={handleUpdated}
       />
     </div>
   );

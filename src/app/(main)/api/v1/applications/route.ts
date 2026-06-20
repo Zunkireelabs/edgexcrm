@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiPaginated,
@@ -12,10 +12,12 @@ import {
 import { validate, required, maxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -88,7 +90,7 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -104,18 +106,32 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  const supabase = await createServiceClient();
   const db = await scopedClient(auth);
 
   // Verify lead exists and belongs to this tenant
-  const { data: lead } = await db
+  const { data: lead } = await supabase
     .from("leads")
-    .select("id, lead_type, assigned_to")
+    .select("id, lead_type, assigned_to, branch_id")
     .eq("id", String(body.lead_id))
+    .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .maybeSingle();
   if (!lead) return apiNotFound("Lead");
 
-  const leadRow = lead as unknown as { id: string; lead_type: string | null; assigned_to: string | null };
+  // Parent-lead scope check: actor may only write to a lead they can access
+  const leadRow = lead as unknown as { id: string; lead_type: string | null; assigned_to: string | null; branch_id: string | null };
+  const membership = await getLeadMembership(supabase, auth.tenantId, leadRow.id);
+  if (
+    shouldRestrictToSelf(auth.permissions) &&
+    !(
+      leadRow.assigned_to === auth.userId ||
+      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
+    )
+  ) {
+    return apiNotFound("Lead");
+  }
+  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
   // Resolve stage: use supplied stage_id or default to the 'shortlisted' (is_default) stage
   let stageId = body.stage_id as string | undefined;

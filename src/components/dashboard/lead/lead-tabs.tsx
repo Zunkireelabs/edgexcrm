@@ -33,6 +33,7 @@ interface LeadTabsProps {
   onNotesChange: (notes: LeadNote[]) => void;
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
+  canManageApplications?: boolean;
   currentUserId: string;
   industryId?: string | null;
   tenantName?: string;
@@ -46,7 +47,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, canManageApplications, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -222,7 +223,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
         )}
         {industryId === "education_consultancy" && lead.lead_type === "prospect" && (
           <TabsContent value="applications" className="mt-0">
-            <ApplicationsPanel leadId={lead.id} isAdmin={isAdmin} />
+            <ApplicationsPanel
+              leadId={lead.id}
+              canManageApplications={canManageApplications ?? isAdmin}
+            />
           </TabsContent>
         )}
       </Tabs>

@@ -10,9 +10,10 @@ interface ApplicationColumnProps {
   stage: ApplicationStage;
   applications: Application[];
   canDrag: boolean;
+  onOpenDetail?: (app: Application) => void;
 }
 
-export function ApplicationColumn({ stage, applications, canDrag }: ApplicationColumnProps) {
+export function ApplicationColumn({ stage, applications, canDrag, onOpenDetail }: ApplicationColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   return (
@@ -36,7 +37,7 @@ export function ApplicationColumn({ stage, applications, canDrag }: ApplicationC
         <SortableContext items={applications.map((a) => a.id)} strategy={verticalListSortingStrategy}>
           {applications.length > 0 ? (
             applications.map((app) => (
-              <ApplicationCard key={app.id} application={app} disabled={!canDrag} />
+              <ApplicationCard key={app.id} application={app} disabled={!canDrag} onOpenDetail={onOpenDetail} />
             ))
           ) : (
             <div className="flex flex-col items-center justify-center h-32 text-center px-4">

@@ -38,6 +38,7 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
+  canManageApplications?: boolean;
 }
 
 interface LeadDraft {
@@ -96,6 +97,7 @@ export function LeadDetailV2({
   industry,
   userBranchId,
   leadScope,
+  canManageApplications,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -522,6 +524,7 @@ export function LeadDetailV2({
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
             isAdmin={isAdmin}
+            canManageApplications={canManageApplications ?? isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}

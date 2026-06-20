@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireAdmin, requireLeadBranchAccess } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -79,11 +79,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   const supabase = await createServiceClient();
 
-  // Verify lead exists, belongs to tenant, and is already a prospect
+  // Verify lead exists, belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
     .select("id, assigned_to, branch_id, lead_type")
@@ -95,7 +95,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!lead) return apiNotFound("Lead");
   const leadRow = lead as { id: string; assigned_to: string | null; branch_id: string | null; lead_type: string | null };
 
+  // Parent-lead scope check (mirrors the GET scope check on this same route)
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
+  if (
+    shouldRestrictToSelf(auth.permissions) &&
+    !(
+      leadRow.assigned_to === auth.userId ||
+      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
+    )
+  ) {
+    return apiNotFound("Lead");
+  }
   if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
   let body: Record<string, unknown>;

@@ -14,6 +14,7 @@ interface ApplicationsWorkspaceProps {
   role: UserRole;
   stages: ApplicationStage[];
   applications: Application[];
+  canManageApplications: boolean;
 }
 
 type View = "board" | "list";
@@ -34,8 +35,8 @@ export function ApplicationsWorkspace({
   role,
   stages: initialStages,
   applications: initialApplications,
+  canManageApplications,
 }: ApplicationsWorkspaceProps) {
-  const isAdmin = role === "owner" || role === "admin";
   const router = useRouter();
 
   const [view, setView] = useState<View>("board");
@@ -130,7 +131,7 @@ export function ApplicationsWorkspace({
             {applications.length} application{applications.length !== 1 ? "s" : ""}
           </p>
         </div>
-        {isAdmin && (
+        {canManageApplications && (
           <Button size="sm" onClick={() => setAddOpen(true)}>
             <Plus className="h-4 w-4 mr-1.5" />
             Add Application
@@ -219,6 +220,7 @@ export function ApplicationsWorkspace({
             stages={stages}
             applications={filteredApplications}
             role={role}
+            canManageApplications={canManageApplications}
             onRefresh={handleRefresh}
           />
         </div>
@@ -232,7 +234,7 @@ export function ApplicationsWorkspace({
         open={addOpen}
         onOpenChange={setAddOpen}
         stages={stages}
-        role={role}
+        canManageApplications={canManageApplications}
         onSuccess={handleCreated}
       />
     </div>

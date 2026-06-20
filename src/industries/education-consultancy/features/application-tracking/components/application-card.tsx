@@ -3,12 +3,13 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, GraduationCap, MapPin } from "lucide-react";
+import { Calendar, GraduationCap, MapPin, Pencil } from "lucide-react";
 import type { Application } from "@/types/database";
 
 interface ApplicationCardProps {
   application: Application;
   disabled: boolean;
+  onOpenDetail?: (app: Application) => void;
 }
 
 function formatDate(dateString: string | null): string {
@@ -22,7 +23,7 @@ function getStudentName(app: Application): string {
   return [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown Student";
 }
 
-export function ApplicationCard({ application, disabled }: ApplicationCardProps) {
+export function ApplicationCard({ application, disabled, onOpenDetail }: ApplicationCardProps) {
   const {
     attributes,
     listeners,
@@ -50,13 +51,25 @@ export function ApplicationCard({ application, disabled }: ApplicationCardProps)
         disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
       } hover:border-primary/40 transition-colors`}
     >
-      <Link
-        href={`/leads/${leadId}`}
-        onClick={(e) => e.stopPropagation()}
-        className="block text-sm font-semibold text-foreground hover:text-primary line-clamp-1 leading-snug"
-      >
-        {getStudentName(application)}
-      </Link>
+      <div className="flex items-start justify-between gap-1">
+        <Link
+          href={`/leads/${leadId}`}
+          onClick={(e) => e.stopPropagation()}
+          className="text-sm font-semibold text-foreground hover:text-primary line-clamp-1 leading-snug flex-1"
+        >
+          {getStudentName(application)}
+        </Link>
+        {onOpenDetail && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onOpenDetail(application); }}
+            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+            title="View / Edit"
+          >
+            <Pencil className="h-3 w-3" />
+          </button>
+        )}
+      </div>
 
       <div className="space-y-1">
         <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

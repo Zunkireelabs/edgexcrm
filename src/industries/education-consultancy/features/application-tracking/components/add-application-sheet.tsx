@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ApplicationStage, UserRole } from "@/types/database";
+import type { ApplicationStage } from "@/types/database";
 
 interface LeadOption {
   id: string;
@@ -34,7 +34,7 @@ interface AddApplicationSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   stages: ApplicationStage[];
-  role: UserRole;
+  canManageApplications: boolean;
   onSuccess: () => void;
 }
 
@@ -42,10 +42,9 @@ export function AddApplicationSheet({
   open,
   onOpenChange,
   stages,
-  role,
+  canManageApplications,
   onSuccess,
 }: AddApplicationSheetProps) {
-  const isAdmin = role === "owner" || role === "admin";
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
   const [submitting, setSubmitting] = useState(false);
@@ -93,7 +92,7 @@ export function AddApplicationSheet({
     return () => clearTimeout(timer);
   }, [open, leadSearch]);
 
-  if (!isAdmin) return null;
+  if (!canManageApplications) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
