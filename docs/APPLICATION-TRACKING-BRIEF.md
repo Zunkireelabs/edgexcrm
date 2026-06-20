@@ -207,6 +207,65 @@ funnel dashboard (this feature provides the `status`/`stage` slugs it will later
 
 ---
 
+## 11. Round 2 — Fixback (post-Opus-review, 2026-06-20)
+
+Opus reviewed commit `592a901`. **Gates were green** (build exit 0; eslint 0 errors / 31 warnings under the
+50 cap; migration NOT applied to shared DB; not pushed — stop-at-review respected). Migration + API +
+wiring are sound. Three things to fix before this goes to `stage`, driven by Sadin's decisions:
+
+**Sadin's decisions:** (1) application management must be available to counselors, admins, AND a custom
+"Application Executive" position — i.e. a **configurable permission**, not hard-coded `requireAdmin`.
+(2) The offer/financial **edit UI ships now**.
+
+### Fix 1 — Configurable `canManageApplications` permission (replaces `requireAdmin` on all writes)
+
+The Positions/RBAC system is a **fixed permission struct** (no generic key catalog). Add a new top-level
+boolean, mirroring the existing `canEditLeads` precedent. Keep all layers in sync:
+
+- **`src/lib/api/permissions.ts`:**
+  - `PositionPermissions` → add `canManageApplications?: boolean;`
+  - `ResolvedPermissions` → add `canManageApplications: boolean;`
+  - `resolvePermissions()`: owner/admin → `true`; member **with** position → `position.canManageApplications === true`; member **without** position → counselor `true`, viewer `false`.
+  - `validatePositionPermissions()` → add an optional-boolean block (copy `canEditLeads`).
+  - Add helper `export function canManageApplications(p: ResolvedPermissions) { return p.canManageApplications; }`
+- **`src/components/dashboard/settings/positions-manager.tsx`:** add a "Can manage applications" checkbox under the `base_tier === "member"` block; thread it through the local `PositionPermissions` interface + `buildDefaultForm` + `permissionsFromForm` + `formFromPosition` (mirror the "Can edit leads" checkbox exactly). This is what an admin toggles on for an "Application Executive" custom position.
+- **New migration `058_application_manage_permission.sql`** (tracked, additive): set `canManageApplications = true` on the seeded **system Counselor** position (030) and **Branch Manager** position (053) JSONB via `jsonb_set`, so counselors/branch-managers assigned those system positions inherit it. Do NOT edit applied migrations.
+- **API routes — replace `if (!requireAdmin(auth)) return apiForbidden();`** with the permission + parent-lead scope check on every write (`POST /applications`, `PATCH` + `DELETE /applications/[id]`, `POST /leads/[id]/applications`):
+  1. `if (!canManageApplications(auth.permissions)) return apiForbidden();`
+  2. **Parent-lead scope:** the actor may only write an application whose parent lead they can access under their `leadScope`. Reuse the exact gate the per-lead GET already runs: load the parent lead + `getLeadMembership(...)`, then for `shouldRestrictToSelf(auth.permissions)` require `lead.assigned_to === auth.userId || membership.some(m => m.assigned_to === auth.userId)`, and always `requireLeadBranchAccess(auth, lead, membership)`. Owner/admin/`leadScope:"all"` bypass. (`PATCH`/`DELETE /applications/[id]` currently load only the application — they must now also load the parent lead to run this check.)
+
+### Fix 2 — Application detail/edit UI (ship now)
+
+Currently an application can only be created + stage-advanced + deleted; `offer_type`, `offer_letter_url`,
+`application_fee_paid`, `tuition_fee`, `deposit_paid`, `notes` (and typo fixes to university/program/intake/
+country/deadline) have schema + PATCH support but **no UI**. Add an **application detail/edit sheet**:
+
+- New component (e.g. `application-detail-sheet.tsx`) opened from a row in `ApplicationsPanel` (per-lead) and a card in the global board. Fields: university, program, intake, country, deadline, **offer_type (Conditional/Unconditional select — surface prominently once stage ≥ `conditional_offer`)**, **offer_letter_url (plain URL text input in v1)**, application_fee_paid (checkbox), tuition_fee (number), deposit_paid (checkbox), notes (textarea). Saves via `PATCH /api/v1/applications/[id]`.
+- Gate all edit controls (and the existing Add/stage-advance/delete) behind `canManageApplications` passed down from the page/tab, instead of `isAdmin`. Counselors/executives with the permission see the controls; others get the read-only view.
+- (Fast-follow, NOT this round: swap the offer-letter URL field for a real upload via the existing `/api/v1/upload` signed-URL flow into the `lead-documents` bucket. Log on STATUS-BOARD.)
+
+### Fix 3 — Global board fetch must respect lead scope
+
+`src/app/(main)/(dashboard)/applications/page.tsx` currently fetches **all** tenant applications via the
+service client, so a counselor sees every student's applications (bypasses the scoping the GET API applies).
+Scope the SSR fetch by the actor's `leadScope`: for `shouldRestrictToSelf`/own, restrict to applications
+whose `lead_id` is in the actor's own/assigned + branch-member lead set (mirror `leadQueryScope` / the
+per-lead GET logic). Owner/admin/`all` → unchanged.
+
+### Fix 4 — Minor: PATCH must preserve POST invariants
+
+In `PATCH /applications/[id]`, `university_name` and `program_name` are NOT NULL + required-on-POST, but the
+patch loop allows `?? null` → DB 500. Reject empty/whitespace/null for those two on PATCH with a clean
+validation error (and trim). (STATUS-BOARD code-review rule: "PATCH preserves POST invariants.")
+
+### Round-2 gate (same stop-at-review rules)
+- `npm run build` clean + `npx eslint --max-warnings 50` clean — paste real output.
+- Migration `058` verified on a LOCAL/throwaway DB only — NOT applied to shared Supabase.
+- Commit to `feature/application-tracking` only — no push, no PR, no promotion.
+- Re-verify the gate matrix incl. a member with an "Application Executive" position (canManageApplications on) able to add/edit; a viewer read-only; a counselor scoped to own leads on the board.
+
+---
+
 ## 10. Sonnet handoff prompt (copy-paste)
 
 ```
