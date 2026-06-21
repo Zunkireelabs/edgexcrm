@@ -13,7 +13,7 @@ import { AgentsManager } from "@/components/dashboard/settings/agents-manager";
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
-import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
+import { InboxConnector } from "@/industries/_shared/features/email/components/inbox-connector";
 import { getFeatureAccess, getIndustrySidebarItems } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { FormConfig, Industry, TenantEntity } from "@/types/database";

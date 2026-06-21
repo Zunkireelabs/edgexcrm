@@ -11,7 +11,7 @@ import {
   DESTINATIONS,
   FIELDS_OF_STUDY,
   DEGREE_LEVELS,
-} from "@/industries/education-consultancy/features/lead-lists/taxonomies";
+} from "@/industries/_shared/features/lead-lists/taxonomies";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -161,8 +161,8 @@ export function KeyInfoSection({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
-          {/* Lead Type / List — education_consultancy only */}
-          {industryId === "education_consultancy" && (
+          {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
+          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
@@ -179,7 +179,7 @@ export function KeyInfoSection({
                   {(() => {
                     const intakeList = leadLists.find((l) => l.is_intake);
                     const leadWithList = lead as { list_id?: string | null };
-                    if (intakeList && leadWithList.list_id === intakeList.id && onQualify) {
+                    if (industryId === "education_consultancy" && intakeList && leadWithList.list_id === intakeList.id && onQualify) {
                       return (
                         <button
                           type="button"

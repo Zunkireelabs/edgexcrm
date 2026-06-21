@@ -17,14 +17,14 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
-import { type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
-import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
+import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
+import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/compose-email-dialog"
+      "@/industries/_shared/features/email/components/compose-email-dialog"
     ).then((m) => m.ComposeEmailDialog),
   { ssr: false },
 );
@@ -33,7 +33,7 @@ const ComposeEmailDialog = dynamic(
 const EmailThreadCard = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/email-thread-card"
+      "@/industries/_shared/features/email/components/email-thread-card"
     ).then((m) => m.EmailThreadCard),
   { ssr: false },
 );

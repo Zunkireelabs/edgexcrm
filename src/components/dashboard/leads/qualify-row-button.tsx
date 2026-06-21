@@ -25,7 +25,7 @@ import {
   DESTINATIONS,
   FIELDS_OF_STUDY,
   DEGREE_LEVELS,
-} from "@/industries/education-consultancy/features/lead-lists/taxonomies";
+} from "@/industries/_shared/features/lead-lists/taxonomies";
 
 interface QualifyRowButtonProps {
   leadId: string;

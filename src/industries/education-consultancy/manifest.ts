@@ -1,13 +1,13 @@
 import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
-import { checkInMeta } from "./features/check-in/meta";
+import { checkInMeta } from "../_shared/features/check-in/meta";
 import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
-import { emailMeta } from "./features/email/meta";
+import { emailMeta } from "../_shared/features/email/meta";
 import { insightsMeta } from "./features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
 import { applicationTrackingMeta } from "./features/application-tracking/meta";
-import { leadListsMeta } from "./features/lead-lists/meta";
+import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {

@@ -30,8 +30,7 @@ export default async function LeadDetailPage({
 
   const serviceClient = await createServiceClient();
 
-  const isEducation = tenantData.tenant.industry_id === "education_consultancy";
-  const hasLeadLists = isEducation && getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
 
   const [notes, checklists, activities, stages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),

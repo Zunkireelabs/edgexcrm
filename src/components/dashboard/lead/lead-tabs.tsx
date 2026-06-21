@@ -16,7 +16,7 @@ import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
 import { ActivitiesPanel } from "./activities/activities-panel";
 import { MergeDialog } from "./merge-dialog";
-import { useEmailThreads } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";

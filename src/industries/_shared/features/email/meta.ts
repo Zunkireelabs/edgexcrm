@@ -3,5 +3,5 @@ import type { FeatureMeta } from "../../../_types";
 
 export const emailMeta: FeatureMeta = {
   id: FEATURES.EMAIL,
-  industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
+  industries: [INDUSTRIES.EDUCATION_CONSULTANCY, INDUSTRIES.TRAVEL_AGENCY],
 };
