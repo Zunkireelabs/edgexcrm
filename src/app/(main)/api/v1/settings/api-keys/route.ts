@@ -171,13 +171,17 @@ export async function POST(request: NextRequest) {
     const rawOrigins = body.allowed_origins;
     if (Array.isArray(rawOrigins) && rawOrigins.length > 0) {
       const cleaned = rawOrigins.map((o) => String(o).trim()).filter(Boolean);
+      const normalized: string[] = [];
       const invalid: string[] = [];
       for (const o of cleaned) {
         try {
           const url = new URL(o);
-          // Must be exactly scheme://host (no path, query, or fragment)
-          if (o !== `${url.protocol}//${url.host}`) {
+          // Accept scheme://host with an optional bare trailing slash; reject real paths, queries, or fragments.
+          // Store the canonical origin (scheme://host[:port]) — exactly what browsers send as the Origin header.
+          if ((url.pathname !== "/" && url.pathname !== "") || url.search || url.hash) {
             invalid.push(o);
+          } else {
+            normalized.push(url.origin);
           }
         } catch {
           invalid.push(o);
@@ -188,7 +192,7 @@ export async function POST(request: NextRequest) {
           allowed_origins: ["Each origin must be like https://example.com (scheme + host only, no path)"],
         });
       }
-      allowedOrigins = cleaned.length > 0 ? cleaned : null;
+      allowedOrigins = normalized.length > 0 ? normalized : null;
     }
 
     // Generate key
