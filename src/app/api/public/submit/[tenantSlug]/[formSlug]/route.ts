@@ -366,12 +366,8 @@ export async function POST(
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
 
-  // ── 11. Generate display_id for education_consultancy ──
+  // ── 11. Generate display_id (education_consultancy only) ──
   let displayId: string | null = null;
-  // Resolve intake list for education_consultancy new leads.
-  // Dedup path already returned above, so this only applies to brand-new inserts.
-  // Falls back to null silently if no intake list exists.
-  let intakeListId: string | null = null;
   if (tenant.industry_id === "education_consultancy") {
     const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
     const { data: maxRow } = await supabase
@@ -384,7 +380,13 @@ export async function POST(
       .single();
     const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
     displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
+  }
 
+  // Resolve intake list for brand-new leads — any tenant with lead-lists (education + travel).
+  // Dedup path already returned above, so this only applies to brand-new inserts.
+  // Falls back to null silently if no intake list exists.
+  let intakeListId: string | null = null;
+  {
     const { data: intakeList } = await supabase
       .from("lead_lists")
       .select("id")
