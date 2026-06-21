@@ -56,8 +56,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
     }));
 
-    const isEducation = industryId === "education_consultancy";
-    const { threads, setThreads, loading: threadsLoading } = useEmailThreads(isEducation ? lead.id : "");
+    const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
+    const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
     const unreadEmailCount = useMemo(
       () => threads.reduce((n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length, 0),
       [threads]

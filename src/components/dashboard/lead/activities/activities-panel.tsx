@@ -89,7 +89,7 @@ export function ActivitiesPanel({
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
 
-  const isEducation = industryId === "education_consultancy";
+  const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -257,7 +257,7 @@ export function ActivitiesPanel({
       case "emails":
         return (
           <div className="flex gap-2">
-            {isEducation && (
+            {hasEmail && (
               <Button size="sm" onClick={() => { setReplyContext(null); setComposeOpen(true); }}>
                 Compose Email
               </Button>
@@ -286,7 +286,7 @@ export function ActivitiesPanel({
       case "calls":
         return "Call a contact from this record. Or log a call activity to keep track of your discussion and notes.";
       case "emails":
-        return isEducation
+        return hasEmail
           ? "Compose an email to this lead, or log a past email to track your communication history."
           : "Log emails to keep track of your communication with this lead.";
       case "meetings":
@@ -302,7 +302,7 @@ export function ActivitiesPanel({
     }
   };
 
-  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && threadsLoading));
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (hasEmail && threadsLoading));
   const hasEmailContent = threads.length > 0 || loggedEmailActivities.length > 0;
 
   return (
@@ -508,8 +508,8 @@ export function ActivitiesPanel({
         onActivityLogged={handleActivityLogged}
       />
 
-      {/* Compose Email Dialog — education_consultancy only */}
-      {isEducation && (
+      {/* Compose Email Dialog — tenants with the email feature (education + travel) */}
+      {hasEmail && (
         <ComposeEmailDialog
           open={composeOpen}
           onOpenChange={handleComposeClose}
