@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, GraduationCap, MapPin, ExternalLink } from "lucide-react";
+import { Calendar, GraduationCap, MapPin } from "lucide-react";
 import type { Application } from "@/types/database";
 
 interface ApplicationCardProps {
@@ -41,18 +41,31 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
 
   const leadId = (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
+  function handleCardClick() {
+    onOpenDetail?.(application);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onOpenDetail?.(application);
+    }
+  }
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
+      onClick={handleCardClick}
+      onKeyDown={handleKeyDown}
       className={`bg-card rounded-lg border p-3 space-y-2 shadow-sm ${
         disabled ? "cursor-default" : "cursor-grab active:cursor-grabbing"
       } hover:border-primary/40 transition-colors`}
     >
       <div className="flex items-start justify-between gap-1">
-        {/* Student name → /leads/[id] */}
+        {/* Student name → /leads/[id]; stopPropagation keeps card click from also navigating */}
         <Link
           href={`/leads/${leadId}`}
           onClick={(e) => e.stopPropagation()}
@@ -60,26 +73,6 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
         >
           {getStudentName(application)}
         </Link>
-        {/* Application detail link → /applications/[id] */}
-        {onOpenDetail ? (
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); onOpenDetail(application); }}
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-            title="Open application"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </button>
-        ) : (
-          <Link
-            href={`/applications/${application.id}`}
-            onClick={(e) => e.stopPropagation()}
-            className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-            title="Open application"
-          >
-            <ExternalLink className="h-3 w-3" />
-          </Link>
-        )}
       </div>
 
       <div className="space-y-1">
