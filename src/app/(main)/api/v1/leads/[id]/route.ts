@@ -306,8 +306,7 @@ export async function PATCH(
 
   // Validate list_id: must belong to this tenant and be accessible to the caller
   if (body.list_id !== undefined && body.list_id !== null) {
-    const isEducation = auth.industryId === "education_consultancy";
-    if (!isEducation || !getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+    if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
       return apiForbidden();
     }
     const { data: listCheck } = await supabase

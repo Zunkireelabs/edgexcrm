@@ -68,6 +68,7 @@ interface CheckInPageProps {
   pipelines: PipelineWithCounts[];
   stages: PipelineStage[];
   teamMembers: TeamMember[];
+  industryId: string;
 }
 
 type DateFilter = "today" | "week" | "month" | "custom";
@@ -146,7 +147,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId }: CheckInPageProps) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -319,7 +320,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
           intake_source: "walk_in",
           intake_medium: "check_in",
           custom_fields: notes.trim() ? { initial_notes: notes.trim() } : {},
-          tags: [leadTag],
+          tags: industryId === "travel_agency" ? [] : [leadTag],
           is_final: true,
           step: 1,
         }),
@@ -593,10 +594,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs">Assign Counselor</Label>
+                      <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assign Counselor"}</Label>
                       <Select value={assignedTo} onValueChange={(v) => setAssignedTo(v)}>
                         <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Select counselor (optional)" />
+                          <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select counselor (optional)"} />
                         </SelectTrigger>
                         <SelectContent>
                           {teamMembers.map((m) => (
@@ -608,27 +609,29 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
                       </Select>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label className="text-xs">Tag</Label>
-                      <div className="flex gap-2">
-                        {["student", "parent"].map((tag) => (
-                          <button
-                            key={tag}
-                            type="button"
-                            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                              leadTag === tag
-                                ? tag === "parent"
-                                  ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                                  : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-                                : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                            }`}
-                            onClick={() => setLeadTag(tag)}
-                          >
-                            {tag.charAt(0).toUpperCase() + tag.slice(1)}
-                          </button>
-                        ))}
+                    {industryId !== "travel_agency" && (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Tag</Label>
+                        <div className="flex gap-2">
+                          {["student", "parent"].map((tag) => (
+                            <button
+                              key={tag}
+                              type="button"
+                              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                                leadTag === tag
+                                  ? tag === "parent"
+                                    ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                                    : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                              }`}
+                              onClick={() => setLeadTag(tag)}
+                            >
+                              {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
                     <div className="space-y-1">
                       <Label htmlFor="notes" className="text-xs">Notes</Label>
@@ -865,8 +868,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers }: CheckI
               <LeadExtraDetails details={leadDetails} />
             )}
 
-            {/* Tag selector */}
-            {leadDetails && (
+            {/* Tag selector — education only */}
+            {leadDetails && industryId !== "travel_agency" && (
               <div className="mb-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Tag</p>
                 <div className="flex gap-2">

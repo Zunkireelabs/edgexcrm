@@ -47,7 +47,7 @@ export default async function DashboardPage() {
       <h1 className="text-lg font-bold">Dashboard</h1>
 
       {/* Stats Cards */}
-      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} />}
+      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} stages={stages} />}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">

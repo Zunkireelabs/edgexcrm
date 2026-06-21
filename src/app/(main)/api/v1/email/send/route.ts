@@ -17,7 +17,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { validate, required, maxLength, isUUID } from "@/lib/api/validation";
 import { emitEvent } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
-import { sendMessage } from "@/industries/education-consultancy/features/email/lib/gmail-client";
+import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {

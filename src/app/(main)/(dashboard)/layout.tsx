@@ -37,8 +37,7 @@ export default async function DashboardLayout({
   }
 
   const maxBranches = tenantData.entitlements.maxBranches;
-  const isEducation = tenantData.tenant.industry_id === "education_consultancy";
-  const hasLeadLists = isEducation && getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
 
   const [formConfigs, branches, cookieStore, allLeadLists] = await Promise.all([
     getFormConfigsForTenant(tenantData.tenant.id),

@@ -43,7 +43,7 @@ export function LeadsByCounselorChart({ leads, memberMap }: LeadsByCounselorChar
       <Card>
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-            Leads by Counselor
+            Leads by Team Member
           </CardTitle>
         </CardHeader>
         <CardContent className="flex items-center justify-center h-[250px]">
@@ -59,7 +59,7 @@ export function LeadsByCounselorChart({ leads, memberMap }: LeadsByCounselorChar
     <Card>
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-          Leads by Counselor
+          Leads by Team Member
         </CardTitle>
       </CardHeader>
       <CardContent>

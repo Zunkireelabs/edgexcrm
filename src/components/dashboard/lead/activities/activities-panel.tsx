@@ -17,14 +17,14 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
-import { type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
-import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
+import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
+import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/compose-email-dialog"
+      "@/industries/_shared/features/email/components/compose-email-dialog"
     ).then((m) => m.ComposeEmailDialog),
   { ssr: false },
 );
@@ -33,7 +33,7 @@ const ComposeEmailDialog = dynamic(
 const EmailThreadCard = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/email-thread-card"
+      "@/industries/_shared/features/email/components/email-thread-card"
     ).then((m) => m.EmailThreadCard),
   { ssr: false },
 );
@@ -89,7 +89,7 @@ export function ActivitiesPanel({
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
 
-  const isEducation = industryId === "education_consultancy";
+  const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -257,7 +257,7 @@ export function ActivitiesPanel({
       case "emails":
         return (
           <div className="flex gap-2">
-            {isEducation && (
+            {hasEmail && (
               <Button size="sm" onClick={() => { setReplyContext(null); setComposeOpen(true); }}>
                 Compose Email
               </Button>
@@ -286,7 +286,7 @@ export function ActivitiesPanel({
       case "calls":
         return "Call a contact from this record. Or log a call activity to keep track of your discussion and notes.";
       case "emails":
-        return isEducation
+        return hasEmail
           ? "Compose an email to this lead, or log a past email to track your communication history."
           : "Log emails to keep track of your communication with this lead.";
       case "meetings":
@@ -302,7 +302,7 @@ export function ActivitiesPanel({
     }
   };
 
-  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && threadsLoading));
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (hasEmail && threadsLoading));
   const hasEmailContent = threads.length > 0 || loggedEmailActivities.length > 0;
 
   return (
@@ -508,8 +508,8 @@ export function ActivitiesPanel({
         onActivityLogged={handleActivityLogged}
       />
 
-      {/* Compose Email Dialog — education_consultancy only */}
-      {isEducation && (
+      {/* Compose Email Dialog — tenants with the email feature (education + travel) */}
+      {hasEmail && (
         <ComposeEmailDialog
           open={composeOpen}
           onOpenChange={handleComposeClose}

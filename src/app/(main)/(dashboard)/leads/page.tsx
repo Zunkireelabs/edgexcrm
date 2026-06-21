@@ -34,8 +34,7 @@ export default async function LeadsPage({
     scope.branchId = branchCookieVal;
   }
 
-  const isEducation = tenantData.tenant.industry_id === "education_consultancy";
-  const hasLeadLists = isEducation && getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
 
   // Resolve list slug → list object (and archive exclusion for master view)
   let activeList: LeadList | null = null;

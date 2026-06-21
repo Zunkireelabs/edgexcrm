@@ -344,8 +344,8 @@ export function DashboardShell({
               .filter((i) => navAllowed(i.href))
               .filter((i) => !(isEducation && i.href === "/dashboard"))
               .flatMap((item) => {
-                // Education with lead lists: replace flat "All Leads" with the dynamic group
-                if (item.href === "/leads" && isEducation && leadLists.length > 0) {
+                // Tenants with lead lists: replace flat "All Leads" with the dynamic group
+                if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
                       <div className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-500">

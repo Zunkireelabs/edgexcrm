@@ -5,7 +5,7 @@ import {
   getPipelineStages,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CheckInDetailPage } from "@/industries/education-consultancy/features/check-in/detail-ui";
+import { CheckInDetailPage } from "@/industries/_shared/features/check-in/detail-ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";

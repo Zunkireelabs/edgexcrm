@@ -90,11 +90,10 @@ export async function GET(request: NextRequest) {
 
   const supabase = await createServiceClient();
 
-  // Resolve ?list=slug for lead-lists feature (education only)
+  // Resolve ?list=slug for lead-lists feature
   let resolvedListId: string | null = null;
   let archiveListIds: string[] = [];
-  const isEducation = auth.industryId === "education_consultancy";
-  if (isEducation && getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+  if (getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
     const { data: lists } = await supabase
       .from("lead_lists")
       .select("id, slug, is_archive, access")
@@ -133,8 +132,8 @@ export async function GET(request: NextRequest) {
   // Apply list filter
   if (resolvedListId) {
     query = query.eq("list_id", resolvedListId);
-  } else if (isEducation && archiveListIds.length > 0) {
-    // Master view for education: exclude leads in archive lists
+  } else if (archiveListIds.length > 0) {
+    // Master view: exclude leads in archive lists
     query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
   }
 
@@ -482,10 +481,10 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
-  // For education_consultancy new leads: set list_id to the tenant's intake list.
+  // For tenants with lead-lists: assign new leads to the intake list when list_id not supplied.
   // Only applies to brand-new inserts — the update path strips list_id from its payload.
   // Falls back to null silently if no intake list exists (edge tenant, older setup).
-  if (!body.list_id && tenant.industry_id === "education_consultancy") {
+  if (!body.list_id) {
     const { data: intakeList } = await supabase
       .from("lead_lists")
       .select("id")

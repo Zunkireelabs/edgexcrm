@@ -201,12 +201,12 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
-  // ── type / list (education_consultancy only)
+  // ── type / list (education_consultancy + travel_agency)
   {
     key: "lead_type",
     label: "List",
     group: "standard",
-    industries: ["education_consultancy"],
+    industries: ["education_consultancy", "travel_agency"],
     defaultVisible: true,
     renderTh: () => (
       <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[160px]">
@@ -227,7 +227,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 lists={ctx.leadLists}
                 onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
               />
-              {isInIntake && qualifiedList && (
+              {ctx.industryId === "education_consultancy" && isInIntake && qualifiedList && (
                 <QualifyRowButton
                   leadId={lead.id}
                   currentDestinations={(lead as { destinations?: string[] }).destinations ?? []}
