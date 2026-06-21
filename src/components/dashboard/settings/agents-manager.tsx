@@ -61,7 +61,7 @@ export function AgentsManager() {
   const fetchAgents = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/agents");
+      const res = await fetch("/api/v1/agents?all=true");
       if (res.ok) {
         const json = await res.json();
         setAgents(json.data ?? []);

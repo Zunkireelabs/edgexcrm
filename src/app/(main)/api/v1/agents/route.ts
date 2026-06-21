@@ -15,17 +15,21 @@ import { FEATURES } from "@/industries/_registry";
 
 const VALID_AGENT_TYPES = ["agent", "super_agent"] as const;
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
 
+  const { searchParams } = new URL(request.url);
+  const includeInactive = searchParams.get("all") === "true";
+
   const db = await scopedClient(auth);
-  const { data, error } = await db
+  let query = db
     .from("agents")
     .select("id, name, agent_type, is_active")
-    .eq("is_active", true)
     .order("name", { ascending: true });
+  if (!includeInactive) query = query.eq("is_active", true);
+  const { data, error } = await query;
 
   if (error) return apiError("DB_ERROR", "Failed to fetch agents", 500);
   return apiSuccess(data ?? []);
