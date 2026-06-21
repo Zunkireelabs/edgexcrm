@@ -25,6 +25,8 @@ export default async function LeadsPage({
   ]);
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+  // Normalize "all" sentinel → null for the Add Lead branch picker default
+  const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
 
   // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
@@ -119,6 +121,8 @@ export default async function LeadsPage({
         industryId={tenantData.tenant.industry_id}
         branches={branches}
         maxBranches={tenantData.entitlements.maxBranches}
+        selectedBranchId={selectedBranchId}
+        userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
       />
     </div>

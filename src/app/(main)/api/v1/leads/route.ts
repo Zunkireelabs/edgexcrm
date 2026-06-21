@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { leadQueryScope, canSeeNav, canAccessList } from "@/lib/api/permissions";
@@ -27,7 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { leadIdsForBranch, leadIdsVisibleToAssignee } from "@/lib/leads/branch-membership";
+import { leadIdsForBranch, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -266,6 +267,39 @@ async function handlePost(request: NextRequest) {
 
   if (!tenant) return apiNotFound("Tenant");
 
+  // ── Branch resolution (insert path only) ────────────────────────────────
+  // Read active-branch cookie from the header switcher.
+  // "all" / "overall" / empty = Overall view → treat as no active branch.
+  const cookieStore = await cookies();
+  const edgexBranchVal = cookieStore.get("edgex_branch")?.value ?? null;
+  const cookieBranchId =
+    edgexBranchVal && edgexBranchVal !== "all" && edgexBranchVal !== "overall"
+      ? edgexBranchVal
+      : null;
+
+  // Optional session auth for creator's branch affiliation (step 3).
+  // Dashboard callers have a session; unauthenticated / widget callers return null.
+  const dashAuth = await authenticateRequest();
+
+  // Precedence: 1. explicit body branch_id  2. active branch cookie  3. creator's branch
+  //             4. tenant default branch (is_default = true)
+  const explicitBranchId = (body.branch_id as string | null | undefined) || null;
+  const step123BranchId = explicitBranchId ?? cookieBranchId ?? (dashAuth?.branchId ?? null);
+
+  // Step 4: fall back to the tenant's default branch when none of steps 1–3 resolved.
+  let creationBranchId = step123BranchId;
+  if (!creationBranchId) {
+    const { data: defaultBranch } = await supabase
+      .from("branches")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_default", true)
+      .limit(1)
+      .maybeSingle();
+    creationBranchId = defaultBranch?.id ?? null;
+  }
+  // ── End branch resolution ────────────────────────────────────────────────
+
   // Validate assigned_to: must belong to this tenant if provided
   if (body.assigned_to !== undefined && body.assigned_to !== null && body.assigned_to !== "") {
     const { data: assigneeCheck } = await supabase
@@ -464,6 +498,9 @@ async function handlePost(request: NextRequest) {
     leadPayload.list_id = (body.list_id as string | null) ?? null;
   }
 
+  // Set branch on insert path only; stripped from the update destructure below.
+  leadPayload.branch_id = creationBranchId;
+
   // Normalised fields for identity resolution (used in both update + create paths)
   const normalizedEmail = normalizeEmail(leadPayload.email as string | null | undefined);
   const normalizedPhone = normalizePhone(leadPayload.phone as string | null | undefined);
@@ -582,7 +619,7 @@ async function handlePost(request: NextRequest) {
 
     // Normal update (no fold)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tenant_id: _tenantId, list_id: _listId, ...updatePayload } = leadPayload;
+    const { tenant_id: _tenantId, list_id: _listId, branch_id: _branchId, ...updatePayload } = leadPayload;
 
     const { data: updated, error } = await supabase
       .from("leads")
@@ -871,6 +908,9 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Sync origin branch membership so branch-scoped users see the lead (no-op when null)
+  void syncOriginMembership(supabase, tenantId, lead.id, creationBranchId, (lead as Lead).assigned_to ?? null).catch(() => {});
 
   // Phone duplicate suggestions — non-fatal, never blocks ingestion
   if (createPhoneMatchIds.length > 0) {

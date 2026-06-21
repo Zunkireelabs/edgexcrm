@@ -33,6 +33,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 
@@ -395,6 +396,17 @@ export async function POST(
   }
 
   // ── 11. Insert lead ──
+  // Resolve the tenant's default branch for branch inheritance on new public-form inserts.
+  // Uses the is_default column added in migration 060.
+  const { data: defaultBranch } = await supabase
+    .from("branches")
+    .select("id")
+    .eq("tenant_id", tenant.id)
+    .eq("is_default", true)
+    .limit(1)
+    .maybeSingle();
+  const publicFormBranchId: string | null = defaultBranch?.id ?? null;
+
   const leadPayload = {
     tenant_id: tenant.id,
     pipeline_id: resolved.pipelineId,
@@ -423,6 +435,7 @@ export async function POST(
       || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    branch_id: publicFormBranchId,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
     ...(intakeListId && { list_id: intakeListId }),
@@ -498,6 +511,9 @@ export async function POST(
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
+
+  // Sync origin branch membership (no-op now; Part B wires the default branch)
+  void syncOriginMembership(supabase, tenant.id, lead.id, publicFormBranchId, null).catch(() => {});
 
   // Record submission + fire-and-forget: audit + event + notifications
   const leadId = lead.id;
