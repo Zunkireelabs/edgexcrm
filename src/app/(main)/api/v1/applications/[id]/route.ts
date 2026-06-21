@@ -132,6 +132,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     "deposit_paid",
     "offer_letter_url",
     "notes",
+    "agent_id",
+    "applied_date",
+    "intake_start_date",
   ];
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;

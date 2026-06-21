@@ -23,6 +23,12 @@ import {
 } from "@/components/ui/select";
 import type { ApplicationStage } from "@/types/database";
 
+interface AgentOption {
+  id: string;
+  name: string;
+  agent_type: "agent" | "super_agent";
+}
+
 interface AddApplicationToLeadSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -45,6 +51,10 @@ export function AddApplicationToLeadSheet({
   const [country, setCountry] = useState("");
   const [stageId, setStageId] = useState("");
   const [deadline, setDeadline] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [appliedDate, setAppliedDate] = useState("");
+  const [intakeStartDate, setIntakeStartDate] = useState("");
+  const [agents, setAgents] = useState<AgentOption[]>([]);
 
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
@@ -55,9 +65,20 @@ export function AddApplicationToLeadSheet({
       setIntakeTerm("");
       setCountry("");
       setDeadline("");
+      setAgentId("");
+      setAppliedDate("");
+      setIntakeStartDate("");
     }
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetch("/api/v1/agents")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setAgents(j.data); })
+      .catch(() => {});
+  }, [open]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -75,6 +96,9 @@ export function AddApplicationToLeadSheet({
       if (intakeTerm.trim()) body.intake_term = intakeTerm.trim();
       if (country.trim()) body.country = country.trim();
       if (deadline) body.application_deadline = deadline;
+      if (agentId && agentId !== "__none__") body.agent_id = agentId;
+      if (appliedDate) body.applied_date = appliedDate;
+      if (intakeStartDate) body.intake_start_date = intakeStartDate;
 
       const res = await fetch(`/api/v1/leads/${leadId}/applications`, {
         method: "POST",
@@ -106,7 +130,9 @@ export function AddApplicationToLeadSheet({
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
           <div className="space-y-1.5">
-            <Label htmlFor="app-university">University <span className="text-destructive">*</span></Label>
+            <Label htmlFor="app-university" className="text-xs text-gray-600">
+              University <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="app-university"
               value={universityName}
@@ -117,7 +143,9 @@ export function AddApplicationToLeadSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="app-program">Program <span className="text-destructive">*</span></Label>
+            <Label htmlFor="app-program" className="text-xs text-gray-600">
+              Program <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="app-program"
               value={programName}
@@ -129,7 +157,7 @@ export function AddApplicationToLeadSheet({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="app-intake">Intake Term</Label>
+              <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
               <Input
                 id="app-intake"
                 value={intakeTerm}
@@ -138,7 +166,7 @@ export function AddApplicationToLeadSheet({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="app-country">Country</Label>
+              <Label htmlFor="app-country" className="text-xs text-gray-600">Country</Label>
               <Input
                 id="app-country"
                 value={country}
@@ -149,7 +177,7 @@ export function AddApplicationToLeadSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Stage</Label>
+            <Label className="text-xs text-gray-600">Stage</Label>
             <Select value={stageId} onValueChange={setStageId}>
               <SelectTrigger>
                 <SelectValue placeholder="Select stage" />
@@ -163,13 +191,54 @@ export function AddApplicationToLeadSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="app-deadline">Application Deadline</Label>
+            <Label htmlFor="app-deadline" className="text-xs text-gray-600">Application Deadline</Label>
             <Input
               id="app-deadline"
               type="date"
               value={deadline}
               onChange={(e) => setDeadline(e.target.value)}
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Agent</Label>
+            <Select value={agentId} onValueChange={setAgentId}>
+              <SelectTrigger>
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">None</SelectItem>
+                {agents.map((a) => (
+                  <SelectItem key={a.id} value={a.id}>
+                    {a.name}
+                    <span className="ml-1 text-xs text-muted-foreground">
+                      ({a.agent_type === "super_agent" ? "Super-Agent" : "Agent"})
+                    </span>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="app-applied-date" className="text-xs text-gray-600">Applied Date</Label>
+              <Input
+                id="app-applied-date"
+                type="date"
+                value={appliedDate}
+                onChange={(e) => setAppliedDate(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="app-intake-start" className="text-xs text-gray-600">Intake / Start Date</Label>
+              <Input
+                id="app-intake-start"
+                type="date"
+                value={intakeStartDate}
+                onChange={(e) => setIntakeStartDate(e.target.value)}
+              />
+            </div>
           </div>
         </form>
 

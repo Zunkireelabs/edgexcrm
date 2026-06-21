@@ -770,6 +770,9 @@ export interface Application {
   deposit_paid: boolean;
   offer_letter_url: string | null;
   notes: string | null;
+  agent_id: string | null;
+  applied_date: string | null;
+  intake_start_date: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
