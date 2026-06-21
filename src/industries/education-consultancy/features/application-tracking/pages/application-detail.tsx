@@ -104,12 +104,24 @@ export function ApplicationDetailPage({
   const [tuitionFee, setTuitionFee] = useState("");
   const [depositPaid, setDepositPaid] = useState(false);
   const [notes, setNotes] = useState("");
+  const [agentId, setAgentId] = useState("");
+  const [appliedDate, setAppliedDate] = useState("");
+  const [intakeStartDate, setIntakeStartDate] = useState("");
+  const [agents, setAgents] = useState<{ id: string; name: string; agent_type: string }[]>([]);
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
   const progress = computeProgress(stages, application.stage_id);
   const showOfferType = currentStage != null && OFFER_STAGE_POSITIONS.has(currentStage.position);
   const leadId =
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
+
+  // Fetch agents for the detail edit dropdown
+  useEffect(() => {
+    fetch("/api/v1/agents")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setAgents(j.data); })
+      .catch(() => {});
+  }, []);
 
   // Fetch team member emails for timeline display
   useEffect(() => {
@@ -137,6 +149,9 @@ export function ApplicationDetailPage({
     setTuitionFee(application.tuition_fee != null ? String(application.tuition_fee) : "");
     setDepositPaid(application.deposit_paid ?? false);
     setNotes(application.notes ?? "");
+    setAgentId(application.agent_id ?? "");
+    setAppliedDate(application.applied_date ?? "");
+    setIntakeStartDate(application.intake_start_date ?? "");
     setEditing(true);
   }
 
@@ -157,6 +172,9 @@ export function ApplicationDetailPage({
         tuition_fee: tuitionFee !== "" ? Number(tuitionFee) : null,
         deposit_paid: depositPaid,
         notes: notes.trim() || null,
+        agent_id: agentId && agentId !== "__none__" ? agentId : null,
+        applied_date: appliedDate || null,
+        intake_start_date: intakeStartDate || null,
       };
 
       const res = await fetch(`/api/v1/applications/${application.id}`, {
@@ -226,7 +244,7 @@ export function ApplicationDetailPage({
       </Button>
 
       {/* 3-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[240px_1fr_280px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[290px_1fr_280px] gap-6 items-start">
 
         {/* ── LEFT: Student Rail ── */}
         <div className="space-y-4">
@@ -561,6 +579,58 @@ export function ApplicationDetailPage({
                     {application.notes ?? "—"}
                   </p>
                 )}
+              </div>
+
+              {/* Agent & Dates */}
+              <div className="rounded-lg border p-3 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Agent &amp; Dates</p>
+
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Agent</Label>
+                  {editing ? (
+                    <Select value={agentId || "__none__"} onValueChange={(v) => setAgentId(v === "__none__" ? "" : v)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="None" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {agents.map((a) => (
+                          <SelectItem key={a.id} value={a.id}>
+                            {a.name}
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              ({a.agent_type === "super_agent" ? "Super-Agent" : "Agent"})
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-sm">
+                      {application.agent_id
+                        ? (agents.find((a) => a.id === application.agent_id)?.name ?? "—")
+                        : "—"}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Applied Date</Label>
+                    {editing ? (
+                      <Input type="date" value={appliedDate} onChange={(e) => setAppliedDate(e.target.value)} />
+                    ) : (
+                      <p className="text-sm">{formatDate(application.applied_date ?? null)}</p>
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Intake / Start</Label>
+                    {editing ? (
+                      <Input type="date" value={intakeStartDate} onChange={(e) => setIntakeStartDate(e.target.value)} />
+                    ) : (
+                      <p className="text-sm">{formatDate(application.intake_start_date ?? null)}</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>

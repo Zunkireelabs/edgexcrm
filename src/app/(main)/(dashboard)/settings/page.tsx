@@ -9,6 +9,7 @@ import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
 import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
 import { LeadListsManager } from "@/components/dashboard/settings/lead-lists-manager";
+import { AgentsManager } from "@/components/dashboard/settings/agents-manager";
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
@@ -112,6 +113,9 @@ export default async function SettingsPage() {
       <PositionsManager navCatalog={navCatalog} widgetCatalog={widgetCatalog} />
       {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS) && (
         <LeadListsManager />
+      )}
+      {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.APPLICATION_TRACKING) && (
+        <AgentsManager />
       )}
       <BranchesManager maxBranches={tenantData.entitlements.maxBranches} />
       <EmailRulesManager tenantId={tenantData.tenant.id} />

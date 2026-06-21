@@ -186,6 +186,9 @@ export async function POST(request: NextRequest) {
   if (body.offer_type && ["conditional", "unconditional"].includes(String(body.offer_type))) {
     insert.offer_type = body.offer_type;
   }
+  if (body.agent_id) insert.agent_id = String(body.agent_id);
+  if (body.applied_date) insert.applied_date = String(body.applied_date);
+  if (body.intake_start_date) insert.intake_start_date = String(body.intake_start_date);
 
   const { data: created, error } = await db
     .from("applications")
