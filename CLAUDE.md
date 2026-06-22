@@ -406,12 +406,23 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 - Email: `admin@zunkireelabs.com`
 - Password: `admin123`
 
-### Supabase Project
-- **Project ref**: `pirhnklvtjjpuvbvibxf`
-- **Region**: ap-south-1
-- **URL**: `https://pirhnklvtjjpuvbvibxf.supabase.co`
-- **DB connection**: `postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik%23@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
-- **Keys**: in `.env.local`
+### Supabase Projects — TWO separate databases (since 2026-06-21)
+
+**Production** and **dev/staging** now have their own Supabase projects. They no longer share a DB. Always confirm which one you're touching.
+
+| Env | Project ref | URL | Used by |
+|---|---|---|---|
+| **Production** | `pirhnklvtjjpuvbvibxf` (ap-south-1) | `https://pirhnklvtjjpuvbvibxf.supabase.co` | prod deploy (`lead-crm`/`edgex.zunkireelabs.com`), `docker-compose.prod.yml`, prod VPS `.env.local` |
+| **Dev/Staging** | `dymeudcddasqpomfpjvt` | `https://dymeudcddasqpomfpjvt.supabase.co` | `dev-lead-crm.zunkireelabs.com`, `docker-compose.yml`, dev VPS `.env.local`, **local `npm run dev`** |
+
+- **Prod DB connection**: `postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik%23@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
+- **Stage DB connection (direct)**: `postgresql://postgres:Zunkiree%40123%25%5E%26@db.dymeudcddasqpomfpjvt.supabase.co:5432/postgres` (password `Zunkiree@123%^&`)
+- **Keys**: in each environment's `.env.local`. The DB pointer lives in **two places per environment** — `docker-compose*.yml` build args (`NEXT_PUBLIC_*`, baked at build) **and** the VPS `.env.local` (`SUPABASE_SERVICE_ROLE_KEY` + the `NEXT_PUBLIC_*` runtime copies). Change both in lockstep or you get a prod/stage split-brain (client one DB, server the other).
+- **Stage = sanitized clone of prod** (point-in-time 2026-06-21): identical schema + all rows, but end-customer PII scrubbed and **every auth password reset to `edgexdev123`**. Log into dev/local as any prod email (e.g. `admin@zunkireelabs.com`, `hello@admizz.org`) with password `edgexdev123`.
+
+### Migration workflow (dev-first)
+
+Apply new migrations to **stage** (`dymeudcddasqpomfpjvt`) first → verify on dev/local → then apply to **prod** (`pirhnklvtjjpuvbvibxf`) at promotion time. (Historically migrations hit one shared DB; that's no longer true — a migration is not on prod until you run it on prod.) Apply in a txn with before/after counts, additive-only.
 
 ### Server
 - **The ONLY Zunkiree Labs VPS is `root@94.136.189.213`.** There is no other zunkireelabs server.
