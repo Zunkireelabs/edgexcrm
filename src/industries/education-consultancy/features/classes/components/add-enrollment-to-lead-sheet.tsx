@@ -116,13 +116,13 @@ export function AddEnrollmentToLeadSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
-        <SheetHeader>
+      <SheetContent side="right" className="w-full sm:max-w-lg flex flex-col">
+        <SheetHeader className="shrink-0 border-b pb-4">
           <SheetTitle>Add to Class</SheetTitle>
           <SheetDescription>Enroll this student in a class.</SheetDescription>
         </SheetHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 py-4">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-600">
               Class <span className="text-destructive">*</span>
@@ -179,17 +179,20 @@ export function AddEnrollmentToLeadSheet({
           </div>
         </form>
 
-        <SheetFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
-            Cancel
-          </Button>
-          <Button
-            onClick={handleSubmit}
-            disabled={submitting || !classId}
-          >
-            {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Add to Class
-          </Button>
+        <SheetFooter className="shrink-0 border-t pt-4">
+          <div className="flex w-full gap-4">
+            <Button className="flex-1" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1"
+              onClick={handleSubmit}
+              disabled={submitting || !classId}
+            >
+              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Add to Class
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
