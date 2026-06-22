@@ -107,6 +107,30 @@ export default async function LeadDetailPage({
       (lead as unknown as { lead_type?: string | null }).lead_type === "prospect"
     );
 
+  // Consent props — only query when applicationsActive to avoid extra DB calls
+  let consentEnabled = false;
+  let consentSigned = false;
+  if (applicationsActive) {
+    const [tplRes, signedRes] = await Promise.all([
+      serviceClient
+        .from("consent_templates")
+        .select("is_active")
+        .eq("tenant_id", tenantData.tenant.id)
+        .maybeSingle(),
+      serviceClient
+        .from("lead_consents")
+        .select("id")
+        .eq("tenant_id", tenantData.tenant.id)
+        .eq("lead_id", lead.id)
+        .eq("status", "signed")
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    consentEnabled = (tplRes.data as { is_active: boolean } | null)?.is_active === true;
+    consentSigned = !!signedRes.data;
+  }
+
   return (
     <LeadDetailV2
       lead={lead}
@@ -126,6 +150,8 @@ export default async function LeadDetailPage({
       leadLists={accessibleLists}
       classesActive={classesActive}
       applicationsActive={applicationsActive}
+      consentEnabled={consentEnabled}
+      consentSigned={consentSigned}
     />
   );
 }
