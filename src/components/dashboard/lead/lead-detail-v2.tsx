@@ -39,6 +39,7 @@ import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
+import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 
 interface TeamMember {
   id: string;
@@ -61,7 +62,10 @@ interface LeadDetailV2Props {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   canManageApplications?: boolean;
+  canManageClasses?: boolean;
   leadLists?: LeadList[];
+  classesActive?: boolean;
+  applicationsActive?: boolean;
 }
 
 interface LeadDraft {
@@ -121,7 +125,10 @@ export function LeadDetailV2({
   userBranchId,
   leadScope,
   canManageApplications,
+  canManageClasses,
   leadLists,
+  classesActive,
+  applicationsActive,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -673,12 +680,28 @@ export function LeadDetailV2({
 
         {/* Right Sidebar */}
         <div className="lg:col-span-full xl:col-span-1">
-          {tenant.industry_id === "education_consultancy" && currentLead.lead_type === "prospect" ? (
+          {tenant.industry_id === "education_consultancy" ? (
             <div className="space-y-4">
-              <ApplicationsCard
-                leadId={currentLead.id}
-                canManage={canManageApplications ?? isAdmin}
-              />
+              {applicationsActive ? (
+                <ApplicationsCard
+                  leadId={currentLead.id}
+                  canManage={canManageApplications ?? isAdmin}
+                />
+              ) : (
+                <ManagementPanel
+                  ref={checklistRef}
+                  lead={currentLead}
+                  checklists={checklists}
+                  isAdmin={isAdmin}
+                  onChecklistsChange={handleChecklistsChange}
+                />
+              )}
+              {classesActive && (
+                <ClassesCard
+                  leadId={currentLead.id}
+                  canManage={canManageClasses ?? isAdmin}
+                />
+              )}
             </div>
           ) : (
             <ManagementPanel
