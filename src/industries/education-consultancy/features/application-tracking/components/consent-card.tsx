@@ -28,9 +28,10 @@ interface ConsentCardProps {
   consentEnabled: boolean;
   consentSigned: boolean;
   canManage: boolean;
+  onSignedChange?: (signed: boolean) => void;
 }
 
-export function ConsentCard({ leadId, tenantId, canManage }: ConsentCardProps) {
+export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: ConsentCardProps) {
   const [status, setStatus] = useState<ConsentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -42,12 +43,13 @@ export function ConsentCard({ leadId, tenantId, canManage }: ConsentCardProps) {
       if (!res.ok) return;
       const { data } = await res.json();
       setStatus(data as ConsentStatus);
+      onSignedChange?.((data as ConsentStatus).status === "signed");
     } catch {
       // silently fail
     } finally {
       setLoading(false);
     }
-  }, [leadId]);
+  }, [leadId, onSignedChange]);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 

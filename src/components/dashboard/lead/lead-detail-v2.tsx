@@ -152,6 +152,8 @@ export function LeadDetailV2({
   const [activeTab, setActiveTab] = useState("activity");
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
+  const [consentSignedState, setConsentSignedState] = useState(consentSigned);
+  useEffect(() => { setConsentSignedState(consentSigned); }, [consentSigned]);
 
   // Qualify dialog state (education_consultancy only)
   const [qualifyOpen, setQualifyOpen] = useState(false);
@@ -696,12 +698,13 @@ export function LeadDetailV2({
                       consentEnabled={consentEnabled}
                       consentSigned={consentSigned}
                       canManage={canManageApplications ?? isAdmin}
+                      onSignedChange={setConsentSignedState}
                     />
                   )}
                   <ApplicationsCard
                     leadId={currentLead.id}
                     canManage={canManageApplications ?? isAdmin}
-                    disabled={consentEnabled && !consentSigned}
+                    disabled={consentEnabled && !consentSignedState}
                   />
                 </>
               ) : (
