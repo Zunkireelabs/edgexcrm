@@ -207,6 +207,18 @@ When a piece of work ships, append to SESSION-LOG, update FEATURE-CATALOG, move 
 
 ---
 
+## Two-session workflow: Opus plans, Sonnet executes
+
+**This project is driven by two separate Claude sessions with strict role separation:**
+
+- **Opus session = planner / lead / reviewer ("the brain").** Designs, decides, writes briefs, and reviews. **Opus does NOT execute the work itself** — no feature code, no migrations, no DB writes, no deploys, no spawning sub-agents to do it. (Infra/ops exceptions only when the user explicitly says "you do it.")
+- **Sonnet session = executor.** A *different* Claude session the user runs separately. It writes the code / runs the commands.
+- **The user is the courier between the two sessions.** Flow: Opus writes a brief → user pastes it into the Sonnet session → Sonnet does the work and produces a report → user brings the report back → **Opus reviews it** (and re-runs gates / verifies independently; never trust the executor's self-report — see memory `feedback_sonnet_oversteps_review_gate`).
+
+So when execution is needed, Opus's deliverable is a **copy-pasteable brief for the user to hand to Sonnet**, not a tool action and not an `Agent`/sub-agent dispatch.
+
+---
+
 ## Automatic Skill Routing
 
 **IMPORTANT: This project uses orchestrated development.**
