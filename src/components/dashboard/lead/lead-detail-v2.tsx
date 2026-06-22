@@ -47,6 +47,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
 }
 
 interface LeadDetailV2Props {
@@ -184,6 +185,14 @@ export function LeadDetailV2({
   const teamMemberEmails = teamMembers.reduce<Record<string, string>>(
     (acc, member) => {
       acc[member.user_id] = member.email;
+      return acc;
+    },
+    {}
+  );
+
+  const teamMemberNames = teamMembers.reduce<Record<string, string>>(
+    (acc, member) => {
+      if (member.name) acc[member.user_id] = member.name;
       return acc;
     },
     {}
@@ -660,6 +669,7 @@ export function LeadDetailV2({
             notes={notes}
             activities={activities}
             teamMemberEmails={teamMemberEmails}
+            teamMemberNames={teamMemberNames}
             customFields={customFields}
             activeTab={activeTab}
             onTabChange={setActiveTab}
