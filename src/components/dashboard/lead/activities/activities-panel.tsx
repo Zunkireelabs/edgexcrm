@@ -582,18 +582,18 @@ function SystemActivityItem({
           if (o) loadSubmission();
         }}
       >
-        <div className="flex items-center gap-2 text-sm py-1">
-          <div className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
-          <CollapsibleTrigger className="flex items-center gap-1 text-foreground hover:underline underline-offset-2 cursor-pointer">
-            <span>{description}</span>
-            <ChevronDown
-              className={`h-3 w-3 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`}
-            />
-          </CollapsibleTrigger>
-          <span className="text-muted-foreground shrink-0">· {time}</span>
-          {userEmail && (
-            <span className="text-muted-foreground truncate">· {userEmail}</span>
-          )}
+        <div className="flex items-start gap-2 py-1 text-sm">
+          <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+          <span className="min-w-0">
+            <CollapsibleTrigger className="inline-flex items-center gap-1 text-foreground hover:underline underline-offset-2 cursor-pointer">
+              <span>{description}</span>
+              <ChevronDown
+                className={`h-3 w-3 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`}
+              />
+            </CollapsibleTrigger>
+            <span className="text-muted-foreground"> · {time}</span>
+            {userEmail && <span className="text-muted-foreground"> · {userEmail}</span>}
+          </span>
         </div>
         <CollapsibleContent className="pl-4 pt-1 pb-2">
           {submissionLoading ? (
@@ -609,11 +609,13 @@ function SystemActivityItem({
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm py-1">
-      <div className={`h-2 w-2 rounded-full ${dotColor}`} />
-      <span className="text-foreground">{description}</span>
-      <span className="text-muted-foreground">· {time}</span>
-      {userEmail && <span className="text-muted-foreground">· {userEmail}</span>}
+    <div className="flex items-start gap-2 py-1 text-sm">
+      <span className={`h-2 w-2 rounded-full mt-1.5 shrink-0 ${dotColor}`} />
+      <span className="min-w-0">
+        <span className="text-foreground">{description}</span>
+        <span className="text-muted-foreground"> · {time}</span>
+        {userEmail && <span className="text-muted-foreground"> · {userEmail}</span>}
+      </span>
     </div>
   );
 }
@@ -743,7 +745,46 @@ function getSystemActivityDescription(
     return "Unassigned";
   }
 
-  return `${activity.action} ${activity.entity_type}`;
+  // Generic lead.updated: build "Updated name, destinations, …" from the changed fields
+  if (activity.action === "lead.updated" && Object.keys(changes).length > 0) {
+    const FIELD_LABELS: Record<string, string> = {
+      first_name: "name",
+      last_name: "name",
+      phone: "phone",
+      email: "email",
+      destinations: "destinations",
+      field_of_study: "field of study",
+      degree_level: "degree level",
+      tags: "tags",
+      intake_source: "source",
+      source: "source",
+      custom_fields: "details",
+      notes: "notes",
+      status: "stage",
+      stage_id: "stage",
+      city: "city",
+      country: "country",
+      company_name: "company",
+      designation: "designation",
+      salutation: "salutation",
+      preferred_contact_method: "contact method",
+    };
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const key of Object.keys(changes)) {
+      const label = FIELD_LABELS[key] ?? key.replace(/_/g, " ");
+      if (!seen.has(label)) {
+        seen.add(label);
+        labels.push(label);
+      }
+    }
+    if (labels.length > 0) return `Updated ${labels.join(", ")}`;
+  }
+
+  // Humanized fallback — never render a raw dotted action string
+  const actionParts = activity.action.split(".");
+  const readable = (actionParts.length > 1 ? actionParts.slice(1).join(" ") : actionParts[0]).replace(/_/g, " ");
+  return readable.charAt(0).toUpperCase() + readable.slice(1);
 }
 
 function formatRelativeTime(dateString: string): string {
