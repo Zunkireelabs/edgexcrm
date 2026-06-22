@@ -139,15 +139,20 @@ export function AddEnrollmentToLeadSheet({
             </Select>
           </div>
 
-          <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
             <Label className="text-xs text-gray-600">Fee Paid?</Label>
-            <button
-              type="button"
-              onClick={() => setFeePaid((v) => !v)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${feePaid ? "bg-primary" : "bg-muted"}`}
+            <Select
+              value={feePaid ? "paid" : "unpaid"}
+              onValueChange={(v) => setFeePaid(v === "paid")}
             >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${feePaid ? "translate-x-6" : "translate-x-1"}`} />
-            </button>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unpaid">Not paid</SelectItem>
+                <SelectItem value="paid">Paid</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {feePaid && (
