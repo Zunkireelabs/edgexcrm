@@ -28,6 +28,7 @@ interface TeamMember {
   role: string;
   position_id: string | null;
   branch_id: string | null;
+  name?: string | null;
   email: string;
   default_hourly_rate: number | null;
   created_at: string;
@@ -311,10 +312,10 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
               >
                 <div className="flex items-center gap-3">
                   <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-                    {member.email.charAt(0).toUpperCase()}
+                    {(member.name || member.email).charAt(0).toUpperCase()}
                   </div>
                   <div>
-                    <p className="text-sm font-medium">{member.email}</p>
+                    <p className="text-sm font-medium">{member.name || member.email}</p>
                     <p className="text-xs text-muted-foreground">
                       Joined {new Date(member.created_at).toLocaleDateString()}
                     </p>
