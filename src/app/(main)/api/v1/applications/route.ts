@@ -133,6 +133,16 @@ export async function POST(request: NextRequest) {
   }
   if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
+  // Consent gate — only enforced if the tenant has an ACTIVE consent template
+  const { data: consentTpl } = await supabase.from("consent_templates")
+    .select("is_active").eq("tenant_id", auth.tenantId).maybeSingle();
+  if ((consentTpl as { is_active: boolean } | null)?.is_active) {
+    const { data: signed } = await supabase.from("lead_consents")
+      .select("id").eq("tenant_id", auth.tenantId).eq("lead_id", leadRow.id)
+      .eq("status", "signed").is("deleted_at", null).limit(1).maybeSingle();
+    if (!signed) return apiError("CONSENT_REQUIRED", "Student consent must be signed before creating an application", 409);
+  }
+
   // Resolve stage: use supplied stage_id or default to the 'shortlisted' (is_default) stage
   let stageId = body.stage_id as string | undefined;
   let stageSlug = "shortlisted";
