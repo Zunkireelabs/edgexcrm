@@ -44,15 +44,15 @@ export function UnassignedMembersTray({
               className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50"
             >
               <div
-                title={m.email}
+                title={m.name || m.email}
                 className={cn(
                   "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
                   avatarColor(m.email)
                 )}
               >
-                {m.email.charAt(0).toUpperCase()}
+                {(m.name || m.email).charAt(0).toUpperCase()}
               </div>
-              <span className="text-xs text-gray-700">{m.email}</span>
+              <span className="text-xs text-gray-700">{m.name || m.email}</span>
               {isAdmin && assignablePositions.length > 0 && (
                 <select
                   defaultValue=""

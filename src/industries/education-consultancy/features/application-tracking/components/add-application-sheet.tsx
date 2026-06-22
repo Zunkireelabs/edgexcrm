@@ -68,6 +68,7 @@ export function AddApplicationSheet({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [consentBlocked, setConsentBlocked] = useState(false);
 
   useEffect(() => {
     if (!open) {
@@ -82,6 +83,7 @@ export function AddApplicationSheet({
       setAgentId("");
       setAppliedDate("");
       setIntakeStartDate("");
+      setConsentBlocked(false);
     }
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
@@ -94,6 +96,19 @@ export function AddApplicationSheet({
       .then((j) => { if (j?.data) setAgents(j.data); })
       .catch(() => {});
   }, [open]);
+
+  // Check consent status when a lead is selected
+  useEffect(() => {
+    if (!selectedLead) { setConsentBlocked(false); return; }
+    fetch(`/api/v1/leads/${selectedLead.id}/consent`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (!j?.data) return;
+        const { consent_enabled, status } = j.data as { consent_enabled: boolean; status: string };
+        setConsentBlocked(consent_enabled && status !== "signed");
+      })
+      .catch(() => {});
+  }, [selectedLead]);
 
   // Debounced lead search
   useEffect(() => {
@@ -355,14 +370,27 @@ export function AddApplicationSheet({
           </div>
         </div>
 
-        <SheetFooter className="shrink-0 border-t pt-4">
+        <SheetFooter className="shrink-0 border-t pt-4 space-y-3">
+          {consentBlocked && selectedLead && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 w-full">
+              This student must sign consent first.{" "}
+              <a
+                href={`/leads/${selectedLead.id}`}
+                className="underline font-medium"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Manage consent
+              </a>
+            </p>
+          )}
           <div className="flex w-full gap-4">
             <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting} className="flex-1">
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim()}
+              disabled={submitting || !selectedLead || !universityName.trim() || !programName.trim() || consentBlocked}
               className="flex-1"
             >
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

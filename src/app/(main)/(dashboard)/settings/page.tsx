@@ -10,6 +10,8 @@ import { IndustryEntitiesManager } from "@/components/dashboard/settings/industr
 import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
 import { LeadListsManager } from "@/components/dashboard/settings/lead-lists-manager";
 import { AgentsManager } from "@/components/dashboard/settings/agents-manager";
+import { ClassesManager } from "@/components/dashboard/settings/classes-manager";
+import { ConsentManager } from "@/components/dashboard/settings/consent-manager";
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
@@ -116,6 +118,12 @@ export default async function SettingsPage() {
       )}
       {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.APPLICATION_TRACKING) && (
         <AgentsManager />
+      )}
+      {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.APPLICATION_TRACKING) && (
+        <ConsentManager />
+      )}
+      {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES) && (
+        <ClassesManager />
       )}
       <BranchesManager maxBranches={tenantData.entitlements.maxBranches} />
       <EmailRulesManager tenantId={tenantData.tenant.id} />

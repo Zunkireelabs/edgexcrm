@@ -25,6 +25,7 @@ interface LeadTabsProps {
   notes: LeadNote[];
   activities: LeadActivity[];
   teamMemberEmails: Record<string, string>;
+  teamMemberNames: Record<string, string>;
   customFields: Record<string, unknown>;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -44,7 +45,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const notesTabRef = useRef<{ focusComposer: () => void }>(null);
@@ -188,6 +189,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             notes={notes}
             systemActivities={activities}
             teamMemberEmails={teamMemberEmails}
+            teamMemberNames={teamMemberNames}
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
             currentUserId={currentUserId}
