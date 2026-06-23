@@ -167,8 +167,11 @@ function NoteCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-medium truncate">{authorName}</span>
-              <span className="text-xs text-muted-foreground shrink-0">
-                {formatDateTime(note.created_at)}
+              <span
+                className="text-xs text-muted-foreground shrink-0"
+                title={formatAbsolute(note.created_at)}
+              >
+                {formatRelativeTime(note.created_at)}
               </span>
             </div>
             <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">
@@ -191,31 +194,38 @@ function getInitials(nameOrEmail: string): string {
   return base.substring(0, 2).toUpperCase();
 }
 
-function formatDateTime(dateString: string): string {
+// Relative time for the note timestamp ("Just now" / "5m ago" / "3h ago" /
+// "Yesterday" / "2d ago" / "Jun 16"). Mirrors formatRelativeTime used by the
+// Overview preview and Activity notes sub-tab so all three sites match.
+function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffDays === 0) {
-    return date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+    if (diffHours === 0) {
+      const diffMinutes = Math.floor(diffMs / (1000 * 60));
+      return diffMinutes <= 1 ? "Just now" : `${diffMinutes}m ago`;
+    }
+    return `${diffHours}h ago`;
   }
-  if (diffDays === 1) {
-    return "Yesterday at " + date.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-  if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  }
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return `${diffDays}d ago`;
 
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+// Full, exact timestamp shown on hover via the title tooltip
+// (e.g. "Jun 23, 2026, 12:09 PM").
+function formatAbsolute(dateString: string): string {
+  return new Date(dateString).toLocaleString("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
   });
 }
