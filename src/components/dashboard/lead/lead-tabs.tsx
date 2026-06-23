@@ -11,10 +11,9 @@ import { Button } from "@/components/ui/button";
 import { AISparkleIcon } from "@/components/ui/ai-sparkle";
 import type { Lead, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
-import { NotesTab } from "./notes-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
-import { ActivitiesPanel } from "./activities/activities-panel";
+import { ActivitiesPanel, type ActivitiesPanelRef } from "./activities/activities-panel";
 import { MergeDialog } from "./merge-dialog";
 import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { getLeadFullName } from "./lead-name";
@@ -48,12 +47,12 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
     { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
-    const notesTabRef = useRef<{ focusComposer: () => void }>(null);
+    const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
     const router = useRouter();
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
-        notesTabRef.current?.focusComposer();
+        activitiesPanelRef.current?.openNotes(true);
       },
     }));
 
@@ -73,14 +72,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="notes" className="gap-2">
-            Notes
-            {notes.length > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                {notes.length}
-              </Badge>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="activity" className="gap-2">
             Activity
             {activityUnreadCount > 0 ? (
@@ -162,7 +153,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                   <button
                     type="button"
                     className="text-sm text-primary hover:underline"
-                    onClick={() => onTabChange("notes")}
+                    onClick={() => {
+                      onTabChange("activity");
+                      setTimeout(() => activitiesPanelRef.current?.openNotes(), 50);
+                    }}
                   >
                     View all {notes.length} notes →
                   </button>
@@ -174,19 +168,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           {isAdmin && <PossibleDuplicatesCard lead={lead} onMerged={() => router.refresh()} />}
         </TabsContent>
 
-        <TabsContent value="notes" className="mt-0">
-          <NotesTab
-            ref={notesTabRef}
-            leadId={lead.id}
-            notes={notes}
-            onNotesChange={onNotesChange}
-            teamMemberNames={teamMemberNames}
-            teamMemberEmails={teamMemberEmails}
-          />
-        </TabsContent>
-
         <TabsContent value="activity" className="mt-0">
           <ActivitiesPanel
+            ref={activitiesPanelRef}
             leadId={lead.id}
             notes={notes}
             systemActivities={activities}

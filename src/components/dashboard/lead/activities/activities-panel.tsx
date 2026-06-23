@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import dynamic from "next/dynamic";
 import {
   Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
@@ -22,6 +22,7 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
+import { NotesTab, type NotesTabRef } from "../notes-tab";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
@@ -72,13 +73,20 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
 ];
 
-export function ActivitiesPanel({
+export interface ActivitiesPanelRef {
+  /** Switch to the Notes sub-tab; pass true to also focus the composer. */
+  openNotes: (focus?: boolean) => void;
+}
+
+export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelProps>(
+  function ActivitiesPanel({
   leadId,
   notes,
   systemActivities,
   teamMemberEmails,
   teamMemberNames,
   isAdmin,
+  onNotesChange,
   currentUserId,
   industryId,
   leadEmail,
@@ -87,8 +95,18 @@ export function ActivitiesPanel({
   threads,
   setThreads,
   threadsLoading,
-}: ActivitiesPanelProps) {
+}: ActivitiesPanelProps, ref) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
+  const notesTabRef = useRef<NotesTabRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    openNotes: (focus = false) => {
+      setActiveTab("notes");
+      if (focus) {
+        setTimeout(() => notesTabRef.current?.focusComposer(), 50);
+      }
+    },
+  }));
   const [loggedActivities, setLoggedActivities] = useState<LeadActivityRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -328,6 +346,11 @@ export function ActivitiesPanel({
               }`}
             >
               {tab.label}
+              {tab.id === "notes" && notes.length > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {notes.length}
+                </Badge>
+              )}
               {tab.id === "emails" && unreadEmailCount > 0 && (
                 <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                   {unreadEmailCount > 9 ? "9+" : unreadEmailCount}
@@ -345,28 +368,16 @@ export function ActivitiesPanel({
         </div>
       )}
 
-      {/* Notes tab */}
+      {/* Notes tab — full composer + cards (real names, relative time) */}
       {activeTab === "notes" && (
-        <Card className="shadow-none rounded-lg py-0">
-          <CardContent className="p-4">
-            {notes.length > 0 ? (
-              <div className="space-y-3">
-                {notes.map((note) => (
-                  <div key={note.id} className="border-l-2 border-muted pl-3 py-1">
-                    <p className="text-sm text-foreground">{note.content}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {teamMemberNames[note.user_id] || teamMemberEmails[note.user_id] || note.user_email} · {formatRelativeTime(note.created_at)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                {getEmptyMessage()}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <NotesTab
+          ref={notesTabRef}
+          leadId={leadId}
+          notes={notes}
+          onNotesChange={onNotesChange}
+          teamMemberNames={teamMemberNames}
+          teamMemberEmails={teamMemberEmails}
+        />
       )}
 
       {/* Tasks tab */}
@@ -541,7 +552,7 @@ export function ActivitiesPanel({
       )}
     </div>
   );
-}
+});
 
 // System activity item — monochrome timeline node
 function SystemActivityItem({
@@ -889,27 +900,4 @@ function getSystemActivityDescription(
   const actionParts = activity.action.split(".");
   const readable = (actionParts.length > 1 ? actionParts.slice(1).join(" ") : actionParts[0]).replace(/_/g, " ");
   return readable.charAt(0).toUpperCase() + readable.slice(1);
-}
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? "Just now" : `${diffMinutes}m ago`;
-    }
-    return `${diffHours}h ago`;
-  }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
 }
