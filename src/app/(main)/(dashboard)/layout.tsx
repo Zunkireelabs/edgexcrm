@@ -4,6 +4,7 @@ import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadList
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
+import { SettingsModalProvider } from "@/contexts/settings-modal-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canAccessList } from "@/lib/api/permissions";
@@ -74,24 +75,30 @@ export default async function DashboardLayout({
 
   return (
     <AIAssistantProvider>
-      <DashboardShell
-        user={user}
+      <SettingsModalProvider
         tenant={tenantData.tenant}
         role={tenantData.role}
-        positionName={tenantData.positionName}
-        formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
-        industrySidebarItems={industrySidebarItems}
-        allowedNavKeys={allowedNavKeys}
-        branches={branches}
-        maxBranches={maxBranches}
-        userBranchId={tenantData.branchId}
-        leadScope={tenantData.permissions.leadScope}
-        selectedBranchId={selectedBranchId}
-        leadLists={leadLists}
-        stagingLists={stagingLists}
+        industryId={tenantData.tenant.industry_id ?? null}
       >
-        {children}
-      </DashboardShell>
+        <DashboardShell
+          user={user}
+          tenant={tenantData.tenant}
+          role={tenantData.role}
+          positionName={tenantData.positionName}
+          formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
+          industrySidebarItems={industrySidebarItems}
+          allowedNavKeys={allowedNavKeys}
+          branches={branches}
+          maxBranches={maxBranches}
+          userBranchId={tenantData.branchId}
+          leadScope={tenantData.permissions.leadScope}
+          selectedBranchId={selectedBranchId}
+          leadLists={leadLists}
+          stagingLists={stagingLists}
+        >
+          {children}
+        </DashboardShell>
+      </SettingsModalProvider>
     </AIAssistantProvider>
   );
 }

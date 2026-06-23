@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
@@ -246,6 +247,7 @@ export function DashboardShell({
   const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
+  const { openSettings } = useSettingsModal();
   const { counts } = useBadgeCounts();
 
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
@@ -280,15 +282,18 @@ export function DashboardShell({
     (e) => e.position === "after-pipeline",
   );
 
-  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number }) {
+  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number; onClick?: () => void }) {
     const isActive =
       pathname === item.href ||
       (item.href !== "/dashboard" && item.href !== "/orca" && pathname.startsWith(item.href));
+    const handleClick = item.onClick
+      ? () => { item.onClick!(); setMobileOpen(false); }
+      : () => setMobileOpen(false);
     return (
       <Link
         key={item.href}
         href={item.href}
-        onClick={() => setMobileOpen(false)}
+        onClick={handleClick}
         className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
@@ -460,7 +465,7 @@ export function DashboardShell({
                 {/* Administration */}
                 <NavSectionHeader label="Administration" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
-                {navAllowed("/settings") && renderNavItem({ href: "/settings", label: "Settings", icon: Settings })}
+                {navAllowed("/settings") && renderNavItem({ href: "/settings", label: "Settings", icon: Settings, onClick: () => openSettings() })}
 
                 {publicFormsSection}
               </>
@@ -513,7 +518,13 @@ export function DashboardShell({
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}
-            {UNIVERSAL_NAV_BOTTOM.filter((i) => navAllowed(i.href)).map(renderNavItem)}
+            {UNIVERSAL_NAV_BOTTOM.filter((i) => navAllowed(i.href)).map((item) =>
+              renderNavItem(
+                item.href === "/settings"
+                  ? { ...item, onClick: () => openSettings() }
+                  : item,
+              )
+            )}
 
             {/* Public Forms Section — hidden when /forms not in position's nav allow-list */}
             {navAllowed("/forms") && (
@@ -695,14 +706,14 @@ export function DashboardShell({
 
                     {/* Menu Items */}
                     <div className="py-1">
-                      <Link
-                        href="/settings"
-                        onClick={() => setShowAccountDropdown(false)}
+                      <button
+                        type="button"
+                        onClick={() => { setShowAccountDropdown(false); openSettings(); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <Settings className="w-4 h-4 text-gray-500" />
                         <span>Settings</span>
-                      </Link>
+                      </button>
                     </div>
 
                     {/* Logout */}
