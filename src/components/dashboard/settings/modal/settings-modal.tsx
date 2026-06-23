@@ -62,7 +62,7 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
     >
       <DialogContent
         className="w-[90vw] md:w-[80vw] max-w-[1440px] sm:max-w-[1440px] md:min-w-[720px] h-[85vh] p-0 flex gap-0 overflow-hidden"
-        overlayClassName="bg-[#0000004d]"
+        overlayClassName="bg-[#0000004d] backdrop-blur-[2px]"
         showCloseButton={false}
       >
         {/* Left sidebar */}
