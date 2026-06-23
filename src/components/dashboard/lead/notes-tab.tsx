@@ -1,13 +1,23 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { LeadNote } from "@/types/database";
+
+interface MentionUser {
+  user_id: string;
+  name: string | null;
+  email: string;
+}
+
+/** The label inserted/matched for a mention — real name when known, else email. */
+function mentionLabel(u: MentionUser): string {
+  return u.name || u.email;
+}
 
 interface NotesTabProps {
   leadId: string;
@@ -45,36 +55,121 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
     const [newNote, setNewNote] = useState("");
     const [adding, setAdding] = useState(false);
 
+    // @mention picker state
+    const [mentionUsers, setMentionUsers] = useState<MentionUser[]>([]);
+    const [mentionOpen, setMentionOpen] = useState(false);
+    const [mentionQuery, setMentionQuery] = useState("");
+    const [mentionStart, setMentionStart] = useState<number | null>(null);
+    const [activeIdx, setActiveIdx] = useState(0);
+
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
         textareaRef.current?.focus();
       },
     }));
 
+    // Load the branch-scoped mentionable users for this lead.
+    useEffect(() => {
+      let cancelled = false;
+      fetch(`/api/v1/leads/${leadId}/mentionable-users`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((json) => {
+          if (!cancelled && json?.data) setMentionUsers(json.data as MentionUser[]);
+        })
+        .catch(() => {});
+      return () => {
+        cancelled = true;
+      };
+    }, [leadId]);
+
+    // Labels of all mentionable users — used to highlight @mentions in saved notes.
+    const mentionLabels = useMemo(() => mentionUsers.map(mentionLabel), [mentionUsers]);
+
+    const mentionMatches = useMemo(() => {
+      const q = mentionQuery.trim().toLowerCase();
+      const list = q
+        ? mentionUsers.filter(
+            (u) =>
+              (u.name || "").toLowerCase().includes(q) ||
+              u.email.toLowerCase().includes(q),
+          )
+        : mentionUsers;
+      return list.slice(0, 6);
+    }, [mentionUsers, mentionQuery]);
+
+    // Detect an active "@query" right before the cursor (no spaces in the query,
+    // so an already-inserted "@Full Name " never re-triggers the picker).
+    const syncMentionState = (value: string, cursor: number) => {
+      const upto = value.slice(0, cursor);
+      const at = upto.lastIndexOf("@");
+      if (at < 0) {
+        setMentionOpen(false);
+        return;
+      }
+      const charBefore = at > 0 ? upto[at - 1] : " ";
+      const validStart = at === 0 || /\s/.test(charBefore);
+      const query = upto.slice(at + 1);
+      if (!validStart || /\s/.test(query) || query.length > 40) {
+        setMentionOpen(false);
+        return;
+      }
+      setMentionStart(at);
+      setMentionQuery(query);
+      setActiveIdx(0);
+      setMentionOpen(true);
+    };
+
+    const selectMention = (u: MentionUser) => {
+      if (mentionStart === null) return;
+      const label = mentionLabel(u);
+      const before = newNote.slice(0, mentionStart);
+      const after = newNote.slice(mentionStart + 1 + mentionQuery.length);
+      const inserted = `@${label} `;
+      setNewNote(before + inserted + after);
+      setMentionOpen(false);
+      setMentionStart(null);
+      setMentionQuery("");
+      const caret = before.length + inserted.length;
+      setTimeout(() => {
+        const el = textareaRef.current;
+        if (el) {
+          el.focus();
+          el.setSelectionRange(caret, caret);
+        }
+      }, 0);
+    };
+
+    const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      const value = e.target.value;
+      setNewNote(value);
+      syncMentionState(value, e.target.selectionStart ?? value.length);
+    };
+
     const handleAddNote = async () => {
-      if (!newNote.trim()) return;
+      const content = newNote.trim();
+      if (!content) return;
       setAdding(true);
 
       try {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        // Which mentionable users are referenced as @Label in the text.
+        const mentioned_user_ids = mentionUsers
+          .filter((u) => content.includes(`@${mentionLabel(u)}`))
+          .map((u) => u.user_id);
 
-        const { data, error } = await supabase
-          .from("lead_notes")
-          .insert({
-            lead_id: leadId,
-            user_id: user!.id,
-            user_email: user!.email!,
-            content: newNote.trim(),
-          })
-          .select()
-          .single();
+        const res = await fetch(`/api/v1/leads/${leadId}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, mentioned_user_ids }),
+        });
+        if (!res.ok) throw new Error("request failed");
+        const json = await res.json();
 
-        if (error) throw error;
-
-        onNotesChange([data as LeadNote, ...notes]);
+        onNotesChange([json.data as LeadNote, ...notes]);
         setNewNote("");
-        toast.success("Note added");
+        setMentionOpen(false);
+        toast.success(
+          mentioned_user_ids.length ? "Note added · people notified" : "Note added",
+        );
       } catch {
         toast.error("Failed to add note");
       } finally {
@@ -82,7 +177,29 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
       }
     };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (mentionOpen && mentionMatches.length > 0) {
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          setActiveIdx((i) => (i + 1) % mentionMatches.length);
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          setActiveIdx((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+          return;
+        }
+        if (e.key === "Enter" || e.key === "Tab") {
+          e.preventDefault();
+          selectMention(mentionMatches[activeIdx]);
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          setMentionOpen(false);
+          return;
+        }
+      }
       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         handleAddNote();
@@ -95,17 +212,49 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
         <Card className="shadow-none rounded-lg py-0">
           <CardContent className="p-4 pb-4">
             <div className="space-y-3">
-              <Textarea
-                ref={textareaRef}
-                placeholder="Add a note..."
-                value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
-                onKeyDown={handleKeyDown}
-                className="min-h-[100px] resize-none"
-              />
+              <div className="relative">
+                <Textarea
+                  ref={textareaRef}
+                  placeholder="Add a note... (type @ to mention)"
+                  value={newNote}
+                  onChange={handleChange}
+                  onKeyDown={handleKeyDown}
+                  onBlur={() => setTimeout(() => setMentionOpen(false), 120)}
+                  className="min-h-[100px] resize-none"
+                />
+                {mentionOpen && mentionMatches.length > 0 && (
+                  <div className="absolute left-2 right-2 top-11 z-50 max-h-[150px] overflow-auto rounded-md border bg-popover shadow-lg">
+                    {mentionMatches.map((u, i) => (
+                      <button
+                        type="button"
+                        key={u.user_id}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectMention(u);
+                        }}
+                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm ${
+                          i === activeIdx ? "bg-accent" : "hover:bg-accent"
+                        }`}
+                      >
+                        <span className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-medium text-primary shrink-0">
+                          {getInitials(u.name || u.email)}
+                        </span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block truncate font-medium">{u.name || u.email}</span>
+                          {u.name && (
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {u.email}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-between">
                 <p className="text-xs text-muted-foreground">
-                  Press ⌘+Enter to save
+                  Type @ to mention · ⌘+Enter to save
                 </p>
                 <Button
                   size="sm"
@@ -139,6 +288,7 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
                 teamMemberNames={teamMemberNames}
                 teamMemberEmails={teamMemberEmails}
                 currentUserId={currentUserId}
+                mentionLabels={mentionLabels}
               />
             ))}
           </div>
@@ -153,11 +303,13 @@ function NoteCard({
   teamMemberNames,
   teamMemberEmails,
   currentUserId,
+  mentionLabels,
 }: {
   note: LeadNote;
   teamMemberNames: Record<string, string>;
   teamMemberEmails: Record<string, string>;
   currentUserId?: string;
+  mentionLabels: string[];
 }) {
   const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
   const initials = getInitials(authorName);
@@ -196,7 +348,7 @@ function NoteCard({
                   isOwn ? "text-right" : ""
                 }`}
               >
-                {note.content}
+                {renderWithMentions(note.content, mentionLabels)}
               </p>
             </div>
           </div>
@@ -214,6 +366,36 @@ function getInitials(nameOrEmail: string): string {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
   return base.substring(0, 2).toUpperCase();
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Render note text, wrapping any "@<known member>" as a styled mention chip. */
+function renderWithMentions(content: string, labels: string[]): React.ReactNode {
+  const known = [...new Set(labels.filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (known.length === 0) return content;
+
+  const re = new RegExp(`@(${known.map(escapeRegExp).join("|")})`, "g");
+  const out: React.ReactNode[] = [];
+  let last = 0;
+  let key = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(content)) !== null) {
+    if (m.index > last) out.push(content.slice(last, m.index));
+    out.push(
+      <span
+        key={key++}
+        className="rounded bg-primary/10 px-1 font-medium text-primary"
+      >
+        @{m[1]}
+      </span>,
+    );
+    last = m.index + m[0].length;
+  }
+  if (last < content.length) out.push(content.slice(last));
+  return out;
 }
 
 // Relative time for the note timestamp ("Just now" / "5m ago" / "3h ago" /
