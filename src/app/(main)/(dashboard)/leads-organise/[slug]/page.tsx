@@ -148,6 +148,7 @@ export default async function LeadsOrganiseCockpitPage({
         leadLists={pipelineLists}
         roleMap={roleMap}
         extraDefaultVisibleKeys={["assigned_role"]}
+        isStagingView
       />
     </div>
   );

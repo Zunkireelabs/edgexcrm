@@ -98,6 +98,7 @@ interface LeadsTableProps {
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
   extraDefaultVisibleKeys?: string[];
+  isStagingView?: boolean;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -125,6 +126,7 @@ export function LeadsTable({
   leadLists = [],
   roleMap,
   extraDefaultVisibleKeys = [],
+  isStagingView = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -1094,7 +1096,7 @@ export function LeadsTable({
                 Move to list
               </button>
             )}
-            {isAdmin && selectedCount === 2 && (
+            {isAdmin && !isStagingView && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
@@ -1474,7 +1476,7 @@ export function LeadsTable({
       </Dialog>
 
       {/* Merge Dialog — shown when exactly 2 leads are selected */}
-      {isAdmin && mergeDialogOpen && selectedCount === 2 && (() => {
+      {isAdmin && !isStagingView && mergeDialogOpen && selectedCount === 2 && (() => {
         const [idA, idB] = Array.from(selectedIds);
         const leadA = localLeads.find((l) => l.id === idA);
         const leadB = localLeads.find((l) => l.id === idB);
