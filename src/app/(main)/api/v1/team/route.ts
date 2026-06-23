@@ -50,12 +50,16 @@ export async function GET() {
     created_at: string;
   }>;
 
-  // Fetch user emails from auth.users — uses raw() escape hatch since
+  // Fetch user emails + names from auth.users — uses raw() escape hatch since
   // auth.admin is a service-only API not covered by the tenant scope.
-  const { data: authData } = await db.raw().auth.admin.listUsers();
+  // perPage:1000 future-proofs against silent truncation as the tenant grows.
+  const { data: authData } = await db.raw().auth.admin.listUsers({ perPage: 1000 });
   const userMap = new Map<string, string>();
+  const nameMap = new Map<string, string | null>();
   for (const u of authData?.users || []) {
     userMap.set(u.id, u.email || "");
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    nameMap.set(u.id, (meta?.name ?? meta?.full_name ?? null) as string | null);
   }
 
   const enriched = members.map((m) => ({
@@ -64,6 +68,7 @@ export async function GET() {
     role: m.role,
     position_id: m.position_id,
     branch_id: m.branch_id,
+    name: nameMap.get(m.user_id) ?? null,
     email: userMap.get(m.user_id) || "Unknown",
     default_hourly_rate: m.default_hourly_rate,
     created_at: m.created_at,

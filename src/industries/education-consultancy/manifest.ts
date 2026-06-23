@@ -8,6 +8,7 @@ import { insightsMeta } from "./features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
 import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
+import { classesMeta } from "./features/classes/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -21,6 +22,7 @@ export const manifest: IndustryManifest = {
     { meta: campaignsMeta },
     { meta: applicationTrackingMeta },
     { meta: leadListsMeta },
+    { meta: classesMeta },
   ],
   sidebar: [
     {
@@ -59,6 +61,12 @@ export const manifest: IndustryManifest = {
       href: "/applications",
       label: "Applications",
       icon: "GraduationCap",
+    },
+    {
+      featureId: FEATURES.CLASSES,
+      href: "/classes",
+      label: "Classes",
+      icon: "BookOpen",
     },
   ],
   ai: aiConfig,

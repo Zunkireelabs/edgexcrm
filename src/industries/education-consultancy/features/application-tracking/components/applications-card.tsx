@@ -13,9 +13,10 @@ import type { Application, ApplicationStage } from "@/types/database";
 interface ApplicationsCardProps {
   leadId: string;
   canManage: boolean;
+  disabled?: boolean;
 }
 
-export function ApplicationsCard({ leadId, canManage }: ApplicationsCardProps) {
+export function ApplicationsCard({ leadId, canManage, disabled = false }: ApplicationsCardProps) {
   const [applications, setApplications] = useState<Application[]>([]);
   const [stages, setStages] = useState<ApplicationStage[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,8 +62,9 @@ export function ApplicationsCard({ leadId, canManage }: ApplicationsCardProps) {
                 size="sm"
                 variant="ghost"
                 className="h-6 w-6 p-0"
-                onClick={() => setAddOpen(true)}
-                title="Add Application"
+                onClick={() => !disabled && setAddOpen(true)}
+                title={disabled ? "Sign consent first" : "Add Application"}
+                disabled={disabled}
               >
                 <Plus className="h-3.5 w-3.5" />
               </Button>

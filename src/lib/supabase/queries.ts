@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
@@ -80,34 +80,56 @@ export async function getLeads(
   }
 ): Promise<Lead[]> {
   const supabase = await createClient();
-  let query = supabase
-    .from("leads")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .is("deleted_at", null)
-    .is("converted_at", null)
-    .limit(scope?.limit ?? 1000);
 
+  // Compute id-lists once (async) before the chunk loop.
+  let selfIds: string[] | null = null;
+  let branchIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
-    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
-    query = query.in("id", ids);
+    selfIds = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
   } else if (scope?.branchId) {
-    const ids = await leadIdsForBranch(supabase, tenantId, scope.branchId);
-    query = query.in("id", ids);
-  }
-  if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
-
-  if (scope?.listId) {
-    query = query.eq("list_id", scope.listId);
-  } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
-    // Master view for education: show leads not in any archive list (NULL list_id is included)
-    query = query.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+    branchIds = await leadIdsForBranch(supabase, tenantId, scope.branchId);
   }
 
-  const { data, error } = await query.order("last_activity_at", { ascending: false });
+  // Factory applied on every chunk so all filters + stable sort are consistent.
+  const buildQuery = () => {
+    let q = supabase
+      .from("leads")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .is("converted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
 
-  if (error) throw error;
-  return (data as Lead[]) || [];
+    if (selfIds !== null) q = q.in("id", selfIds);
+    else if (branchIds !== null) q = q.in("id", branchIds);
+
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+
+    if (scope?.listId) {
+      q = q.eq("list_id", scope.listId);
+    } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+      // Master view for education: show leads not in any archive list (NULL list_id is included)
+      q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+    }
+
+    return q;
+  };
+
+  // TEMPORARY: loads the whole list into the client; proper server-side pagination is the real roadmap fix.
+  // PostgREST caps each response at max-rows=1000, so .limit() alone can't exceed that. We page in CHUNK-sized
+  // slices via .range() and concatenate until a short page or the caller's ceiling (scope.limit) is reached.
+  const CHUNK = 1000;
+  const max = scope?.limit ?? 1000;
+  const out: Lead[] = [];
+  for (let from = 0; from < max; from += CHUNK) {
+    const to = Math.min(from + CHUNK, max) - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) break;
+    out.push(...((data ?? []) as Lead[]));
+    if (!data || data.length < CHUNK) break;
+  }
+  return out;
 }
 
 export async function getLead(
@@ -590,4 +612,54 @@ export async function getRecentNotifications(
 
   if (error) return [];
   return (data ?? []) as RecentNotification[];
+}
+
+export async function getImportSourceReconciliation(
+  tenantId: string,
+  stagingListId: string,
+): Promise<ImportSourceReconciliationRow[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase.rpc("reconcile_import_sources", {
+    p_tenant: tenantId,
+    p_staging_list: stagingListId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ImportSourceReconciliationRow[];
+}
+
+export interface TeamMemberWithPosition {
+  user_id: string;
+  display: string;
+  position_name: string | null;
+}
+
+export async function getTeamMembersWithPositions(
+  tenantId: string,
+): Promise<TeamMemberWithPosition[]> {
+  const supabase = await createServiceClient();
+  const { data: members, error } = await supabase
+    .from("tenant_users")
+    .select("user_id, positions(name)")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const userMap = new Map<string, string>();
+  for (const u of authData?.users || []) {
+    userMap.set(u.id, u.email || "");
+  }
+
+  return (members || []).map((m) => {
+    const posEmbed = Array.isArray(m.positions)
+      ? (m.positions[0] ?? null)
+      : m.positions;
+    const email = userMap.get(m.user_id) || "";
+    const name = email.split("@")[0] || email;
+    return {
+      user_id: m.user_id,
+      display: name,
+      position_name: (posEmbed as { name?: string } | null)?.name ?? null,
+    };
+  });
 }

@@ -31,6 +31,7 @@ export default async function LeadDetailPage({
   const serviceClient = await createServiceClient();
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const hasClasses = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES);
 
   const [notes, checklists, activities, stages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
@@ -53,7 +54,8 @@ export default async function LeadDetailPage({
           .eq("id", tenantData.tenant.industry_id)
           .single()
       : Promise.resolve({ data: null }),
-    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([] as LeadList[]),
+    // Fetch lists when either feature is enabled (both rely on list positions)
+    (hasLeadLists || hasClasses) ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([] as LeadList[]),
   ]);
 
   const entity = entityResult.data as TenantEntity | null;
@@ -68,6 +70,66 @@ export default async function LeadDetailPage({
         )
       )
     : [];
+
+  // Compute list-position gates for Classes and Applications cards (education only)
+  const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
+  const allListsTyped = allLists as LeadList[];
+  const qualifiedList = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "qualified");
+  const prospectsListItem = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "prospects");
+  const currentList = leadListId ? allListsTyped.find((l) => l.id === leadListId) : null;
+
+  const currentSortOrder = currentList ? (currentList as unknown as { sort_order: number; is_archive: boolean }).sort_order : null;
+  const currentIsArchive = currentList ? (currentList as unknown as { is_archive: boolean }).is_archive : false;
+
+  const qualifiedSortOrder = qualifiedList ? (qualifiedList as unknown as { sort_order: number }).sort_order : null;
+  const prospectsSortOrder = prospectsListItem ? (prospectsListItem as unknown as { sort_order: number }).sort_order : null;
+
+  // classesActive: non-archive list AND sort_order >= qualified's sort_order
+  const classesActive =
+    hasClasses &&
+    leadListId !== null &&
+    currentSortOrder !== null &&
+    qualifiedSortOrder !== null &&
+    !currentIsArchive &&
+    currentSortOrder >= qualifiedSortOrder;
+
+  // applicationsActive: non-archive list AND sort_order >= prospects, OR legacy lead_type=prospect
+  const applicationsActive =
+    getFeatureAccess(tenantData.tenant.industry_id, FEATURES.APPLICATION_TRACKING) &&
+    (
+      (
+        leadListId !== null &&
+        currentSortOrder !== null &&
+        prospectsSortOrder !== null &&
+        !currentIsArchive &&
+        currentSortOrder >= prospectsSortOrder
+      ) ||
+      (lead as unknown as { lead_type?: string | null }).lead_type === "prospect"
+    );
+
+  // Consent props — only query when applicationsActive to avoid extra DB calls
+  let consentEnabled = false;
+  let consentSigned = false;
+  if (applicationsActive) {
+    const [tplRes, signedRes] = await Promise.all([
+      serviceClient
+        .from("consent_templates")
+        .select("is_active")
+        .eq("tenant_id", tenantData.tenant.id)
+        .maybeSingle(),
+      serviceClient
+        .from("lead_consents")
+        .select("id")
+        .eq("tenant_id", tenantData.tenant.id)
+        .eq("lead_id", lead.id)
+        .eq("status", "signed")
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    consentEnabled = (tplRes.data as { is_active: boolean } | null)?.is_active === true;
+    consentSigned = !!signedRes.data;
+  }
 
   return (
     <LeadDetailV2
@@ -84,7 +146,12 @@ export default async function LeadDetailPage({
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
       canManageApplications={tenantData.permissions.canManageApplications}
+      canManageClasses={tenantData.permissions.canManageClasses}
       leadLists={accessibleLists}
+      classesActive={classesActive}
+      applicationsActive={applicationsActive}
+      consentEnabled={consentEnabled}
+      consentSigned={consentSigned}
     />
   );
 }

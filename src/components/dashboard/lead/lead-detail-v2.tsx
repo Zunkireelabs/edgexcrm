@@ -39,12 +39,15 @@ import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
+import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
+import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
 
 interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
 }
 
 interface LeadDetailV2Props {
@@ -61,7 +64,12 @@ interface LeadDetailV2Props {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   canManageApplications?: boolean;
+  canManageClasses?: boolean;
   leadLists?: LeadList[];
+  classesActive?: boolean;
+  applicationsActive?: boolean;
+  consentEnabled?: boolean;
+  consentSigned?: boolean;
 }
 
 interface LeadDraft {
@@ -121,7 +129,12 @@ export function LeadDetailV2({
   userBranchId,
   leadScope,
   canManageApplications,
+  canManageClasses,
   leadLists,
+  classesActive,
+  applicationsActive,
+  consentEnabled = false,
+  consentSigned = false,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -140,6 +153,8 @@ export function LeadDetailV2({
   const [activeTab, setActiveTab] = useState("activity");
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
+  const [consentSignedState, setConsentSignedState] = useState(consentSigned);
+  useEffect(() => { setConsentSignedState(consentSigned); }, [consentSigned]);
 
   // Qualify dialog state (education_consultancy only)
   const [qualifyOpen, setQualifyOpen] = useState(false);
@@ -170,6 +185,14 @@ export function LeadDetailV2({
   const teamMemberEmails = teamMembers.reduce<Record<string, string>>(
     (acc, member) => {
       acc[member.user_id] = member.email;
+      return acc;
+    },
+    {}
+  );
+
+  const teamMemberNames = teamMembers.reduce<Record<string, string>>(
+    (acc, member) => {
+      if (member.name) acc[member.user_id] = member.name;
       return acc;
     },
     {}
@@ -646,6 +669,7 @@ export function LeadDetailV2({
             notes={notes}
             activities={activities}
             teamMemberEmails={teamMemberEmails}
+            teamMemberNames={teamMemberNames}
             customFields={customFields}
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -673,12 +697,41 @@ export function LeadDetailV2({
 
         {/* Right Sidebar */}
         <div className="lg:col-span-full xl:col-span-1">
-          {tenant.industry_id === "education_consultancy" && currentLead.lead_type === "prospect" ? (
+          {tenant.industry_id === "education_consultancy" ? (
             <div className="space-y-4">
-              <ApplicationsCard
-                leadId={currentLead.id}
-                canManage={canManageApplications ?? isAdmin}
-              />
+              {applicationsActive ? (
+                <>
+                  {consentEnabled && (
+                    <ConsentCard
+                      leadId={currentLead.id}
+                      tenantId={tenant.id}
+                      consentEnabled={consentEnabled}
+                      consentSigned={consentSigned}
+                      canManage={canManageApplications ?? isAdmin}
+                      onSignedChange={setConsentSignedState}
+                    />
+                  )}
+                  <ApplicationsCard
+                    leadId={currentLead.id}
+                    canManage={canManageApplications ?? isAdmin}
+                    disabled={consentEnabled && !consentSignedState}
+                  />
+                </>
+              ) : (
+                <ManagementPanel
+                  ref={checklistRef}
+                  lead={currentLead}
+                  checklists={checklists}
+                  isAdmin={isAdmin}
+                  onChecklistsChange={handleChecklistsChange}
+                />
+              )}
+              {classesActive && (
+                <ClassesCard
+                  leadId={currentLead.id}
+                  canManage={canManageClasses ?? isAdmin}
+                />
+              )}
             </div>
           ) : (
             <ManagementPanel

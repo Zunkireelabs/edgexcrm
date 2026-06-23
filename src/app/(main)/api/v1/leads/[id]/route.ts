@@ -417,17 +417,19 @@ export async function PATCH(
     existingLead.assigned_to !== updated.assigned_to;
 
   Promise.all([
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "lead.updated",
-      entityType: "lead",
-      entityId: id,
-      changes,
-      ipAddress: ip,
-      userAgent,
-      requestId,
-    }),
+    ...(Object.keys(changes).length > 0
+      ? [createAuditLog({
+          tenantId: auth.tenantId,
+          userId: auth.userId,
+          action: "lead.updated",
+          entityType: "lead",
+          entityId: id,
+          changes,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        })]
+      : []),
     ...(statusChanged
       ? [
           emitEvent({

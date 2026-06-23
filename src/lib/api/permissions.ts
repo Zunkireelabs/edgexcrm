@@ -7,6 +7,7 @@ export interface PositionPermissions {
   leadScope: "all" | "own" | "team";                              // "team" reserved → resolves as "all" in v1
   canEditLeads?: boolean;                                          // only meaningful for member+leadScope:all (branch manager). Absent ⇒ default per resolver.
   canManageApplications?: boolean;                                 // controls write access to the Application Tracking feature. Absent ⇒ default per resolver.
+  canManageClasses?: boolean;                                      // controls write access to the Classes feature. Absent ⇒ default per resolver.
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -18,6 +19,7 @@ export interface ResolvedPermissions {
   leadScope: "all" | "own" | "team";
   canEditLeads: boolean;
   canManageApplications: boolean;
+  canManageClasses: boolean;
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
@@ -37,6 +39,7 @@ export function resolvePermissions(
       leadScope: "all",
       canEditLeads: true,
       canManageApplications: true,
+      canManageClasses: true,
       dashboardWidgets: null,
     };
   }
@@ -51,6 +54,7 @@ export function resolvePermissions(
       leadScope,
       canEditLeads: role === "counselor", // counselors edit own; viewers don't
       canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
+      canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
       dashboardWidgets: null,
     };
   }
@@ -63,6 +67,7 @@ export function resolvePermissions(
     leadScope: p.leadScope, // "team" treated as "all" by callers in v1; see helpers below
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
+    canManageClasses: p.canManageClasses === true,
     dashboardWidgets:
       p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
   };
@@ -74,6 +79,9 @@ export function shouldRestrictToSelf(p: ResolvedPermissions): boolean {
 }
 export function canManageApplications(p: ResolvedPermissions): boolean {
   return p.canManageApplications;
+}
+export function canManageClasses(p: ResolvedPermissions): boolean {
+  return p.canManageClasses;
 }
 export function canAccessPipeline(p: ResolvedPermissions, pipelineId: string): boolean {
   return p.pipelineAccess === "all" || p.pipelineAccess.ids.has(pipelineId);
@@ -180,6 +188,11 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canManageApplications (optional)
   if (p.canManageApplications !== undefined && typeof p.canManageApplications !== "boolean") {
     return "permissions.canManageApplications must be a boolean";
+  }
+
+  // canManageClasses (optional)
+  if (p.canManageClasses !== undefined && typeof p.canManageClasses !== "boolean") {
+    return "permissions.canManageClasses must be a boolean";
   }
 
   // dashboard

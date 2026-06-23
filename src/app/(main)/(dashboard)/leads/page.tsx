@@ -52,11 +52,11 @@ export default async function LeadsPage({
         if (accessible) activeList = found;
       }
     }
-    const archiveIds = allLists.filter((l) => l.is_archive).map((l) => l.id);
+    const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
     if (activeList) {
       scope.listId = activeList.id;
     } else {
-      scope.excludeListIds = archiveIds;
+      scope.excludeListIds = excludeIds;
     }
   }
 
