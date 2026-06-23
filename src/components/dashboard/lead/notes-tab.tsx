@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Clock, Send } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -330,18 +330,8 @@ function NoteCard({
               <span className="text-xs font-medium text-primary">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <div
-                className={`flex items-center justify-between gap-2 ${
-                  isOwn ? "flex-row-reverse" : ""
-                }`}
-              >
+              <div className={`flex items-center ${isOwn ? "justify-end" : "justify-start"}`}>
                 <span className="text-sm font-medium truncate">{authorName}</span>
-                <span
-                  className="text-xs text-muted-foreground shrink-0"
-                  title={formatAbsolute(note.created_at)}
-                >
-                  {formatRelativeTime(note.created_at)}
-                </span>
               </div>
               <p
                 className={`text-sm text-foreground mt-1 whitespace-pre-wrap ${
@@ -350,6 +340,15 @@ function NoteCard({
               >
                 {renderWithMentions(note.content, mentionLabels)}
               </p>
+              {/* Exact date + time — always visible, aligned to the bubble side */}
+              <div
+                className={`mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/70 ${
+                  isOwn ? "justify-end" : "justify-start"
+                }`}
+              >
+                <Clock className="h-3 w-3 shrink-0" />
+                <span>{formatExactStamp(note.created_at)}</span>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -398,38 +397,14 @@ function renderWithMentions(content: string, labels: string[]): React.ReactNode 
   return out;
 }
 
-// Relative time for the note timestamp ("Just now" / "5m ago" / "3h ago" /
-// "Yesterday" / "2d ago" / "Jun 16"). Mirrors formatRelativeTime used by the
-// Overview preview and Activity notes sub-tab so all three sites match.
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? "Just now" : `${diffMinutes}m ago`;
-    }
-    return `${diffHours}h ago`;
-  }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
-
-  return date.toLocaleDateString("en-US", {
+// Visible exact stamp: "Jun 23, 2026 · 2:42 PM".
+function formatExactStamp(dateString: string): string {
+  const d = new Date(dateString);
+  const date = d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
-    year: date.getFullYear() !== now.getFullYear() ? "numeric" : undefined,
+    year: "numeric",
   });
-}
-
-// Full, exact timestamp shown on hover via the title tooltip
-// (e.g. "Jun 23, 2026, 12:09 PM").
-function formatAbsolute(dateString: string): string {
-  return new Date(dateString).toLocaleString("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
+  const time = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return `${date} · ${time}`;
 }
