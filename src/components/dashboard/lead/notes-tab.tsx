@@ -15,6 +15,8 @@ interface NotesTabProps {
   onNotesChange: (notes: LeadNote[]) => void;
   teamMemberNames?: Record<string, string>;
   teamMemberEmails?: Record<string, string>;
+  /** Auth user id of the viewer — own notes render chat-style on the right. */
+  currentUserId?: string;
 }
 
 /** Resolve a note author's display name: real name → team email → stored email. */
@@ -36,7 +38,7 @@ export interface NotesTabRef {
 
 export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
   function NotesTab(
-    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {} },
+    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId },
     ref,
   ) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -136,6 +138,7 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
                 note={note}
                 teamMemberNames={teamMemberNames}
                 teamMemberEmails={teamMemberEmails}
+                currentUserId={currentUserId}
               />
             ))}
           </div>
@@ -149,38 +152,57 @@ function NoteCard({
   note,
   teamMemberNames,
   teamMemberEmails,
+  currentUserId,
 }: {
   note: LeadNote;
   teamMemberNames: Record<string, string>;
   teamMemberEmails: Record<string, string>;
+  currentUserId?: string;
 }) {
   const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
   const initials = getInitials(authorName);
+  // Chat-style: the viewer's own notes sit on the right (mirrored + tinted);
+  // everyone else's stay on the left exactly as before.
+  const isOwn = !!currentUserId && note.user_id === currentUserId;
 
   return (
-    <Card className="shadow-none rounded-lg py-0">
-      <CardContent className="p-4 pb-4">
-        <div className="flex gap-3">
-          <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-            <span className="text-xs font-medium text-primary">{initials}</span>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">{authorName}</span>
-              <span
-                className="text-xs text-muted-foreground shrink-0"
-                title={formatAbsolute(note.created_at)}
-              >
-                {formatRelativeTime(note.created_at)}
-              </span>
+    <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
+      <Card
+        className={`shadow-none rounded-lg py-0 max-w-[80%] ${
+          isOwn ? "bg-primary/5 border-primary/20" : ""
+        }`}
+      >
+        <CardContent className="p-4 pb-4">
+          <div className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}>
+            <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+              <span className="text-xs font-medium text-primary">{initials}</span>
             </div>
-            <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">
-              {note.content}
-            </p>
+            <div className="flex-1 min-w-0">
+              <div
+                className={`flex items-center justify-between gap-2 ${
+                  isOwn ? "flex-row-reverse" : ""
+                }`}
+              >
+                <span className="text-sm font-medium truncate">{authorName}</span>
+                <span
+                  className="text-xs text-muted-foreground shrink-0"
+                  title={formatAbsolute(note.created_at)}
+                >
+                  {formatRelativeTime(note.created_at)}
+                </span>
+              </div>
+              <p
+                className={`text-sm text-foreground mt-1 whitespace-pre-wrap ${
+                  isOwn ? "text-right" : ""
+                }`}
+              >
+                {note.content}
+              </p>
+            </div>
           </div>
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 

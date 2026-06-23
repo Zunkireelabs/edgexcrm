@@ -377,6 +377,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           onNotesChange={onNotesChange}
           teamMemberNames={teamMemberNames}
           teamMemberEmails={teamMemberEmails}
+          currentUserId={currentUserId}
         />
       )}
 
