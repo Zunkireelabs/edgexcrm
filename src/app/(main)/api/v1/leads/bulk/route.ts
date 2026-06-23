@@ -2,6 +2,9 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { canAccessList } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import {
   apiSuccess,
   apiValidationError,
@@ -41,7 +44,13 @@ export async function PATCH(request: NextRequest) {
   // §4.1: team-scoped member with no branchId has no branch scope — disallow bulk ops
   if (isTeamScoped && !auth.branchId) return apiForbidden();
 
-  let body: { ids?: string[]; assigned_to?: string | null; branch_id?: string | null };
+  let body: {
+    ids?: string[];
+    assigned_to?: string | null;
+    branch_id?: string | null;
+    list_id?: string | null;
+    archive_reason?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -73,6 +82,13 @@ export async function PATCH(request: NextRequest) {
   if (body.branch_id !== undefined && body.branch_id !== null) {
     if (!UUID_REGEX.test(body.branch_id)) {
       return apiValidationError({ branch_id: ["Invalid UUID format"] });
+    }
+  }
+
+  // Validate list_id if provided
+  if (body.list_id !== undefined && body.list_id !== null) {
+    if (!UUID_REGEX.test(body.list_id)) {
+      return apiValidationError({ list_id: ["Invalid UUID format"] });
     }
   }
 
@@ -114,10 +130,37 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Validate list_id: feature gate, resolve, check access, require archive_reason
+  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown } | null = null;
+  if (body.list_id !== undefined && body.list_id !== null) {
+    if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+      return apiForbidden();
+    }
+    const { data: listCheck } = await supabase
+      .from("lead_lists")
+      .select("id, slug, name, is_archive, access")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.list_id)
+      .maybeSingle();
+    if (!listCheck) {
+      return apiValidationError({ list_id: ["List not found in this tenant"] });
+    }
+    const accessible = canAccessList(
+      auth.permissions,
+      listCheck.access as { mode: string; positionIds?: string[] },
+      auth.positionId,
+    );
+    if (!accessible) return apiForbidden();
+    if (listCheck.is_archive && !body.archive_reason) {
+      return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
+    }
+    targetList = listCheck;
+  }
+
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id")
+    .select("id, assigned_to, branch_id, list_id")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -129,7 +172,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const existingMap = new Map(
-    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id }])
+    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id, list_id: l.list_id as string | null }])
   );
   const notFoundIds = body.ids.filter((id) => !existingMap.has(id));
 
@@ -153,6 +196,13 @@ export async function PATCH(request: NextRequest) {
   };
   if (body.assigned_to !== undefined) bulkUpdatePayload.assigned_to = body.assigned_to ?? null;
   if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
+  if (body.list_id !== undefined) {
+    bulkUpdatePayload.list_id = body.list_id ?? null;
+    if (targetList) {
+      bulkUpdatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
+      if (body.archive_reason) bulkUpdatePayload.archive_reason = body.archive_reason;
+    }
+  }
 
   // Update all leads
   const { error: updateError } = await supabase
@@ -183,10 +233,29 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // Create audit logs and events for each updated lead
+  // Resolve old list names for human-readable audit entries
+  const oldListNameMap = new Map<string, string>();
+  if (body.list_id !== undefined) {
+    const uniqueOldListIds = [...new Set(
+      idsToUpdate.map((id) => existingMap.get(id)?.list_id).filter((v): v is string => !!v)
+    )];
+    if (uniqueOldListIds.length > 0) {
+      const { data: oldLists } = await supabase
+        .from("lead_lists")
+        .select("id, name")
+        .in("id", uniqueOldListIds);
+      if (oldLists) {
+        for (const l of oldLists) oldListNameMap.set(l.id, l.name);
+      }
+    }
+  }
+
+  // Create audit logs and events for each updated lead (fire-and-forget)
   Promise.all(
     idsToUpdate.flatMap((id) => {
       const prev = existingMap.get(id);
+      const ops: Promise<unknown>[] = [];
+
       const changes: Record<string, { old: unknown; new: unknown }> = {};
       if (body.assigned_to !== undefined) {
         changes.assigned_to = { old: prev?.assigned_to ?? null, new: body.assigned_to ?? null };
@@ -194,8 +263,34 @@ export async function PATCH(request: NextRequest) {
       if (body.branch_id !== undefined) {
         changes.branch_id = { old: prev?.branch_id ?? null, new: body.branch_id ?? null };
       }
-      return [
-        createAuditLog({
+      if (body.list_id !== undefined) {
+        const oldListId = prev?.list_id ?? null;
+        const newListId = body.list_id ?? null;
+        if (oldListId !== newListId) {
+          // Human-readable names for the activity timeline
+          const oldListName = oldListId ? (oldListNameMap.get(oldListId) ?? null) : null;
+          const newListName = targetList?.name ?? null;
+          changes.list = { old: oldListName, new: newListName };
+          if (body.archive_reason) {
+            changes.archive_reason = { old: null, new: body.archive_reason };
+          }
+          ops.push(emitEvent({
+            tenantId: auth.tenantId,
+            type: "lead.list_changed",
+            entityType: "lead",
+            entityId: id,
+            payload: {
+              old_list_id: oldListId,
+              new_list_id: newListId,
+              archive_reason: body.archive_reason ?? null,
+            },
+            requestId,
+          }));
+        }
+      }
+
+      if (Object.keys(changes).length > 0) {
+        ops.push(createAuditLog({
           tenantId: auth.tenantId,
           userId: auth.userId,
           action: "lead.updated",
@@ -205,8 +300,12 @@ export async function PATCH(request: NextRequest) {
           ipAddress: ip,
           userAgent,
           requestId,
-        }),
-        emitEvent({
+        }));
+      }
+
+      // Only emit assign/unassign events when assignment is being changed
+      if (body.assigned_to !== undefined) {
+        ops.push(emitEvent({
           tenantId: auth.tenantId,
           type: body.assigned_to ? "lead.assigned" : "lead.unassigned",
           entityType: "lead",
@@ -216,8 +315,10 @@ export async function PATCH(request: NextRequest) {
             ...(body.branch_id !== undefined && { branch_id: body.branch_id ?? null }),
           },
           requestId,
-        }),
-      ];
+        }));
+      }
+
+      return ops;
     })
   );
 
@@ -290,6 +391,7 @@ export async function PATCH(request: NextRequest) {
     ids: idsToUpdate,
     ...(body.assigned_to !== undefined && { assigned_to: body.assigned_to ?? null }),
     ...(body.branch_id !== undefined && { branch_id: body.branch_id ?? null }),
+    ...(body.list_id !== undefined && { list_id: body.list_id ?? null }),
     notFound: notFoundIds,
   });
 }

@@ -46,14 +46,18 @@ export default async function DashboardLayout({
     hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([]),
   ]);
 
-  // Filter lead lists by caller's per-list access
-  const leadLists = (allLeadLists as LeadList[]).filter((l) =>
+  // Filter lead lists by caller's per-list access, then split staging vs pipeline
+  const accessibleLists = (allLeadLists as LeadList[]).filter((l) =>
     canAccessList(
       tenantData.permissions,
       l.access as { mode: string; positionIds?: string[] },
       tenantData.positionId,
     )
   );
+  const isLayoutAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+  const leadLists = accessibleLists.filter((l) => !l.is_staging);
+  // Leads Organise is admin-only; counselors/viewers never see it in the nav
+  const stagingLists = isLayoutAdmin ? accessibleLists.filter((l) => !!l.is_staging) : [];
 
   const industrySidebarItems = getIndustrySidebarItems(
     tenantData.tenant.industry_id,
@@ -84,6 +88,7 @@ export default async function DashboardLayout({
         leadScope={tenantData.permissions.leadScope}
         selectedBranchId={selectedBranchId}
         leadLists={leadLists}
+        stagingLists={stagingLists}
       >
         {children}
       </DashboardShell>

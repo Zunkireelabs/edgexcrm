@@ -60,6 +60,7 @@ import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
+import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -207,6 +208,7 @@ interface DashboardShellProps {
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
   leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
+  stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
 }
 
@@ -224,6 +226,7 @@ export function DashboardShell({
   leadScope = "all",
   selectedBranchId = null,
   leadLists = [],
+  stagingLists = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -342,6 +345,19 @@ export function DashboardShell({
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
           <>
+            {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+              <Suspense key="leads-organise-nav" fallback={
+                <div className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-500">
+                  <span className="w-[18px] h-[18px] shrink-0" />
+                  Leads Organise
+                </div>
+              }>
+                <LeadsOrganiseNavGroup
+                  lists={stagingLists}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              </Suspense>
+            )}
             {UNIVERSAL_NAV_TOP
               .filter((i) => navAllowed(i.href))
               .filter((i) => !(isEducation && i.href === "/dashboard"))

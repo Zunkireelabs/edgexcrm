@@ -46,6 +46,7 @@ import {
   MoreHorizontal,
   Pencil,
   Building2,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -152,6 +153,10 @@ export function LeadsTable({
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
   const [assignToBranch, setAssignToBranch] = useState<string>("");
   const [isAssigningBranch, setIsAssigningBranch] = useState(false);
+  const [moveListDialogOpen, setMoveListDialogOpen] = useState(false);
+  const [moveListId, setMoveListId] = useState<string>("");
+  const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
+  const [isMoveList, setIsMoveList] = useState(false);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -450,6 +455,68 @@ export function LeadsTable({
       toast.error(error instanceof Error ? error.message : "Failed to share leads");
     } finally {
       setIsAssigningBranch(false);
+    }
+  }
+
+  const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
+  const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
+
+  const CHUNK_SIZE = 100;
+
+  async function handleBulkMove() {
+    const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    if (idsToMove.length === 0) {
+      toast.error("No leads selected");
+      return;
+    }
+    if (!moveListId) {
+      toast.error("Please select a target list");
+      return;
+    }
+    if (moveTargetIsArchive && !moveArchiveReason.trim()) {
+      toast.error("Archive reason is required");
+      return;
+    }
+
+    setIsMoveList(true);
+    const chunks: string[][] = [];
+    for (let i = 0; i < idsToMove.length; i += CHUNK_SIZE) {
+      chunks.push(idsToMove.slice(i, i + CHUNK_SIZE));
+    }
+
+    let totalMoved = 0;
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) {
+          toast.loading(`Moving… chunk ${i + 1}/${chunks.length}`, { id: "bulk-move" });
+        }
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: chunks[i],
+            list_id: moveListId,
+            ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to move leads");
+        }
+        totalMoved += data.data.updated as number;
+      }
+      toast.dismiss("bulk-move");
+      toast.success(`Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`);
+      setSelectedIds(new Set());
+      setMoveListDialogOpen(false);
+      setMoveListId("");
+      setMoveArchiveReason("");
+      router.refresh();
+    } catch (error) {
+      toast.dismiss("bulk-move");
+      toast.error(error instanceof Error ? error.message : "Failed to move leads");
+    } finally {
+      setIsMoveList(false);
     }
   }
 
@@ -1010,6 +1077,15 @@ export function LeadsTable({
                 Branch
               </button>
             )}
+            {isAdmin && leadLists.length > 0 && (
+              <button
+                onClick={() => setMoveListDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Move to list
+              </button>
+            )}
             {isAdmin && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
@@ -1325,6 +1401,65 @@ export function LeadsTable({
               disabled={isAssigningBranch || !assignToBranch}
             >
               {isAssigningBranch ? "Sharing…" : "Share"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Move to List Dialog */}
+      <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
+        setMoveListDialogOpen(open);
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to list</DialogTitle>
+            <DialogDescription>
+              Select a target list. Leads will be moved out of their current list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select list..." />
+              </SelectTrigger>
+              <SelectContent>
+                {leadLists.map((l) => (
+                  <SelectItem key={l.id} value={l.id}>
+                    {l.name}{l.is_archive ? " (Archive)" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {moveTargetIsArchive && (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-gray-700">Archive reason</p>
+                <Select value={moveArchiveReason} onValueChange={setMoveArchiveReason}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select reason..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); }}
+              disabled={isMoveList}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkMove}
+              disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
+            >
+              {isMoveList ? "Moving…" : "Move"}
             </Button>
           </DialogFooter>
         </DialogContent>

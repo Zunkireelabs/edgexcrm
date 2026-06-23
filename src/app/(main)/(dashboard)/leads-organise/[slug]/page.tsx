@@ -1,23 +1,37 @@
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
+import {
+  getCurrentUserTenant,
+  getLeads,
+  getLeadListsByTenant,
+  getTeamMembers,
+  getPipelineStages,
+  getFormConfigsForTenant,
+  getBranches,
+} from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
-import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
 
-export default async function LeadsPage({
-  searchParams,
+export default async function LeadsOrganiseCockpitPage({
+  params,
 }: {
-  searchParams: Promise<{ list?: string }>;
+  params: Promise<{ slug: string }>;
 }) {
+  const { slug } = await params;
+
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
-  if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const { list: listSlug } = await searchParams;
+  // Admin/manager only
+  const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+  if (!isAdmin) redirect("/dashboard");
+
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  if (!hasLeadLists) notFound();
 
   const [serviceClient, cookieStore] = await Promise.all([
     createServiceClient(),
@@ -25,44 +39,45 @@ export default async function LeadsPage({
   ]);
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
-  // Normalize "all" sentinel → null for the Add Lead branch picker default
   const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
 
-  // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
+  const allLists = await getLeadListsByTenant(tenantData.tenant.id);
+
+  // Resolve the staging list by slug
+  const stagingList = (allLists as LeadList[]).find(
+    (l) => l.slug === slug && !!l.is_staging
+  );
+  if (!stagingList) notFound();
+
+  // Check caller can access it
+  const accessible = canAccessList(
+    tenantData.permissions,
+    stagingList.access as { mode: string; positionIds?: string[] },
+    tenantData.positionId,
+  );
+  if (!accessible) notFound();
+
+  // Build scope for this staging list's leads
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
   if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
     scope.branchId = branchCookieVal;
   }
+  scope.listId = stagingList.id;
 
-  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
-
-  // Resolve list slug → list object (and archive exclusion for master view)
-  let activeList: LeadList | null = null;
-  let allLists: LeadList[] = [];
-  if (hasLeadLists) {
-    allLists = await getLeadListsByTenant(tenantData.tenant.id);
-    if (listSlug) {
-      const found = allLists.find((l) => l.slug === listSlug);
-      if (found) {
-        const accessible = canAccessList(
-          tenantData.permissions,
-          found.access as { mode: string; positionIds?: string[] },
-          tenantData.positionId,
-        );
-        if (accessible) activeList = found;
-      }
-    }
-    const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
-    if (activeList) {
-      scope.listId = activeList.id;
-    } else {
-      scope.excludeListIds = excludeIds;
-    }
-  }
+  // Pipeline lists are the non-staging ones (move targets for the bulk bar)
+  const pipelineLists = (allLists as LeadList[]).filter(
+    (l) =>
+      !l.is_staging &&
+      canAccessList(
+        tenantData.permissions,
+        l.access as { mode: string; positionIds?: string[] },
+        tenantData.positionId,
+      )
+  );
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
-      getLeads(tenantData.tenant.id, scope),
+      getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
@@ -90,22 +105,9 @@ export default async function LeadsPage({
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
-  const pageHeading = activeList ? activeList.name : "All Leads";
-
-  // Pass lead lists (accessible ones) for the move-to-list selector
-  const accessibleLists = hasLeadLists
-    ? allLists.filter((l) =>
-        canAccessList(
-          tenantData.permissions,
-          l.access as { mode: string; positionIds?: string[] },
-          tenantData.positionId,
-        )
-      )
-    : [];
-
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
+      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
       <LeadsTable
         leads={leads}
         memberMap={memberMap}
@@ -122,7 +124,7 @@ export default async function LeadsPage({
         maxBranches={tenantData.entitlements.maxBranches}
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
-        leadLists={accessibleLists}
+        leadLists={pipelineLists}
       />
     </div>
   );

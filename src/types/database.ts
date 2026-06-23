@@ -199,6 +199,7 @@ export interface LeadList {
   is_system: boolean;
   is_archive: boolean;
   is_intake: boolean;
+  is_staging?: boolean;
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
   created_at: string;
