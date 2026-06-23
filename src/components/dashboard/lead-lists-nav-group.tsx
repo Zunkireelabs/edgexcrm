@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import { ChevronDown, Users, Settings2 } from "lucide-react";
 import type { LeadList } from "@/types/database";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
 
 interface LeadListsNavGroupProps {
   lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
@@ -15,6 +16,7 @@ interface LeadListsNavGroupProps {
 export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadListsNavGroupProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { openSettings } = useSettingsModal();
   const currentList = searchParams.get("list");
 
   const isOnLeads = pathname === "/leads";
@@ -74,14 +76,14 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadLi
             );
           })}
           {isAdmin && (
-            <Link
-              href="/settings#lead-lists"
-              onClick={onNavigate}
+            <button
+              type="button"
+              onClick={() => { onNavigate(); openSettings("lead-management"); }}
               className="w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-xs text-gray-400 hover:text-gray-600 hover:bg-[#ebebeb] transition-colors"
             >
               <Settings2 className="w-3.5 h-3.5 shrink-0" />
               Manage lists
-            </Link>
+            </button>
           )}
         </div>
       ) : null}

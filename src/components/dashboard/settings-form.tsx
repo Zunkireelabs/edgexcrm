@@ -26,7 +26,7 @@ import { Copy, ExternalLink, Check, X, Loader2 } from "lucide-react";
 
 interface SettingsFormProps {
   tenant: Tenant;
-  formConfigs: FormConfig[];
+  formConfigs?: FormConfig[];
 }
 
 type SlugStatus = "idle" | "checking" | "available" | "taken" | "invalid";
@@ -42,7 +42,7 @@ function debounce<T extends (...args: Parameters<T>) => void>(
   };
 }
 
-export function SettingsForm({ tenant, formConfigs }: SettingsFormProps) {
+export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
   const router = useRouter();
   const [name, setName] = useState(tenant.name);
   const [slug, setSlug] = useState(tenant.slug);

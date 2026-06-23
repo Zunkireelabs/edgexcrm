@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Users } from "lucide-react";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
@@ -40,6 +41,7 @@ interface ClassesWorkspaceProps {
 
 export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage }: ClassesWorkspaceProps) {
   const router = useRouter();
+  const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
   const [enrollOpen, setEnrollOpen] = useState(false);
 
@@ -92,16 +94,16 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           <div className="p-3 border-b flex items-center justify-between">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">All Classes</span>
             {canManage && (
-              <Link href="/settings#classes" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+              <button type="button" onClick={() => openSettings("academic-operations")} className="text-xs text-muted-foreground hover:text-foreground transition-colors">
                 Manage →
-              </Link>
+              </button>
             )}
           </div>
           {classes.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center p-4">
               No classes yet.{" "}
               {canManage && (
-                <Link href="/settings#classes" className="underline">Add one in Settings.</Link>
+                <button type="button" onClick={() => openSettings("academic-operations")} className="underline">Add one in Settings.</button>
               )}
             </p>
           ) : (

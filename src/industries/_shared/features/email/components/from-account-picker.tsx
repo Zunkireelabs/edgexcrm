@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { Loader2 } from "lucide-react";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
 import {
   Select,
   SelectContent,
@@ -19,6 +19,7 @@ interface FromAccountPickerProps {
 
 export function FromAccountPicker({ value, onChange }: FromAccountPickerProps) {
   const { inboxes, loading } = useConnectedInboxes();
+  const { openSettings } = useSettingsModal();
 
   if (loading) {
     return (
@@ -40,9 +41,13 @@ export function FromAccountPicker({ value, onChange }: FromAccountPickerProps) {
           <span className="text-sm text-muted-foreground">No inboxes connected</span>
         </div>
         <p className="text-xs text-muted-foreground">
-          <Link href="/settings#connected-inboxes" className="text-primary hover:underline">
+          <button
+            type="button"
+            onClick={() => openSettings("communications")}
+            className="text-primary hover:underline"
+          >
             Connect a Gmail inbox in Settings
-          </Link>{" "}
+          </button>{" "}
           to send emails from CRM.
         </p>
       </div>
