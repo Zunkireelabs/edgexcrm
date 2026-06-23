@@ -121,6 +121,14 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   BookOpen,
 };
 
+function NavSectionHeader({ label }: { label: string }) {
+  return (
+    <p className="px-3 pt-4 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
+      {label}
+    </p>
+  );
+}
+
 function SidebarGroupRender({
   group,
   pathname,
@@ -344,6 +352,120 @@ export function DashboardShell({
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
+          isEducation ? (() => {
+            // Finds a flat industry item by href (all education items are flat after manifest refactor)
+            const eduItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            const publicFormsSection = navAllowed("/forms") && (
+              hasManyForms ? (
+                <div>
+                  <button
+                    onClick={() => setFormsExpanded(!formsExpanded)}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="w-[18px] h-[18px]" />
+                      Public Forms
+                    </div>
+                    <ChevronDown
+                      className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {formsExpanded && (
+                    <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
+                      {formConfigs.map((form) => (
+                        <a
+                          key={form.slug}
+                          href={`/form/${tenant.slug}/${form.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={() => setMobileOpen(false)}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
+                        >
+                          <span className="flex-1 truncate">{form.name}</span>
+                          <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <a
+                  href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="w-[18px] h-[18px]" />
+                    View Public Form
+                  </div>
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              )
+            );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {eduItem("/insights/dashboards") && renderIndustryEntry(eduItem("/insights/dashboards")!)}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Knowledge Base", icon: Library })}
+
+                {/* Leads */}
+                <NavSectionHeader label="Leads" />
+                {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+                  <Suspense key="leads-organise-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-500">
+                      <span className="w-[18px] h-[18px] shrink-0" />
+                      Leads Organise
+                    </div>
+                  }>
+                    <LeadsOrganiseNavGroup
+                      lists={stagingLists}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  </Suspense>
+                )}
+                <Suspense key="lead-lists-nav" fallback={
+                  <div className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium text-gray-500">
+                    <Users className="w-[18px] h-[18px] shrink-0" />
+                    All Leads
+                  </div>
+                }>
+                  <LeadListsNavGroup
+                    lists={leadLists}
+                    onNavigate={() => setMobileOpen(false)}
+                    isAdmin={role === "owner" || role === "admin"}
+                  />
+                </Suspense>
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+
+                {/* Operations */}
+                <NavSectionHeader label="Operations" />
+                {eduItem("/applications") && renderIndustryEntry(eduItem("/applications")!)}
+                {eduItem("/classes") && renderIndustryEntry(eduItem("/classes")!)}
+                {eduItem("/check-in") && renderIndustryEntry(eduItem("/check-in")!)}
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
+
+                {/* Marketing */}
+                <NavSectionHeader label="Marketing" />
+                {eduItem("/forms") && renderIndustryEntry(eduItem("/forms")!)}
+                {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
+
+                {/* Administration */}
+                <NavSectionHeader label="Administration" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/settings") && renderNavItem({ href: "/settings", label: "Settings", icon: Settings })}
+
+                {publicFormsSection}
+              </>
+            );
+          })() : (
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
@@ -360,7 +482,6 @@ export function DashboardShell({
             )}
             {UNIVERSAL_NAV_TOP
               .filter((i) => navAllowed(i.href))
-              .filter((i) => !(isEducation && i.href === "/dashboard"))
               .flatMap((item) => {
                 // Tenants with lead lists: replace flat "All Leads" with the dynamic group
                 if (item.href === "/leads" && leadLists.length > 0) {
@@ -444,6 +565,7 @@ export function DashboardShell({
               )
             )}
           </>
+          )
         ) : (
           <>
             {ORCA_NAV.map(renderNavItem)}

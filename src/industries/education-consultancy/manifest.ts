@@ -25,49 +25,16 @@ export const manifest: IndustryManifest = {
     { meta: classesMeta },
   ],
   sidebar: [
-    {
-      kind: "group",
-      position: "after-home",
-      id: "insights",
-      label: "Insights",
-      icon: "ChartColumn",
-      children: [
-        { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
-      ],
-    },
-    // Contacts sidebar item removed for education_consultancy — /contacts redirects to
-    // /leads?list=prospects now that lead-lists is active.
-    {
-      featureId: FEATURES.CHECK_IN,
-      href: "/check-in",
-      label: "Check-In",
-      icon: "UserCheck",
-    },
-    {
-      featureId: FEATURES.FORM_BUILDER,
-      href: "/forms",
-      label: "Forms",
-      icon: "FileText",
-    },
-    {
-      featureId: FEATURES.CAMPAIGNS,
-      href: "/campaigns",
-      label: "Campaigns",
-      icon: "Megaphone",
-      minRoles: ["owner", "admin"],
-    },
-    {
-      featureId: FEATURES.APPLICATION_TRACKING,
-      href: "/applications",
-      label: "Applications",
-      icon: "GraduationCap",
-    },
-    {
-      featureId: FEATURES.CLASSES,
-      href: "/classes",
-      label: "Classes",
-      icon: "BookOpen",
-    },
+    // Intelligence section
+    { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
+    // Operations section
+    { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },
+    { featureId: FEATURES.CLASSES, href: "/classes", label: "Classes", icon: "BookOpen" },
+    // Contacts sidebar item removed — /contacts redirects to /leads?list=prospects now that lead-lists is active.
+    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck" },
+    // Marketing section
+    { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
+    { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },
   ],
   ai: aiConfig,
 };
