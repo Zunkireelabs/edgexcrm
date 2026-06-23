@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
+import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
 
 interface ConsentTemplate {
   id: string;
@@ -175,7 +176,25 @@ export function ConsentManager() {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Consent Document Body</Label>
+          <div className="flex items-center justify-between">
+            <Label>Consent Document Body</Label>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                if (
+                  form.body.trim() &&
+                  !window.confirm("Replace the current consent text with the default template?")
+                ) {
+                  return;
+                }
+                setForm((f) => ({ ...f, body: DEFAULT_CONSENT_TEMPLATE }));
+                toast.success("Default template inserted — review and Save");
+              }}
+            >
+              Insert default template
+            </button>
+          </div>
           <textarea
             value={form.body}
             onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
