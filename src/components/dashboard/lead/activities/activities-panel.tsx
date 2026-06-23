@@ -355,7 +355,7 @@ export function ActivitiesPanel({
                   <div key={note.id} className="border-l-2 border-muted pl-3 py-1">
                     <p className="text-sm text-foreground">{note.content}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {note.user_email} · {formatRelativeTime(note.created_at)}
+                      {teamMemberNames[note.user_id] || teamMemberEmails[note.user_id] || note.user_email} · {formatRelativeTime(note.created_at)}
                     </p>
                   </div>
                 ))}

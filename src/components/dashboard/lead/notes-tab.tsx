@@ -13,6 +13,21 @@ interface NotesTabProps {
   leadId: string;
   notes: LeadNote[];
   onNotesChange: (notes: LeadNote[]) => void;
+  teamMemberNames?: Record<string, string>;
+  teamMemberEmails?: Record<string, string>;
+}
+
+/** Resolve a note author's display name: real name → team email → stored email. */
+function resolveAuthor(
+  note: LeadNote,
+  teamMemberNames: Record<string, string>,
+  teamMemberEmails: Record<string, string>,
+): string {
+  return (
+    teamMemberNames[note.user_id] ||
+    teamMemberEmails[note.user_id] ||
+    note.user_email
+  );
 }
 
 export interface NotesTabRef {
@@ -20,7 +35,10 @@ export interface NotesTabRef {
 }
 
 export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
-  function NotesTab({ leadId, notes, onNotesChange }, ref) {
+  function NotesTab(
+    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {} },
+    ref,
+  ) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [newNote, setNewNote] = useState("");
     const [adding, setAdding] = useState(false);
@@ -113,7 +131,12 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
         ) : (
           <div className="space-y-3">
             {notes.map((note) => (
-              <NoteCard key={note.id} note={note} />
+              <NoteCard
+                key={note.id}
+                note={note}
+                teamMemberNames={teamMemberNames}
+                teamMemberEmails={teamMemberEmails}
+              />
             ))}
           </div>
         )}
@@ -122,8 +145,17 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
   }
 );
 
-function NoteCard({ note }: { note: LeadNote }) {
-  const initials = getInitials(note.user_email);
+function NoteCard({
+  note,
+  teamMemberNames,
+  teamMemberEmails,
+}: {
+  note: LeadNote;
+  teamMemberNames: Record<string, string>;
+  teamMemberEmails: Record<string, string>;
+}) {
+  const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
+  const initials = getInitials(authorName);
 
   return (
     <Card className="shadow-none rounded-lg py-0">
@@ -134,7 +166,7 @@ function NoteCard({ note }: { note: LeadNote }) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-medium truncate">{note.user_email}</span>
+              <span className="text-sm font-medium truncate">{authorName}</span>
               <span className="text-xs text-muted-foreground shrink-0">
                 {formatDateTime(note.created_at)}
               </span>
@@ -149,13 +181,14 @@ function NoteCard({ note }: { note: LeadNote }) {
   );
 }
 
-function getInitials(email: string): string {
-  const name = email.split("@")[0];
-  const parts = name.split(/[._-]/);
+function getInitials(nameOrEmail: string): string {
+  // For an email, derive from the local-part; for a real name, from the words.
+  const base = nameOrEmail.includes("@") ? nameOrEmail.split("@")[0] : nameOrEmail;
+  const parts = base.trim().split(/[\s._-]+/).filter(Boolean);
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  return name.substring(0, 2).toUpperCase();
+  return base.substring(0, 2).toUpperCase();
 }
 
 function formatDateTime(dateString: string): string {
