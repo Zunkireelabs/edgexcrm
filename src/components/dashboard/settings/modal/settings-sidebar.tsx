@@ -16,7 +16,7 @@ export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps
   const visibleCategories = SETTINGS_CATEGORIES.filter((c) => c.isVisible(ctx));
 
   return (
-    <div className="w-60 flex-shrink-0 border-r border-gray-100 flex flex-col bg-gray-50/50">
+    <div className="w-60 flex-shrink-0 border-r border-[#e5e7eb] flex flex-col bg-[#fafafa]">
       {/* Org identity block */}
       <div className="px-4 py-4 border-b border-gray-100">
         <div className="flex items-center gap-3">
@@ -46,8 +46,8 @@ export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps
               className={cn(
                 "w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-sm transition-colors text-left",
                 isActive
-                  ? "bg-white text-gray-900 font-medium shadow-sm"
-                  : "text-gray-500 hover:bg-white/70 hover:text-gray-900",
+                  ? "bg-[#ebebeb] text-gray-900 font-medium"
+                  : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900",
               )}
             >
               <Icon className="w-4 h-4 flex-shrink-0" />

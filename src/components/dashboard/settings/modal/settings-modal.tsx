@@ -72,7 +72,7 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
         />
 
         {/* Right panel */}
-        <div className="flex-1 min-w-0 flex flex-col overflow-hidden relative">
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden relative bg-[#fafafa]">
           {/* Close button */}
           <button
             type="button"
