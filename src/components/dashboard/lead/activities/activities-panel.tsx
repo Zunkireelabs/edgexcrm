@@ -727,6 +727,7 @@ function getSystemActivityIcon(activity: LeadActivity): LucideIcon {
     return isFirst ? UserPlus : FileText;
   }
   if (activity.action === "lead.merged") return GitMerge;
+  if (activity.action === "lead.note_added") return FileText;
   if (activity.action === "lead.branch_revoked") return UserMinus;
   if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return Users;
 
@@ -816,6 +817,10 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.merged") {
     return "Duplicate record merged";
+  }
+
+  if (activity.action === "lead.note_added") {
+    return "Added a note";
   }
 
   if (activity.action === "lead.branch_shared") {

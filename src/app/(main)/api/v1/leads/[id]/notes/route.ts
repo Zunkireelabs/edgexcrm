@@ -14,6 +14,7 @@ import {
   createNotificationsExcept,
   NotificationTypes,
 } from "@/lib/notifications";
+import { createAuditLog } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
 export async function GET(
@@ -132,6 +133,17 @@ export async function POST(
     log.error({ err: error }, "Failed to create note");
     return apiServiceUnavailable("Failed to add note");
   }
+
+  // Record the note in the lead's System Activity timeline (audit_logs).
+  await createAuditLog({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    action: "lead.note_added",
+    entityType: "lead",
+    entityId: id,
+    changes: { note_id: { old: null, new: note.id } },
+    requestId,
+  });
 
   // Notify mentioned users — but only those that genuinely belong to the
   // lead's branch/tenant (don't trust the client's id list blindly).

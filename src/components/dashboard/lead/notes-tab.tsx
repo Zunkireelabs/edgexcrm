@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Clock, Send } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -51,6 +52,7 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
     { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId },
     ref,
   ) {
+    const router = useRouter();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const [newNote, setNewNote] = useState("");
     const [adding, setAdding] = useState(false);
@@ -167,6 +169,9 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
         onNotesChange([json.data as LeadNote, ...notes]);
         setNewNote("");
         setMentionOpen(false);
+        // Refresh server data so the "Added a note" entry appears in the
+        // Activity timeline without a manual reload.
+        router.refresh();
         toast.success(
           mentioned_user_ids.length ? "Note added · people notified" : "Note added",
         );
