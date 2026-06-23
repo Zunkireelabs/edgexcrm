@@ -183,6 +183,17 @@ export function ConsentManager() {
             rows={8}
             className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+          <p className="text-xs text-muted-foreground">
+            Merge fields auto-fill per student when the link is sent:{" "}
+            <code className="text-foreground">{"{{student_name}}"}</code>,{" "}
+            <code className="text-foreground">{"{{student_email}}"}</code>,{" "}
+            <code className="text-foreground">{"{{student_phone}}"}</code>,{" "}
+            <code className="text-foreground">{"{{city}}"}</code>,{" "}
+            <code className="text-foreground">{"{{country}}"}</code>,{" "}
+            <code className="text-foreground">{"{{organization}}"}</code>,{" "}
+            <code className="text-foreground">{"{{date}}"}</code>,{" "}
+            <code className="text-foreground">{"{{consent_version}}"}</code>
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
