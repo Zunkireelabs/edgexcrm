@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import { PanelContent, PanelHeader, PanelSection } from "../panel-shell";
+import { PanelContent, PanelSection } from "../panel-shell";
 import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
@@ -15,8 +15,7 @@ export function CommunicationsPanel() {
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
 
   return (
-    <PanelContent>
-      <PanelHeader title="Communications" description="Email sender, channels, rules, and connected inboxes" />
+    <PanelContent wide>
       <PanelSection>
         <EmailSenderCard />
       </PanelSection>

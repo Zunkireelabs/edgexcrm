@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PanelContent, PanelHeader, PanelSection } from "../panel-shell";
+import { PanelContent, PanelSection } from "../panel-shell";
 import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { ComingSoon } from "../coming-soon";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -47,7 +47,6 @@ export function IntegrationsPanel() {
 
   return (
     <PanelContent>
-      <PanelHeader title="Integrations" description="API keys and webhook configuration" />
       <PanelSection>
         {loading ? (
           <div className="h-24 bg-gray-100 rounded-lg animate-pulse" />

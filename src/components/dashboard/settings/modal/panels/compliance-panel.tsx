@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelContent, PanelHeader, PanelSection } from "../panel-shell";
+import { PanelContent, PanelSection } from "../panel-shell";
 import { ConsentManager } from "@/components/dashboard/settings/consent-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -12,7 +12,6 @@ export function CompliancePanel() {
 
   return (
     <PanelContent>
-      <PanelHeader title="Compliance" description="Consent templates and compliance configuration" />
       {hasApplicationTracking && (
         <PanelSection>
           <ConsentManager />

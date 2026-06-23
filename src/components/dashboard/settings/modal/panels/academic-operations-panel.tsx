@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelContent, PanelHeader, PanelSection } from "../panel-shell";
+import { PanelContent, PanelSection } from "../panel-shell";
 import { ClassesManager } from "@/components/dashboard/settings/classes-manager";
 import { AgentsManager } from "@/components/dashboard/settings/agents-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -13,8 +13,7 @@ export function AcademicOperationsPanel() {
   const hasApplicationTracking = getFeatureAccess(industryId, FEATURES.APPLICATION_TRACKING);
 
   return (
-    <PanelContent>
-      <PanelHeader title="Academic Operations" description="Classes, agents, and student workflow configuration" />
+    <PanelContent wide>
       {hasClasses && (
         <PanelSection>
           <ClassesManager />

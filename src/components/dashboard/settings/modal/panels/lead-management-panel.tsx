@@ -1,6 +1,6 @@
 "use client";
 
-import { PanelContent, PanelHeader, PanelSection } from "../panel-shell";
+import { PanelContent, PanelSection } from "../panel-shell";
 import { LeadListsManager } from "@/components/dashboard/settings/lead-lists-manager";
 import { ComingSoon } from "../coming-soon";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -12,8 +12,7 @@ export function LeadManagementPanel() {
   const hasLeadLists = getFeatureAccess(industryId, FEATURES.LEAD_LISTS);
 
   return (
-    <PanelContent>
-      <PanelHeader title="Lead Management" description="Lists, routing, and scoring configuration" />
+    <PanelContent wide>
       {hasLeadLists && (
         <PanelSection>
           <LeadListsManager />

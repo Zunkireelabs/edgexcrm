@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { PanelContent, PanelHeader } from "../panel-shell";
+import { PanelContent } from "../panel-shell";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -25,8 +25,7 @@ export function OrganizationPanel() {
   const maxBranches = bootstrapData?.maxBranches ?? 1;
 
   return (
-    <PanelContent>
-      <PanelHeader title="Organization" description="Destinations, entities, and branches" />
+    <PanelContent wide>
       {loading ? (
         <div className="space-y-3">
           {[1, 2].map((i) => (

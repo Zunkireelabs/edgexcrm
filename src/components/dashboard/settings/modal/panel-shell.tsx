@@ -34,10 +34,16 @@ export function PanelSection({
   );
 }
 
-export function PanelContent({ children }: { children: ReactNode }) {
+export function PanelContent({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
   return (
-    <div className="px-8 py-6 space-y-6 h-full overflow-y-auto">
-      {children}
+    <div className="px-8 py-6">
+      <div className={cn("space-y-6", wide ? "max-w-none" : "max-w-3xl")}>{children}</div>
     </div>
   );
 }

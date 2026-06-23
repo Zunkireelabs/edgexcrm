@@ -61,7 +61,7 @@ export function SettingsModal({ isOpen, activeTab, onTabChange, onClose }: Setti
       onOpenChange={(open) => { if (!open) onClose(); }}
     >
       <DialogContent
-        className="max-w-[1320px] w-[90vw] h-[85vh] p-0 flex gap-0 overflow-hidden"
+        className="w-[90vw] max-w-[1320px] sm:max-w-[1320px] h-[85vh] p-0 flex gap-0 overflow-hidden"
         showCloseButton={false}
       >
         {/* Left sidebar */}
