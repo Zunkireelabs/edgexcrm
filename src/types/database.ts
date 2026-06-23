@@ -207,6 +207,34 @@ export interface LeadList {
   count?: number;
 }
 
+export interface LeadImportSource {
+  id: string;
+  tenant_id: string;
+  staging_list_id: string;
+  source_label: string;
+  raw_rows: number;
+  dropped_rows: number;
+  no_contact_rows: number;
+  with_contact_rows: number;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportSourceReconciliationRow {
+  source_label: string;
+  raw_rows: number;
+  dropped_rows: number;
+  no_contact_rows: number;
+  with_contact_rows: number;
+  notes: string | null;
+  sort_order: number;
+  in_crm: number;
+  still_in_staging: number;
+  routed_out: number;
+}
+
 // AI Insights Types
 export type AIScoreLabel = "High" | "Medium" | "Low";
 export type AIPriorityTier = "hot" | "warm" | "cold" | "unlikely";

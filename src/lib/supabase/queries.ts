@@ -1,5 +1,5 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
@@ -612,4 +612,54 @@ export async function getRecentNotifications(
 
   if (error) return [];
   return (data ?? []) as RecentNotification[];
+}
+
+export async function getImportSourceReconciliation(
+  tenantId: string,
+  stagingListId: string,
+): Promise<ImportSourceReconciliationRow[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase.rpc("reconcile_import_sources", {
+    p_tenant: tenantId,
+    p_staging_list: stagingListId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ImportSourceReconciliationRow[];
+}
+
+export interface TeamMemberWithPosition {
+  user_id: string;
+  display: string;
+  position_name: string | null;
+}
+
+export async function getTeamMembersWithPositions(
+  tenantId: string,
+): Promise<TeamMemberWithPosition[]> {
+  const supabase = await createServiceClient();
+  const { data: members, error } = await supabase
+    .from("tenant_users")
+    .select("user_id, positions(name)")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const userMap = new Map<string, string>();
+  for (const u of authData?.users || []) {
+    userMap.set(u.id, u.email || "");
+  }
+
+  return (members || []).map((m) => {
+    const posEmbed = Array.isArray(m.positions)
+      ? (m.positions[0] ?? null)
+      : m.positions;
+    const email = userMap.get(m.user_id) || "";
+    const name = email.split("@")[0] || email;
+    return {
+      user_id: m.user_id,
+      display: name,
+      position_name: (posEmbed as { name?: string } | null)?.name ?? null,
+    };
+  });
 }

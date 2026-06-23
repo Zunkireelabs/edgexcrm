@@ -19,6 +19,7 @@ export interface LeadColumnCtx {
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
   branchMap: Record<string, string>;
+  roleMap?: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
   selectedIds: Set<string>;
@@ -671,6 +672,27 @@ const STATIC_COLUMNS: LeadColumn[] = [
           ) : (
             <span className="text-gray-400">—</span>
           )}
+        </td>
+      );
+    },
+  },
+
+  // ── assigned_role (universal; default-visible only in staging cockpit via extraDefaultVisibleKeys)
+  {
+    key: "assigned_role",
+    label: "Assigned (Role)",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="assigned_role" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">
+        Assigned (Role)
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const display = lead.assigned_to ? (ctx.roleMap?.[lead.assigned_to] ?? null) : null;
+      return (
+        <td key="assigned_role" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {display ? display : <span className="text-gray-400">—</span>}
         </td>
       );
     },

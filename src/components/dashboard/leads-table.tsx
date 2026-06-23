@@ -96,6 +96,8 @@ interface LeadsTableProps {
   selectedBranchId?: string | null;
   userBranchId?: string | null;
   leadLists?: LeadList[];
+  roleMap?: Record<string, string>;
+  extraDefaultVisibleKeys?: string[];
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -121,6 +123,8 @@ export function LeadsTable({
   selectedBranchId = null,
   userBranchId = null,
   leadLists = [],
+  roleMap,
+  extraDefaultVisibleKeys = [],
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -624,8 +628,10 @@ export function LeadsTable({
   // Default middle visible keys (anchors name + actions always implicit).
   const defaultMiddleKeys = useMemo(() => {
     const defaults = getDefaultVisibleKeys(industryId, maxBranches);
-    return defaults.filter((k) => k !== "name" && k !== "actions");
-  }, [industryId, maxBranches]);
+    const base = defaults.filter((k) => k !== "name" && k !== "actions");
+    const extra = extraDefaultVisibleKeys.filter((k) => !base.includes(k));
+    return [...base, ...extra];
+  }, [industryId, maxBranches, extraDefaultVisibleKeys]);
 
   // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
@@ -642,9 +648,10 @@ export function LeadsTable({
       .filter((c) => !c.required)
       .map((c) => c.key);
     const validKeys = [...staticKeys, ...cfKeys];
-    const defKeys = getDefaultVisibleKeys(industryId).filter(
-      (k) => k !== "name" && k !== "actions",
-    );
+    const defKeys = [
+      ...getDefaultVisibleKeys(industryId).filter((k) => k !== "name" && k !== "actions"),
+      ...extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions"),
+    ];
     setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
@@ -693,6 +700,7 @@ export function LeadsTable({
       formMap,
       entityMap,
       branchMap,
+      roleMap,
       stages,
       industryId,
       selectedIds,
@@ -756,7 +764,7 @@ export function LeadsTable({
         : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, formMap, entityMap, branchMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
+    [memberMap, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column

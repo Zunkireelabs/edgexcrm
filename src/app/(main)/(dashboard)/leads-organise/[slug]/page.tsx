@@ -8,9 +8,12 @@ import {
   getPipelineStages,
   getFormConfigsForTenant,
   getBranches,
+  getImportSourceReconciliation,
+  getTeamMembersWithPositions,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
+import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
 import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -75,32 +78,49 @@ export default async function LeadsOrganiseCockpitPage({
       )
   );
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
-    await Promise.all([
-      getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
-      getTeamMembers(tenantData.tenant.id),
-      getPipelineStages(tenantData.tenant.id),
-      getFormConfigsForTenant(tenantData.tenant.id),
-      tenantData.tenant.industry_id
-        ? serviceClient
-            .from("industries")
-            .select("*")
-            .eq("id", tenantData.tenant.industry_id)
-            .single()
-        : Promise.resolve({ data: null }),
-      serviceClient
-        .from("tenant_entities")
-        .select("*")
-        .eq("tenant_id", tenantData.tenant.id)
-        .eq("is_active", true)
-        .order("position", { ascending: true }),
-      tenantData.entitlements.maxBranches > 1
-        ? getBranches(tenantData.tenant.id)
-        : Promise.resolve([]),
-    ]);
+  const [
+    leads,
+    teamMembers,
+    teamMembersWithPositions,
+    reconciliationRows,
+    stages,
+    formConfigs,
+    industryResult,
+    entitiesResult,
+    branches,
+  ] = await Promise.all([
+    getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
+    getTeamMembers(tenantData.tenant.id),
+    getTeamMembersWithPositions(tenantData.tenant.id),
+    getImportSourceReconciliation(tenantData.tenant.id, stagingList.id),
+    getPipelineStages(tenantData.tenant.id),
+    getFormConfigsForTenant(tenantData.tenant.id),
+    tenantData.tenant.industry_id
+      ? serviceClient
+          .from("industries")
+          .select("*")
+          .eq("id", tenantData.tenant.industry_id)
+          .single()
+      : Promise.resolve({ data: null }),
+    serviceClient
+      .from("tenant_entities")
+      .select("*")
+      .eq("tenant_id", tenantData.tenant.id)
+      .eq("is_active", true)
+      .order("position", { ascending: true }),
+    tenantData.entitlements.maxBranches > 1
+      ? getBranches(tenantData.tenant.id)
+      : Promise.resolve([]),
+  ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
+  const roleMap = Object.fromEntries(
+    teamMembersWithPositions.map((m) => [
+      m.user_id,
+      m.position_name ? `${m.display} (${m.position_name})` : m.display,
+    ]),
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -108,6 +128,7 @@ export default async function LeadsOrganiseCockpitPage({
   return (
     <div className="flex flex-col h-full min-h-0">
       <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
+      <ReconciliationPanel rows={reconciliationRows} />
       <LeadsTable
         leads={leads}
         memberMap={memberMap}
@@ -125,6 +146,8 @@ export default async function LeadsOrganiseCockpitPage({
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
         leadLists={pipelineLists}
+        roleMap={roleMap}
+        extraDefaultVisibleKeys={["assigned_role"]}
       />
     </div>
   );
