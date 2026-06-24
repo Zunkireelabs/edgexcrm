@@ -1,11 +1,6 @@
 services:
   app:
-    build:
-      context: .
-      args:
-        NEXT_PUBLIC_SUPABASE_URL: https://dymeudcddasqpomfpjvt.supabase.co
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR5bWV1ZGNkZGFzcXBvbWZwanZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIwMjk2OTYsImV4cCI6MjA5NzYwNTY5Nn0.9ACrVF1XH-vsl7o6dlM4znj6Mry1-gLDRjQkNhxZMqw
-        NEXT_PUBLIC_APP_URL: https://dev-lead-crm.zunkireelabs.com
+    image: ghcr.io/zunkireelabs/edgexcrm:stage
     container_name: leads-crm-dev
     restart: unless-stopped
     env_file:
