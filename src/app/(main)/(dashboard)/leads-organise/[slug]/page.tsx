@@ -9,6 +9,7 @@ import {
   getFormConfigsForTenant,
   getBranches,
   getImportSourceReconciliation,
+  getImportSourceReconciliationUniqueCount,
   getTeamMembersWithPositions,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -83,6 +84,7 @@ export default async function LeadsOrganiseCockpitPage({
     teamMembers,
     teamMembersWithPositions,
     reconciliationRows,
+    reconUniqueInCrm,
     stages,
     formConfigs,
     industryResult,
@@ -93,6 +95,7 @@ export default async function LeadsOrganiseCockpitPage({
     getTeamMembers(tenantData.tenant.id),
     getTeamMembersWithPositions(tenantData.tenant.id),
     getImportSourceReconciliation(tenantData.tenant.id, stagingList.id),
+    getImportSourceReconciliationUniqueCount(tenantData.tenant.id, stagingList.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),
     tenantData.tenant.industry_id
@@ -128,7 +131,7 @@ export default async function LeadsOrganiseCockpitPage({
   return (
     <div className="flex flex-col h-full min-h-0">
       <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
-      <ReconciliationPanel rows={reconciliationRows} />
+      <ReconciliationPanel rows={reconciliationRows} uniqueInCrm={reconUniqueInCrm} />
       <LeadsTable
         leads={leads}
         memberMap={memberMap}

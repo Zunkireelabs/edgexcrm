@@ -12,6 +12,7 @@ import {
 
 interface ReconciliationPanelProps {
   rows: ImportSourceReconciliationRow[];
+  uniqueInCrm: number;
 }
 
 function InCrmBreakdown({ row }: { row: ImportSourceReconciliationRow }) {
@@ -35,7 +36,7 @@ function InCrmBreakdown({ row }: { row: ImportSourceReconciliationRow }) {
   );
 }
 
-export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
+export function ReconciliationPanel({ rows, uniqueInCrm }: ReconciliationPanelProps) {
   const [open, setOpen] = useState(true);
 
   if (rows.length === 0) return null;
@@ -147,18 +148,31 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-gray-200 bg-gray-50 font-semibold text-gray-700">
-                    <td className="px-4 py-2">TOTAL</td>
+                    <td className="px-4 py-2">Sum across files</td>
                     <td className="px-4 py-2 text-right tabular-nums">{totals.raw_rows.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{totals.in_crm.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right tabular-nums text-green-700">{totals.routed_out.toLocaleString()}</td>
                     <td className="px-4 py-2 text-right tabular-nums">{totals.still_in_staging.toLocaleString()}</td>
                     <td className="px-4 py-2" />
                   </tr>
+                  <tr className="bg-blue-50 font-semibold text-gray-800 border-t border-blue-100">
+                    <td className="px-4 py-2">Unique leads in staging</td>
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2 text-right tabular-nums">
+                      {uniqueInCrm.toLocaleString()}
+                      <div className="text-[10px] font-normal text-gray-400">
+                        matches the list · {(totals.in_crm - uniqueInCrm).toLocaleString()} appear in 2+ files
+                      </div>
+                    </td>
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2" />
+                    <td className="px-4 py-2" />
+                  </tr>
                 </tfoot>
               </table>
             </div>
             <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100">
-              Per-file totals sum to more than the staging count — a lead from two files is counted in both, matching your raw spreadsheets.
+              Per-file counts overlap — a lead in two files is counted under each (matching your raw spreadsheets). &ldquo;Unique leads in staging&rdquo; deduplicates them and equals the list count.
             </p>
           </div>
         )}
