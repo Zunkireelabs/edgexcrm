@@ -142,8 +142,8 @@ export function LeadsTable({
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
-  const [counselorFilter, setCounselorFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
   const [prospectIndustryFilter, setProspectIndustryFilter] = useState<string>("all");
@@ -233,6 +233,17 @@ export function LeadsTable({
     return m;
   }, [leads, isStagingView]);
 
+  // Per-counselor counts for staging dropdown (keyed by userId, "unassigned" for none)
+  const counselorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!isStagingView) return m;
+    leads.forEach((l) => {
+      const key = l.assigned_to ?? "unassigned";
+      m.set(key, (m.get(key) ?? 0) + 1);
+    });
+    return m;
+  }, [leads, isStagingView]);
+
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
     const c = new Map<string, string>();
@@ -251,13 +262,14 @@ export function LeadsTable({
       const matchesForm =
         formFilter === "all" || lead.form_config_id === formFilter;
       const matchesCounselor =
-        counselorFilter === "all" ||
-        (counselorFilter === "unassigned" ? !lead.assigned_to : lead.assigned_to === counselorFilter);
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !lead.assigned_to) ||
+        (!!lead.assigned_to && counselorFilter.includes(lead.assigned_to));
       const matchesSource =
-        sourceFilter === "all" ||
+        sourceFilter.length === 0 ||
         (isStagingView
-          ? (lead.intake_source?.split(" | ").map((p) => p.trim()).includes(sourceFilter) ?? false)
-          : lead.intake_source === sourceFilter);
+          ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
+          : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
 
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -337,8 +349,8 @@ export function LeadsTable({
     setSearch("");
     setStatusFilter("all");
     setFormFilter("all");
-    setCounselorFilter("all");
-    setSourceFilter("all");
+    setCounselorFilter([]);
+    setSourceFilter([]);
     setTagFilter("all");
     setCreatedFilter("all");
     setProspectIndustryFilter("all");
@@ -349,8 +361,8 @@ export function LeadsTable({
     search !== "",
     statusFilter !== "all",
     formFilter !== "all",
-    counselorFilter !== "all",
-    sourceFilter !== "all",
+    counselorFilter.length > 0,
+    sourceFilter.length > 0,
     tagFilter !== "all",
     createdFilter !== "all",
     prospectIndustryFilter !== "all",
@@ -995,6 +1007,7 @@ export function LeadsTable({
           {isAdmin && counselors.length > 0 && (
             <FilterDropdown
               label="All Counselors"
+              multiple
               value={counselorFilter}
               onChange={(val) => {
                 setCounselorFilter(val);
@@ -1002,11 +1015,18 @@ export function LeadsTable({
               }}
               icon={<Users2 className="h-3 w-3" />}
               options={[
-                { value: "all", label: "All Counselors", description: "Show leads from everyone" },
-                { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
+                {
+                  value: "unassigned",
+                  label: isStagingView
+                    ? `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`
+                    : "Unassigned",
+                  description: "Leads not assigned yet",
+                },
                 ...counselors.map(([userId, email]) => ({
                   value: userId,
-                  label: email.split("@")[0],
+                  label: isStagingView
+                    ? `${email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`
+                    : email.split("@")[0],
                   description: email,
                 })),
               ]}
@@ -1017,22 +1037,20 @@ export function LeadsTable({
           {sources.length > 0 && (
             <FilterDropdown
               label="All Sources"
+              multiple
               value={sourceFilter}
               onChange={(val) => {
                 setSourceFilter(val);
                 setCurrentPage(1);
               }}
               icon={<Globe className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Sources", description: "Show leads from all sources" },
-                ...sources.map((s) => ({
-                  value: s,
-                  label: isStagingView && sourceCounts.has(s)
-                    ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
-                    : s,
-                  description: `Leads from ${s}`,
-                })),
-              ]}
+              options={sources.map((s) => ({
+                value: s,
+                label: isStagingView && sourceCounts.has(s)
+                  ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
+                  : s,
+                description: `Leads from ${s}`,
+              }))}
             />
           )}
 
