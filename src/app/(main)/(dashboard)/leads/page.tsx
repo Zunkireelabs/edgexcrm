@@ -60,6 +60,11 @@ export default async function LeadsPage({
     }
   }
 
+  // Interim: load the full list so list views (e.g. Migration QC) aren't capped at 1000.
+  // getLeads chunks past PostgREST's per-response cap; client-side pagination (25/page) keeps display fast.
+  // TODO: replace with server-side pagination for very large tenants.
+  scope.limit = 50000;
+
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
       getLeads(tenantData.tenant.id, scope),

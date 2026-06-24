@@ -112,6 +112,7 @@ export interface LeadQueryScope {
   branchId: string | null;      // null = no branch filter
   listId?: string | null;          // filter to one list (lead-lists feature)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
+  limit?: number;                   // max leads to load (getLeads chunks past PostgREST's 1000/response cap)
 }
 export function leadQueryScope(
   p: ResolvedPermissions,
