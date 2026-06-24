@@ -163,6 +163,31 @@ export function LeadsTable({
   const [moveListId, setMoveListId] = useState<string>("");
   const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
   const [isMoveList, setIsMoveList] = useState(false);
+  const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
+
+  // Smart suggestion — stable key derived from the staging list's id
+  const stagingListId = isStagingView ? (localLeads[0]?.list_id ?? null) : null;
+  const routeMemoryKey = stagingListId ? `leadsRoute:lastTarget:${stagingListId}` : null;
+
+  // Pre-fill the Move-to-list dialog from localStorage when it opens (staging only)
+  useEffect(() => {
+    if (!moveListDialogOpen || !isStagingView || !routeMemoryKey) return;
+    try {
+      if (typeof window === "undefined") return;
+      const raw = window.localStorage.getItem(routeMemoryKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { list_id?: string; assigned_to?: string | null };
+      if (saved.list_id && leadLists.some((l) => l.id === saved.list_id)) {
+        setMoveListId(saved.list_id);
+      }
+      if (saved.assigned_to && teamMembers.some((m) => m.user_id === saved.assigned_to)) {
+        setMoveAssignTo(saved.assigned_to);
+      }
+    } catch {
+      // localStorage unavailable or corrupt — ignore
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveListDialogOpen]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -309,6 +334,23 @@ export function LeadsTable({
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
+
+  // Assignment hint for the staging Move-to-list dialog
+  const selectionAssignmentHint = useMemo(() => {
+    if (!isStagingView || selectedIds.size === 0) return null;
+    const selectedLeads = localLeads.filter((l) => selectedIds.has(l.id));
+    const rawAssignees = selectedLeads.map((l) => l.assigned_to ?? null);
+    const distinct = new Set(rawAssignees);
+    if (distinct.size === 1) {
+      const single = Array.from(distinct)[0];
+      if (single === null) {
+        return "Selected leads are unassigned — pick a member to assign them on route.";
+      }
+      const name = memberMap[single]?.split("@")[0] ?? single;
+      return `All selected are assigned to ${name} — 'Keep current assignee' leaves them with this owner.`;
+    }
+    return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
+  }, [isStagingView, selectedIds, localLeads, memberMap]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -503,6 +545,9 @@ export function LeadsTable({
             ids: chunks[i],
             list_id: moveListId,
             ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
+            ...(moveAssignTo !== "keep" && {
+              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
+            }),
           }),
         });
         const data = await response.json();
@@ -511,12 +556,39 @@ export function LeadsTable({
         }
         totalMoved += data.data.updated as number;
       }
+      // Persist last-used target for smart suggestion (staging only)
+      if (isStagingView && routeMemoryKey) {
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(
+              routeMemoryKey,
+              JSON.stringify({
+                list_id: moveListId,
+                assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
+              }),
+            );
+          }
+        } catch {
+          // localStorage unavailable — ignore
+        }
+      }
+      const assignedName =
+        moveAssignTo !== "keep" && moveAssignTo !== "unassign"
+          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.email?.split("@")[0]
+          : null;
+      const toastMsg = [
+        `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
+        assignedName ? `and assigned to ${assignedName}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
       toast.dismiss("bulk-move");
-      toast.success(`Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`);
+      toast.success(toastMsg);
       setSelectedIds(new Set());
       setMoveListDialogOpen(false);
       setMoveListId("");
       setMoveArchiveReason("");
+      setMoveAssignTo("keep");
       router.refresh();
     } catch (error) {
       toast.dismiss("bulk-move");
@@ -1419,7 +1491,7 @@ export function LeadsTable({
       {/* Bulk Move to List Dialog */}
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
-        if (!open) { setMoveListId(""); setMoveArchiveReason(""); }
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -1456,11 +1528,44 @@ export function LeadsTable({
                 </Select>
               </div>
             )}
+            {isStagingView && (
+              <>
+                {selectionAssignmentHint && (
+                  <p className="text-xs text-muted-foreground">{selectionAssignmentHint}</p>
+                )}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
+                  <Select value={moveAssignTo} onValueChange={setMoveAssignTo}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Keep current assignee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keep">
+                        <span className="text-muted-foreground">Keep current assignee</span>
+                      </SelectItem>
+                      <SelectItem value="unassign">
+                        <span className="text-muted-foreground">Unassign</span>
+                      </SelectItem>
+                      {teamMembers
+                        .filter((m) => m.role !== "viewer")
+                        .map((member) => (
+                          <SelectItem key={member.user_id} value={member.user_id}>
+                            <div className="flex items-center gap-2">
+                              <span>{member.email.split("@")[0]}</span>
+                              <span className="text-xs text-muted-foreground">({member.role})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); }}
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }}
               disabled={isMoveList}
             >
               Cancel
