@@ -331,7 +331,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
