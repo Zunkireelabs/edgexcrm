@@ -33,8 +33,12 @@ export function useBadgeCounts() {
 
   useEffect(() => {
     let cancelled = false;
+    let inflight = false;
     const load = async () => {
+      if (inflight) return;
+      inflight = true;
       const data = await fetchCounts();
+      inflight = false;
       if (!cancelled && data) setCounts(data);
     };
     load();
