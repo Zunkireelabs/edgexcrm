@@ -206,14 +206,32 @@ export function LeadsTable({
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
 
-  // Get unique sources from leads
+  // Get unique sources from leads (staging: split on " | "; /leads: exact string)
   const sources = useMemo(() => {
     const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.intake_source) s.add(l.intake_source);
+    leads.forEach((l) => {
+      if (!l.intake_source) return;
+      if (isStagingView) {
+        l.intake_source.split(" | ").forEach((part) => { const t = part.trim(); if (t) s.add(t); });
+      } else {
+        s.add(l.intake_source);
+      }
     });
     return Array.from(s).sort();
-  }, [leads]);
+  }, [leads, isStagingView]);
+
+  // Per-source counts for staging dropdown (split-based, same logic as above)
+  const sourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!isStagingView) return m;
+    leads.forEach((l) =>
+      l.intake_source?.split(" | ").forEach((p) => {
+        const t = p.trim();
+        if (t) m.set(t, (m.get(t) ?? 0) + 1);
+      })
+    );
+    return m;
+  }, [leads, isStagingView]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -236,7 +254,10 @@ export function LeadsTable({
         counselorFilter === "all" ||
         (counselorFilter === "unassigned" ? !lead.assigned_to : lead.assigned_to === counselorFilter);
       const matchesSource =
-        sourceFilter === "all" || lead.intake_source === sourceFilter;
+        sourceFilter === "all" ||
+        (isStagingView
+          ? (lead.intake_source?.split(" | ").map((p) => p.trim()).includes(sourceFilter) ?? false)
+          : lead.intake_source === sourceFilter);
 
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -1006,7 +1027,9 @@ export function LeadsTable({
                 { value: "all", label: "All Sources", description: "Show leads from all sources" },
                 ...sources.map((s) => ({
                   value: s,
-                  label: s,
+                  label: isStagingView && sourceCounts.has(s)
+                    ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
+                    : s,
                   description: `Leads from ${s}`,
                 })),
               ]}
