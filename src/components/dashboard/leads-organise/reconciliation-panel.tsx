@@ -134,7 +134,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left">
-                              Still in this staging list, awaiting routing. In CRM = Routed + Still here.
+                              Still in staging, awaiting routing into the pipeline. In CRM = Routed + Still here.
                             </TooltipContent>
                           </Tooltip>
                         </td>

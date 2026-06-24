@@ -7,7 +7,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -1506,11 +1508,39 @@ export function LeadsTable({
                 <SelectValue placeholder="Select list..." />
               </SelectTrigger>
               <SelectContent>
-                {leadLists.map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name}{l.is_archive ? " (Archive)" : ""}
-                  </SelectItem>
-                ))}
+                {(() => {
+                  const pipeline = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const staging  = leadLists.filter((l) => l.is_staging);
+                  const archived = leadLists.filter((l) => l.is_archive);
+                  return (
+                    <>
+                      {pipeline.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Pipeline</SelectLabel>
+                          {pipeline.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {staging.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Staging</SelectLabel>
+                          {staging.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {archived.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Archived</SelectLabel>
+                          {archived.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </>
+                  );
+                })()}
               </SelectContent>
             </Select>
             {moveTargetIsArchive && (
