@@ -51,34 +51,32 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 30m
+          command_timeout: 45m
           script: |
             cd /home/zunkireelabs/devprojects/lead-gen-crm-dev
             git pull origin stage
-            rm -rf .next
-            docker compose build --no-cache
+            DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 docker compose build
             docker compose up -d
             echo "Waiting for container to be healthy..."
             sleep 10
-            for i in $(seq 1 12); do
+            for i in $(seq 1 18); do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' leads-crm-dev 2>/dev/null || echo "unknown")
               if [ "$STATUS" = "healthy" ]; then
                 echo "Container is healthy!"
                 exit 0
               fi
-              echo "Attempt $i/12: Status is $STATUS, waiting..."
+              echo "Attempt $i/18: Status is $STATUS, waiting..."
               sleep 10
             done
-            echo "Container did not become healthy within 2 minutes"
+            echo "Container did not become healthy within 3 minutes"
             docker logs leads-crm-dev --tail 50
             exit 1
 
       - name: Verify Health
         run: |
-          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" https://dev-lead-crm.zunkireelabs.com/login)
-          if [ "$HTTP_CODE" = "200" ]; then
-            echo "Staging health check passed (HTTP $HTTP_CODE)"
-          else
-            echo "Staging health check failed (HTTP $HTTP_CODE)"
-            exit 1
-          fi
+          for i in $(seq 1 10); do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" https://dev-lead-crm.zunkireelabs.com/login || echo 000)
+            if [ "$CODE" = "200" ]; then echo "Health OK (HTTP $CODE) on attempt $i"; exit 0; fi
+            echo "Attempt $i/10: HTTP $CODE — waiting 15s..."; sleep 15
+          done
+          echo "Health check failed after retries"; exit 1
