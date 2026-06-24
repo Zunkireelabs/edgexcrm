@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 interface BadgeCounts {
   unread_notifications: number;
@@ -24,31 +24,18 @@ async function fetchCounts(): Promise<BadgeCounts | null> {
 
 export function useBadgeCounts() {
   const [counts, setCounts] = useState<BadgeCounts>(DEFAULT_COUNTS);
-  const inflight = useRef(false);
 
   // Exposed for callers that want to force a refresh (e.g. after opening a lead).
   const refresh = useCallback(async () => {
-    if (inflight.current) return;
-    inflight.current = true;
-    try {
-      const data = await fetchCounts();
-      if (data) setCounts(data);
-    } finally {
-      inflight.current = false;
-    }
+    const data = await fetchCounts();
+    if (data) setCounts(data);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     const load = async () => {
-      if (inflight.current) return;
-      inflight.current = true;
-      try {
-        const data = await fetchCounts();
-        if (!cancelled && data) setCounts(data);
-      } finally {
-        inflight.current = false;
-      }
+      const data = await fetchCounts();
+      if (!cancelled && data) setCounts(data);
     };
     load();
     const interval = setInterval(load, 30000);
