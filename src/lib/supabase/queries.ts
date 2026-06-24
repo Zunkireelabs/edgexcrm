@@ -67,6 +67,136 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
   return (data as LeadList[]) || [];
 }
 
+// ── Server-side paginated query for staging cockpit ──────────────────────────
+
+export type StagingLeadFilters = {
+  search?: string;
+  statusFilter?: string;
+  formFilter?: string;
+  counselorFilter?: string; // "all" | "unassigned" | UUID
+  sourceFilter?: string;
+  tagFilter?: string;
+  prospectIndustryFilter?: string;
+  createdFilter?: string; // "all" | "today" | "week" | "month"
+  sortField?: "activity" | "created" | "updated" | "name" | "email";
+  sortDirection?: "asc" | "desc";
+};
+
+// Internal: apply filter conditions to a supabase query builder.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyStagingFilters(q: any, filters: StagingLeadFilters, nowMs: number): any {
+  if (filters.statusFilter && filters.statusFilter !== "all") q = q.eq("status", filters.statusFilter);
+  if (filters.formFilter && filters.formFilter !== "all") q = q.eq("form_config_id", filters.formFilter);
+  if (filters.counselorFilter && filters.counselorFilter !== "all") {
+    if (filters.counselorFilter === "unassigned") {
+      q = q.is("assigned_to", null);
+    } else {
+      q = q.eq("assigned_to", filters.counselorFilter);
+    }
+  }
+  if (filters.sourceFilter && filters.sourceFilter !== "all") q = q.eq("intake_source", filters.sourceFilter);
+  if (filters.tagFilter && filters.tagFilter !== "all") q = q.contains("tags", [filters.tagFilter]);
+  if (filters.prospectIndustryFilter && filters.prospectIndustryFilter !== "all") {
+    if (filters.prospectIndustryFilter === "__none__") {
+      q = q.is("prospect_industry", null);
+    } else {
+      q = q.eq("prospect_industry", filters.prospectIndustryFilter);
+    }
+  }
+  if (filters.createdFilter && filters.createdFilter !== "all") {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const windows: Record<string, number> = { today: dayMs, week: 7 * dayMs, month: 30 * dayMs };
+    const windowMs = windows[filters.createdFilter];
+    if (windowMs) q = q.gte("created_at", new Date(nowMs - windowMs).toISOString());
+  }
+  if (filters.search) {
+    const s = filters.search.replace(/%/g, "\\%").replace(/_/g, "\\_");
+    q = q.or(`first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%,phone.ilike.%${s}%,city.ilike.%${s}%`);
+  }
+  return q;
+}
+
+// Internal: apply sort order to a query builder.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyStagingSort(q: any, sortField: string, sortDirection: string): any {
+  const asc = sortDirection === "asc";
+  switch (sortField) {
+    case "activity": q = q.order("last_activity_at", { ascending: asc }); break;
+    case "updated": q = q.order("updated_at", { ascending: asc }); break;
+    case "created": q = q.order("created_at", { ascending: asc }); break;
+    case "name": q = q.order("first_name", { ascending: asc }).order("last_name", { ascending: asc }); break;
+    case "email": q = q.order("email", { ascending: asc }); break;
+    default: q = q.order("last_activity_at", { ascending: false });
+  }
+  return q.order("id", { ascending: false }); // stable secondary sort
+}
+
+/** Single-request paginated query for the staging cockpit. Returns rows + exact total count. */
+export async function getLeadsPage(
+  tenantId: string,
+  scope: { listId: string; branchId?: string | null },
+  filters: StagingLeadFilters,
+  pagination: { page: number; pageSize: number },
+): Promise<{ rows: Lead[]; totalCount: number }> {
+  const supabase = await createServiceClient();
+  const nowMs = Date.now();
+
+  let branchIds: string[] | null = null;
+  if (scope.branchId) branchIds = await leadIdsForBranch(supabase, tenantId, scope.branchId);
+
+  let q = supabase
+    .from("leads")
+    .select("*", { count: "exact" })
+    .eq("tenant_id", tenantId)
+    .eq("list_id", scope.listId)
+    .is("deleted_at", null)
+    .is("converted_at", null);
+
+  if (branchIds !== null) q = q.in("id", branchIds);
+  q = applyStagingFilters(q, filters, nowMs);
+  q = applyStagingSort(q, filters.sortField ?? "activity", filters.sortDirection ?? "desc");
+
+  const from = (pagination.page - 1) * pagination.pageSize;
+  const to = from + pagination.pageSize - 1;
+  const { data, count, error } = await q.range(from, to);
+  if (error) throw error;
+  return { rows: (data ?? []) as Lead[], totalCount: count ?? 0 };
+}
+
+/**
+ * Returns ALL matching lead IDs in a staging list for bulk select-all-matching operations.
+ * Uses the exact same filter→SQL logic as getLeadsPage — single source of truth.
+ * Caller must pass an already-authenticated supabase service client.
+ */
+export async function getStagingLeadIdsForBulk(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  tenantId: string,
+  stagingListId: string,
+  branchId: string | null,
+  filters: StagingLeadFilters,
+): Promise<string[]> {
+  const nowMs = Date.now();
+
+  let branchIds: string[] | null = null;
+  if (branchId) branchIds = await leadIdsForBranch(supabase, tenantId, branchId);
+
+  let q = supabase
+    .from("leads")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("list_id", stagingListId)
+    .is("deleted_at", null)
+    .is("converted_at", null);
+
+  if (branchIds !== null) q = q.in("id", branchIds);
+  q = applyStagingFilters(q, filters, nowMs);
+
+  const { data, error } = await q;
+  if (error) throw error;
+  return (data ?? []).map((r: { id: string }) => r.id);
+}
+
 export async function getLeads(
   tenantId: string,
   scope?: {

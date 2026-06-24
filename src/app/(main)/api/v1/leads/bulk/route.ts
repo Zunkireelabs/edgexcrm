@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getStagingLeadIdsForBulk, type StagingLeadFilters } from "@/lib/supabase/queries";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { canAccessList } from "@/lib/api/permissions";
@@ -45,7 +46,13 @@ export async function PATCH(request: NextRequest) {
   if (isTeamScoped && !auth.branchId) return apiForbidden();
 
   let body: {
+    // Standard id-array path
     ids?: string[];
+    // Select-all-matching path (staging cockpit only)
+    selectAllMatching?: boolean;
+    stagingListId?: string;
+    filters?: StagingLeadFilters;
+    // Shared update fields
     assigned_to?: string | null;
     branch_id?: string | null;
     list_id?: string | null;
@@ -57,7 +64,108 @@ export async function PATCH(request: NextRequest) {
     return apiValidationError({ body: ["Invalid JSON body"] });
   }
 
-  // Validate IDs
+  // ── Select-all-matching path ───────────────────────────────────────────────
+  // When selectAllMatching=true the server re-derives the matching id set from the
+  // same filter→SQL builder used by the paginated page query. The predicate is ALWAYS
+  // force-anchored to tenant_id (via service client) and the validated staging list_id —
+  // an empty/absent filter means "all leads in this staging list", never "whole tenant".
+  if (body.selectAllMatching) {
+    if (!body.stagingListId || !UUID_REGEX.test(body.stagingListId)) {
+      return apiValidationError({ stagingListId: ["Must provide a valid staging list UUID when selectAllMatching is true"] });
+    }
+    const supabase = await createServiceClient();
+    // Verify stagingListId is a real staging list that belongs to this tenant and the caller can access
+    const { data: stagingCheck } = await supabase
+      .from("lead_lists")
+      .select("id, is_staging, access")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.stagingListId)
+      .maybeSingle();
+    if (!stagingCheck || !stagingCheck.is_staging) {
+      return apiForbidden();
+    }
+
+    // Re-derive matching IDs from the same filter→SQL builder used by getLeadsPage
+    const matchingIds = await getStagingLeadIdsForBulk(
+      supabase,
+      auth.tenantId,
+      body.stagingListId,
+      null, // no branch filter in select-all-matching (admin-only path)
+      body.filters ?? {},
+    );
+
+    if (matchingIds.length === 0) {
+      return apiSuccess({ updated: 0, ids: [], notFound: [], selectAllMatching: true });
+    }
+
+    // Validate the update fields (same checks as id-array path below)
+    if (body.assigned_to !== undefined && body.assigned_to !== null) {
+      if (!UUID_REGEX.test(body.assigned_to)) return apiValidationError({ assigned_to: ["Invalid UUID format"] });
+    }
+    if (body.list_id !== undefined && body.list_id !== null) {
+      if (!UUID_REGEX.test(body.list_id)) return apiValidationError({ list_id: ["Invalid UUID format"] });
+    }
+
+    // Validate target list if moving
+    let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown } | null = null;
+    if (body.list_id !== undefined && body.list_id !== null) {
+      if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) return apiForbidden();
+      const { data: listCheck } = await supabase
+        .from("lead_lists")
+        .select("id, slug, name, is_archive, access")
+        .eq("tenant_id", auth.tenantId)
+        .eq("id", body.list_id)
+        .maybeSingle();
+      if (!listCheck) return apiValidationError({ list_id: ["List not found in this tenant"] });
+      if (listCheck.is_archive && !body.archive_reason) {
+        return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
+      }
+      targetList = listCheck;
+    }
+
+    if (body.assigned_to) {
+      const { data: member } = await supabase
+        .from("tenant_users")
+        .select("id")
+        .eq("tenant_id", auth.tenantId)
+        .eq("user_id", body.assigned_to)
+        .single();
+      if (!member) return apiValidationError({ assigned_to: ["User is not a member of this tenant"] });
+    }
+
+    const bulkPayload: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (body.assigned_to !== undefined) bulkPayload.assigned_to = body.assigned_to ?? null;
+    if (body.list_id !== undefined) {
+      bulkPayload.list_id = body.list_id ?? null;
+      if (targetList) {
+        bulkPayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
+        if (body.archive_reason) bulkPayload.archive_reason = body.archive_reason;
+      }
+    }
+
+    // Batch in groups of 1000 to stay within Supabase in() limits
+    const BATCH = 1000;
+    let updatedCount = 0;
+    for (let i = 0; i < matchingIds.length; i += BATCH) {
+      const chunk = matchingIds.slice(i, i + BATCH);
+      const { error: updateError } = await supabase
+        .from("leads")
+        .update(bulkPayload)
+        .eq("tenant_id", auth.tenantId)
+        .in("id", chunk);
+      if (updateError) {
+        log.error({ err: updateError }, "Failed to bulk update (select-all-matching)");
+        return apiServiceUnavailable("Failed to update leads");
+      }
+      updatedCount += chunk.length;
+    }
+
+    log.info({ count: updatedCount, selectAllMatching: true }, "Bulk updated leads via select-all-matching");
+    return apiSuccess({ updated: updatedCount, ids: [], selectAllMatching: true });
+  }
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  // Validate IDs (standard path)
   if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
     return apiValidationError({ ids: ["Must provide an array of lead IDs"] });
   }
@@ -411,11 +519,52 @@ export async function DELETE(request: NextRequest) {
   if (!auth) return apiUnauthorized();
   if (!requireAdmin(auth)) return apiForbidden();
 
-  let body: { ids?: string[] };
+  let body: { ids?: string[]; selectAllMatching?: boolean; stagingListId?: string; filters?: StagingLeadFilters };
   try {
     body = await request.json();
   } catch {
     return apiValidationError({ body: ["Invalid JSON body"] });
+  }
+
+  const supabase = await createServiceClient();
+
+  // Select-all-matching delete path (staging cockpit only)
+  if (body.selectAllMatching) {
+    if (!body.stagingListId || !UUID_REGEX.test(body.stagingListId)) {
+      return apiValidationError({ stagingListId: ["Must provide a valid staging list UUID when selectAllMatching is true"] });
+    }
+    const { data: stagingCheck } = await supabase
+      .from("lead_lists")
+      .select("id, is_staging")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.stagingListId)
+      .maybeSingle();
+    if (!stagingCheck || !stagingCheck.is_staging) return apiForbidden();
+
+    const matchingIds = await getStagingLeadIdsForBulk(
+      supabase,
+      auth.tenantId,
+      body.stagingListId,
+      null,
+      body.filters ?? {},
+    );
+
+    if (matchingIds.length === 0) return apiSuccess({ deleted: 0, ids: [], selectAllMatching: true });
+
+    const BATCH = 1000;
+    let deletedCount = 0;
+    for (let i = 0; i < matchingIds.length; i += BATCH) {
+      const chunk = matchingIds.slice(i, i + BATCH);
+      const { error } = await supabase
+        .from("leads")
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("tenant_id", auth.tenantId)
+        .in("id", chunk);
+      if (error) { log.error({ err: error }, "Failed to bulk delete (select-all-matching)"); return apiServiceUnavailable("Failed to delete leads"); }
+      deletedCount += chunk.length;
+    }
+    log.info({ count: deletedCount, selectAllMatching: true }, "Bulk soft deleted leads via select-all-matching");
+    return apiSuccess({ deleted: deletedCount, ids: [], selectAllMatching: true });
   }
 
   if (!body.ids || !Array.isArray(body.ids) || body.ids.length === 0) {
@@ -426,14 +575,11 @@ export async function DELETE(request: NextRequest) {
     return apiValidationError({ ids: ["Cannot delete more than 100 leads at once"] });
   }
 
-  // Validate all IDs are valid UUIDs
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const invalidIds = body.ids.filter((id) => !uuidRegex.test(id));
   if (invalidIds.length > 0) {
     return apiValidationError({ ids: ["Invalid UUID format in IDs"] });
   }
-
-  const supabase = await createServiceClient();
 
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
