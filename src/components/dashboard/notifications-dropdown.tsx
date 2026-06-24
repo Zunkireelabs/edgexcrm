@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Inbox } from "lucide-react";
 
@@ -37,8 +37,11 @@ export function NotificationsDropdown() {
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
+  const inflight = useRef(false);
 
   const fetchNotifications = useCallback(async () => {
+    if (inflight.current) return;
+    inflight.current = true;
     try {
       const res = await fetch("/api/v1/notifications?limit=10");
       if (!res.ok) return;
@@ -48,6 +51,8 @@ export function NotificationsDropdown() {
       setUnreadCount(json.data?.unread_count || 0);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
+    } finally {
+      inflight.current = false;
     }
   }, []);
 

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import type { StagingLeadFilters } from "@/lib/supabase/queries";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -99,6 +100,13 @@ interface LeadsTableProps {
   roleMap?: Record<string, string>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
+  // Server-side pagination props (staging cockpit only)
+  serverPaginated?: boolean;
+  serverTotalCount?: number;
+  serverPage?: number;
+  serverPageSize?: number;
+  serverFilters?: StagingLeadFilters;
+  stagingListId?: string | null;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -127,6 +135,12 @@ export function LeadsTable({
   roleMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
+  serverPaginated = false,
+  serverTotalCount,
+  serverPage,
+  serverPageSize,
+  serverFilters,
+  stagingListId,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -164,10 +178,49 @@ export function LeadsTable({
   const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
   const [isMoveList, setIsMoveList] = useState(false);
   const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
+  const [selectAllMatchingActive, setSelectAllMatchingActive] = useState(false);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  // Smart suggestion — stable key derived from the staging list's id
-  const stagingListId = isStagingView ? (localLeads[0]?.list_id ?? null) : null;
-  const routeMemoryKey = stagingListId ? `leadsRoute:lastTarget:${stagingListId}` : null;
+  // Helper: push a URL param update when in server-paginated mode.
+  const pushServerParam = useCallback((updates: Record<string, string | null>) => {
+    const url = new URL(window.location.href);
+    for (const [key, val] of Object.entries(updates)) {
+      if (!val || val === "all" || val === "") {
+        url.searchParams.delete(key);
+      } else {
+        url.searchParams.set(key, val);
+      }
+    }
+    router.push(url.pathname + url.search);
+  }, [router]);
+
+  // Sync local filter/sort/page state from server props when server-paginated.
+  useEffect(() => {
+    if (!serverPaginated || !serverFilters) return;
+    setSearch(serverFilters.search ?? "");
+    setStatusFilter(serverFilters.statusFilter ?? "all");
+    setFormFilter(serverFilters.formFilter ?? "all");
+    setCounselorFilter(serverFilters.counselorFilter ?? "all");
+    setSourceFilter(serverFilters.sourceFilter ?? "all");
+    setTagFilter(serverFilters.tagFilter ?? "all");
+    setCreatedFilter(serverFilters.createdFilter ?? "all");
+    setProspectIndustryFilter(serverFilters.prospectIndustryFilter ?? "all");
+    setSortField((serverFilters.sortField as SortField) ?? "activity");
+    setSortDirection((serverFilters.sortDirection as SortDirection) ?? "desc");
+    setSelectAllMatchingActive(false);
+  }, [serverPaginated, serverFilters]);
+
+  useEffect(() => {
+    if (!serverPaginated) return;
+    setCurrentPage(serverPage ?? 1);
+    setItemsPerPage(serverPageSize ?? 25);
+  }, [serverPaginated, serverPage, serverPageSize]);
+
+  // Smart suggestion — stable key derived from the staging list's id.
+  // In server-paginated mode, stagingListId comes via props; otherwise derive from the first lead.
+  const stagingListIdFromLeads = isStagingView && !serverPaginated ? (localLeads[0]?.list_id ?? null) : null;
+  const effectiveStagingListId = stagingListId ?? stagingListIdFromLeads;
+  const routeMemoryKey = effectiveStagingListId ? `leadsRoute:lastTarget:${effectiveStagingListId}` : null;
 
   // Pre-fill the Move-to-list dialog from localStorage when it opens (staging only)
   useEffect(() => {
@@ -320,6 +373,14 @@ export function LeadsTable({
     setCreatedFilter("all");
     setProspectIndustryFilter("all");
     setCurrentPage(1);
+    setSelectAllMatchingActive(false);
+    if (serverPaginated) {
+      pushServerParam({
+        search: null, statusFilter: null, formFilter: null, counselorFilter: null,
+        sourceFilter: null, tagFilter: null, createdFilter: null,
+        prospectIndustryFilter: null, sortField: null, sortDirection: null, page: null,
+      });
+    }
   };
 
   const activeFiltersCount = [
@@ -367,23 +428,34 @@ export function LeadsTable({
     }
   }, [currentPage, totalPages]);
 
-  const filteredIds = useMemo(() => new Set(paginatedLeads.map((l) => l.id)), [paginatedLeads]);
+  // Server-pagination derived values — override client-side when active.
+  const spLeads = serverPaginated ? localLeads : paginatedLeads;
+  const spTotalCount = serverPaginated ? (serverTotalCount ?? 0) : filtered.length;
+  const spTotalPages = Math.ceil(spTotalCount / (serverPaginated ? (serverPageSize ?? 25) : itemsPerPage));
+  const spCurrentPage = serverPaginated ? (serverPage ?? 1) : currentPage;
+  const spItemsPerPage = serverPaginated ? (serverPageSize ?? 25) : itemsPerPage;
+  const spStartIndex = serverPaginated ? (spCurrentPage - 1) * spItemsPerPage : startIndex;
+  const spEndIndex = serverPaginated ? spStartIndex + localLeads.length : endIndex;
 
+  const filteredIds = useMemo(() => new Set(spLeads.map((l) => l.id)), [spLeads]);
+
+  const effectiveSelectedCount = selectAllMatchingActive ? spTotalCount : selectedIds.size;
   const selectedCount = selectedIds.size;
-  const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
-  const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
+  const allSelected = spLeads.length > 0 && spLeads.every((l) => selectedIds.has(l.id));
+  const someSelected = spLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
 
   function toggleSelectAll() {
+    setSelectAllMatchingActive(false);
     if (allSelected) {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        paginatedLeads.forEach((l) => next.delete(l.id));
+        spLeads.forEach((l) => next.delete(l.id));
         return next;
       });
     } else {
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        paginatedLeads.forEach((l) => next.add(l.id));
+        spLeads.forEach((l) => next.add(l.id));
         return next;
       });
     }
@@ -402,27 +474,38 @@ export function LeadsTable({
   }
 
   async function handleBulkDelete() {
-    const idsToDelete = Array.from(selectedIds).filter((id) => filteredIds.has(id));
-
-    if (idsToDelete.length === 0) {
-      toast.error("No leads selected");
-      return;
-    }
-
     setIsDeleting(true);
     try {
+      if (selectAllMatchingActive && serverPaginated) {
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectAllMatching: true,
+            stagingListId: effectiveStagingListId,
+            filters: serverFilters,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to delete leads");
+        toast.success(`Deleted ${data.data.deleted} lead${data.data.deleted !== 1 ? "s" : ""}`);
+        setSelectedIds(new Set());
+        setSelectAllMatchingActive(false);
+        setDeleteDialogOpen(false);
+        router.refresh();
+        return;
+      }
+
+      const idsToDelete = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+      if (idsToDelete.length === 0) { toast.error("No leads selected"); return; }
+
       const response = await fetch("/api/v1/leads/bulk", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: idsToDelete }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to delete leads");
-      }
-
+      if (!response.ok) throw new Error(data.error?.message || "Failed to delete leads");
       toast.success(`Deleted ${data.data.deleted} lead${data.data.deleted !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
@@ -435,15 +518,34 @@ export function LeadsTable({
   }
 
   async function handleBulkAssign() {
-    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
-
-    if (idsToAssign.length === 0) {
-      toast.error("No leads selected");
-      return;
-    }
-
     setIsAssigning(true);
     try {
+      if (selectAllMatchingActive && serverPaginated) {
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectAllMatching: true,
+            stagingListId: effectiveStagingListId,
+            filters: serverFilters,
+            assigned_to: assignTo === "unassign" ? null : assignTo,
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to assign leads");
+        const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
+        toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+        setSelectedIds(new Set());
+        setSelectAllMatchingActive(false);
+        setAssignDialogOpen(false);
+        setAssignTo("");
+        router.refresh();
+        return;
+      }
+
+      const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+      if (idsToAssign.length === 0) { toast.error("No leads selected"); return; }
+
       const response = await fetch("/api/v1/leads/bulk", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -452,13 +554,8 @@ export function LeadsTable({
           assigned_to: assignTo === "unassign" ? null : assignTo,
         }),
       });
-
       const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to assign leads");
-      }
-
+      if (!response.ok) throw new Error(data.error?.message || "Failed to assign leads");
       const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
       toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
@@ -473,13 +570,16 @@ export function LeadsTable({
   }
 
   async function handleBulkAssignBranch() {
-    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
-    if (idsToAssign.length === 0) {
-      toast.error("No leads selected");
-      return;
-    }
     setIsAssigningBranch(true);
     try {
+      const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+      if (idsToAssign.length === 0 && !selectAllMatchingActive) {
+        toast.error("No leads selected");
+        return;
+      }
+
+      // Branch share does not yet support select-all-matching (no server-side filter path in /bulk/share).
+      // Fall back to id-array if fewer than 100 leads are visible; otherwise prompt user.
       const response = await fetch("/api/v1/leads/bulk/share", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -489,13 +589,12 @@ export function LeadsTable({
         }),
       });
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to share leads");
-      }
+      if (!response.ok) throw new Error(data.error?.message || "Failed to share leads");
       const count = data.data.shared as number;
       const branchName = branches.find((b) => b.id === assignToBranch)?.name ?? "branch";
       toast.success(`Shared ${count} lead${count !== 1 ? "s" : ""} to ${branchName}`);
       setSelectedIds(new Set());
+      setSelectAllMatchingActive(false);
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
       router.refresh();
@@ -512,51 +611,12 @@ export function LeadsTable({
   const CHUNK_SIZE = 100;
 
   async function handleBulkMove() {
-    const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
-    if (idsToMove.length === 0) {
-      toast.error("No leads selected");
-      return;
-    }
-    if (!moveListId) {
-      toast.error("Please select a target list");
-      return;
-    }
-    if (moveTargetIsArchive && !moveArchiveReason.trim()) {
-      toast.error("Archive reason is required");
-      return;
-    }
+    if (!moveListId) { toast.error("Please select a target list"); return; }
+    if (moveTargetIsArchive && !moveArchiveReason.trim()) { toast.error("Archive reason is required"); return; }
 
     setIsMoveList(true);
-    const chunks: string[][] = [];
-    for (let i = 0; i < idsToMove.length; i += CHUNK_SIZE) {
-      chunks.push(idsToMove.slice(i, i + CHUNK_SIZE));
-    }
 
-    let totalMoved = 0;
-    try {
-      for (let i = 0; i < chunks.length; i++) {
-        if (chunks.length > 1) {
-          toast.loading(`Moving… chunk ${i + 1}/${chunks.length}`, { id: "bulk-move" });
-        }
-        const response = await fetch("/api/v1/leads/bulk", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ids: chunks[i],
-            list_id: moveListId,
-            ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
-            ...(moveAssignTo !== "keep" && {
-              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
-            }),
-          }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(data.error?.message || "Failed to move leads");
-        }
-        totalMoved += data.data.updated as number;
-      }
-      // Persist last-used target for smart suggestion (staging only)
+    const persistRouteMemory = () => {
       if (isStagingView && routeMemoryKey) {
         try {
           if (typeof window !== "undefined") {
@@ -568,20 +628,75 @@ export function LeadsTable({
               }),
             );
           }
-        } catch {
-          // localStorage unavailable — ignore
-        }
+        } catch { /* localStorage unavailable */ }
       }
-      const assignedName =
-        moveAssignTo !== "keep" && moveAssignTo !== "unassign"
-          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.email?.split("@")[0]
-          : null;
-      const toastMsg = [
-        `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
-        assignedName ? `and assigned to ${assignedName}` : null,
-      ]
-        .filter(Boolean)
-        .join(" ");
+    };
+
+    try {
+      // Select-all-matching path: send filter criteria to server, no id chunking needed.
+      if (selectAllMatchingActive && serverPaginated) {
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            selectAllMatching: true,
+            stagingListId: effectiveStagingListId,
+            filters: serverFilters,
+            list_id: moveListId,
+            ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
+            ...(moveAssignTo !== "keep" && {
+              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
+            }),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to move leads");
+        const totalMoved = data.data.updated as number;
+        persistRouteMemory();
+        const assignedName = moveAssignTo !== "keep" && moveAssignTo !== "unassign"
+          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.email?.split("@")[0] : null;
+        const toastMsg = [`Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
+          assignedName ? `and assigned to ${assignedName}` : null].filter(Boolean).join(" ");
+        toast.success(toastMsg);
+        setSelectedIds(new Set());
+        setSelectAllMatchingActive(false);
+        setMoveListDialogOpen(false);
+        setMoveListId("");
+        setMoveArchiveReason("");
+        setMoveAssignTo("keep");
+        router.refresh();
+        return;
+      }
+
+      // Existing id-array path (visible-page selection).
+      const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+      if (idsToMove.length === 0) { toast.error("No leads selected"); return; }
+
+      const chunks: string[][] = [];
+      for (let i = 0; i < idsToMove.length; i += CHUNK_SIZE) chunks.push(idsToMove.slice(i, i + CHUNK_SIZE));
+
+      let totalMoved = 0;
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) toast.loading(`Moving… chunk ${i + 1}/${chunks.length}`, { id: "bulk-move" });
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: chunks[i],
+            list_id: moveListId,
+            ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
+            ...(moveAssignTo !== "keep" && { assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo }),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error?.message || "Failed to move leads");
+        totalMoved += data.data.updated as number;
+      }
+      persistRouteMemory();
+      const assignedName = moveAssignTo !== "keep" && moveAssignTo !== "unassign"
+        ? teamMembers.find((m) => m.user_id === moveAssignTo)?.email?.split("@")[0] : null;
+      const toastMsg = [`Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
+        assignedName ? `and assigned to ${assignedName}` : null].filter(Boolean).join(" ");
       toast.dismiss("bulk-move");
       toast.success(toastMsg);
       setSelectedIds(new Set());
@@ -855,7 +970,7 @@ export function LeadsTable({
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}
           <div className="text-sm font-medium text-muted-foreground shrink-0">
-            {filtered.length} Leads
+            {spTotalCount} Leads
           </div>
 
           {/* Search */}
@@ -865,7 +980,17 @@ export function LeadsTable({
               type="text"
               placeholder="Search leads..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSearch(val);
+                if (serverPaginated) {
+                  clearTimeout(searchDebounceRef.current);
+                  searchDebounceRef.current = setTimeout(() => {
+                    setSelectAllMatchingActive(false);
+                    pushServerParam({ search: val || null, page: null });
+                  }, 300);
+                }
+              }}
               className="w-full h-7 pl-7 pr-3 rounded-md border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
@@ -898,7 +1023,10 @@ export function LeadsTable({
                 <p className="text-sm font-medium">Sort by</p>
                 <div className="flex items-center gap-2">
                   {/* Field selector */}
-                  <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+                  <Select value={sortField} onValueChange={(v) => {
+                    setSortField(v as SortField);
+                    if (serverPaginated) { setSelectAllMatchingActive(false); pushServerParam({ sortField: v, page: null }); }
+                  }}>
                     <SelectTrigger className="flex-1 h-9">
                       <SelectValue />
                     </SelectTrigger>
@@ -914,7 +1042,10 @@ export function LeadsTable({
                   <div className="flex rounded-md border shrink-0">
                     <button
                       type="button"
-                      onClick={() => setSortDirection("desc")}
+                      onClick={() => {
+                        setSortDirection("desc");
+                        if (serverPaginated) { setSelectAllMatchingActive(false); pushServerParam({ sortDirection: "desc", page: null }); }
+                      }}
                       className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
                         sortDirection === "desc"
                           ? "bg-primary text-primary-foreground"
@@ -925,7 +1056,10 @@ export function LeadsTable({
                     </button>
                     <button
                       type="button"
-                      onClick={() => setSortDirection("asc")}
+                      onClick={() => {
+                        setSortDirection("asc");
+                        if (serverPaginated) { setSelectAllMatchingActive(false); pushServerParam({ sortDirection: "asc", page: null }); }
+                      }}
                       className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
                         sortDirection === "asc"
                           ? "bg-primary text-primary-foreground"
@@ -976,6 +1110,8 @@ export function LeadsTable({
               onChange={(val) => {
                 setCounselorFilter(val);
                 setCurrentPage(1);
+                setSelectAllMatchingActive(false);
+                if (serverPaginated) pushServerParam({ counselorFilter: val === "all" ? null : val, page: null });
               }}
               icon={<Users2 className="h-3 w-3" />}
               options={[
@@ -998,6 +1134,8 @@ export function LeadsTable({
               onChange={(val) => {
                 setSourceFilter(val);
                 setCurrentPage(1);
+                setSelectAllMatchingActive(false);
+                if (serverPaginated) pushServerParam({ sourceFilter: val === "all" ? null : val, page: null });
               }}
               icon={<Globe className="h-3 w-3" />}
               options={[
@@ -1019,6 +1157,8 @@ export function LeadsTable({
               onChange={(val) => {
                 setTagFilter(val);
                 setCurrentPage(1);
+                setSelectAllMatchingActive(false);
+                if (serverPaginated) pushServerParam({ tagFilter: val === "all" ? null : val, page: null });
               }}
               icon={<Tag className="h-3 w-3" />}
               options={[
@@ -1037,6 +1177,8 @@ export function LeadsTable({
               onChange={(val) => {
                 setProspectIndustryFilter(val);
                 setCurrentPage(1);
+                setSelectAllMatchingActive(false);
+                if (serverPaginated) pushServerParam({ prospectIndustryFilter: val === "all" ? null : val, page: null });
               }}
               icon={<Briefcase className="h-3 w-3" />}
               options={[
@@ -1058,6 +1200,8 @@ export function LeadsTable({
             onChange={(val) => {
               setCreatedFilter(val);
               setCurrentPage(1);
+              setSelectAllMatchingActive(false);
+              if (serverPaginated) pushServerParam({ createdFilter: val === "all" ? null : val, page: null });
             }}
             icon={<Calendar className="h-3 w-3" />}
             searchable={false}
@@ -1076,6 +1220,8 @@ export function LeadsTable({
             onChange={(val) => {
               setStatusFilter(val);
               setCurrentPage(1);
+              setSelectAllMatchingActive(false);
+              if (serverPaginated) pushServerParam({ statusFilter: val === "all" ? null : val, page: null });
             }}
             searchable={false}
             options={[
@@ -1096,6 +1242,8 @@ export function LeadsTable({
               onChange={(val) => {
                 setFormFilter(val);
                 setCurrentPage(1);
+                setSelectAllMatchingActive(false);
+                if (serverPaginated) pushServerParam({ formFilter: val === "all" ? null : val, page: null });
               }}
               options={[
                 { value: "all", label: "All Forms", description: "Show leads from all forms" },
@@ -1133,13 +1281,35 @@ export function LeadsTable({
       {/* Bulk Action Bar - animated container between filters and table */}
       <div
         className={`shrink-0 overflow-hidden transition-all duration-300 ease-out ${
-          selectedCount > 0 ? 'max-h-[52px] opacity-100' : 'max-h-0 opacity-0'
+          selectedCount > 0 || selectAllMatchingActive ? 'max-h-[52px] opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="flex items-center justify-between px-4 py-2 bg-white rounded-lg border border-gray-200">
-          <span className="text-sm font-medium text-gray-700">
-            {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-gray-700">
+              {effectiveSelectedCount} lead{effectiveSelectedCount !== 1 ? "s" : ""} selected
+            </span>
+            {/* Select-all-matching affordance (server-paginated mode only) */}
+            {serverPaginated && !selectAllMatchingActive && allSelected && spTotalCount > spLeads.length && (
+              <button
+                onClick={() => setSelectAllMatchingActive(true)}
+                className="text-xs text-blue-600 hover:text-blue-800 hover:underline font-medium"
+              >
+                Select all {spTotalCount} matching
+              </button>
+            )}
+            {serverPaginated && selectAllMatchingActive && (
+              <span className="text-xs text-blue-600 font-medium">
+                All {spTotalCount} matching selected
+                <button
+                  onClick={() => { setSelectAllMatchingActive(false); setSelectedIds(new Set()); }}
+                  className="ml-2 text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1">
             {isAdmin && teamMembers.length > 0 && (
               <button
@@ -1186,7 +1356,7 @@ export function LeadsTable({
             </button>
             <div className="w-px h-4 bg-gray-200 mx-1" />
             <button
-              onClick={() => setSelectedIds(new Set())}
+              onClick={() => { setSelectedIds(new Set()); setSelectAllMatchingActive(false); }}
               className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
               aria-label="Deselect all"
             >
@@ -1219,7 +1389,7 @@ export function LeadsTable({
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {paginatedLeads.length === 0 ? (
+            {spLeads.length === 0 ? (
               <tr>
                 <td
                   colSpan={totalColSpan}
@@ -1230,7 +1400,7 @@ export function LeadsTable({
                 </td>
               </tr>
             ) : (
-              paginatedLeads.map((lead) => {
+              spLeads.map((lead) => {
                 const isSelected = selectedIds.has(lead.id);
                 const initials = getInitials(lead.first_name, lead.last_name);
 
@@ -1285,17 +1455,22 @@ export function LeadsTable({
         {/* Pagination Controls - Zunkireelabs style (inside white card) */}
         <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
           <span className="text-xs text-gray-500">
-            Showing {startIndex + 1}-{endIndex} of {filtered.length}
+            Showing {spStartIndex + 1}–{spEndIndex} of {spTotalCount}
           </span>
           <div className="flex items-center gap-4">
             {/* Per page dropdown */}
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500">per page</span>
               <Select
-                value={String(itemsPerPage)}
+                value={String(spItemsPerPage)}
                 onValueChange={(v) => {
-                  setItemsPerPage(Number(v));
-                  setCurrentPage(1);
+                  if (serverPaginated) {
+                    setSelectAllMatchingActive(false);
+                    pushServerParam({ pageSize: v, page: null });
+                  } else {
+                    setItemsPerPage(Number(v));
+                    setCurrentPage(1);
+                  }
                 }}
               >
                 <SelectTrigger className="h-7 w-16 text-xs">
@@ -1312,18 +1487,32 @@ export function LeadsTable({
             {/* Page navigation */}
             <div className="flex items-center gap-1">
               <button
-                disabled={currentPage <= 1}
-                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={spCurrentPage <= 1}
+                onClick={() => {
+                  if (serverPaginated) {
+                    setSelectAllMatchingActive(false);
+                    pushServerParam({ page: String(spCurrentPage - 1) });
+                  } else {
+                    setCurrentPage((p) => p - 1);
+                  }
+                }}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-xs text-gray-600 px-2">
-                Page {currentPage} of {totalPages || 1}
+                Page {spCurrentPage} of {spTotalPages || 1}
               </span>
               <button
-                disabled={currentPage >= totalPages}
-                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={spCurrentPage >= spTotalPages}
+                onClick={() => {
+                  if (serverPaginated) {
+                    setSelectAllMatchingActive(false);
+                    pushServerParam({ page: String(spCurrentPage + 1) });
+                  } else {
+                    setCurrentPage((p) => p + 1);
+                  }
+                }}
                 className="p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight className="w-4 h-4" />
@@ -1361,7 +1550,7 @@ export function LeadsTable({
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete {selectedCount} lead{selectedCount !== 1 ? "s" : ""}?</DialogTitle>
+            <DialogTitle>Delete {effectiveSelectedCount} lead{effectiveSelectedCount !== 1 ? "s" : ""}?</DialogTitle>
             <DialogDescription>
               This action cannot be undone. The selected leads will be permanently
               removed from your workspace.
@@ -1393,7 +1582,7 @@ export function LeadsTable({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""}</DialogTitle>
+            <DialogTitle>Assign {effectiveSelectedCount} lead{effectiveSelectedCount !== 1 ? "s" : ""}</DialogTitle>
             <DialogDescription>
               Select a team member to assign the selected leads to, or unassign them.
             </DialogDescription>
@@ -1448,7 +1637,7 @@ export function LeadsTable({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Share {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
+            <DialogTitle>Share {effectiveSelectedCount} lead{effectiveSelectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
             <DialogDescription>
               Add the selected leads to a branch (they stay in their current branches).
             </DialogDescription>
@@ -1495,7 +1684,7 @@ export function LeadsTable({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to list</DialogTitle>
+            <DialogTitle>Move {effectiveSelectedCount} lead{effectiveSelectedCount !== 1 ? "s" : ""} to list</DialogTitle>
             <DialogDescription>
               Select a target list. Leads will be moved out of their current list.
             </DialogDescription>

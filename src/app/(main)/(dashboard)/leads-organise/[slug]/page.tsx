@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import {
   getCurrentUserTenant,
-  getLeads,
+  getLeadsPage,
   getLeadListsByTenant,
   getTeamMembers,
   getPipelineStages,
@@ -10,6 +10,7 @@ import {
   getBranches,
   getImportSourceReconciliation,
   getTeamMembersWithPositions,
+  type StagingLeadFilters,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
@@ -21,10 +22,28 @@ import type { TenantEntity, Industry, LeadList } from "@/types/database";
 
 export default async function LeadsOrganiseCockpitPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ slug: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
-  const { slug } = await params;
+  const [{ slug }, sp] = await Promise.all([params, searchParams]);
+
+  const page = Math.max(1, parseInt(sp.page ?? "1", 10) || 1);
+  const rawPageSize = parseInt(sp.pageSize ?? "25", 10);
+  const pageSize = [10, 25, 50, 100].includes(rawPageSize) ? rawPageSize : 25;
+  const serverFilters: StagingLeadFilters = {
+    search: sp.search || undefined,
+    statusFilter: sp.statusFilter || "all",
+    formFilter: sp.formFilter || "all",
+    counselorFilter: sp.counselorFilter || "all",
+    sourceFilter: sp.sourceFilter || "all",
+    tagFilter: sp.tagFilter || "all",
+    prospectIndustryFilter: sp.prospectIndustryFilter || "all",
+    createdFilter: sp.createdFilter || "all",
+    sortField: (sp.sortField as StagingLeadFilters["sortField"]) || "activity",
+    sortDirection: (sp.sortDirection as StagingLeadFilters["sortDirection"]) || "desc",
+  };
 
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
@@ -79,7 +98,7 @@ export default async function LeadsOrganiseCockpitPage({
   );
 
   const [
-    leads,
+    leadsPage,
     teamMembers,
     teamMembersWithPositions,
     reconciliationRows,
@@ -89,7 +108,12 @@ export default async function LeadsOrganiseCockpitPage({
     entitiesResult,
     branches,
   ] = await Promise.all([
-    getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
+    getLeadsPage(
+      tenantData.tenant.id,
+      { listId: stagingList.id, branchId: scope.branchId ?? null },
+      serverFilters,
+      { page, pageSize },
+    ),
     getTeamMembers(tenantData.tenant.id),
     getTeamMembersWithPositions(tenantData.tenant.id),
     getImportSourceReconciliation(tenantData.tenant.id, stagingList.id),
@@ -124,6 +148,7 @@ export default async function LeadsOrganiseCockpitPage({
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
+  const { rows: leads, totalCount } = leadsPage;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -149,6 +174,12 @@ export default async function LeadsOrganiseCockpitPage({
         roleMap={roleMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
+        serverPaginated
+        serverTotalCount={totalCount}
+        serverPage={page}
+        serverPageSize={pageSize}
+        serverFilters={serverFilters}
+        stagingListId={stagingList.id}
       />
     </div>
   );
