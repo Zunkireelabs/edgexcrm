@@ -627,18 +627,6 @@ export async function getImportSourceReconciliation(
   return (data ?? []) as ImportSourceReconciliationRow[];
 }
 
-export async function getImportSourceReconciliationUniqueCount(
-  tenantId: string,
-  stagingListId: string,
-): Promise<number> {
-  const supabase = await createServiceClient();
-  const { data, error } = await supabase.rpc("reconcile_import_sources_unique", {
-    p_tenant: tenantId,
-    p_staging_list: stagingListId,
-  });
-  if (error) throw error;
-  return Number(data ?? 0);
-}
 
 export interface TeamMemberWithPosition {
   user_id: string;
