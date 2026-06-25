@@ -44,6 +44,10 @@ export function ListRoutingEditor({ attribution, dispatch }: ListRoutingEditorPr
   }
 
   const selectValue = attribution.target_list_id ?? DEFAULT_SENTINEL;
+  // Label the default with the tenant's actual intake list name (e.g.
+  // "Pre-qualified (intake)") and drop the duplicate intake entry below it.
+  const intakeList = lists.find((l) => l.is_intake);
+  const defaultLabel = intakeList ? `${intakeList.name} (intake)` : "Default (intake list)";
 
   return (
     <Card>
@@ -60,13 +64,14 @@ export function ListRoutingEditor({ attribution, dispatch }: ListRoutingEditorPr
             <SelectValue placeholder="Select list…" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={DEFAULT_SENTINEL}>Default (intake list)</SelectItem>
-            {lists.map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.name}
-                {l.is_intake ? " (intake)" : ""}
-              </SelectItem>
-            ))}
+            <SelectItem value={DEFAULT_SENTINEL}>{defaultLabel}</SelectItem>
+            {lists
+              .filter((l) => !l.is_intake)
+              .map((l) => (
+                <SelectItem key={l.id} value={l.id}>
+                  {l.name}
+                </SelectItem>
+              ))}
           </SelectContent>
         </Select>
       </CardContent>
