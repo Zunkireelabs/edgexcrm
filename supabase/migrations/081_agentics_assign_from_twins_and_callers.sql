@@ -1,4 +1,4 @@
--- Migration 081: Assign counsellors to 155 Agentics leads via phone-twin matching and tele-call history
+-- Migration 081: Assign counsellors to 154 Agentics leads via phone-twin matching and activity history
 -- Tenant: Admizz Education (febeb37c-521c-4f29-adbb-0195b2eede88)
 -- Idempotent: only fills assigned_to IS NULL, never clobbers existing assignments
 
@@ -140,41 +140,40 @@ BEGIN
 END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- Part B: Tele-call assignment (≈10 leads, minus any overlapping with A)
--- For each remaining unassigned Agentics lead that has a tele-call activity
--- (import_batch='admizz-activities-2026-06-25', subject='Tele-call remark',
--- non-admin user), set assigned_to = that activity's user_id (earliest call).
+-- Part B: Activity assignment (≈9 leads, minus any overlapping with A)
+-- For each remaining unassigned Agentics lead that has any non-admin activity
+-- (import_batch='admizz-activities-2026-06-25', any subject,
+-- non-admin user), set assigned_to = that activity's user_id (earliest activity).
 -- Admin fallback user excluded: bfff9897-3ab4-4e94-90d8-e0517528edf6
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
 DECLARE
   v_part_b_rows INTEGER;
 BEGIN
-  WITH tele_calls AS (
+  WITH activities AS (
     SELECT
       la.lead_id,
       la.user_id,
       ROW_NUMBER() OVER (PARTITION BY la.lead_id ORDER BY la.created_at) AS rn
     FROM lead_activities la
     WHERE la.metadata->>'import_batch' = 'admizz-activities-2026-06-25'
-      AND la.subject = 'Tele-call remark'
       AND la.user_id IS NOT NULL
       AND la.user_id != 'bfff9897-3ab4-4e94-90d8-e0517528edf6'
   ),
-  earliest_caller AS (
-    SELECT lead_id, user_id FROM tele_calls WHERE rn = 1
+  earliest_actor AS (
+    SELECT lead_id, user_id FROM activities WHERE rn = 1
   )
   UPDATE leads l
-  SET assigned_to = ec.user_id
-  FROM earliest_caller ec
-  WHERE l.id = ec.lead_id
+  SET assigned_to = ea.user_id
+  FROM earliest_actor ea
+  WHERE l.id = ea.lead_id
     AND l.tenant_id = 'febeb37c-521c-4f29-adbb-0195b2eede88'
     AND l.custom_fields->>'import_batch' = 'agentics-2026-06-24'
     AND l.deleted_at IS NULL
     AND l.assigned_to IS NULL;
 
   GET DIAGNOSTICS v_part_b_rows = ROW_COUNT;
-  RAISE NOTICE 'Part B: tele-call rows updated=%', v_part_b_rows;
+  RAISE NOTICE 'Part B: activity-based rows updated=%', v_part_b_rows;
 END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +216,7 @@ BEGIN
   END IF;
 
   RAISE NOTICE 'VALIDATION PASSED: all assigned leads have valid tenant members';
-  RAISE NOTICE 'Expected: assigned≈152 (145 Part A + 7 Part B), unassigned≈2334';
+  RAISE NOTICE 'Expected: assigned≈154 (145 Part A + 9 Part B), unassigned≈2332';
 END $$;
 
 COMMIT;
