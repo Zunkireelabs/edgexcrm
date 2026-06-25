@@ -134,7 +134,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
                               </span>
                             </TooltipTrigger>
                             <TooltipContent side="left">
-                              Still in this staging list, awaiting routing. In CRM = Routed + Still here.
+                              Still in staging, awaiting routing into the pipeline. In CRM = Routed + Still here.
                             </TooltipContent>
                           </Tooltip>
                         </td>
@@ -158,7 +158,7 @@ export function ReconciliationPanel({ rows }: ReconciliationPanelProps) {
               </table>
             </div>
             <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100">
-              Per-file totals sum to more than the staging count — a lead from two files is counted in both, matching your raw spreadsheets.
+              Each lead in staging carries one source — per-file counts add up to the list total. A lead&rsquo;s multiple sources are combined later, at promote-to-main.
             </p>
           </div>
         )}
