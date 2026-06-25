@@ -17,6 +17,7 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { sendConsentEmail } from "@/lib/email/send-consent";
 import { APP_URL } from "@/lib/email";
+import { fillConsentTemplate, buildConsentMergeData } from "@/lib/consent/merge";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -133,7 +134,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, email, first_name, last_name")
+    .select("id, assigned_to, branch_id, email, first_name, last_name, phone, city, country")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -147,6 +148,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     email: string | null;
     first_name: string | null;
     last_name: string | null;
+    phone: string | null;
+    city: string | null;
+    country: string | null;
   };
 
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
@@ -209,6 +213,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const leadEmail = leadRow.email;
     const sentVia = leadEmail ? "email" : "link";
 
+    // Resolve the org name, then fill the dynamic template with this student's
+    // data so the frozen body_snapshot is personalized (same template, every
+    // student). The snapshot is what the student signs and what the PDF renders.
+    const orgRes = await supabase
+      .from("tenants")
+      .select("name")
+      .eq("id", auth.tenantId)
+      .single();
+    const organization = (orgRes.data as { name: string } | null)?.name ?? "Your Consultant";
+    const filledBody = fillConsentTemplate(
+      tplRow.body ?? "",
+      buildConsentMergeData({
+        firstName: leadRow.first_name,
+        lastName: leadRow.last_name,
+        email: leadRow.email,
+        phone: leadRow.phone,
+        city: leadRow.city,
+        country: leadRow.country,
+        organization,
+        consentVersion: tplRow.version,
+      }),
+    );
+
     const { data: newRecord, error: insertError } = await db
       .from("lead_consents")
       .insert({
@@ -216,7 +243,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         lead_id: id,
         status: "sent",
         token,
-        body_snapshot: tplRow.body,
+        body_snapshot: filledBody,
         template_version: tplRow.version,
         sent_at: new Date().toISOString(),
         sent_via: sentVia,

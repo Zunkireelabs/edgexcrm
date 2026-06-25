@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { FileText, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
+import { DEFAULT_CONSENT_TEMPLATE } from "@/lib/consent/default-template";
 
 interface ConsentTemplate {
   id: string;
@@ -175,7 +176,25 @@ export function ConsentManager() {
         </div>
 
         <div className="space-y-1.5">
-          <Label>Consent Document Body</Label>
+          <div className="flex items-center justify-between">
+            <Label>Consent Document Body</Label>
+            <button
+              type="button"
+              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                if (
+                  form.body.trim() &&
+                  !window.confirm("Replace the current consent text with the default template?")
+                ) {
+                  return;
+                }
+                setForm((f) => ({ ...f, body: DEFAULT_CONSENT_TEMPLATE }));
+                toast.success("Default template inserted — review and Save");
+              }}
+            >
+              Insert default template
+            </button>
+          </div>
           <textarea
             value={form.body}
             onChange={(e) => setForm((f) => ({ ...f, body: e.target.value }))}
@@ -183,6 +202,17 @@ export function ConsentManager() {
             rows={8}
             className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
           />
+          <p className="text-xs text-muted-foreground">
+            Merge fields auto-fill per student when the link is sent:{" "}
+            <code className="text-foreground">{"{{student_name}}"}</code>,{" "}
+            <code className="text-foreground">{"{{student_email}}"}</code>,{" "}
+            <code className="text-foreground">{"{{student_phone}}"}</code>,{" "}
+            <code className="text-foreground">{"{{city}}"}</code>,{" "}
+            <code className="text-foreground">{"{{country}}"}</code>,{" "}
+            <code className="text-foreground">{"{{organization}}"}</code>,{" "}
+            <code className="text-foreground">{"{{date}}"}</code>,{" "}
+            <code className="text-foreground">{"{{consent_version}}"}</code>
+          </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
