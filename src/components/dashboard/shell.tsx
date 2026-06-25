@@ -253,6 +253,14 @@ export function DashboardShell({
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
 
+  // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
+  const brandSuffix =
+    ({
+      education_consultancy: "edu",
+      travel_agency: "travel",
+      it_agency: "agency",
+    } as Record<string, string>)[tenant.industry_id ?? ""] ?? "";
+
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -335,7 +343,12 @@ export function DashboardShell({
     <div className="flex flex-col h-full bg-[#fafafa]">
       {/* EdgeX product brand wordmark */}
       <div className="px-5 py-3 h-[52px] flex items-center">
-        <span className="text-lg font-semibold text-gray-900 tracking-tight">EdgeX</span>
+        <span className="text-lg font-semibold text-gray-900 tracking-tight">
+          EdgeX
+          {brandSuffix && (
+            <span className="font-normal text-[#2663EB]">{brandSuffix}</span>
+          )}
+        </span>
       </div>
 
       {/* Mode switcher */}
