@@ -220,6 +220,7 @@ export function InboxUI({
         <ContactPanel
           conversation={selectedConv}
           tenantId={tenantId}
+          userRole={userRole}
           onConversationUpdate={reloadConversations}
         />
       </div>
