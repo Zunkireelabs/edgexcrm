@@ -220,29 +220,67 @@ export function LeadsTable({
     return Array.from(s).sort();
   }, [leads, isStagingView]);
 
-  // Per-source counts for staging dropdown (split-based, same logic as above)
+  // Per-source counts — cross-filtered: reflects all active filters except source itself
   const sourceCounts = useMemo(() => {
     const m = new Map<string, number>();
     if (!isStagingView) return m;
-    leads.forEach((l) =>
-      l.intake_source?.split(" | ").forEach((p) => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      if (!l.intake_source) return;
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
+      l.intake_source.split(" | ").forEach((p) => {
         const t = p.trim();
         if (t) m.set(t, (m.get(t) ?? 0) + 1);
-      })
-    );
+      });
+    });
     return m;
-  }, [leads, isStagingView]);
+  }, [localLeads, isStagingView, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter]);
 
-  // Per-counselor counts for staging dropdown (keyed by userId, "unassigned" for none)
+  // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
   const counselorCounts = useMemo(() => {
     const m = new Map<string, number>();
     if (!isStagingView) return m;
-    leads.forEach((l) => {
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      const matchesSource =
+        sourceFilter.length === 0 ||
+        (l.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false);
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesSource || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
       const key = l.assigned_to ?? "unassigned";
       m.set(key, (m.get(key) ?? 0) + 1);
     });
     return m;
-  }, [leads, isStagingView]);
+  }, [localLeads, isStagingView, sourceFilter, tagFilter, statusFilter, formFilter, createdFilter]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -1003,6 +1041,27 @@ export function LeadsTable({
 
         {/* Filter Row - Compact */}
         <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          {/* Source Filter */}
+          {sources.length > 0 && (
+            <FilterDropdown
+              label="All Sources"
+              multiple
+              value={sourceFilter}
+              onChange={(val) => {
+                setSourceFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Globe className="h-3 w-3" />}
+              options={sources.map((s) => ({
+                value: s,
+                label: isStagingView
+                  ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
+                  : s,
+                description: `Leads from ${s}`,
+              }))}
+            />
+          )}
+
           {/* Counselor Filter (Admin only) */}
           {isAdmin && counselors.length > 0 && (
             <FilterDropdown
@@ -1030,27 +1089,6 @@ export function LeadsTable({
                   description: email,
                 })),
               ]}
-            />
-          )}
-
-          {/* Source Filter */}
-          {sources.length > 0 && (
-            <FilterDropdown
-              label="All Sources"
-              multiple
-              value={sourceFilter}
-              onChange={(val) => {
-                setSourceFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Globe className="h-3 w-3" />}
-              options={sources.map((s) => ({
-                value: s,
-                label: isStagingView && sourceCounts.has(s)
-                  ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
-                  : s,
-                description: `Leads from ${s}`,
-              }))}
             />
           )}
 
