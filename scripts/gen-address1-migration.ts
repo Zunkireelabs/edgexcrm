@@ -71,7 +71,7 @@ console.log(`Address1 col : "${addr1Col}"`);
 
 interface Pair { phone10: string; address_1: string }
 const pairs: Pair[] = [];
-let noPhone = 0, noAddr = 0, noEither = 0;
+let noAddr = 0, noEither = 0;
 
 for (const row of rows) {
   const p = phone10(row[phoneCol]);
