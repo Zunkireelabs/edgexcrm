@@ -16,6 +16,7 @@ export const EMAIL_MOBILE_WIDTH = 140;
 
 export interface LeadColumnCtx {
   memberMap: Record<string, string>;
+  memberNames?: Record<string, string>;
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
   branchMap: Record<string, string>;
@@ -317,10 +318,11 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => {
       const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
+      const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
       return (
         <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
           {assignedEmail ? (
-            <span>{assignedEmail.split("@")[0]}</span>
+            <span>{assignedName || assignedEmail.split("@")[0]}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}
@@ -665,10 +667,11 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => {
       const ownerEmail = lead.owner_id ? ctx.memberMap[lead.owner_id] : null;
+      const ownerName = lead.owner_id ? ctx.memberNames?.[lead.owner_id] : null;
       return (
         <td key="owner" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
           {ownerEmail ? (
-            <span>{ownerEmail.split("@")[0]}</span>
+            <span>{ownerName || ownerEmail.split("@")[0]}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}

@@ -11,6 +11,7 @@ interface RendererProps {
   leads: Lead[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
+  memberNames?: Record<string, string>;
   formMap: Record<string, string>;
 }
 
@@ -53,6 +54,7 @@ interface DashboardViewProps {
   leads: Lead[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
+  memberNames?: Record<string, string>;
   formMap: Record<string, string>;
   visibleDashboards: Dashboard[];
   canManage: boolean;
@@ -63,6 +65,7 @@ export function DashboardView({
   leads,
   stages,
   memberMap,
+  memberNames,
   formMap,
   visibleDashboards,
   canManage,
@@ -83,7 +86,7 @@ export function DashboardView({
         <p className="text-gray-500">This dashboard has no widgets configured.</p>
       ) : (
         <div className="space-y-6">
-          {renderWidgets(dashboard.widgets, { leads, stages, memberMap, formMap })}
+          {renderWidgets(dashboard.widgets, { leads, stages, memberMap, memberNames, formMap })}
         </div>
       )}
     </div>

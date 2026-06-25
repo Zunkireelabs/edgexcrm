@@ -114,6 +114,7 @@ export default async function LeadsOrganiseCockpitPage({
   ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
   const roleMap = Object.fromEntries(
     teamMembersWithPositions.map((m) => [
@@ -132,6 +133,7 @@ export default async function LeadsOrganiseCockpitPage({
       <LeadsTable
         leads={leads}
         memberMap={memberMap}
+        memberNames={memberNames}
         stages={stages}
         formMap={formMap}
         role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}

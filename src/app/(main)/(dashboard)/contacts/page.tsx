@@ -42,15 +42,21 @@ export default async function ContactsRoutePage() {
       .eq("tenant_id", tenantData.tenant.id);
 
     const memberMap: Record<string, string> = {};
-    const teamMembers: { user_id: string; email: string; role: string }[] = [];
+    const teamMembers: { user_id: string; email: string; role: string; name: string }[] = [];
 
     if (teamData) {
       const { data: { users } } = await supabase.auth.admin.listUsers();
-      const userMap = new Map(users.map((u) => [u.id, u.email || ""]));
+      const userMap = new Map(users.map((u) => {
+        const email = u.email || "";
+        const meta = u.user_metadata as Record<string, unknown> | undefined;
+        const raw = ((meta?.name ?? meta?.full_name ?? "") as string).trim();
+        const name = (raw && raw.toLowerCase() !== email.toLowerCase()) ? raw : email.split("@")[0];
+        return [u.id, { email, name }];
+      }));
       for (const m of teamData) {
-        const email = userMap.get(m.user_id) || "";
-        memberMap[m.user_id] = email;
-        teamMembers.push({ user_id: m.user_id, email, role: m.role });
+        const user = userMap.get(m.user_id) ?? { email: "", name: "" };
+        memberMap[m.user_id] = user.email;
+        teamMembers.push({ user_id: m.user_id, email: user.email, role: m.role, name: user.name });
       }
     }
 

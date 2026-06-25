@@ -24,6 +24,7 @@ import type { Branch } from "@/types/database";
 interface TeamMemberLite {
   user_id: string;
   email: string;
+  name?: string | null;
 }
 
 interface BranchesManagerProps {
@@ -54,9 +55,10 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
       if (teamRes.ok) {
         const d = await teamRes.json();
         setMembers(
-          (d.data ?? []).map((m: { user_id: string; email: string }) => ({
+          (d.data ?? []).map((m: { user_id: string; email: string; name?: string | null }) => ({
             user_id: m.user_id,
             email: m.email,
+            name: m.name ?? null,
           })),
         );
       }
@@ -237,7 +239,7 @@ export function BranchesManager({ maxBranches }: BranchesManagerProps) {
                         <SelectItem value="__none__">No manager</SelectItem>
                         {members.map((m) => (
                           <SelectItem key={m.user_id} value={m.user_id}>
-                            {m.email.split("@")[0]}
+                            {m.name || m.email.split("@")[0]}
                           </SelectItem>
                         ))}
                       </SelectContent>
