@@ -298,6 +298,9 @@ export interface FormAttribution {
   default_source?: string | null;
   default_medium?: string | null;
   default_campaign?: string | null;
+  // Optional list-routing: send this form's new leads into a specific lead list
+  // (a separate bucket) instead of the tenant's default intake list.
+  target_list_id?: string | null;
 }
 
 export interface UtmLink {

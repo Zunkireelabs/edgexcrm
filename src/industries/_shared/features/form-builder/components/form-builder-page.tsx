@@ -14,6 +14,7 @@ import { BrandingEditor } from "./branding-editor";
 import { AttributionEditor } from "./attribution-editor";
 import { AutoresponderEditor } from "./autoresponder-editor";
 import { PipelineRoutingEditor } from "./pipeline-routing-editor";
+import { ListRoutingEditor } from "./list-routing-editor";
 import { slugify } from "../lib/validation";
 
 interface FormBuilderPageProps {
@@ -303,10 +304,16 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
             </TabsContent>
 
             <TabsContent value="routing">
-              <PipelineRoutingEditor
-                targetPipelineId={state.targetPipelineId}
-                dispatch={dispatch}
-              />
+              <div className="space-y-4">
+                <PipelineRoutingEditor
+                  targetPipelineId={state.targetPipelineId}
+                  dispatch={dispatch}
+                />
+                <ListRoutingEditor
+                  attribution={state.attribution}
+                  dispatch={dispatch}
+                />
+              </div>
             </TabsContent>
 
             <TabsContent value="autoresponder">
