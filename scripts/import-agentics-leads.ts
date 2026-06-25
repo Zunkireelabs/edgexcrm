@@ -1,5 +1,5 @@
 /**
- * Import Agentics leads (2,512 rows) into Admizz migration-qc staging list.
+ * Import Agentics leads (2,486 distinct rows — file 9.1, 26 exact-dup rows removed at source) into Admizz migration-qc staging list.
  *
  * Usage:
  *   npx tsx scripts/import-agentics-leads.ts --dry-run   # Preview: parse, count, show 3 samples. No insert.
@@ -27,7 +27,7 @@ const ADMIZZ_TENANT_ID = "febeb37c-521c-4f29-adbb-0195b2eede88";
 const MIGRATION_QC_SLUG = "migration-qc";
 const IMPORT_BATCH = "agentics-2026-06-24";
 const INTAKE_SOURCE = "Agentics leads";
-const XLSX_FILE = "temp_ss/cus-admizz-docs/migration-leads/9 - Agentics Lead.xlsx";
+const XLSX_FILE = "temp_ss/cus-admizz-docs/migration-leads/9.1 - Agentics Lead.xlsx";
 const SHEET_NAME = "Agentics-Leads";
 
 // Admizz default pipeline + first stage (matches existing migration-qc leads)
@@ -43,11 +43,11 @@ const COL = {
   nationality: "Nationality",
   interested_country: "Interested Country",
   program_category: "Preferred Program Category",
-  program_level: "Preferred Program Level ",
-  source_category: "Source Category: ",
-  source_channel: "Source Channel: ",
-  source_page: "Source page/ account / name: ",
-  campaign: "Campaign / sub-detail: ",
+  program_level: "Preferred Program Level",
+  source_category: "Source Category:",
+  source_channel: "Source Channel:",
+  source_page: "Source page/ account / name:",
+  campaign: "Campaign / sub-detail:",
 } as const;
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
