@@ -195,15 +195,14 @@ export function FilterDropdown({
                     }
                     className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
                   >
-                    {/* Selection indicator — square checkbox for multi, circle radio for single */}
+                    {/* Selection indicator — square checkbox for multi-select, circle radio for single-select */}
                     {multiple ? (
                       <div
-                        className={`
-                          mt-0.5 w-3.5 h-3.5 rounded-sm border-2 flex items-center justify-center shrink-0
-                          ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
-                        `}
+                        className={`mt-0.5 w-4 h-4 rounded-[4px] border-2 flex items-center justify-center shrink-0 ${
+                          isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-400"
+                        }`}
                       >
-                        {isSelected && <Check className="w-2 h-2 text-white" />}
+                        {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
                       </div>
                     ) : (
                       <div
