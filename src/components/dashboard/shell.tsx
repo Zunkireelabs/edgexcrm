@@ -31,7 +31,6 @@ import {
   UserCheck,
   Clock,
   ChevronDown,
-  ExternalLink,
   User as UserIcon,
   Search,
   Sparkles,
@@ -226,7 +225,6 @@ export function DashboardShell({
   tenant,
   role,
   positionName,
-  formConfigs = [],
   industrySidebarItems = [],
   allowedNavKeys = null,
   branches = [],
@@ -244,7 +242,6 @@ export function DashboardShell({
   const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { openSettings } = useSettingsModal();
@@ -329,7 +326,6 @@ export function DashboardShell({
     });
   }
 
-  const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#fafafa]">
@@ -363,54 +359,6 @@ export function DashboardShell({
               industrySidebarItems.find(
                 (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
               );
-            const publicFormsSection = navAllowed("/forms") && (
-              hasManyForms ? (
-                <div>
-                  <button
-                    onClick={() => setFormsExpanded(!formsExpanded)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-[18px] h-[18px]" />
-                      Public Forms
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {formsExpanded && (
-                    <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
-                      {formConfigs.map((form) => (
-                        <a
-                          key={form.slug}
-                          href={`/form/${tenant.slug}/${form.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => setMobileOpen(false)}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
-                        >
-                          <span className="flex-1 truncate">{form.name}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <a
-                  href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-[18px] h-[18px]" />
-                    View Public Form
-                  </div>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )
-            );
             return (
               <>
                 {/* Home — standalone, no section header */}
@@ -465,9 +413,6 @@ export function DashboardShell({
                 {/* Administration */}
                 <NavSectionHeader label="Administration" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
-                {navAllowed("/settings") && renderNavItem({ href: "/settings", label: "Settings", icon: Settings, onClick: () => openSettings() })}
-
-                {publicFormsSection}
               </>
             );
           })() : (
@@ -518,63 +463,9 @@ export function DashboardShell({
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}
-            {UNIVERSAL_NAV_BOTTOM.filter((i) => navAllowed(i.href)).map((item) =>
-              renderNavItem(
-                item.href === "/settings"
-                  ? { ...item, onClick: () => openSettings() }
-                  : item,
-              )
-            )}
-
-            {/* Public Forms Section — hidden when /forms not in position's nav allow-list */}
-            {navAllowed("/forms") && (
-              hasManyForms ? (
-                <div>
-                  <button
-                    onClick={() => setFormsExpanded(!formsExpanded)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-[18px] h-[18px]" />
-                      Public Forms
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {formsExpanded && (
-                    <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
-                      {formConfigs.map((form) => (
-                        <a
-                          key={form.slug}
-                          href={`/form/${tenant.slug}/${form.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => setMobileOpen(false)}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
-                        >
-                          <span className="flex-1 truncate">{form.name}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <a
-                  href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-[18px] h-[18px]" />
-                    View Public Form
-                  </div>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )
-            )}
+            {UNIVERSAL_NAV_BOTTOM.filter(
+              (i) => navAllowed(i.href) && i.href !== "/settings",
+            ).map(renderNavItem)}
           </>
           )
         ) : (
@@ -583,6 +474,19 @@ export function DashboardShell({
           </>
         )}
       </nav>
+
+      {/* Settings — pinned to the bottom of the sidebar (always visible) */}
+      {navMode === "ops" && navAllowed("/settings") && (
+        <div className="border-t border-gray-200 p-3">
+          <button
+            onClick={() => openSettings()}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+          >
+            <Settings className="w-[18px] h-[18px]" />
+            Settings
+          </button>
+        </div>
+      )}
     </div>
   );
 
