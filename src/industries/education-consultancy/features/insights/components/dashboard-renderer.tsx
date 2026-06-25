@@ -14,6 +14,7 @@ interface DashboardRendererProps {
   leads: Lead[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
+  memberNames?: Record<string, string>;
   formMap: Record<string, string>;
 }
 
@@ -22,6 +23,7 @@ export function DashboardRenderer({
   leads,
   stages,
   memberMap,
+  memberNames,
   formMap,
 }: DashboardRendererProps) {
   switch (widgetKey) {
@@ -32,7 +34,7 @@ export function DashboardRenderer({
     case "leads-by-source":
       return <LeadsBySourceChart leads={leads} formMap={formMap} />;
     case "leads-by-counselor":
-      return <LeadsByCounselorChart leads={leads} memberMap={memberMap} />;
+      return <LeadsByCounselorChart leads={leads} memberMap={memberMap} memberNames={memberNames} />;
     case "utm":
       return <UtmAnalyticsSection leads={leads} />;
     default:

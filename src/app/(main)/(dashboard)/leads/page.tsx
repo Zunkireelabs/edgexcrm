@@ -85,6 +85,7 @@ export default async function LeadsPage({
     ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
 
   const industry = industryResult.data as Industry | null;
@@ -109,6 +110,7 @@ export default async function LeadsPage({
       <LeadsTable
         leads={leads}
         memberMap={memberMap}
+        memberNames={memberNames}
         stages={stages}
         formMap={formMap}
         role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}

@@ -79,11 +79,13 @@ interface TeamMember {
   user_id: string;
   email: string;
   role: string;
+  name: string;
 }
 
 interface LeadsTableProps {
   leads: Lead[];
   memberMap?: Record<string, string>;
+  memberNames?: Record<string, string>;
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
   role?: UserRole;
@@ -112,6 +114,7 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
 export function LeadsTable({
   leads,
   memberMap = {},
+  memberNames = {},
   stages = [],
   formMap = {},
   role = "viewer",
@@ -419,11 +422,11 @@ export function LeadsTable({
       if (single === null) {
         return "Selected leads are unassigned — pick a member to assign them on route.";
       }
-      const name = memberMap[single]?.split("@")[0] ?? single;
+      const name = (memberNames[single] || memberMap[single]?.split("@")[0]) ?? single;
       return `All selected are assigned to ${name} — 'Keep current assignee' leaves them with this owner.`;
     }
     return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
-  }, [isStagingView, selectedIds, localLeads, memberMap]);
+  }, [isStagingView, selectedIds, localLeads, memberMap, memberNames]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -647,7 +650,7 @@ export function LeadsTable({
       }
       const assignedName =
         moveAssignTo !== "keep" && moveAssignTo !== "unassign"
-          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.email?.split("@")[0]
+          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.name
           : null;
       const toastMsg = [
         `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
@@ -686,8 +689,8 @@ export function LeadsTable({
           case "location":
             return [lead.city, lead.country].filter(Boolean).join(", ");
           case "assigned": {
-            const email = lead.assigned_to ? memberMap[lead.assigned_to] : null;
-            return email ? email.split("@")[0] : "";
+            const uid = lead.assigned_to;
+            return uid ? (memberNames[uid] || (memberMap[uid] ? memberMap[uid].split("@")[0] : "")) : "";
           }
           case "status": {
             const stage = stages.find((s) => s.id === lead.stage_id);
@@ -729,8 +732,8 @@ export function LeadsTable({
           case "company_email":
             return lead.company_email || "";
           case "owner": {
-            const email = lead.owner_id ? memberMap[lead.owner_id] : null;
-            return email ? email.split("@")[0] : "";
+            const uid = lead.owner_id;
+            return uid ? (memberNames[uid] || (memberMap[uid] ? memberMap[uid].split("@")[0] : "")) : "";
           }
           default:
             if (col.key.startsWith("cf:")) {
@@ -844,6 +847,7 @@ export function LeadsTable({
   const columnCtx: LeadColumnCtx = useMemo(
     () => ({
       memberMap,
+      memberNames,
       formMap,
       entityMap,
       branchMap,
@@ -911,7 +915,7 @@ export function LeadsTable({
         : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
+    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -1084,8 +1088,8 @@ export function LeadsTable({
                 ...counselors.map(([userId, email]) => ({
                   value: userId,
                   label: isStagingView
-                    ? `${email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`
-                    : email.split("@")[0],
+                    ? `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`
+                    : memberNames[userId] || email.split("@")[0],
                   description: email,
                 })),
               ]}
@@ -1433,6 +1437,7 @@ export function LeadsTable({
               onClose={() => setPreviewLeadId(null)}
               stages={stages}
               memberMap={memberMap}
+              memberNames={memberNames}
             />
           )}
         </div>
@@ -1493,7 +1498,7 @@ export function LeadsTable({
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
-                        <span>{member.email.split("@")[0]}</span>
+                        <span>{member.name}</span>
                         <span className="text-xs text-muted-foreground">({member.role})</span>
                       </div>
                     </SelectItem>
@@ -1660,7 +1665,7 @@ export function LeadsTable({
                         .map((member) => (
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">
-                              <span>{member.email.split("@")[0]}</span>
+                              <span>{member.name}</span>
                               <span className="text-xs text-muted-foreground">({member.role})</span>
                             </div>
                           </SelectItem>

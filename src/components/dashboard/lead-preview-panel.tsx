@@ -28,6 +28,7 @@ interface LeadPreviewPanelProps {
   onClose: () => void;
   stages?: PipelineStage[];
   memberMap?: Record<string, string>;
+  memberNames?: Record<string, string>;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -56,6 +57,7 @@ export function LeadPreviewPanel({
   onClose,
   stages = [],
   memberMap = {},
+  memberNames = {},
 }: LeadPreviewPanelProps) {
   const [notes, setNotes] = useState<LeadNote[]>([]);
   const [checklists, setChecklists] = useState<LeadChecklist[]>([]);
@@ -222,7 +224,9 @@ export function LeadPreviewPanel({
               <div className="flex items-center gap-1.5 text-sm text-gray-700">
                 <User className="h-3.5 w-3.5 text-gray-400" />
                 <span className="truncate">
-                  {assignedEmail ? assignedEmail.split("@")[0] : "Unassigned"}
+                  {assignedEmail
+                    ? (lead.assigned_to && memberNames[lead.assigned_to]) || assignedEmail.split("@")[0]
+                    : "Unassigned"}
                 </span>
               </div>
             </div>

@@ -51,6 +51,7 @@ interface TeamMemberData {
   user_id: string;
   email: string;
   role: string;
+  name: string;
 }
 
 interface PipelineBoardProps {
@@ -69,6 +70,7 @@ interface PipelineBoardProps {
 interface TeamMember {
   user_id: string;
   email: string;
+  name?: string | null;
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
@@ -679,7 +681,7 @@ export function PipelineBoard({
                 { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
                 ...teamMembers.map((m) => ({
                   value: m.user_id,
-                  label: m.email.split("@")[0],
+                  label: m.name || m.email.split("@")[0],
                   description: m.email,
                 })),
               ]}

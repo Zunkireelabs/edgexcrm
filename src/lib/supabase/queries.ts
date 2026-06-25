@@ -380,11 +380,20 @@ export async function getLeadsForPipeline(
   });
 }
 
+function resolveDisplayName(email: string, meta?: Record<string, unknown> | null): string {
+  const raw = ((meta?.name ?? meta?.full_name ?? "") as string).trim();
+  if (!raw || raw.toLowerCase() === email.toLowerCase()) {
+    return email.split("@")[0];
+  }
+  return raw;
+}
+
 export interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   email: string;
+  name: string;
   created_at: string;
 }
 
@@ -399,18 +408,24 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
   if (error) throw error;
 
   const { data: authData } = await supabase.auth.admin.listUsers();
-  const userMap = new Map<string, string>();
+  const userMap = new Map<string, { email: string; name: string }>();
   for (const u of authData?.users || []) {
-    userMap.set(u.id, u.email || "");
+    const email = u.email || "";
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    userMap.set(u.id, { email, name: resolveDisplayName(email, meta) });
   }
 
-  return (members || []).map((m) => ({
-    id: m.id,
-    user_id: m.user_id,
-    role: m.role,
-    email: userMap.get(m.user_id) || "Unknown",
-    created_at: m.created_at,
-  }));
+  return (members || []).map((m) => {
+    const user = userMap.get(m.user_id) ?? { email: "Unknown", name: "Unknown" };
+    return {
+      id: m.id,
+      user_id: m.user_id,
+      role: m.role,
+      email: user.email,
+      name: user.name,
+      created_at: m.created_at,
+    };
+  });
 }
 
 export async function getBranches(tenantId: string): Promise<Branch[]> {
@@ -767,20 +782,21 @@ export async function getTeamMembersWithPositions(
   if (error) throw error;
 
   const { data: authData } = await supabase.auth.admin.listUsers();
-  const userMap = new Map<string, string>();
+  const userMap = new Map<string, { email: string; name: string }>();
   for (const u of authData?.users || []) {
-    userMap.set(u.id, u.email || "");
+    const email = u.email || "";
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    userMap.set(u.id, { email, name: resolveDisplayName(email, meta) });
   }
 
   return (members || []).map((m) => {
     const posEmbed = Array.isArray(m.positions)
       ? (m.positions[0] ?? null)
       : m.positions;
-    const email = userMap.get(m.user_id) || "";
-    const name = email.split("@")[0] || email;
+    const user = userMap.get(m.user_id) ?? { email: "", name: "" };
     return {
       user_id: m.user_id,
-      display: name,
+      display: user.name || user.email.split("@")[0] || user.email,
       position_name: (posEmbed as { name?: string } | null)?.name ?? null,
     };
   });

@@ -16,14 +16,15 @@ const CHART_COLORS = [
 interface LeadsByCounselorChartProps {
   leads: Lead[];
   memberMap: Record<string, string>; // user_id -> email
+  memberNames?: Record<string, string>; // user_id -> display name
 }
 
-export function LeadsByCounselorChart({ leads, memberMap }: LeadsByCounselorChartProps) {
+export function LeadsByCounselorChart({ leads, memberMap, memberNames = {} }: LeadsByCounselorChartProps) {
   // Group leads by assigned counselor
   const counselorCounts = leads.reduce((acc, lead) => {
     const assignedTo = lead.assigned_to;
     const counselorName = assignedTo
-      ? memberMap[assignedTo]?.split("@")[0] || "Unknown"
+      ? memberNames[assignedTo] || memberMap[assignedTo]?.split("@")[0] || "Unknown"
       : "Unassigned";
     acc[counselorName] = (acc[counselorName] || 0) + 1;
     return acc;

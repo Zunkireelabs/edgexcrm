@@ -45,6 +45,7 @@ interface TeamMember {
   user_id: string;
   email: string;
   role: string;
+  name: string;
 }
 
 interface AddLeadSheetProps {
@@ -503,7 +504,7 @@ export function AddLeadSheet({
               <SelectItem value="__none__">Unassigned</SelectItem>
               {assignableMembers.map((member) => (
                 <SelectItem key={member.user_id} value={member.user_id}>
-                  {member.email.split("@")[0]}
+                  {member.name}
                   {member.user_id === currentUserId && " (You)"}
                 </SelectItem>
               ))}
@@ -692,7 +693,7 @@ export function AddLeadSheet({
               <SelectContent>
                 {assignableMembers.map((member) => (
                   <SelectItem key={member.user_id} value={member.user_id}>
-                    {member.email.split("@")[0]}
+                    {member.name}
                     {member.user_id === currentUserId && " (You)"}
                   </SelectItem>
                 ))}

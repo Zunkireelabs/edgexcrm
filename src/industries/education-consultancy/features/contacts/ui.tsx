@@ -10,7 +10,7 @@ interface ContactsPageProps {
   formMap: Record<string, string>;
   role: UserRole;
   tenantId: string;
-  teamMembers: { user_id: string; email: string; role: string }[];
+  teamMembers: { user_id: string; email: string; role: string; name: string }[];
   entities: TenantEntity[];
   entityLabel?: string;
   currentUserId: string;
