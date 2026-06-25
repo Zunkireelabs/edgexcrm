@@ -4,6 +4,13 @@ import { useState, useEffect, useCallback } from "react";
 import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { SendConsentDialog } from "./send-consent-dialog";
 
@@ -36,6 +43,7 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTab, setDialogTab] = useState<"send" | "manual">("send");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -189,12 +197,10 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
                   size="sm"
                   variant="outline"
                   className="h-7 text-xs"
-                  asChild
+                  onClick={() => setPreviewOpen(true)}
                 >
-                  <a href={current.record.document_url} target="_blank" rel="noopener noreferrer">
-                    <FileText className="h-3 w-3 mr-1" />
-                    View document
-                  </a>
+                  <FileText className="h-3 w-3 mr-1" />
+                  View document
                 </Button>
               )}
             </>
@@ -213,6 +219,37 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
           fetchStatus();
         }}
       />
+
+      {/* Signed-document preview — inline PDF in a modal instead of a new tab */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Signed Consent Document</DialogTitle>
+          </DialogHeader>
+          {current?.record?.document_url && (
+            <iframe
+              src={current.record.document_url}
+              title="Signed consent document"
+              className="w-full h-[70vh] rounded-md border"
+            />
+          )}
+          <DialogFooter className="sm:justify-between">
+            {current?.record?.document_url && (
+              <a
+                href={current.record.document_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs text-muted-foreground hover:text-foreground hover:underline self-center"
+              >
+                Open in new tab
+              </a>
+            )}
+            <Button variant="outline" size="sm" onClick={() => setPreviewOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

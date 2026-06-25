@@ -614,6 +614,127 @@ export async function getRecentNotifications(
   return (data ?? []) as RecentNotification[];
 }
 
+// ---- Home: my open conversations (Inbox widget) ----
+
+export interface InboxConversationItem {
+  id: string;
+  contact_display_name: string | null;
+  contact_phone: string | null;
+  last_message_preview: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+}
+
+export interface InboxSnapshot {
+  items: InboxConversationItem[];
+  unreadCount: number;
+}
+
+/** Open conversations assigned to the current user (the home Inbox widget). */
+export async function getMyInboxSnapshot(tenantId: string, userId: string): Promise<InboxSnapshot> {
+  const supabase = await createServiceClient();
+  const { data } = await supabase
+    .from("conversations")
+    .select("id, contact_display_name, contact_phone, last_message_preview, last_message_at, unread_count")
+    .eq("tenant_id", tenantId)
+    .eq("assigned_to_user_id", userId)
+    .eq("status", "open")
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(5);
+
+  const items = (data ?? []) as InboxConversationItem[];
+  const unreadCount = items.reduce((n, c) => n + (c.unread_count || 0), 0);
+  return { items, unreadCount };
+}
+
+// ---- Home: my own recent actions (Recent Activity widget) ----
+
+export interface RecentActivityItem {
+  id: string;
+  title: string;
+  message: string;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  "lead.submission": "New lead submission",
+  "lead.updated": "Updated a lead",
+  "lead.merged": "Merged a duplicate lead",
+  "lead.note_added": "Added a note",
+  "lead.branch_shared": "Shared a lead to a branch",
+  "lead.branch_revoked": "Removed a lead from a branch",
+  "lead.branch_assigned": "Assigned a lead in a branch",
+  "consent.sent": "Sent a consent request",
+  "consent.signed": "Recorded a signed consent",
+  "consent_template.updated": "Updated the consent template",
+};
+
+function labelForAuditAction(action: string): string {
+  return (
+    AUDIT_ACTION_LABELS[action] ??
+    action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
+/**
+ * The current user's own recent actions (from audit_logs, actor = me) — what
+ * *I* did, not notifications sent to me. Lead entities are enriched with the
+ * lead name + a deep link.
+ */
+export async function getMyRecentActivity(
+  tenantId: string,
+  userId: string,
+): Promise<RecentActivityItem[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, entity_type, entity_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (error || !data) return [];
+  const rows = data as Array<{
+    id: string;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    created_at: string;
+  }>;
+
+  // Enrich lead entities with their names in one batch query.
+  const leadIds = Array.from(
+    new Set(rows.filter((r) => r.entity_type === "lead").map((r) => r.entity_id)),
+  );
+  const nameById = new Map<string, string>();
+  if (leadIds.length > 0) {
+    const { data: leads } = await supabase
+      .from("leads")
+      .select("id, first_name, last_name")
+      .in("id", leadIds);
+    for (const l of (leads ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null }>) {
+      const name = [l.first_name, l.last_name].filter(Boolean).join(" ").trim();
+      if (name) nameById.set(l.id, name);
+    }
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: labelForAuditAction(r.action),
+    message:
+      r.entity_type === "lead"
+        ? nameById.get(r.entity_id) ?? "Lead"
+        : r.entity_type.replace(/_/g, " "),
+    link: r.entity_type === "lead" ? `/leads/${r.entity_id}` : null,
+    // Past actions render as a neutral (non-alert) dot.
+    read_at: r.created_at,
+    created_at: r.created_at,
+  }));
+}
+
 export async function getImportSourceReconciliation(
   tenantId: string,
   stagingListId: string,

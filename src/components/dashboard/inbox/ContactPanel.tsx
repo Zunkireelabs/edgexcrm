@@ -2,9 +2,16 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { User, Phone, ExternalLink, UserPlus, RefreshCw } from "lucide-react";
+import { User, Phone, ExternalLink, UserPlus, RefreshCw, UserCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 type ConversationRow = Record<string, unknown>;
@@ -18,17 +25,81 @@ interface LeadData {
   stage_id: string | null;
 }
 
+interface TeamMember {
+  user_id: string;
+  role: string;
+  email: string;
+  name?: string | null;
+}
+
 interface ContactPanelProps {
   conversation: ConversationRow | null;
   tenantId: string;
+  userRole: string;
   onConversationUpdate: () => void;
 }
 
-export function ContactPanel({ conversation, tenantId, onConversationUpdate }: ContactPanelProps) {
+function initials(label: string): string {
+  const base = label.includes("@") ? label.split("@")[0] : label;
+  const parts = base.trim().split(/[\s._-]+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return base.substring(0, 2).toUpperCase();
+}
+
+export function ContactPanel({ conversation, tenantId, userRole, onConversationUpdate }: ContactPanelProps) {
   const [lead, setLead] = useState<LeadData | null>(null);
   const [loadingLead, setLoadingLead] = useState(false);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [assigneeId, setAssigneeId] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
 
+  const isAdmin = userRole === "owner" || userRole === "admin";
   const leadId = conversation?.lead_id as string | null;
+  const convId = conversation?.id as string | undefined;
+
+  // Keep local assignee in sync with the selected conversation.
+  useEffect(() => {
+    setAssigneeId((conversation?.assigned_to_user_id as string | null) ?? null);
+  }, [conversation]);
+
+  // Load team members for the assignee picker (admins/owners only — matches /team access).
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    fetch("/api/v1/team")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (!cancelled && json?.data) setTeamMembers(json.data as TeamMember[]); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAdmin]);
+
+  const assignedMember = teamMembers.find((m) => m.user_id === assigneeId);
+
+  const handleAssign = async (value: string) => {
+    if (!convId) return;
+    const newId = value === "unassigned" ? null : value;
+    const prev = assigneeId;
+    setAssigneeId(newId); // optimistic
+    setAssigning(true);
+    try {
+      const res = await fetch(`/api/v1/inbox/conversations/${convId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assigned_to_user_id: newId,
+          assignee_type: newId ? "human" : "unassigned",
+        }),
+      });
+      if (!res.ok) throw new Error("failed");
+      toast.success(newId ? "Conversation assigned" : "Conversation unassigned");
+      onConversationUpdate();
+    } catch {
+      setAssigneeId(prev); // revert
+      toast.error("Failed to update assignment");
+    } finally {
+      setAssigning(false);
+    }
+  };
   const displayName = (conversation?.contact_display_name as string | null)
     ?? (conversation?.contact_phone as string | null)
     ?? "Unknown contact";
@@ -36,7 +107,6 @@ export function ContactPanel({ conversation, tenantId, onConversationUpdate }: C
   useEffect(() => {
     let cancelled = false;
     if (!leadId) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLead(null);
       return;
     }
@@ -171,6 +241,58 @@ export function ContactPanel({ conversation, tenantId, onConversationUpdate }: C
         <p className="text-xs font-medium text-muted-foreground mb-2 uppercase tracking-wide">
           Conversation
         </p>
+
+        {/* Assigned to */}
+        <div className="mb-3">
+          <p className="text-xs text-muted-foreground mb-1.5">Assigned to</p>
+          {isAdmin ? (
+            <Select
+              value={assigneeId || "unassigned"}
+              onValueChange={handleAssign}
+              disabled={assigning}
+            >
+              <SelectTrigger className="h-8 text-sm">
+                <SelectValue placeholder="Unassigned" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">
+                  <span className="text-muted-foreground">Unassigned</span>
+                </SelectItem>
+                {teamMembers
+                  .filter((m) => m.role !== "viewer")
+                  .map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      <div className="flex items-center gap-2">
+                        <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-[10px] font-medium text-primary">
+                            {initials(m.name || m.email)}
+                          </span>
+                        </div>
+                        <span className="truncate">{m.name || m.email}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          ) : assignedMember ? (
+            <div className="flex items-center gap-2">
+              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                <span className="text-[10px] font-medium text-primary">
+                  {initials(assignedMember.name || assignedMember.email)}
+                </span>
+              </div>
+              <span className="text-sm font-medium truncate">
+                {assignedMember.name || assignedMember.email}
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <UserCircle className="h-4 w-4" />
+              <span className="text-sm">{assigneeId ? "Assigned" : "Unassigned"}</span>
+            </div>
+          )}
+        </div>
+
         <div className="flex flex-col gap-1.5 text-xs">
           <div className="flex justify-between">
             <span className="text-muted-foreground">Status</span>
