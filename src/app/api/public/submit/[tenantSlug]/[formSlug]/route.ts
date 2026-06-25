@@ -397,6 +397,21 @@ export async function POST(
     intakeListId = intakeList?.id ?? null;
   }
 
+  // List Routing: if this form targets a specific list (set in the Routing tab and
+  // stored in attribution.target_list_id), route new leads into that list instead
+  // of the default intake list — but only if the list belongs to this tenant.
+  let routedListId: string | null = intakeListId;
+  const targetListId = formConfig.attribution?.target_list_id ?? null;
+  if (targetListId) {
+    const { data: targetList } = await supabase
+      .from("lead_lists")
+      .select("id")
+      .eq("id", targetListId)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle();
+    if (targetList) routedListId = targetListId;
+  }
+
   // ── 11. Insert lead ──
   // Resolve the tenant's default branch for branch inheritance on new public-form inserts.
   // Uses the is_default column added in migration 060.
@@ -440,7 +455,7 @@ export async function POST(
     branch_id: publicFormBranchId,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
-    ...(intakeListId && { list_id: intakeListId }),
+    ...(routedListId && { list_id: routedListId }),
   };
 
   const { data: lead, error } = await supabase
