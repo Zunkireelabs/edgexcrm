@@ -84,6 +84,7 @@ export const NotificationTypes = {
   LEAD_CREATED: "lead.created",
   LEAD_STAGE_CHANGED: "lead.stage_changed",
   INBOX_MESSAGE_RECEIVED: "inbox.message_received",
+  INBOX_ASSIGNED: "inbox.assigned",
 } as const;
 
 /**

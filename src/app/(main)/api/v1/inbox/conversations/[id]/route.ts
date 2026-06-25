@@ -10,6 +10,7 @@ import {
   apiSuccess,
 } from "@/lib/api/response";
 import { createServiceClient } from "@/lib/supabase/server";
+import { createNotification, NotificationTypes } from "@/lib/notifications";
 
 export async function GET(
   _request: NextRequest,
@@ -64,7 +65,7 @@ export async function PATCH(
   // editing must match viewing (same check as the GET handler above).
   const { data: conv } = await supabase
     .from("conversations")
-    .select("id, lead_id")
+    .select("id, lead_id, assigned_to_user_id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .maybeSingle();
@@ -106,5 +107,26 @@ export async function PATCH(
     .single();
 
   if (error || !data) return apiNotFound("Conversation");
+
+  // Notify a newly-assigned user (skip self-assignment and no-op re-assignment).
+  const oldAssignee = (conv as { assigned_to_user_id?: string | null }).assigned_to_user_id ?? null;
+  const newAssignee =
+    "assigned_to_user_id" in patch ? (patch.assigned_to_user_id as string | null) : undefined;
+  if (newAssignee && newAssignee !== oldAssignee && newAssignee !== auth.userId) {
+    const row = data as Record<string, unknown>;
+    const contactName =
+      (row.contact_display_name as string | null) ||
+      (row.contact_phone as string | null) ||
+      "a contact";
+    await createNotification({
+      tenantId: auth.tenantId,
+      userId: newAssignee,
+      type: NotificationTypes.INBOX_ASSIGNED,
+      title: "New conversation assigned",
+      message: `You were assigned the conversation with ${contactName}`,
+      link: `/inbox?conversation=${id}`,
+    });
+  }
+
   return apiSuccess(data);
 }
