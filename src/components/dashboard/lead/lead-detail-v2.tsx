@@ -332,7 +332,9 @@ export function LeadDetailV2({
 
   // Handlers
   const handleNoteClick = () => {
-    setActiveTab("notes");
+    // Notes now live in the Activity tab's Notes sub-tab; switch there, then
+    // focusComposer routes through LeadTabs → ActivitiesPanel.openNotes(true).
+    setActiveTab("activity");
     setTimeout(() => {
       notesTabRef.current?.focusComposer();
     }, 100);
