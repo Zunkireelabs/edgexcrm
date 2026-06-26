@@ -317,6 +317,9 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       destinations: [],
       field_of_study: null,
       degree_level: null,
+      pre_app_fee_status: null,
+      pre_app_fee_amount: null,
+      pre_app_fee_notes: null,
       archive_reason: null,
     };
     setMergeTarget(partial);
