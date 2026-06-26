@@ -11,6 +11,8 @@
 
 ## 🟢 NEXT SESSION — RESUME HERE
 
+- **(2026-06-26): GLOBAL SEARCH PALETTE (⌘K) — REVIEWED CLEAN, PR OPENED TO STAGE.** Branch `feature/global-search-palette`. Universal/global UI feature: moved global search out of the dead top-header box into a left-sidebar "Global Search" row (top of nav) that opens a cmdk command palette in a Dialog overlay (Settings-modal backdrop: `bg-[#0000004d] backdrop-blur-[2px]`, fixed 60vh height). ⌘K on Mac / Ctrl+K elsewhere. Searches **Navigation** (pages, lead lists, staging lists, industry features, Orca, Settings tabs — all feature-access + role gated; education-only `academic-operations` hidden for non-education) client-side, and **Leads** (name/email/phone) via the existing `/api/v1/leads?search=` (debounced + abortable; counselor/branch scoping inherited). No DB, no migration, no new API. New files: `src/components/ui/command.tsx`, `src/contexts/global-search-context.tsx`, `src/components/dashboard/search/{build-nav-index.ts,global-search-palette.tsx}`. Modified: `shell.tsx`, `(dashboard)/layout.tsx`, `package.json` (+`cmdk@^1.1.1`). Opus-reviewed across 3 rounds (caught + fixed: cmdk `shouldFilter` hiding loading/empty states, `DialogTitle` outside `DialogContent`; then overlay + fixed-height polish). `npm run build` ✅ · eslint ✅. Brief archived to `docs/archive/features/`. **Next: confirm PR base=stage + CI green, merge → auto-deploys dev-lead-crm. Phase 2 = more entity types (Applications/Classes/KB/team) + Orca-AI palette actions (seams left in code).**
+
 - **(2026-06-20): LEAD DETAIL ASSOCIATIONS RAIL (education_consultancy) — BUILT, STOP-AT-REVIEW. Awaiting Opus review + Sadin smoke.** Branch `feature/lead-associations-rail`. A1–A6 complete. `npm run build` ✅ · `npx eslint --max-warnings 50` ✅ (0 errors, 31 warnings all pre-existing). **No DB changes, no push.** New files: `applications-card.tsx` (compact right-rail card — count badge + rows linking to `/applications/[id]` + Add button), `add-application-to-lead-sheet.tsx` (extracted from `applications-panel.tsx`). Modified: `lead-detail-v2.tsx` (right column industry-aware: education + prospect → ApplicationsCard stack; else ManagementPanel unchanged), `lead-tabs.tsx` (removed Applications TabsTrigger + TabsContent + ApplicationsPanel import + `canManageApplications` prop). Deleted: `applications-panel.tsx` (orphaned, no remaining imports). Gate matrix: education prospect → Applications card in rail, no center Applications tab, no Checklist; education non-prospect → Checklist unchanged; non-education → Checklist unchanged. Brief: `docs/LEAD-ASSOCIATIONS-RAIL-BRIEF.md`.
 
 - **(2026-06-20): APPLICATION DETAIL PAGE (education_consultancy) — BUILT, STOP-AT-REVIEW. Awaiting Opus review + Sadin smoke.** Branch `feature/application-detail-page`. D1–D8 complete. `npm run build` ✅ · `npx eslint --max-warnings 50` ✅ (0 errors, 31 warnings all pre-existing). **No DB changes, no push.** New files: `src/app/(main)/(dashboard)/applications/[id]/page.tsx` (route shell), `application-detail.tsx` (3-col client page), `stage-stepper.tsx`, `application-activity-timeline.tsx`, `getApplicationActivity()` in queries.ts. Rewired: board card, applications-table row, applications-panel row → navigate `/applications/[id]`; student name stays `/leads/[id]`. See `docs/APPLICATION-DETAIL-BRIEF.md` + STATUS-BOARD item.
@@ -103,6 +105,20 @@
 - **Open items / questions**: see [STATUS-BOARD.md](./STATUS-BOARD.md).
 
 When closing a session, push this block's content into a new dated session entry below, then refresh this block with the new current state.
+
+---
+
+## Global Search command palette (⌘K) shipped to stage — 2026-06-26
+
+Global/universal UI feature. Replaced the non-functional top-header search box with a sidebar-anchored command palette.
+
+- **Sidebar entry**: "Global Search" row at the top of the nav (above Home), with a platform-aware `⌘K`/`Ctrl K` chip; opens the palette. Dead header `<input>` + its centering spacer removed from `shell.tsx`.
+- **Palette**: cmdk (`cmdk@^1.1.1`) inside the shared shadcn `Dialog`. Backdrop matches the Settings modal (`bg-[#0000004d] backdrop-blur-[2px]`); list pinned to a fixed `h-[60vh]` so it doesn't resize as results change. `shouldFilter={false}` (palette owns all filtering). Cross-platform shortcut via global keydown (`metaKey||ctrlKey + k`), label resolved in `useEffect` to avoid hydration mismatch.
+- **Navigation results** (client-side, zero-API): universal pages, lead lists, staging lists, industry sidebar items, Orca pages, and Settings (top-level + one entry per tab → `openSettings(tab)`). Built by `build-nav-index.ts` from the same server-gated props the sidebar uses, so feature-access + role gating is automatic; `academic-operations` tab hidden for non-education tenants.
+- **Leads results**: reuse existing `GET /api/v1/leads?search=&pageSize=8` (ILIKE on name/email/phone, already counselor/branch-scoped + `deleted_at` filtered). Debounced 200ms, min 2 chars, `AbortController`-cancelled.
+- **No DB / migration / new API.** New files: `command.tsx`, `global-search-context.tsx`, `build-nav-index.ts`, `global-search-palette.tsx`; modified `shell.tsx`, `(dashboard)/layout.tsx`, `package.json`. Mounted via `GlobalSearchProvider` in the dashboard layout (sibling of `SettingsModalProvider`).
+- **Review**: Opus 3-round review — fixed cmdk `shouldFilter` swallowing the loading/empty states, a `DialogTitle`-outside-`DialogContent` Radix a11y error, then the overlay + fixed-height polish. `npm run build` ✅, eslint ✅, both re-run independently. Brief: `docs/archive/features/GLOBAL-SEARCH-PALETTE-BRIEF.md`.
+- **Phase 2 (seams left in code)**: more entity types (Applications, Classes, Knowledge Base content, team) and an Orca-AI "Actions / Ask Orca" group.
 
 ---
 

@@ -50,6 +50,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
+import { useGlobalSearch } from "@/contexts/global-search-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
@@ -245,6 +246,7 @@ export function DashboardShell({
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { openSettings } = useSettingsModal();
+  const { open: openSearch, shortcutLabel } = useGlobalSearch();
   const { counts } = useBadgeCounts();
 
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
@@ -361,6 +363,21 @@ export function DashboardShell({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+      </div>
+
+      {/* Global Search row — top of nav, opens command palette */}
+      <div className="px-3 pb-1">
+        <button
+          type="button"
+          onClick={() => { openSearch(); setMobileOpen(false); }}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+        >
+          <Search className="w-[18px] h-[18px] shrink-0" />
+          <span className="flex-1 text-left">Global Search</span>
+          <kbd className="text-[11px] text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded font-mono leading-none">
+            {shortcutLabel}
+          </kbd>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -534,26 +551,8 @@ export function DashboardShell({
             )}
           </div>
 
-          {/* Spacer for centering */}
-          <div className="flex-1"></div>
-
-          {/* Search Bar - Centered, Zunkireelabs style */}
-          <div className="w-full max-w-lg">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full h-10 pl-9 pr-12 rounded-xl border border-gray-300 bg-white text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                ⌘K
-              </kbd>
-            </div>
-          </div>
-
-          {/* Spacer for centering */}
-          <div className="flex-1"></div>
+          {/* Spacer — keeps the right section right-aligned */}
+          <div className="flex-1" />
 
           {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
           <div className="flex items-center gap-3">
