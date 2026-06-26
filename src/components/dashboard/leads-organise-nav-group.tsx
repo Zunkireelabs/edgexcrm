@@ -30,7 +30,7 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
         <Link
           href="/leads-organise"
           onClick={onNavigate}
-          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             parentActive || hasActiveChild
               ? "bg-[#ebebeb] text-gray-900"
               : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"

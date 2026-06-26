@@ -35,7 +35,7 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadLi
         <Link
           href="/leads"
           onClick={onNavigate}
-          className={`flex-1 flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             parentActive || hasActiveChild
               ? "bg-[#ebebeb] text-gray-900"
               : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -44,7 +44,7 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadLi
           <Users className="w-[18px] h-[18px] shrink-0" />
           All Leads
         </Link>
-        {lists.length > 0 && (
+        {(lists.length > 0 || isAdmin) && (
           <button
             type="button"
             aria-expanded={expanded}
@@ -56,9 +56,9 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadLi
         )}
       </div>
 
-      {(expanded && lists.length > 0) || isAdmin ? (
+      {expanded && (lists.length > 0 || isAdmin) ? (
         <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300 space-y-1">
-          {expanded && lists.map((list) => {
+          {lists.map((list) => {
             const active = isOnLeads && currentList === list.slug;
             return (
               <Link
