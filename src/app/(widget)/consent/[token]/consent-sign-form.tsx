@@ -11,6 +11,8 @@ interface ConsentSignFormProps {
   title: string;
   bodySnapshot: string;
   requireDrawnSignature: boolean;
+  compact?: boolean;
+  onComplete?: (signerName: string) => void;
 }
 
 export function ConsentSignForm({
@@ -20,6 +22,8 @@ export function ConsentSignForm({
   title,
   bodySnapshot,
   requireDrawnSignature,
+  compact,
+  onComplete,
 }: ConsentSignFormProps) {
   const [signerName, setSignerName] = useState("");
   const [agreed, setAgreed] = useState(false);
@@ -159,7 +163,11 @@ export function ConsentSignForm({
         return;
       }
 
-      setDone(true);
+      if (onComplete) {
+        onComplete(signerName.trim());
+      } else {
+        setDone(true);
+      }
     } catch {
       setError("An unexpected error occurred. Please try again.");
     } finally {
@@ -184,7 +192,7 @@ export function ConsentSignForm({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4">
+    <div className={compact ? "py-4 px-0" : "min-h-screen bg-gray-50 py-8 px-4"}>
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <div className="bg-white rounded-xl shadow-sm border p-6 flex items-center gap-4">
