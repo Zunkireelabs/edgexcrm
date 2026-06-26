@@ -31,7 +31,6 @@ import {
   UserCheck,
   Clock,
   ChevronDown,
-  User as UserIcon,
   Search,
   Sparkles,
   Stamp,
@@ -363,6 +362,20 @@ export function DashboardShell({
         </Tabs>
       </div>
 
+      {/* Branch scope switcher — Enterprise only; sits above the nav it filters */}
+      {maxBranches > 1 && (
+        <div className="px-3 pb-2">
+          <BranchSwitcher
+            branches={branches}
+            maxBranches={maxBranches}
+            userBranchId={userBranchId}
+            leadScope={leadScope}
+            selectedBranchId={selectedBranchId}
+            fullWidth
+          />
+        </div>
+      )}
+
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
@@ -488,18 +501,68 @@ export function DashboardShell({
         )}
       </nav>
 
-      {/* Settings — pinned to the bottom of the sidebar (always visible) */}
-      {navMode === "ops" && navAllowed("/settings") && (
-        <div className="border-t border-gray-200 p-3">
-          <button
-            onClick={() => openSettings()}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+      {/* Account — pinned to the bottom of the sidebar; menu opens upward */}
+      <div className="border-t border-gray-200 p-3 relative">
+        <button
+          onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+          className="w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors hover:bg-[#ebebeb]"
+        >
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0"
+            style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
           >
-            <Settings className="w-[18px] h-[18px]" />
-            Settings
-          </button>
-        </div>
-      )}
+            {tenant.name.charAt(0)}
+          </div>
+          <div className="flex-1 min-w-0 text-left">
+            <p className="text-sm font-medium text-gray-900 truncate">{tenant.name}</p>
+            <p className="text-xs text-gray-500 truncate">{user.email}</p>
+          </div>
+          <ChevronDown className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
+        </button>
+
+        {showAccountDropdown && (
+          <>
+            <div className="fixed inset-0 z-40" onClick={() => setShowAccountDropdown(false)} />
+            <div className="absolute left-3 right-3 bottom-full mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+              {/* User info */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <p className="text-sm font-semibold text-gray-900 truncate">
+                  {user.email?.split("@")[0] || "User"}
+                </p>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                <span className="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium capitalize">
+                  {positionName ?? role}
+                </span>
+              </div>
+
+              {/* Settings (ops mode only) */}
+              {navMode === "ops" && navAllowed("/settings") && (
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => { setShowAccountDropdown(false); openSettings(); }}
+                    className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Settings className="w-4 h-4 text-gray-500" />
+                    <span>Settings</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Logout */}
+              <div className="border-t border-gray-100 pt-1">
+                <button
+                  onClick={() => { setShowAccountDropdown(false); handleLogout(); }}
+                  className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 
@@ -570,86 +633,11 @@ export function DashboardShell({
               <span className="text-sm font-medium hidden sm:inline">Assistant</span>
             </button>
 
-            {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
-            <BranchSwitcher
-              branches={branches}
-              maxBranches={maxBranches}
-              userBranchId={userBranchId}
-              leadScope={leadScope}
-              selectedBranchId={selectedBranchId}
-            />
 
             {/* Notifications Dropdown */}
             <NotificationsDropdown />
 
-            {/* User/Tenant Dropdown */}
-            <div className="relative">
-              <button
-                onClick={() => setShowAccountDropdown(!showAccountDropdown)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors"
-              >
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-medium"
-                  style={{ backgroundColor: tenant.primary_color || "#2272B4" }}
-                >
-                  {tenant.name.charAt(0)}
-                </div>
-                <span className="text-sm font-medium text-gray-900 hidden sm:inline">{tenant.name}</span>
-                <ChevronDown className={`w-4 h-4 text-gray-500 hidden sm:inline transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
-              </button>
-
-              {/* Account Dropdown */}
-              {showAccountDropdown && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowAccountDropdown(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
-                    {/* User Info Section */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center">
-                          <UserIcon className="w-5 h-5 text-white" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">
-                            {user.email?.split("@")[0] || "User"}
-                          </p>
-                          <p className="text-xs text-gray-500 truncate">{user.email}</p>
-                          <span className="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium capitalize">
-                            {positionName ?? role}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Menu Items */}
-                    <div className="py-1">
-                      <button
-                        type="button"
-                        onClick={() => { setShowAccountDropdown(false); openSettings(); }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
-                      >
-                        <Settings className="w-4 h-4 text-gray-500" />
-                        <span>Settings</span>
-                      </button>
-                    </div>
-
-                    {/* Logout */}
-                    <div className="border-t border-gray-100 pt-1">
-                      <button
-                        onClick={() => {
-                          setShowAccountDropdown(false);
-                          handleLogout();
-                        }}
-                        className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut className="w-4 h-4" />
-                        <span>Logout</span>
-                      </button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
+            {/* Account menu moved to the sidebar footer (bottom-left) */}
           </div>
         </header>
 
