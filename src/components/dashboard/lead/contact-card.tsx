@@ -49,7 +49,7 @@ function QuickActionButton({ icon, label, onClick, disabled }: QuickActionButton
       disabled={disabled}
       className="flex flex-col items-center gap-1 group disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground group-disabled:hover:border-border group-disabled:hover:text-muted-foreground transition-colors">
+      <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground group-disabled:hover:border-border group-disabled:hover:text-muted-foreground transition-colors">
         {icon}
       </span>
       <span className="text-xs text-muted-foreground group-hover:text-foreground group-disabled:hover:text-muted-foreground transition-colors">
@@ -212,7 +212,7 @@ export function ContactCard({
         )}
 
         {/* Quick Actions (hidden in edit mode) */}
-        {!isEditing && <div className="flex items-center justify-center gap-4 pt-4 border-t border-border">
+        {!isEditing && <div className="flex items-center justify-between gap-1 pt-4 border-t border-border">
           <QuickActionButton
             icon={<MessageSquare className="h-4 w-4" />}
             label="Note"
@@ -241,7 +241,7 @@ export function ContactCard({
                 type="button"
                 className="flex flex-col items-center gap-1 group"
               >
-                <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
+                <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
                   <MoreHorizontal className="h-4 w-4" />
                 </span>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">More</span>
