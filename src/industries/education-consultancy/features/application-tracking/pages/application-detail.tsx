@@ -298,6 +298,32 @@ export function ApplicationDetailPage({
               </CardContent>
             </Card>
           )}
+
+          {/* Created By — standalone container, below Student Info */}
+          <Card className="border shadow-none rounded-lg">
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Created By
+              </p>
+              {createdByName || createdByEmail ? (
+                <div className="flex items-start gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserPlus className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {createdByName ?? createdByEmail}
+                    </p>
+                    {createdByName && createdByEmail && (
+                      <p className="text-xs text-muted-foreground truncate">{createdByEmail}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">—</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── CENTER: Header + Stepper + Timeline ── */}
@@ -642,32 +668,6 @@ export function ApplicationDetailPage({
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-          {/* Created By — standalone container */}
-          <Card className="border shadow-none rounded-lg">
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-                Created By
-              </p>
-              {createdByName || createdByEmail ? (
-                <div className="flex items-start gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
-                    <UserPlus className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground truncate">
-                      {createdByName ?? createdByEmail}
-                    </p>
-                    {createdByName && createdByEmail && (
-                      <p className="text-xs text-muted-foreground truncate">{createdByEmail}</p>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">—</p>
-              )}
             </CardContent>
           </Card>
         </div>
