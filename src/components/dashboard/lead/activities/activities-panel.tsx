@@ -18,11 +18,12 @@ import {
 } from "@/components/ui/collapsible";
 import type { LeadSubmission } from "@/types/database";
 import { toast } from "sonner";
-import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/database";
+import type { LeadActivityRecord, ActivityType, LeadNote, LeadChecklist } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
 import { NotesTab, type NotesTabRef } from "../notes-tab";
+import { ChecklistCard } from "../management-panel";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
@@ -54,6 +55,8 @@ interface ActivitiesPanelProps {
   teamMemberNames: Record<string, string>;
   isAdmin: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
+  checklists: LeadChecklist[];
+  onChecklistsChange: (checklists: LeadChecklist[]) => void;
   currentUserId: string;
   industryId?: string | null;
   leadEmail?: string | null;
@@ -87,6 +90,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   teamMemberNames,
   isAdmin,
   onNotesChange,
+  checklists,
+  onChecklistsChange,
   currentUserId,
   industryId,
   leadEmail,
@@ -381,16 +386,14 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         />
       )}
 
-      {/* Tasks tab */}
+      {/* Tasks tab — same checklist as the right-rail panel, in sync via shared state */}
       {activeTab === "tasks" && (
-        <Card className="shadow-none rounded-lg py-0">
-          <CardContent className="p-8 text-center">
-            <CheckSquare className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-muted-foreground">
-              Tasks are managed in the Checklist panel on the right.
-            </p>
-          </CardContent>
-        </Card>
+        <ChecklistCard
+          leadId={leadId}
+          checklists={checklists}
+          isAdmin={isAdmin}
+          onChecklistsChange={onChecklistsChange}
+        />
       )}
 
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}

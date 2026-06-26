@@ -677,6 +677,8 @@ export function LeadDetailV2({
             onTabChange={setActiveTab}
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
+            checklists={checklists}
+            onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
