@@ -59,6 +59,7 @@ export function LogActivityModal({
 
   // Meeting fields
   const [meetingSubject, setMeetingSubject] = useState("");
+  const [meetingMode, setMeetingMode] = useState<"in_person" | "online">("in_person");
   const [location, setLocation] = useState("");
   const [scheduledDate, setScheduledDate] = useState("");
   const [scheduledTime, setScheduledTime] = useState("");
@@ -69,6 +70,7 @@ export function LogActivityModal({
     setDuration("");
     setEmailSubject("");
     setMeetingSubject("");
+    setMeetingMode("in_person");
     setLocation("");
     setScheduledDate("");
     setScheduledTime("");
@@ -92,6 +94,7 @@ export function LogActivityModal({
         payload.subject = emailSubject || "Email logged";
       } else if (activityType === "meeting") {
         payload.subject = meetingSubject || "Meeting";
+        payload.meeting_mode = meetingMode;
         payload.location = location || null;
         if (scheduledDate && scheduledTime) {
           payload.scheduled_at = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
@@ -219,9 +222,21 @@ export function LogActivityModal({
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Location</Label>
+                <Label>Meeting Type</Label>
+                <Select value={meetingMode} onValueChange={(v) => setMeetingMode(v as "in_person" | "online")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="in_person">In Person</SelectItem>
+                    <SelectItem value="online">Online</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>{meetingMode === "online" ? "Meeting Link" : "Location"}</Label>
                 <Input
-                  placeholder="e.g., Zoom, Office"
+                  placeholder={meetingMode === "online" ? "Zoom / Google Meet URL" : "Office address"}
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                 />
