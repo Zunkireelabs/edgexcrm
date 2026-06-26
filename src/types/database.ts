@@ -184,6 +184,10 @@ export interface Lead {
   destinations: string[];
   field_of_study: string | null;
   degree_level: string | null;
+  // Pre-Application fee (education_consultancy — migration 084)
+  pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
+  pre_app_fee_amount: number | null;
+  pre_app_fee_notes: string | null;
   archive_reason: string | null;
   last_activity_at: string;
   created_at: string;
