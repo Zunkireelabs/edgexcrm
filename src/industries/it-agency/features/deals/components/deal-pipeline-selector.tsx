@@ -145,8 +145,6 @@ export function DealPipelineSelector({
 
           {isOpen && (
             <div className="absolute top-full right-0 mt-1.5 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-              <div className="absolute -top-2 right-4 w-3 h-3 bg-white border-l border-t border-gray-200 rotate-45" />
-
               <div className="p-2 border-b border-gray-100">
                 <div className="relative">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
