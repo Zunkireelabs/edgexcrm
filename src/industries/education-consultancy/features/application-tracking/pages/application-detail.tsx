@@ -13,6 +13,7 @@ import {
   GraduationCap,
   MapPin,
   Calendar,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export function ApplicationDetailPage({
 
   const [application, setApplication] = useState<Application>(initialApplication);
   const [teamMemberEmails, setTeamMemberEmails] = useState<Record<string, string>>({});
+  const [teamMemberNames, setTeamMemberNames] = useState<Record<string, string>>({});
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,10 +131,13 @@ export function ApplicationDetailPage({
       .then((r) => r.json())
       .then((j) => {
         const emails: Record<string, string> = {};
+        const names: Record<string, string> = {};
         for (const m of j.data ?? []) {
           if (m.user_id && m.email) emails[m.user_id] = m.email;
+          if (m.user_id && m.name) names[m.user_id] = m.name;
         }
         setTeamMemberEmails(emails);
+        setTeamMemberNames(names);
       })
       .catch(() => {});
   }, []);
@@ -232,6 +237,11 @@ export function ApplicationDetailPage({
       email: embedded.email,
     } as Lead;
   })();
+
+  // Who created this application — derived from the "application.created" audit entry.
+  const creatorId = activityTimeline.find((a) => a.action === "application.created")?.user_id ?? null;
+  const createdByEmail = creatorId ? (teamMemberEmails[creatorId] ?? null) : null;
+  const createdByName = creatorId ? (teamMemberNames[creatorId] ?? null) : null;
 
   return (
     <div className="w-full px-4 py-6 space-y-6">
@@ -632,6 +642,32 @@ export function ApplicationDetailPage({
                   </div>
                 </div>
               </div>
+            </CardContent>
+          </Card>
+
+          {/* Created By — standalone container */}
+          <Card className="border shadow-none rounded-lg">
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Created By
+              </p>
+              {createdByName || createdByEmail ? (
+                <div className="flex items-start gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserPlus className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {createdByName ?? createdByEmail}
+                    </p>
+                    {createdByName && createdByEmail && (
+                      <p className="text-xs text-muted-foreground truncate">{createdByEmail}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">—</p>
+              )}
             </CardContent>
           </Card>
         </div>
