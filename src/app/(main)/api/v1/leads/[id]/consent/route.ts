@@ -173,8 +173,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const action = body.action as string;
-  if (!action || !["send", "record_manual"].includes(action)) {
-    return apiError("INVALID_ACTION", "action must be 'send' or 'record_manual'", 400);
+  if (!action || !["send", "record_manual", "send_in_person"].includes(action)) {
+    return apiError("INVALID_ACTION", "action must be 'send', 'record_manual', or 'send_in_person'", 400);
   }
 
   const db = await scopedClient(auth);
@@ -303,6 +303,106 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ]);
 
     log.info({ consentId: (newRecord as { id: string }).id }, "Consent sent");
+    return apiSuccess({ ...newRecord, link: consentLink }, 201);
+  }
+
+  if (action === "send_in_person") {
+    const { data: tpl } = await db
+      .from("consent_templates")
+      .select("id, body, version, link_expiry_days, title, is_active")
+      .maybeSingle();
+
+    const tplRow = tpl as {
+      id: string;
+      body: string;
+      version: number;
+      link_expiry_days: number;
+      title: string;
+      is_active: boolean;
+    } | null;
+
+    if (!tplRow?.is_active) {
+      return apiError("NO_TEMPLATE", "Configure consent in Settings first", 400);
+    }
+
+    await db
+      .from("lead_consents")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("lead_id", id)
+      .eq("tenant_id", auth.tenantId)
+      .neq("status", "signed")
+      .is("deleted_at", null);
+
+    const token = crypto.randomUUID();
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    // Personalize the frozen body_snapshot with this student's data — same
+    // pattern as the "send" action, so the in-person signer (and the rendered
+    // PDF) sees a filled document, not raw {{merge_tags}}.
+    const orgRes = await supabase
+      .from("tenants")
+      .select("name")
+      .eq("id", auth.tenantId)
+      .single();
+    const organization = (orgRes.data as { name: string } | null)?.name ?? "Your Consultant";
+    const filledBody = fillConsentTemplate(
+      tplRow.body ?? "",
+      buildConsentMergeData({
+        firstName: leadRow.first_name,
+        lastName: leadRow.last_name,
+        email: leadRow.email,
+        phone: leadRow.phone,
+        city: leadRow.city,
+        country: leadRow.country,
+        organization,
+        consentVersion: tplRow.version,
+      }),
+    );
+
+    const { data: newRecord, error: insertError } = await db
+      .from("lead_consents")
+      .insert({
+        tenant_id: auth.tenantId,
+        lead_id: id,
+        status: "sent",
+        token,
+        body_snapshot: filledBody,
+        template_version: tplRow.version,
+        sent_at: new Date().toISOString(),
+        sent_via: "in_person",
+        link_expires_at: expiresAt,
+        created_by: auth.userId,
+      })
+      .select()
+      .single();
+
+    if (insertError || !newRecord) {
+      log.error({ error: insertError }, "Failed to create in-person consent record");
+      return apiError("DB_ERROR", "Failed to create consent record", 500);
+    }
+
+    const consentLink = `${APP_URL}/consent/${token}`;
+
+    await Promise.all([
+      createAuditLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: "consent.sent",
+        entityType: "lead_consent",
+        entityId: (newRecord as { id: string }).id,
+        requestId,
+      }),
+      emitEvent({
+        tenantId: auth.tenantId,
+        type: "consent.sent",
+        entityType: "lead_consent",
+        entityId: (newRecord as { id: string }).id,
+        requestId,
+        payload: { lead_id: id, sent_via: "in_person" },
+      }),
+    ]);
+
+    log.info({ consentId: (newRecord as { id: string }).id }, "In-person consent session started");
     return apiSuccess({ ...newRecord, link: consentLink }, 201);
   }
 
