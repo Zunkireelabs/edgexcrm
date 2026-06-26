@@ -336,6 +336,29 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const token = crypto.randomUUID();
     const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
 
+    // Personalize the frozen body_snapshot with this student's data — same
+    // pattern as the "send" action, so the in-person signer (and the rendered
+    // PDF) sees a filled document, not raw {{merge_tags}}.
+    const orgRes = await supabase
+      .from("tenants")
+      .select("name")
+      .eq("id", auth.tenantId)
+      .single();
+    const organization = (orgRes.data as { name: string } | null)?.name ?? "Your Consultant";
+    const filledBody = fillConsentTemplate(
+      tplRow.body ?? "",
+      buildConsentMergeData({
+        firstName: leadRow.first_name,
+        lastName: leadRow.last_name,
+        email: leadRow.email,
+        phone: leadRow.phone,
+        city: leadRow.city,
+        country: leadRow.country,
+        organization,
+        consentVersion: tplRow.version,
+      }),
+    );
+
     const { data: newRecord, error: insertError } = await db
       .from("lead_consents")
       .insert({
@@ -343,7 +366,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         lead_id: id,
         status: "sent",
         token,
-        body_snapshot: tplRow.body,
+        body_snapshot: filledBody,
         template_version: tplRow.version,
         sent_at: new Date().toISOString(),
         sent_via: "in_person",
