@@ -1,8 +1,19 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Fragment } from "react";
 import { useRouter } from "next/navigation";
-import { Bell, CheckCheck, Inbox } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
+
+// Buckets a notification date into a section-header label.
+function dateBucket(date: Date): "Today" | "Yesterday" | "Earlier" {
+  const now = new Date();
+  const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const startYesterday = new Date(startToday);
+  startYesterday.setDate(startYesterday.getDate() - 1);
+  if (date >= startToday) return "Today";
+  if (date >= startYesterday) return "Yesterday";
+  return "Earlier";
+}
 
 // Simple relative time formatter (avoids date-fns dependency)
 function formatRelativeTime(date: Date): string {
@@ -211,59 +222,77 @@ export function NotificationsDropdown() {
                   <div className="w-6 h-6 border-2 border-gray-200 border-t-blue-500 rounded-full animate-spin" />
                 </div>
               ) : notifications.length === 0 ? (
-                <div className="py-16 text-center">
-                  <div className="w-14 h-14 mx-auto mb-4 rounded-full bg-gray-50 flex items-center justify-center">
-                    <Inbox className="w-7 h-7 text-gray-300" />
+                <div className="py-12 text-center">
+                  {/* Stacked-cards illustration */}
+                  <div className="relative mx-auto mb-5 h-24 w-40">
+                    <div className="absolute inset-x-0 top-0 mx-auto h-14 w-32 -rotate-[10deg] rounded-xl border border-gray-100 bg-white shadow-sm" />
+                    <div className="absolute inset-x-0 top-1.5 mx-auto h-14 w-32 rotate-[6deg] rounded-xl border border-gray-100 bg-white shadow-sm" />
+                    <div className="absolute inset-x-0 top-3 mx-auto flex h-14 w-32 flex-col justify-center gap-2 rounded-xl border border-gray-100 bg-white px-3 shadow">
+                      <div className="h-2 w-20 rounded-full bg-gray-200" />
+                      <div className="h-2 w-14 rounded-full bg-gray-100" />
+                    </div>
                   </div>
                   <p className="text-sm font-medium text-gray-900 mb-1">No notifications</p>
                   <p className="text-sm text-gray-500">You&apos;re all caught up!</p>
                 </div>
               ) : (
-                <div>
-                  {notifications.map((notification, index) => (
-                    <button
-                      key={notification.id}
-                      onClick={() => handleNotificationClick(notification)}
-                      className={`w-full text-left px-5 py-4 hover:bg-gray-50 transition-colors ${
-                        !notification.read_at ? "bg-blue-50/40" : ""
-                      } ${index !== notifications.length - 1 ? "border-b border-gray-50" : ""}`}
-                    >
-                      <div className="flex gap-4">
-                        {/* Icon with colored background */}
-                        <div className="shrink-0">
-                          {getNotificationIcon(notification.type)}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="flex-1 min-w-0">
-                              <p
-                                className={`text-sm leading-snug ${
-                                  !notification.read_at
-                                    ? "font-semibold text-gray-900"
-                                    : "font-medium text-gray-700"
-                                }`}
-                              >
-                                {notification.title}
-                              </p>
-                              <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug">
-                                {notification.message}
-                              </p>
-                            </div>
-                            {/* Unread indicator */}
-                            {!notification.read_at && (
-                              <span className="shrink-0 w-2.5 h-2.5 bg-blue-500 rounded-full mt-1" />
+                <div className="p-2">
+                  {(() => {
+                    let lastBucket: string | null = null;
+                    return notifications.map((notification) => {
+                      const unread = !notification.read_at;
+                      const bucket = dateBucket(new Date(notification.created_at));
+                      const showHeader = bucket !== lastBucket;
+                      lastBucket = bucket;
+                      return (
+                        <Fragment key={notification.id}>
+                          {showHeader && (
+                            <p className="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                              {bucket}
+                            </p>
+                          )}
+                          <button
+                            onClick={() => handleNotificationClick(notification)}
+                            className={`relative w-full text-left rounded-xl px-3 py-2.5 transition-colors ${
+                              unread ? "bg-blue-50/60 hover:bg-blue-50" : "hover:bg-gray-50"
+                            }`}
+                          >
+                            {/* Unread accent bar */}
+                            {unread && (
+                              <span className="absolute left-0 top-2.5 bottom-2.5 w-[3px] rounded-full bg-blue-500" />
                             )}
-                          </div>
-                          {/* Time */}
-                          <p className="text-xs text-gray-400 mt-2">
-                            {formatRelativeTime(new Date(notification.created_at))}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  ))}
+                            <div className="flex gap-3">
+                              {/* Type icon */}
+                              <div className="shrink-0">
+                                {getNotificationIcon(notification.type)}
+                              </div>
+
+                              {/* Content */}
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-start justify-between gap-2">
+                                  <p
+                                    className={`text-sm leading-snug ${
+                                      unread
+                                        ? "font-semibold text-gray-900"
+                                        : "font-medium text-gray-700"
+                                    }`}
+                                  >
+                                    {notification.title}
+                                  </p>
+                                  <span className="shrink-0 text-xs text-gray-400 whitespace-nowrap mt-0.5">
+                                    {formatRelativeTime(new Date(notification.created_at))}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-gray-500 mt-0.5 line-clamp-2 leading-snug">
+                                  {notification.message}
+                                </p>
+                              </div>
+                            </div>
+                          </button>
+                        </Fragment>
+                      );
+                    });
+                  })()}
                 </div>
               )}
             </div>
