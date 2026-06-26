@@ -244,7 +244,7 @@ export function ApplicationDetailPage({
   const createdByName = creatorId ? (teamMemberNames[creatorId] ?? null) : null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="w-full px-4 py-6 space-y-6">
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <Link href="/applications">
@@ -254,7 +254,7 @@ export function ApplicationDetailPage({
       </Button>
 
       {/* 3-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[290px_1fr_280px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(320px,380px)] gap-6 items-start">
 
         {/* ── LEFT: Student Rail ── */}
         <div className="space-y-4">
@@ -262,7 +262,7 @@ export function ApplicationDetailPage({
             <ContactCard lead={leadForCard} />
           ) : (
             <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-4 text-sm text-muted-foreground text-center">
+              <CardContent className="p-5 text-sm text-muted-foreground text-center">
                 Student not found
               </CardContent>
             </Card>
@@ -271,7 +271,7 @@ export function ApplicationDetailPage({
           {/* Student key info */}
           {fullLead && (
             <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-4 space-y-2">
+              <CardContent className="p-5 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Student Info
                 </p>
@@ -327,7 +327,7 @@ export function ApplicationDetailPage({
         </div>
 
         {/* ── CENTER: Header + Stepper + Timeline ── */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Header card */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5 space-y-3">
