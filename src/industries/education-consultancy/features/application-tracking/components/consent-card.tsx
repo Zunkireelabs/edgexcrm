@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { SendConsentDialog } from "./send-consent-dialog";
+import { InPersonConsentDialog } from "./in-person-consent-dialog";
 
 interface ConsentStatus {
   consent_enabled: boolean;
@@ -44,6 +45,7 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTab, setDialogTab] = useState<"send" | "manual">("send");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [inPersonOpen, setInPersonOpen] = useState(false);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -133,6 +135,10 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
                   <Button size="sm" variant="outline" onClick={() => openDialog("send")} className="h-7 text-xs">
                     Send consent link
                   </Button>
+                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
+                    <PenLine className="h-3 w-3 mr-1" />
+                    Sign here now
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => openDialog("manual")} className="h-7 text-xs">
                     <Upload className="h-3 w-3 mr-1" />
                     Record manually
@@ -166,6 +172,10 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
                   <Button size="sm" variant="outline" onClick={handleResend} className="h-7 text-xs">
                     <RefreshCw className="h-3 w-3 mr-1" />
                     {consentStatus === "expired" ? "Resend" : "Resend"}
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setInPersonOpen(true)} className="h-7 text-xs">
+                    <PenLine className="h-3 w-3 mr-1" />
+                    Sign here now
                   </Button>
                   <Button size="sm" variant="ghost" onClick={() => openDialog("manual")} className="h-7 text-xs">
                     <Upload className="h-3 w-3 mr-1" />
@@ -250,6 +260,16 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <InPersonConsentDialog
+        open={inPersonOpen}
+        onOpenChange={setInPersonOpen}
+        leadId={leadId}
+        onSuccess={() => {
+          setInPersonOpen(false);
+          fetchStatus();
+        }}
+      />
     </>
   );
 }
