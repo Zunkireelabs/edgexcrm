@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -41,9 +42,10 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       return apiNotFound("Lead");
     }
 
-    // Counselor: own-only
-    if (shouldRestrictToSelf(auth.permissions) && lead.assigned_to !== auth.userId) return apiNotFound("Lead");
-    if (!requireLeadBranchAccess(auth, lead)) return apiNotFound("Lead");
+    // Counselor: own-only; branch-manager: membership-based
+    const getMembership = await getLeadMembership(supabase, auth.tenantId, leadId);
+    if (shouldRestrictToSelf(auth.permissions) && !(getMembership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) return apiNotFound("Lead");
+    if (!requireLeadBranchAccess(auth, lead, getMembership)) return apiNotFound("Lead");
 
     // Get cached insights
     const { data: insights } = await supabase
@@ -107,9 +109,10 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
       return apiNotFound("Lead");
     }
 
-    // Counselor: own-only
-    if (shouldRestrictToSelf(auth.permissions) && (lead as Lead).assigned_to !== auth.userId) return apiNotFound("Lead");
-    if (!requireLeadBranchAccess(auth, lead as Lead)) return apiNotFound("Lead");
+    // Counselor: own-only; branch-manager: membership-based
+    const postMembership = await getLeadMembership(supabase, auth.tenantId, leadId);
+    if (shouldRestrictToSelf(auth.permissions) && !(postMembership.some((m) => m.assigned_to === auth.userId) || (lead as Lead).assigned_to === auth.userId)) return apiNotFound("Lead");
+    if (!requireLeadBranchAccess(auth, lead as Lead, postMembership)) return apiNotFound("Lead");
 
     // Check for valid cached insights (unless force regenerate)
     if (!forceRegenerate) {

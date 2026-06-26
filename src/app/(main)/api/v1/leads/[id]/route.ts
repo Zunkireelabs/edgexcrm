@@ -1,7 +1,10 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
-import { canAccessPipeline, leadQueryScope } from "@/lib/api/permissions";
+import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import {
   apiSuccess,
   apiValidationError,
@@ -12,6 +15,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { normalizeEmail } from "@/lib/leads/dedup";
+import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -51,6 +55,11 @@ const UPDATABLE_FIELDS = [
   "salutation",
   "company_email",
   "entity_id",
+  "list_id",
+  "archive_reason",
+  "destinations",
+  "field_of_study",
+  "degree_level",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -86,13 +95,14 @@ export async function GET(
     return apiNotFound("Lead");
   }
 
-  // Scope enforcement: build scope object (handles §4.1 NULL-branch fallback)
+  // Scope enforcement: membership-based (handles §4.1 NULL-branch fallback)
+  const membership = await getLeadMembership(supabase, auth.tenantId, id);
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (scope.restrictToSelf && lead.assigned_to !== auth.userId) {
+  if (scope.restrictToSelf &&
+      !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
     return apiNotFound("Lead");
   }
-  // Branch-manager scope: team-scoped users may only view leads in their branch
-  if (scope.branchId && lead.branch_id !== scope.branchId) {
+  if (scope.branchId && !membership.some((m) => m.branch_id === scope.branchId)) {
     return apiNotFound("Lead");
   }
 
@@ -147,7 +157,8 @@ export async function PATCH(
   if (!canAccessPipeline(auth.permissions, existingLead.pipeline_id)) return apiForbidden();
 
   // Access check: admin or counselor with assignment
-  if (!requireLeadAccess(auth, existingLead)) {
+  const patchMembership = await getLeadMembership(supabase, auth.tenantId, id);
+  if (!requireLeadAccess(auth, existingLead, patchMembership)) {
     return apiForbidden();
   }
 
@@ -294,12 +305,58 @@ export async function PATCH(
     }
   }
 
+  // Validate list_id: must belong to this tenant and be accessible to the caller
+  if (body.list_id !== undefined && body.list_id !== null) {
+    if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+      return apiForbidden();
+    }
+    const { data: listCheck } = await supabase
+      .from("lead_lists")
+      .select("id, slug, is_archive, access")
+      .eq("tenant_id", auth.tenantId)
+      .eq("id", body.list_id as string)
+      .maybeSingle();
+    if (!listCheck) {
+      return apiValidationError({ list_id: ["List not found in this tenant"] });
+    }
+    const accessible = canAccessList(
+      auth.permissions,
+      listCheck.access as { mode: string; positionIds?: string[] },
+      auth.positionId,
+    );
+    if (!accessible) return apiForbidden();
+  }
+
   // Build update payload from whitelist
   const updatePayload: Record<string, unknown> = {};
   for (const field of UPDATABLE_FIELDS) {
     if (body[field] !== undefined) {
       updatePayload[field] = body[field];
     }
+  }
+
+  // Mirror lead_type on list move (keeps existing education UI working during transition)
+  // Also resolve list names for the audit log so the activity timeline can render them.
+  let newListName: string | null = null;
+  let oldListName: string | null = null;
+  if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
+    const { data: targetList } = await supabase
+      .from("lead_lists")
+      .select("id, slug, name")
+      .eq("id", updatePayload.list_id as string)
+      .maybeSingle();
+    if (targetList) {
+      updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
+      newListName = targetList.name;
+    }
+  }
+  if ((existingLead as Record<string, unknown>).list_id) {
+    const { data: oldList } = await supabase
+      .from("lead_lists")
+      .select("name")
+      .eq("id", (existingLead as Record<string, unknown>).list_id as string)
+      .maybeSingle();
+    if (oldList) oldListName = oldList.name;
   }
 
   // Recompute normalized_email when email changes to keep dedup keying accurate
@@ -324,13 +381,51 @@ export async function PATCH(
     return apiServiceUnavailable("Failed to update lead");
   }
 
+  // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
+  if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
+    await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
+  }
+
+  // Assign display ID to education leads moving out of staging (best-effort).
+  const listMovedToNonNull =
+    updatePayload.list_id !== undefined &&
+    updatePayload.list_id !== null &&
+    (existingLead as Record<string, unknown>).list_id !== updatePayload.list_id;
+  if (listMovedToNonNull) {
+    try {
+      await assignDisplayIdsOnMove({
+        supabase,
+        tenantId: auth.tenantId,
+        industryId: auth.industryId,
+        destinationListId: updatePayload.list_id as string,
+        leadIds: [id],
+      });
+    } catch (err) {
+      log.error({ err }, "assignDisplayIdsOnMove failed");
+    }
+  }
+
   // Build audit diff
   const changes: Record<string, { old: unknown; new: unknown }> = {};
   for (const field of Object.keys(updatePayload)) {
+    // Skip lead_type — it's an implementation detail mirrored from list moves
+    if (field === "lead_type" && updatePayload.list_id !== undefined) continue;
     const oldVal = (existingLead as Record<string, unknown>)[field];
     const newVal = (updated as Record<string, unknown>)[field];
     if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
       changes[field] = { old: oldVal, new: newVal };
+    }
+  }
+
+  // Replace UUID list_id diff with human-readable list names for the activity timeline
+  const listChanged =
+    updatePayload.list_id !== undefined &&
+    (existingLead as Record<string, unknown>).list_id !== updated.list_id;
+  if (listChanged && newListName !== null) {
+    delete changes.list_id;
+    changes.list = { old: oldListName, new: newListName };
+    if (updated.archive_reason) {
+      changes.archive_reason = { old: null, new: updated.archive_reason };
     }
   }
 
@@ -342,17 +437,19 @@ export async function PATCH(
     existingLead.assigned_to !== updated.assigned_to;
 
   Promise.all([
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "lead.updated",
-      entityType: "lead",
-      entityId: id,
-      changes,
-      ipAddress: ip,
-      userAgent,
-      requestId,
-    }),
+    ...(Object.keys(changes).length > 0
+      ? [createAuditLog({
+          tenantId: auth.tenantId,
+          userId: auth.userId,
+          action: "lead.updated",
+          entityType: "lead",
+          entityId: id,
+          changes,
+          ipAddress: ip,
+          userAgent,
+          requestId,
+        })]
+      : []),
     ...(statusChanged
       ? [
           emitEvent({
@@ -378,6 +475,22 @@ export async function PATCH(
             payload: {
               old_assigned_to: existingLead.assigned_to,
               new_assigned_to: updated.assigned_to,
+            },
+            requestId,
+          }),
+        ]
+      : []),
+    ...(listChanged
+      ? [
+          emitEvent({
+            tenantId: auth.tenantId,
+            type: "lead.list_changed",
+            entityType: "lead",
+            entityId: id,
+            payload: {
+              old_list_id: (existingLead as Record<string, unknown>).list_id,
+              new_list_id: updated.list_id,
+              archive_reason: updated.archive_reason ?? null,
             },
             requestId,
           }),

@@ -6,9 +6,9 @@ import { GreetingHeader } from "./greeting-header";
 import { ScheduleCard } from "./schedule-card";
 import { TasksCard } from "./tasks-card";
 import { MyLeadsCard } from "./my-leads-card";
-import { EmailSnapshotCard } from "./email-snapshot-card";
+import { InboxSnapshotCard } from "./inbox-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
-import type { ScheduleActivity, PersonalTask, MyTasksResult, EmailSnapshot, RecentNotification } from "@/lib/supabase/queries";
+import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem } from "@/lib/supabase/queries";
 import type { Lead, TaskPriority, TaskStatus } from "@/types/database";
 
 interface HomeContentProps {
@@ -16,8 +16,8 @@ interface HomeContentProps {
   schedule: ScheduleActivity[];
   tasks: MyTasksResult;
   myLeads: Lead[];
-  notifications: RecentNotification[];
-  emailSnapshot: EmailSnapshot | null;
+  recentActivity: RecentActivityItem[];
+  inboxSnapshot: InboxSnapshot;
   isEducation: boolean;
 }
 
@@ -26,9 +26,8 @@ export function HomeContent({
   schedule,
   tasks,
   myLeads,
-  notifications,
-  emailSnapshot,
-  isEducation,
+  recentActivity,
+  inboxSnapshot,
 }: HomeContentProps) {
   const router = useRouter();
   const [openTasks, setOpenTasks] = useState<PersonalTask[]>(tasks.open);
@@ -86,10 +85,8 @@ export function HomeContent({
           onAdd={handleAdd}
         />
         <MyLeadsCard leads={myLeads} />
-        {isEducation && emailSnapshot && (
-          <EmailSnapshotCard snapshot={emailSnapshot} />
-        )}
-        <RecentActivityCard notifications={notifications} />
+        <InboxSnapshotCard snapshot={inboxSnapshot} />
+        <RecentActivityCard notifications={recentActivity} />
       </div>
     </div>
   );

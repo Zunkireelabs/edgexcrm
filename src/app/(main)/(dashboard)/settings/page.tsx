@@ -1,128 +1,59 @@
+/**
+ * Settings page — opener redirect.
+ *
+ * This page no longer renders settings inline. Instead it redirects to the
+ * current dashboard page with ?settings=<tab> so the global SettingsModal
+ * opens over whatever page the user was on.
+ *
+ * Bookmarks and OAuth callbacks that land on /settings?tab=X or /settings?connected=X
+ * are mapped to the correct modal tab and forwarded to /home.
+ */
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { SettingsForm } from "@/components/dashboard/settings-form";
-import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
-import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
-import { IndustryInfoCard } from "@/components/dashboard/settings/industry-info-card";
-import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
-import { PositionsManager } from "@/components/dashboard/settings/positions-manager";
-import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
-import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
-import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-card";
-import { InboxConnector } from "@/industries/education-consultancy/features/email/components/inbox-connector";
-import { getFeatureAccess, getIndustrySidebarItems } from "@/industries/_loader";
-import { FEATURES } from "@/industries/_registry";
-import type { FormConfig, Industry, TenantEntity } from "@/types/database";
 
-export default async function SettingsPage() {
+/** Map old ?tab= values (or anchor keys) to new modal tab keys. */
+const TAB_MAP: Record<string, string> = {
+  general: "general",
+  organization: "organization",
+  team: "team-roles",
+  "team-roles": "team-roles",
+  leads: "lead-management",
+  "lead-management": "lead-management",
+  "lead-lists": "lead-management",
+  academic: "academic-operations",
+  "academic-operations": "academic-operations",
+  classes: "academic-operations",
+  communications: "communications",
+  inbox: "communications",
+  "connected-inboxes": "communications",
+  integrations: "integrations",
+  compliance: "compliance",
+  "ai-orca": "ai-orca",
+};
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string>>;
+}) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
   if (tenantData.role !== "owner" && tenantData.role !== "admin") {
-    return (
-      <div className="text-center py-12 text-muted-foreground">
-        You don&apos;t have permission to view settings.
-      </div>
-    );
+    redirect("/home");
   }
 
-  const supabase = await createClient();
-  const serviceClient = await createServiceClient();
+  const params = await searchParams;
 
-  const [formConfigsResult, apiKeysResult, industryResult, entitiesResult] = await Promise.all([
-    supabase
-      .from("form_configs")
-      .select("*")
-      .eq("tenant_id", tenantData.tenant.id)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true }),
-    serviceClient
-      .from("integration_keys")
-      .select("id, name, permissions, permissions_detail, created_at, last_used_at, revoked_at")
-      .eq("tenant_id", tenantData.tenant.id)
-      .order("created_at", { ascending: false }),
-    // Fetch industry if tenant has one assigned
-    tenantData.tenant.industry_id
-      ? serviceClient
-          .from("industries")
-          .select("*")
-          .eq("id", tenantData.tenant.industry_id)
-          .single()
-      : Promise.resolve({ data: null }),
-    // Fetch tenant entities
-    serviceClient
-      .from("tenant_entities")
-      .select("*")
-      .eq("tenant_id", tenantData.tenant.id)
-      .order("position", { ascending: true }),
-  ]);
+  // Determine which tab to open
+  const rawTab = params.tab ?? params.settings ?? null;
+  const tab = (rawTab && TAB_MAP[rawTab]) ?? "general";
 
-  const apiKeys = (apiKeysResult.data || []).map((k) => ({
-    ...k,
-    status: (k.revoked_at ? "revoked" : "active") as "active" | "revoked",
-  }));
+  // Forward connected/error params (from Gmail OAuth callback) into the modal URL
+  const forwardParams = new URLSearchParams();
+  forwardParams.set("settings", tab);
+  if (params.connected) forwardParams.set("connected", params.connected);
+  if (params.error) forwardParams.set("error", params.error);
 
-  const industry = industryResult.data as Industry | null;
-  const entities = (entitiesResult.data || []) as TenantEntity[];
-
-  // Nav catalog: universal items + industry module items
-  const UNIVERSAL_NAV = [
-    { key: "/dashboard", label: "Dashboard" },
-    { key: "/leads", label: "All Leads" },
-    { key: "/pipeline", label: "Pipeline" },
-    { key: "/knowledge-bases", label: "Knowledge Bases" },
-    { key: "/team", label: "Team" },
-    { key: "/settings", label: "Settings" },
-  ];
-  const industryNav = getIndustrySidebarItems(tenantData.tenant.industry_id, "owner").flatMap(
-    (entry) => {
-      if ("children" in entry) {
-        return entry.children.map((child) => ({ key: child.href, label: child.label }));
-      }
-      return [{ key: entry.href, label: entry.label }];
-    }
-  );
-  const navCatalog = [...UNIVERSAL_NAV, ...industryNav];
-
-  const widgetCatalog = [
-    { key: "stats", label: "Stats cards" },
-    { key: "leads-by-stage", label: "Leads by stage" },
-    { key: "leads-by-source", label: "Leads by source" },
-    { key: "leads-by-counselor", label: "Leads by counselor" },
-    { key: "utm", label: "UTM attribution" },
-  ];
-
-  return (
-    <div className="space-y-6">
-      <h1 className="text-lg font-bold">Settings</h1>
-      <SettingsForm
-        tenant={tenantData.tenant}
-        formConfigs={(formConfigsResult.data || []) as FormConfig[]}
-      />
-      <IndustryInfoCard industry={industry} />
-      {industry && (
-        <IndustryEntitiesManager
-          industry={industry}
-          initialEntities={entities}
-        />
-      )}
-      <PositionsManager navCatalog={navCatalog} widgetCatalog={widgetCatalog} />
-      <BranchesManager maxBranches={tenantData.entitlements.maxBranches} />
-      <EmailRulesManager tenantId={tenantData.tenant.id} />
-      <EmailSenderCard />
-      <ChannelsCard />
-      {getFeatureAccess(tenantData.tenant.industry_id, FEATURES.EMAIL) && (
-        <Suspense>
-          <InboxConnector />
-        </Suspense>
-      )}
-      <ApiKeysManager
-        tenantId={tenantData.tenant.id}
-        initialKeys={apiKeys}
-        category="integration"
-      />
-    </div>
-  );
+  redirect(`/home?${forwardParams.toString()}`);
 }

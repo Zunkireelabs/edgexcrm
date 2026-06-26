@@ -1,7 +1,8 @@
 import { createClient, createServiceClient } from "./server";
-import type { Lead, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
+import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -55,47 +56,110 @@ export async function getCurrentUserTenant(): Promise<{
   };
 }
 
-export async function getLeads(
-  tenantId: string,
-  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; limit?: number; branchId?: string | null }
-): Promise<Lead[]> {
-  const supabase = await createClient();
-  let query = supabase
-    .from("leads")
+export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("lead_lists")
     .select("*")
     .eq("tenant_id", tenantId)
-    .is("deleted_at", null)
-    .is("converted_at", null)
-    .limit(scope?.limit ?? 1000);
-
-  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
-  if (scope?.pipelineIds) query = query.in("pipeline_id", scope.pipelineIds);
-  if (scope?.branchId) query = query.eq("branch_id", scope.branchId);
-
-  const { data, error } = await query.order("last_activity_at", { ascending: false });
-
+    .order("sort_order", { ascending: true });
   if (error) throw error;
-  return (data as Lead[]) || [];
+  return (data as LeadList[]) || [];
+}
+
+export async function getLeads(
+  tenantId: string,
+  scope?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    limit?: number;
+    branchId?: string | null;
+    listId?: string | null;
+    excludeListIds?: string[];
+  }
+): Promise<Lead[]> {
+  const supabase = await createClient();
+
+  // Compute id-lists once (async) before the chunk loop.
+  let selfIds: string[] | null = null;
+  let branchIds: string[] | null = null;
+  if (scope?.restrictToSelf && scope.userId) {
+    selfIds = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
+  } else if (scope?.branchId) {
+    branchIds = await leadIdsForBranch(supabase, tenantId, scope.branchId);
+  }
+
+  // Factory applied on every chunk so all filters + stable sort are consistent.
+  const buildQuery = () => {
+    let q = supabase
+      .from("leads")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .is("converted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (selfIds !== null) q = q.in("id", selfIds);
+    else if (branchIds !== null) q = q.in("id", branchIds);
+
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+
+    if (scope?.listId) {
+      q = q.eq("list_id", scope.listId);
+    } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+      // Master view for education: show leads not in any archive list (NULL list_id is included)
+      q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+    }
+
+    return q;
+  };
+
+  // TEMPORARY: loads the whole list into the client; proper server-side pagination is the real roadmap fix.
+  // PostgREST caps each response at max-rows=1000, so .limit() alone can't exceed that. We page in CHUNK-sized
+  // slices via .range() and concatenate until a short page or the caller's ceiling (scope.limit) is reached.
+  const CHUNK = 1000;
+  const max = scope?.limit ?? 1000;
+  const out: Lead[] = [];
+  for (let from = 0; from < max; from += CHUNK) {
+    const to = Math.min(from + CHUNK, max) - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) break;
+    out.push(...((data ?? []) as Lead[]));
+    if (!data || data.length < CHUNK) break;
+  }
+  return out;
 }
 
 export async function getLead(
   leadId: string,
   tenantId: string,
-  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null }
+  scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; branchId?: string | null }
 ): Promise<Lead | null> {
   const supabase = await createClient();
-  let query = supabase
+  const { data, error } = await supabase
     .from("leads")
     .select("*")
     .eq("id", leadId)
     .eq("tenant_id", tenantId)
-    .is("deleted_at", null);
-
-  if (scope?.restrictToSelf && scope.userId) query = query.eq("assigned_to", scope.userId);
-
-  const { data, error } = await query.single();
+    .is("deleted_at", null)
+    .single();
 
   if (error) return null;
+
+  // Membership-based scoping (fixes the prior gap where branchId was never checked in SSR).
+  if (scope && (scope.restrictToSelf || scope.branchId)) {
+    const membership = await getLeadMembership(supabase, tenantId, leadId);
+    if (scope.restrictToSelf && scope.userId) {
+      const isAssignee = membership.some((m) => m.assigned_to === scope.userId) || data?.assigned_to === scope.userId;
+      if (!isAssignee) return null;
+    }
+    if (scope.branchId) {
+      if (!membership.some((m) => m.branch_id === scope.branchId)) return null;
+    }
+  }
+
   // If pipeline access is restricted and this lead's pipeline isn't allowed, hide it.
   if (scope?.pipelineIds && data?.pipeline_id && !scope.pipelineIds.includes(data.pipeline_id)) {
     return null;
@@ -274,10 +338,11 @@ export async function getLeadsForPipeline(
   }
 
   if (options?.restrictToSelf && options.userId) {
-    query = query.eq("assigned_to", options.userId);
-  }
-  if (options?.branchId) {
-    query = query.eq("branch_id", options.branchId);
+    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, options.userId);
+    query = query.in("id", ids);
+  } else if (options?.branchId) {
+    const ids = await leadIdsForBranch(supabase, tenantId, options.branchId);
+    query = query.in("id", ids);
   }
 
   const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
@@ -315,11 +380,20 @@ export async function getLeadsForPipeline(
   });
 }
 
+function resolveDisplayName(email: string, meta?: Record<string, unknown> | null): string {
+  const raw = ((meta?.name ?? meta?.full_name ?? "") as string).trim();
+  if (!raw || raw.toLowerCase() === email.toLowerCase()) {
+    return email.split("@")[0];
+  }
+  return raw;
+}
+
 export interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   email: string;
+  name: string;
   created_at: string;
 }
 
@@ -334,18 +408,24 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
   if (error) throw error;
 
   const { data: authData } = await supabase.auth.admin.listUsers();
-  const userMap = new Map<string, string>();
+  const userMap = new Map<string, { email: string; name: string }>();
   for (const u of authData?.users || []) {
-    userMap.set(u.id, u.email || "");
+    const email = u.email || "";
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    userMap.set(u.id, { email, name: resolveDisplayName(email, meta) });
   }
 
-  return (members || []).map((m) => ({
-    id: m.id,
-    user_id: m.user_id,
-    role: m.role,
-    email: userMap.get(m.user_id) || "Unknown",
-    created_at: m.created_at,
-  }));
+  return (members || []).map((m) => {
+    const user = userMap.get(m.user_id) ?? { email: "Unknown", name: "Unknown" };
+    return {
+      id: m.id,
+      user_id: m.user_id,
+      role: m.role,
+      email: user.email,
+      name: user.name,
+      created_at: m.created_at,
+    };
+  });
 }
 
 export async function getBranches(tenantId: string): Promise<Branch[]> {
@@ -387,6 +467,21 @@ export async function getLeadActivity(leadId: string, tenantId: string): Promise
     .eq("tenant_id", tenantId)
     .eq("entity_id", leadId)
     .eq("entity_type", "lead")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (error) throw error;
+  return (data as LeadActivity[]) || [];
+}
+
+export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, entity_type, changes, user_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("entity_id", applicationId)
+    .eq("entity_type", "application")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -532,4 +627,177 @@ export async function getRecentNotifications(
 
   if (error) return [];
   return (data ?? []) as RecentNotification[];
+}
+
+// ---- Home: my open conversations (Inbox widget) ----
+
+export interface InboxConversationItem {
+  id: string;
+  contact_display_name: string | null;
+  contact_phone: string | null;
+  last_message_preview: string | null;
+  last_message_at: string | null;
+  unread_count: number;
+}
+
+export interface InboxSnapshot {
+  items: InboxConversationItem[];
+  unreadCount: number;
+}
+
+/** Open conversations assigned to the current user (the home Inbox widget). */
+export async function getMyInboxSnapshot(tenantId: string, userId: string): Promise<InboxSnapshot> {
+  const supabase = await createServiceClient();
+  const { data } = await supabase
+    .from("conversations")
+    .select("id, contact_display_name, contact_phone, last_message_preview, last_message_at, unread_count")
+    .eq("tenant_id", tenantId)
+    .eq("assigned_to_user_id", userId)
+    .eq("status", "open")
+    .order("last_message_at", { ascending: false, nullsFirst: false })
+    .limit(5);
+
+  const items = (data ?? []) as InboxConversationItem[];
+  const unreadCount = items.reduce((n, c) => n + (c.unread_count || 0), 0);
+  return { items, unreadCount };
+}
+
+// ---- Home: my own recent actions (Recent Activity widget) ----
+
+export interface RecentActivityItem {
+  id: string;
+  title: string;
+  message: string;
+  link: string | null;
+  read_at: string | null;
+  created_at: string;
+}
+
+const AUDIT_ACTION_LABELS: Record<string, string> = {
+  "lead.submission": "New lead submission",
+  "lead.updated": "Updated a lead",
+  "lead.merged": "Merged a duplicate lead",
+  "lead.note_added": "Added a note",
+  "lead.branch_shared": "Shared a lead to a branch",
+  "lead.branch_revoked": "Removed a lead from a branch",
+  "lead.branch_assigned": "Assigned a lead in a branch",
+  "consent.sent": "Sent a consent request",
+  "consent.signed": "Recorded a signed consent",
+  "consent_template.updated": "Updated the consent template",
+};
+
+function labelForAuditAction(action: string): string {
+  return (
+    AUDIT_ACTION_LABELS[action] ??
+    action.replace(/[._]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+  );
+}
+
+/**
+ * The current user's own recent actions (from audit_logs, actor = me) — what
+ * *I* did, not notifications sent to me. Lead entities are enriched with the
+ * lead name + a deep link.
+ */
+export async function getMyRecentActivity(
+  tenantId: string,
+  userId: string,
+): Promise<RecentActivityItem[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("audit_logs")
+    .select("id, action, entity_type, entity_id, created_at")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (error || !data) return [];
+  const rows = data as Array<{
+    id: string;
+    action: string;
+    entity_type: string;
+    entity_id: string;
+    created_at: string;
+  }>;
+
+  // Enrich lead entities with their names in one batch query.
+  const leadIds = Array.from(
+    new Set(rows.filter((r) => r.entity_type === "lead").map((r) => r.entity_id)),
+  );
+  const nameById = new Map<string, string>();
+  if (leadIds.length > 0) {
+    const { data: leads } = await supabase
+      .from("leads")
+      .select("id, first_name, last_name")
+      .in("id", leadIds);
+    for (const l of (leads ?? []) as Array<{ id: string; first_name: string | null; last_name: string | null }>) {
+      const name = [l.first_name, l.last_name].filter(Boolean).join(" ").trim();
+      if (name) nameById.set(l.id, name);
+    }
+  }
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: labelForAuditAction(r.action),
+    message:
+      r.entity_type === "lead"
+        ? nameById.get(r.entity_id) ?? "Lead"
+        : r.entity_type.replace(/_/g, " "),
+    link: r.entity_type === "lead" ? `/leads/${r.entity_id}` : null,
+    // Past actions render as a neutral (non-alert) dot.
+    read_at: r.created_at,
+    created_at: r.created_at,
+  }));
+}
+
+export async function getImportSourceReconciliation(
+  tenantId: string,
+  stagingListId: string,
+): Promise<ImportSourceReconciliationRow[]> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase.rpc("reconcile_import_sources", {
+    p_tenant: tenantId,
+    p_staging_list: stagingListId,
+  });
+  if (error) throw error;
+  return (data ?? []) as ImportSourceReconciliationRow[];
+}
+
+
+export interface TeamMemberWithPosition {
+  user_id: string;
+  display: string;
+  position_name: string | null;
+}
+
+export async function getTeamMembersWithPositions(
+  tenantId: string,
+): Promise<TeamMemberWithPosition[]> {
+  const supabase = await createServiceClient();
+  const { data: members, error } = await supabase
+    .from("tenant_users")
+    .select("user_id, positions(name)")
+    .eq("tenant_id", tenantId);
+
+  if (error) throw error;
+
+  const { data: authData } = await supabase.auth.admin.listUsers();
+  const userMap = new Map<string, { email: string; name: string }>();
+  for (const u of authData?.users || []) {
+    const email = u.email || "";
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    userMap.set(u.id, { email, name: resolveDisplayName(email, meta) });
+  }
+
+  return (members || []).map((m) => {
+    const posEmbed = Array.isArray(m.positions)
+      ? (m.positions[0] ?? null)
+      : m.positions;
+    const user = userMap.get(m.user_id) ?? { email: "", name: "" };
+    return {
+      user_id: m.user_id,
+      display: user.name || user.email.split("@")[0] || user.email,
+      position_name: (posEmbed as { name?: string } | null)?.name ?? null,
+    };
+  });
 }

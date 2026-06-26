@@ -36,6 +36,7 @@ export default async function DashboardPage() {
   const memberMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.email])
   );
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
 
   const formMap = Object.fromEntries(
     formConfigs.map((f) => [f.id, f.name])
@@ -47,7 +48,7 @@ export default async function DashboardPage() {
       <h1 className="text-lg font-bold">Dashboard</h1>
 
       {/* Stats Cards */}
-      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} />}
+      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} stages={stages} />}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -58,7 +59,7 @@ export default async function DashboardPage() {
           <LeadsBySourceChart leads={leads} formMap={formMap} />
         )}
         {canSeeWidget(permissions, "leads-by-counselor") && (
-          <LeadsByCounselorChart leads={leads} memberMap={memberMap} />
+          <LeadsByCounselorChart leads={leads} memberMap={memberMap} memberNames={memberNames} />
         )}
       </div>
 

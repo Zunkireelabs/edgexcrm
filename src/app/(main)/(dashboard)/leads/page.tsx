@@ -1,15 +1,23 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
-import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
-import type { TenantEntity, Industry } from "@/types/database";
+import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import type { TenantEntity, Industry, LeadList } from "@/types/database";
 
-export default async function LeadsPage() {
+export default async function LeadsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ list?: string }>;
+}) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
+
+  const { list: listSlug } = await searchParams;
 
   const [serviceClient, cookieStore] = await Promise.all([
     createServiceClient(),
@@ -17,11 +25,39 @@ export default async function LeadsPage() {
   ]);
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+  // Normalize "all" sentinel → null for the Add Lead branch picker default
+  const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
 
   // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
   if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
     scope.branchId = branchCookieVal;
+  }
+
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+
+  // Resolve list slug → list object (and archive exclusion for master view)
+  let activeList: LeadList | null = null;
+  let allLists: LeadList[] = [];
+  if (hasLeadLists) {
+    allLists = await getLeadListsByTenant(tenantData.tenant.id);
+    if (listSlug) {
+      const found = allLists.find((l) => l.slug === listSlug);
+      if (found) {
+        const accessible = canAccessList(
+          tenantData.permissions,
+          found.access as { mode: string; positionIds?: string[] },
+          tenantData.positionId,
+        );
+        if (accessible) activeList = found;
+      }
+    }
+    const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
+    if (activeList) {
+      scope.listId = activeList.id;
+    } else {
+      scope.excludeListIds = excludeIds;
+    }
   }
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
@@ -30,7 +66,6 @@ export default async function LeadsPage() {
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
-      // Fetch industry if tenant has one
       tenantData.tenant.industry_id
         ? serviceClient
             .from("industries")
@@ -38,31 +73,44 @@ export default async function LeadsPage() {
             .eq("id", tenantData.tenant.industry_id)
             .single()
         : Promise.resolve({ data: null }),
-      // Fetch tenant entities
       serviceClient
         .from("tenant_entities")
         .select("*")
         .eq("tenant_id", tenantData.tenant.id)
         .eq("is_active", true)
         .order("position", { ascending: true }),
-      // Fetch branches (empty array for single-branch tenants)
       tenantData.entitlements.maxBranches > 1
         ? getBranches(tenantData.tenant.id)
         : Promise.resolve([]),
     ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
+  const pageHeading = activeList ? activeList.name : "All Leads";
+
+  // Pass lead lists (accessible ones) for the move-to-list selector
+  const accessibleLists = hasLeadLists
+    ? allLists.filter((l) =>
+        canAccessList(
+          tenantData.permissions,
+          l.access as { mode: string; positionIds?: string[] },
+          tenantData.positionId,
+        )
+      )
+    : [];
+
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">All Leads</h1>
+      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
       <LeadsTable
         leads={leads}
         memberMap={memberMap}
+        memberNames={memberNames}
         stages={stages}
         formMap={formMap}
         role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
@@ -74,6 +122,9 @@ export default async function LeadsPage() {
         industryId={tenantData.tenant.industry_id}
         branches={branches}
         maxBranches={tenantData.entitlements.maxBranches}
+        selectedBranchId={selectedBranchId}
+        userBranchId={tenantData.branchId}
+        leadLists={accessibleLists}
       />
     </div>
   );

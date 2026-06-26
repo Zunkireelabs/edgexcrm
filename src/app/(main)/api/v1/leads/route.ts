@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { leadQueryScope, canSeeNav } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav, canAccessList } from "@/lib/api/permissions";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import {
   apiSuccess,
   apiPaginated,
@@ -25,6 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { leadIdsForBranch, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -82,8 +86,38 @@ export async function GET(request: NextRequest) {
   const search = searchParams.get("search");
   let assignedTo = searchParams.get("assigned_to");
   const includeConverted = searchParams.get("include_converted") === "1";
+  const listSlug = searchParams.get("list");
 
   const supabase = await createServiceClient();
+
+  // Resolve ?list=slug for lead-lists feature
+  let resolvedListId: string | null = null;
+  let archiveListIds: string[] = [];
+  if (getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
+    const { data: lists } = await supabase
+      .from("lead_lists")
+      .select("id, slug, is_archive, access")
+      .eq("tenant_id", auth.tenantId);
+
+    if (lists) {
+      archiveListIds = lists.filter((l) => l.is_archive).map((l) => l.id);
+
+      if (listSlug) {
+        const targetList = lists.find((l) => l.slug === listSlug);
+        if (!targetList) {
+          log.info({ listSlug }, "List not found");
+          return apiForbidden();
+        }
+        const accessible = canAccessList(
+          auth.permissions,
+          targetList.access as { mode: string; positionIds?: string[] },
+          auth.positionId,
+        );
+        if (!accessible) return apiForbidden();
+        resolvedListId = targetList.id;
+      }
+    }
+  }
 
   let query = supabase
     .from("leads")
@@ -95,16 +129,31 @@ export async function GET(request: NextRequest) {
     query = query.is("converted_at", null);
   }
 
+  // Apply list filter
+  if (resolvedListId) {
+    query = query.eq("list_id", resolvedListId);
+  } else if (archiveListIds.length > 0) {
+    // Master view: exclude leads in archive lists
+    query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
+  }
+
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (scope.restrictToSelf) assignedTo = auth.userId;
-  if (scope.branchId) query = query.eq("branch_id", scope.branchId);
+  if (scope.restrictToSelf) {
+    const ids = await leadIdsVisibleToAssignee(supabase, auth.tenantId, auth.userId);
+    query = query.in("id", ids);
+    assignedTo = null; // self-scoped users: ignore any client assignedTo param
+  } else if (scope.branchId) {
+    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
+    query = query.in("id", ids);
+  }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    query = query.eq("branch_id", adminBranchFilter);
+    const ids = await leadIdsForBranch(supabase, auth.tenantId, adminBranchFilter);
+    query = query.in("id", ids);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
@@ -216,6 +265,39 @@ async function handlePost(request: NextRequest) {
     .single();
 
   if (!tenant) return apiNotFound("Tenant");
+
+  // ── Branch resolution (insert path only) ────────────────────────────────
+  // Read active-branch cookie from the header switcher.
+  // "all" / "overall" / empty = Overall view → treat as no active branch.
+  const cookieStore = await cookies();
+  const edgexBranchVal = cookieStore.get("edgex_branch")?.value ?? null;
+  const cookieBranchId =
+    edgexBranchVal && edgexBranchVal !== "all" && edgexBranchVal !== "overall"
+      ? edgexBranchVal
+      : null;
+
+  // Optional session auth for creator's branch affiliation (step 3).
+  // Dashboard callers have a session; unauthenticated / widget callers return null.
+  const dashAuth = await authenticateRequest();
+
+  // Precedence: 1. explicit body branch_id  2. active branch cookie  3. creator's branch
+  //             4. tenant default branch (is_default = true)
+  const explicitBranchId = (body.branch_id as string | null | undefined) || null;
+  const step123BranchId = explicitBranchId ?? cookieBranchId ?? (dashAuth?.branchId ?? null);
+
+  // Step 4: fall back to the tenant's default branch when none of steps 1–3 resolved.
+  let creationBranchId = step123BranchId;
+  if (!creationBranchId) {
+    const { data: defaultBranch } = await supabase
+      .from("branches")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_default", true)
+      .limit(1)
+      .maybeSingle();
+    creationBranchId = defaultBranch?.id ?? null;
+  }
+  // ── End branch resolution ────────────────────────────────────────────────
 
   // Validate assigned_to: must belong to this tenant if provided
   if (body.assigned_to !== undefined && body.assigned_to !== null && body.assigned_to !== "") {
@@ -391,9 +473,32 @@ async function handlePost(request: NextRequest) {
     owner_id: body.owner_id || null,
     salutation: body.salutation || null,
     company_email: body.company_email || null,
+    // Education-only structured fields
+    destinations: Array.isArray(body.destinations) ? body.destinations : [],
+    field_of_study: (body.field_of_study as string | null | undefined) || null,
+    degree_level: (body.degree_level as string | null | undefined) || null,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
+
+  // For tenants with lead-lists: assign new leads to the intake list when list_id not supplied.
+  // Only applies to brand-new inserts — the update path strips list_id from its payload.
+  // Falls back to null silently if no intake list exists (edge tenant, older setup).
+  if (!body.list_id) {
+    const { data: intakeList } = await supabase
+      .from("lead_lists")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("is_intake", true)
+      .limit(1)
+      .maybeSingle();
+    leadPayload.list_id = intakeList?.id ?? null;
+  } else {
+    leadPayload.list_id = (body.list_id as string | null) ?? null;
+  }
+
+  // Set branch on insert path only; stripped from the update destructure below.
+  leadPayload.branch_id = creationBranchId;
 
   // Normalised fields for identity resolution (used in both update + create paths)
   const normalizedEmail = normalizeEmail(leadPayload.email as string | null | undefined);
@@ -513,7 +618,7 @@ async function handlePost(request: NextRequest) {
 
     // Normal update (no fold)
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { tenant_id: _tenantId, ...updatePayload } = leadPayload;
+    const { tenant_id: _tenantId, list_id: _listId, branch_id: _branchId, ...updatePayload } = leadPayload;
 
     const { data: updated, error } = await supabase
       .from("leads")
@@ -802,6 +907,9 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Sync origin branch membership so branch-scoped users see the lead (no-op when null)
+  void syncOriginMembership(supabase, tenantId, lead.id, creationBranchId, (lead as Lead).assigned_to ?? null).catch(() => {});
 
   // Phone duplicate suggestions — non-fatal, never blocks ingestion
   if (createPhoneMatchIds.length > 0) {

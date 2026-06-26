@@ -7,7 +7,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -46,6 +48,7 @@ import {
   MoreHorizontal,
   Pencil,
   Building2,
+  ArrowRightLeft,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,7 +61,7 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
-import type { Lead, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
+import type { Lead, LeadList, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
   getLeadColumns,
@@ -76,11 +79,13 @@ interface TeamMember {
   user_id: string;
   email: string;
   role: string;
+  name: string;
 }
 
 interface LeadsTableProps {
   leads: Lead[];
   memberMap?: Record<string, string>;
+  memberNames?: Record<string, string>;
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
   role?: UserRole;
@@ -92,6 +97,12 @@ interface LeadsTableProps {
   industryId?: string | null;
   branches?: Branch[];
   maxBranches?: number;
+  selectedBranchId?: string | null;
+  userBranchId?: string | null;
+  leadLists?: LeadList[];
+  roleMap?: Record<string, string>;
+  extraDefaultVisibleKeys?: string[];
+  isStagingView?: boolean;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -103,6 +114,7 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
 export function LeadsTable({
   leads,
   memberMap = {},
+  memberNames = {},
   stages = [],
   formMap = {},
   role = "viewer",
@@ -114,15 +126,27 @@ export function LeadsTable({
   industryId,
   branches = [],
   maxBranches = 1,
+  selectedBranchId = null,
+  userBranchId = null,
+  leadLists = [],
+  roleMap,
+  extraDefaultVisibleKeys = [],
+  isStagingView = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
   const [localLeads, setLocalLeads] = useState(leads);
+  // Re-sync when the server sends a new lead set — list switch (?list=…),
+  // branch switch (router.refresh), etc. Without this the table shows stale
+  // rows until a manual page reload.
+  useEffect(() => {
+    setLocalLeads(leads);
+  }, [leads]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
-  const [counselorFilter, setCounselorFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
   const [prospectIndustryFilter, setProspectIndustryFilter] = useState<string>("all");
@@ -140,6 +164,35 @@ export function LeadsTable({
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
   const [assignToBranch, setAssignToBranch] = useState<string>("");
   const [isAssigningBranch, setIsAssigningBranch] = useState(false);
+  const [moveListDialogOpen, setMoveListDialogOpen] = useState(false);
+  const [moveListId, setMoveListId] = useState<string>("");
+  const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
+  const [isMoveList, setIsMoveList] = useState(false);
+  const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
+
+  // Smart suggestion — stable key derived from the staging list's id
+  const stagingListId = isStagingView ? (localLeads[0]?.list_id ?? null) : null;
+  const routeMemoryKey = stagingListId ? `leadsRoute:lastTarget:${stagingListId}` : null;
+
+  // Pre-fill the Move-to-list dialog from localStorage when it opens (staging only)
+  useEffect(() => {
+    if (!moveListDialogOpen || !isStagingView || !routeMemoryKey) return;
+    try {
+      if (typeof window === "undefined") return;
+      const raw = window.localStorage.getItem(routeMemoryKey);
+      if (!raw) return;
+      const saved = JSON.parse(raw) as { list_id?: string; assigned_to?: string | null };
+      if (saved.list_id && leadLists.some((l) => l.id === saved.list_id)) {
+        setMoveListId(saved.list_id);
+      }
+      if (saved.assigned_to && teamMembers.some((m) => m.user_id === saved.assigned_to)) {
+        setMoveAssignTo(saved.assigned_to);
+      }
+    } catch {
+      // localStorage unavailable or corrupt — ignore
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moveListDialogOpen]);
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -156,14 +209,81 @@ export function LeadsTable({
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
 
-  // Get unique sources from leads
+  // Get unique sources from leads (staging: split on " | "; /leads: exact string)
   const sources = useMemo(() => {
     const s = new Set<string>();
-    leads.forEach(l => {
-      if (l.intake_source) s.add(l.intake_source);
+    leads.forEach((l) => {
+      if (!l.intake_source) return;
+      if (isStagingView) {
+        l.intake_source.split(" | ").forEach((part) => { const t = part.trim(); if (t) s.add(t); });
+      } else {
+        s.add(l.intake_source);
+      }
     });
     return Array.from(s).sort();
-  }, [leads]);
+  }, [leads, isStagingView]);
+
+  // Per-source counts — cross-filtered: reflects all active filters except source itself
+  const sourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!isStagingView) return m;
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      if (!l.intake_source) return;
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
+      l.intake_source.split(" | ").forEach((p) => {
+        const t = p.trim();
+        if (t) m.set(t, (m.get(t) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [localLeads, isStagingView, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter]);
+
+  // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
+  const counselorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    if (!isStagingView) return m;
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      const matchesSource =
+        sourceFilter.length === 0 ||
+        (l.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false);
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesSource || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
+      const key = l.assigned_to ?? "unassigned";
+      m.set(key, (m.get(key) ?? 0) + 1);
+    });
+    return m;
+  }, [localLeads, isStagingView, sourceFilter, tagFilter, statusFilter, formFilter, createdFilter]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -183,10 +303,14 @@ export function LeadsTable({
       const matchesForm =
         formFilter === "all" || lead.form_config_id === formFilter;
       const matchesCounselor =
-        counselorFilter === "all" ||
-        (counselorFilter === "unassigned" ? !lead.assigned_to : lead.assigned_to === counselorFilter);
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !lead.assigned_to) ||
+        (!!lead.assigned_to && counselorFilter.includes(lead.assigned_to));
       const matchesSource =
-        sourceFilter === "all" || lead.intake_source === sourceFilter;
+        sourceFilter.length === 0 ||
+        (isStagingView
+          ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
+          : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
 
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -260,14 +384,14 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
     setFormFilter("all");
-    setCounselorFilter("all");
-    setSourceFilter("all");
+    setCounselorFilter([]);
+    setSourceFilter([]);
     setTagFilter("all");
     setCreatedFilter("all");
     setProspectIndustryFilter("all");
@@ -278,14 +402,31 @@ export function LeadsTable({
     search !== "",
     statusFilter !== "all",
     formFilter !== "all",
-    counselorFilter !== "all",
-    sourceFilter !== "all",
+    counselorFilter.length > 0,
+    sourceFilter.length > 0,
     tagFilter !== "all",
     createdFilter !== "all",
     prospectIndustryFilter !== "all",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
+
+  // Assignment hint for the staging Move-to-list dialog
+  const selectionAssignmentHint = useMemo(() => {
+    if (!isStagingView || selectedIds.size === 0) return null;
+    const selectedLeads = localLeads.filter((l) => selectedIds.has(l.id));
+    const rawAssignees = selectedLeads.map((l) => l.assigned_to ?? null);
+    const distinct = new Set(rawAssignees);
+    if (distinct.size === 1) {
+      const single = Array.from(distinct)[0];
+      if (single === null) {
+        return "Selected leads are unassigned — pick a member to assign them on route.";
+      }
+      const name = (memberNames[single] || memberMap[single]?.split("@")[0]) ?? single;
+      return `All selected are assigned to ${name} — 'Keep current assignee' leaves them with this owner.`;
+    }
+    return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
+  }, [isStagingView, selectedIds, localLeads, memberMap, memberNames]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filtered.length / itemsPerPage);
@@ -415,28 +556,121 @@ export function LeadsTable({
     }
     setIsAssigningBranch(true);
     try {
-      const response = await fetch("/api/v1/leads/bulk", {
-        method: "PATCH",
+      const response = await fetch("/api/v1/leads/bulk/share", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ids: idsToAssign,
-          branch_id: assignToBranch === "__unassign__" ? null : assignToBranch,
+          branch_ids: [assignToBranch],
         }),
       });
       const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to assign branch");
+        throw new Error(data.error?.message || "Failed to share leads");
       }
-      const action = assignToBranch === "__unassign__" ? "Unrouted" : "Assigned";
-      toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+      const count = data.data.shared as number;
+      const branchName = branches.find((b) => b.id === assignToBranch)?.name ?? "branch";
+      toast.success(`Shared ${count} lead${count !== 1 ? "s" : ""} to ${branchName}`);
       setSelectedIds(new Set());
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
       router.refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to assign branch");
+      toast.error(error instanceof Error ? error.message : "Failed to share leads");
     } finally {
       setIsAssigningBranch(false);
+    }
+  }
+
+  const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
+  const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
+
+  const CHUNK_SIZE = 100;
+
+  async function handleBulkMove() {
+    const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    if (idsToMove.length === 0) {
+      toast.error("No leads selected");
+      return;
+    }
+    if (!moveListId) {
+      toast.error("Please select a target list");
+      return;
+    }
+    if (moveTargetIsArchive && !moveArchiveReason.trim()) {
+      toast.error("Archive reason is required");
+      return;
+    }
+
+    setIsMoveList(true);
+    const chunks: string[][] = [];
+    for (let i = 0; i < idsToMove.length; i += CHUNK_SIZE) {
+      chunks.push(idsToMove.slice(i, i + CHUNK_SIZE));
+    }
+
+    let totalMoved = 0;
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        if (chunks.length > 1) {
+          toast.loading(`Moving… chunk ${i + 1}/${chunks.length}`, { id: "bulk-move" });
+        }
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: chunks[i],
+            list_id: moveListId,
+            ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
+            ...(moveAssignTo !== "keep" && {
+              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
+            }),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to move leads");
+        }
+        totalMoved += data.data.updated as number;
+      }
+      // Persist last-used target for smart suggestion (staging only)
+      if (isStagingView && routeMemoryKey) {
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.setItem(
+              routeMemoryKey,
+              JSON.stringify({
+                list_id: moveListId,
+                assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
+              }),
+            );
+          }
+        } catch {
+          // localStorage unavailable — ignore
+        }
+      }
+      const assignedName =
+        moveAssignTo !== "keep" && moveAssignTo !== "unassign"
+          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.name
+          : null;
+      const toastMsg = [
+        `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
+        assignedName ? `and assigned to ${assignedName}` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      toast.dismiss("bulk-move");
+      toast.success(toastMsg);
+      setSelectedIds(new Set());
+      setMoveListDialogOpen(false);
+      setMoveListId("");
+      setMoveArchiveReason("");
+      setMoveAssignTo("keep");
+      router.refresh();
+    } catch (error) {
+      toast.dismiss("bulk-move");
+      toast.error(error instanceof Error ? error.message : "Failed to move leads");
+    } finally {
+      setIsMoveList(false);
     }
   }
 
@@ -455,8 +689,8 @@ export function LeadsTable({
           case "location":
             return [lead.city, lead.country].filter(Boolean).join(", ");
           case "assigned": {
-            const email = lead.assigned_to ? memberMap[lead.assigned_to] : null;
-            return email ? email.split("@")[0] : "";
+            const uid = lead.assigned_to;
+            return uid ? (memberNames[uid] || (memberMap[uid] ? memberMap[uid].split("@")[0] : "")) : "";
           }
           case "status": {
             const stage = stages.find((s) => s.id === lead.stage_id);
@@ -498,8 +732,8 @@ export function LeadsTable({
           case "company_email":
             return lead.company_email || "";
           case "owner": {
-            const email = lead.owner_id ? memberMap[lead.owner_id] : null;
-            return email ? email.split("@")[0] : "";
+            const uid = lead.owner_id;
+            return uid ? (memberNames[uid] || (memberMap[uid] ? memberMap[uid].split("@")[0] : "")) : "";
           }
           default:
             if (col.key.startsWith("cf:")) {
@@ -544,8 +778,10 @@ export function LeadsTable({
   // Default middle visible keys (anchors name + actions always implicit).
   const defaultMiddleKeys = useMemo(() => {
     const defaults = getDefaultVisibleKeys(industryId, maxBranches);
-    return defaults.filter((k) => k !== "name" && k !== "actions");
-  }, [industryId, maxBranches]);
+    const base = defaults.filter((k) => k !== "name" && k !== "actions");
+    const extra = extraDefaultVisibleKeys.filter((k) => !base.includes(k));
+    return [...base, ...extra];
+  }, [industryId, maxBranches, extraDefaultVisibleKeys]);
 
   // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
@@ -562,9 +798,10 @@ export function LeadsTable({
       .filter((c) => !c.required)
       .map((c) => c.key);
     const validKeys = [...staticKeys, ...cfKeys];
-    const defKeys = getDefaultVisibleKeys(industryId).filter(
-      (k) => k !== "name" && k !== "actions",
-    );
+    const defKeys = [
+      ...getDefaultVisibleKeys(industryId).filter((k) => k !== "name" && k !== "actions"),
+      ...extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions"),
+    ];
     setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
@@ -610,9 +847,11 @@ export function LeadsTable({
   const columnCtx: LeadColumnCtx = useMemo(
     () => ({
       memberMap,
+      memberNames,
       formMap,
       entityMap,
       branchMap,
+      roleMap,
       stages,
       industryId,
       selectedIds,
@@ -638,8 +877,45 @@ export function LeadsTable({
         setLocalLeads((prev) =>
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
+      leadLists: leadLists.length > 0 ? leadLists : undefined,
+      onListMove: leadLists.length > 0
+        ? async (leadId: string, listId: string, archiveReason?: string) => {
+            // Optimistic update
+            const targetList = leadLists.find((l) => l.id === listId);
+            setLocalLeads((prev) =>
+              prev.map((l) =>
+                l.id === leadId
+                  ? {
+                      ...l,
+                      list_id: listId,
+                      lead_type: targetList?.slug === "prospects" ? "prospect" : "lead",
+                      ...(archiveReason ? { archive_reason: archiveReason } : {}),
+                    }
+                  : l
+              )
+            );
+            try {
+              const res = await fetch(`/api/v1/leads/${leadId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ list_id: listId, ...(archiveReason ? { archive_reason: archiveReason } : {}) }),
+              });
+              if (!res.ok) throw new Error("Failed to move lead");
+            } catch {
+              // Revert on failure
+              setLocalLeads((prev) =>
+                prev.map((l) =>
+                  l.id === leadId
+                    ? { ...leads.find((orig) => orig.id === leadId) ?? l }
+                    : l
+                )
+              );
+            }
+          }
+        : undefined,
     }),
-    [memberMap, formMap, entityMap, branchMap, stages, industryId, selectedIds, unreadLeadIds],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -769,10 +1045,32 @@ export function LeadsTable({
 
         {/* Filter Row - Compact */}
         <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          {/* Source Filter */}
+          {sources.length > 0 && (
+            <FilterDropdown
+              label="All Sources"
+              multiple
+              value={sourceFilter}
+              onChange={(val) => {
+                setSourceFilter(val);
+                setCurrentPage(1);
+              }}
+              icon={<Globe className="h-3 w-3" />}
+              options={sources.map((s) => ({
+                value: s,
+                label: isStagingView
+                  ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
+                  : s,
+                description: `Leads from ${s}`,
+              }))}
+            />
+          )}
+
           {/* Counselor Filter (Admin only) */}
           {isAdmin && counselors.length > 0 && (
             <FilterDropdown
               label="All Counselors"
+              multiple
               value={counselorFilter}
               onChange={(val) => {
                 setCounselorFilter(val);
@@ -780,33 +1078,19 @@ export function LeadsTable({
               }}
               icon={<Users2 className="h-3 w-3" />}
               options={[
-                { value: "all", label: "All Counselors", description: "Show leads from everyone" },
-                { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
+                {
+                  value: "unassigned",
+                  label: isStagingView
+                    ? `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`
+                    : "Unassigned",
+                  description: "Leads not assigned yet",
+                },
                 ...counselors.map(([userId, email]) => ({
                   value: userId,
-                  label: email.split("@")[0],
+                  label: isStagingView
+                    ? `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`
+                    : memberNames[userId] || email.split("@")[0],
                   description: email,
-                })),
-              ]}
-            />
-          )}
-
-          {/* Source Filter */}
-          {sources.length > 0 && (
-            <FilterDropdown
-              label="All Sources"
-              value={sourceFilter}
-              onChange={(val) => {
-                setSourceFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Globe className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Sources", description: "Show leads from all sources" },
-                ...sources.map((s) => ({
-                  value: s,
-                  label: s,
-                  description: `Leads from ${s}`,
                 })),
               ]}
             />
@@ -960,7 +1244,16 @@ export function LeadsTable({
                 Branch
               </button>
             )}
-            {isAdmin && selectedCount === 2 && (
+            {isAdmin && leadLists.length > 0 && (
+              <button
+                onClick={() => setMoveListDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
+              >
+                <ArrowRightLeft className="h-4 w-4" />
+                Move to list
+              </button>
+            )}
+            {isAdmin && !isStagingView && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors"
@@ -1144,6 +1437,7 @@ export function LeadsTable({
               onClose={() => setPreviewLeadId(null)}
               stages={stages}
               memberMap={memberMap}
+              memberNames={memberNames}
             />
           )}
         </div>
@@ -1204,7 +1498,7 @@ export function LeadsTable({
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
-                        <span>{member.email.split("@")[0]}</span>
+                        <span>{member.name}</span>
                         <span className="text-xs text-muted-foreground">({member.role})</span>
                       </div>
                     </SelectItem>
@@ -1233,16 +1527,16 @@ export function LeadsTable({
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Branch Assign Dialog */}
+      {/* Bulk Branch Share Dialog */}
       <Dialog open={branchAssignDialogOpen} onOpenChange={(open) => {
         setBranchAssignDialogOpen(open);
         if (!open) setAssignToBranch("");
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
+            <DialogTitle>Share {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to branch</DialogTitle>
             <DialogDescription>
-              Select a branch to assign the selected leads to, or remove their branch routing.
+              Add the selected leads to a branch (they stay in their current branches).
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
@@ -1251,9 +1545,6 @@ export function LeadsTable({
                 <SelectValue placeholder="Select branch..." />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="__unassign__">
-                  <span className="text-muted-foreground">Remove branch (unroute)</span>
-                </SelectItem>
                 {branches.map((b) => (
                   <SelectItem key={b.id} value={b.id}>
                     {b.name}
@@ -1277,14 +1568,134 @@ export function LeadsTable({
               onClick={handleBulkAssignBranch}
               disabled={isAssigningBranch || !assignToBranch}
             >
-              {isAssigningBranch ? "Assigning…" : assignToBranch === "__unassign__" ? "Remove Branch" : "Assign"}
+              {isAssigningBranch ? "Sharing…" : "Share"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Move to List Dialog */}
+      <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
+        setMoveListDialogOpen(open);
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Move {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to list</DialogTitle>
+            <DialogDescription>
+              Select a target list. Leads will be moved out of their current list.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-3">
+            <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }}>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select list..." />
+              </SelectTrigger>
+              <SelectContent>
+                {(() => {
+                  const pipeline = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const staging  = leadLists.filter((l) => l.is_staging);
+                  const archived = leadLists.filter((l) => l.is_archive);
+                  return (
+                    <>
+                      {pipeline.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Pipeline</SelectLabel>
+                          {pipeline.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {staging.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Staging</SelectLabel>
+                          {staging.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                      {archived.length > 0 && (
+                        <SelectGroup>
+                          <SelectLabel>Archived</SelectLabel>
+                          {archived.map((l) => (
+                            <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                          ))}
+                        </SelectGroup>
+                      )}
+                    </>
+                  );
+                })()}
+              </SelectContent>
+            </Select>
+            {moveTargetIsArchive && (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-gray-700">Archive reason</p>
+                <Select value={moveArchiveReason} onValueChange={setMoveArchiveReason}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select reason..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {["Not interested", "Wrong number", "Not reachable", "Already enrolled elsewhere", "Other"].map((r) => (
+                      <SelectItem key={r} value={r}>{r}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {isStagingView && (
+              <>
+                {selectionAssignmentHint && (
+                  <p className="text-xs text-muted-foreground">{selectionAssignmentHint}</p>
+                )}
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
+                  <Select value={moveAssignTo} onValueChange={setMoveAssignTo}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Keep current assignee" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="keep">
+                        <span className="text-muted-foreground">Keep current assignee</span>
+                      </SelectItem>
+                      <SelectItem value="unassign">
+                        <span className="text-muted-foreground">Unassign</span>
+                      </SelectItem>
+                      {teamMembers
+                        .filter((m) => m.role !== "viewer")
+                        .map((member) => (
+                          <SelectItem key={member.user_id} value={member.user_id}>
+                            <div className="flex items-center gap-2">
+                              <span>{member.name}</span>
+                              <span className="text-xs text-muted-foreground">({member.role})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }}
+              disabled={isMoveList}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleBulkMove}
+              disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
+            >
+              {isMoveList ? "Moving…" : "Move"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Merge Dialog — shown when exactly 2 leads are selected */}
-      {isAdmin && mergeDialogOpen && selectedCount === 2 && (() => {
+      {isAdmin && !isStagingView && mergeDialogOpen && selectedCount === 2 && (() => {
         const [idA, idB] = Array.from(selectedIds);
         const leadA = localLeads.find((l) => l.id === idA);
         const leadB = localLeads.find((l) => l.id === idB);
@@ -1316,6 +1727,9 @@ export function LeadsTable({
           role={role}
           currentUserId={currentUserId}
           industryId={industryId}
+          branches={branches}
+          selectedBranchId={selectedBranchId}
+          userBranchId={userBranchId}
         />
       )}
 

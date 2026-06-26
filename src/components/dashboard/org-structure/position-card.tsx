@@ -96,13 +96,13 @@ export function PositionCard({
                 {visible.map((m) => (
                   <div
                     key={m.user_id}
-                    title={m.email}
+                    title={m.name || m.email}
                     className={cn(
                       "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ring-1 ring-white",
                       avatarColor(m.email)
                     )}
                   >
-                    {m.email.charAt(0).toUpperCase()}
+                    {(m.name || m.email).charAt(0).toUpperCase()}
                   </div>
                 ))}
                 {overflow > 0 && (
@@ -142,15 +142,15 @@ export function PositionCard({
           {members.map((m) => (
             <div key={m.user_id} className="flex items-center gap-1.5 w-full">
               <div
-                title={m.email}
+                title={m.name || m.email}
                 className={cn(
                   "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
                   avatarColor(m.email)
                 )}
               >
-                {m.email.charAt(0).toUpperCase()}
+                {(m.name || m.email).charAt(0).toUpperCase()}
               </div>
-              <span className="text-xs text-gray-700 flex-1 truncate min-w-0">{m.email}</span>
+              <span className="text-xs text-gray-700 flex-1 truncate min-w-0">{m.name || m.email}</span>
               <span className={cn(
                 "text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0",
                 roleColors[m.role] ?? "bg-gray-100 text-gray-600"
@@ -200,7 +200,7 @@ export function PositionCard({
               >
                 <option value="">+ assign member…</option>
                 {unassignedMembers.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>{m.email}</option>
+                  <option key={m.user_id} value={m.user_id}>{m.name || m.email}</option>
                 ))}
               </select>
             </div>

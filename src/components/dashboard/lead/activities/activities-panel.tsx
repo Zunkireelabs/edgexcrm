@@ -1,8 +1,13 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import dynamic from "next/dynamic";
-import { Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown } from "lucide-react";
+import {
+  Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
+  ArrowRight, Archive, CheckCircle2, Pencil, Users, UserMinus, UserPlus,
+  GitMerge, Check,
+  type LucideIcon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,14 +22,15 @@ import type { LeadActivityRecord, ActivityType, LeadNote } from "@/types/databas
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
-import { type EmailThread, type Email } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
-import { useConnectedInboxes } from "@/industries/education-consultancy/features/email/hooks/use-connected-inboxes";
+import { NotesTab, type NotesTabRef } from "../notes-tab";
+import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
+import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/compose-email-dialog"
+      "@/industries/_shared/features/email/components/compose-email-dialog"
     ).then((m) => m.ComposeEmailDialog),
   { ssr: false },
 );
@@ -33,7 +39,7 @@ const ComposeEmailDialog = dynamic(
 const EmailThreadCard = dynamic(
   () =>
     import(
-      "@/industries/education-consultancy/features/email/components/email-thread-card"
+      "@/industries/_shared/features/email/components/email-thread-card"
     ).then((m) => m.EmailThreadCard),
   { ssr: false },
 );
@@ -45,6 +51,7 @@ interface ActivitiesPanelProps {
   notes: LeadNote[];
   systemActivities: LeadActivity[];
   teamMemberEmails: Record<string, string>;
+  teamMemberNames: Record<string, string>;
   isAdmin: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
   currentUserId: string;
@@ -66,12 +73,20 @@ const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
   { id: "meetings", label: "Meetings", icon: <Calendar className="h-4 w-4" /> },
 ];
 
-export function ActivitiesPanel({
+export interface ActivitiesPanelRef {
+  /** Switch to the Notes sub-tab; pass true to also focus the composer. */
+  openNotes: (focus?: boolean) => void;
+}
+
+export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelProps>(
+  function ActivitiesPanel({
   leadId,
   notes,
   systemActivities,
   teamMemberEmails,
+  teamMemberNames,
   isAdmin,
+  onNotesChange,
   currentUserId,
   industryId,
   leadEmail,
@@ -80,8 +95,18 @@ export function ActivitiesPanel({
   threads,
   setThreads,
   threadsLoading,
-}: ActivitiesPanelProps) {
+}: ActivitiesPanelProps, ref) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
+  const notesTabRef = useRef<NotesTabRef>(null);
+
+  useImperativeHandle(ref, () => ({
+    openNotes: (focus = false) => {
+      setActiveTab("notes");
+      if (focus) {
+        setTimeout(() => notesTabRef.current?.focusComposer(), 50);
+      }
+    },
+  }));
   const [loggedActivities, setLoggedActivities] = useState<LeadActivityRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
@@ -89,7 +114,7 @@ export function ActivitiesPanel({
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
 
-  const isEducation = industryId === "education_consultancy";
+  const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -257,7 +282,7 @@ export function ActivitiesPanel({
       case "emails":
         return (
           <div className="flex gap-2">
-            {isEducation && (
+            {hasEmail && (
               <Button size="sm" onClick={() => { setReplyContext(null); setComposeOpen(true); }}>
                 Compose Email
               </Button>
@@ -286,7 +311,7 @@ export function ActivitiesPanel({
       case "calls":
         return "Call a contact from this record. Or log a call activity to keep track of your discussion and notes.";
       case "emails":
-        return isEducation
+        return hasEmail
           ? "Compose an email to this lead, or log a past email to track your communication history."
           : "Log emails to keep track of your communication with this lead.";
       case "meetings":
@@ -302,7 +327,7 @@ export function ActivitiesPanel({
     }
   };
 
-  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (isEducation && threadsLoading));
+  const isEmailsTabLoading = activeTab === "emails" && (isLoading || (hasEmail && threadsLoading));
   const hasEmailContent = threads.length > 0 || loggedEmailActivities.length > 0;
 
   return (
@@ -321,6 +346,11 @@ export function ActivitiesPanel({
               }`}
             >
               {tab.label}
+              {tab.id === "notes" && notes.length > 0 && (
+                <Badge variant="secondary" className="h-4 min-w-4 px-1 text-[10px] leading-none">
+                  {notes.length}
+                </Badge>
+              )}
               {tab.id === "emails" && unreadEmailCount > 0 && (
                 <Badge variant="destructive" className="h-4 min-w-4 px-1 text-[10px] leading-none">
                   {unreadEmailCount > 9 ? "9+" : unreadEmailCount}
@@ -338,28 +368,17 @@ export function ActivitiesPanel({
         </div>
       )}
 
-      {/* Notes tab */}
+      {/* Notes tab — full composer + cards (real names, relative time) */}
       {activeTab === "notes" && (
-        <Card className="shadow-none rounded-lg py-0">
-          <CardContent className="p-4">
-            {notes.length > 0 ? (
-              <div className="space-y-3">
-                {notes.map((note) => (
-                  <div key={note.id} className="border-l-2 border-muted pl-3 py-1">
-                    <p className="text-sm text-foreground">{note.content}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {note.user_email} · {formatRelativeTime(note.created_at)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                {getEmptyMessage()}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <NotesTab
+          ref={notesTabRef}
+          leadId={leadId}
+          notes={notes}
+          onNotesChange={onNotesChange}
+          teamMemberNames={teamMemberNames}
+          teamMemberEmails={teamMemberEmails}
+          currentUserId={currentUserId}
+        />
       )}
 
       {/* Tasks tab */}
@@ -477,23 +496,33 @@ export function ActivitiesPanel({
           {/* System activities on "all" tab */}
           {activeTab === "all" && systemActivities.length > 0 && (
             <div className="mt-6 pt-4 border-t">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">System Activity</h3>
-              <div className="space-y-2">
-                {(() => {
-                  const submissions = systemActivities.filter((a) => a.action === "lead.submission");
-                  const others = systemActivities.filter((a) => a.action !== "lead.submission").slice(0, 10);
-                  return [...submissions, ...others]
-                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                    .map((activity) => (
+              <h3 className="text-sm font-medium text-muted-foreground mb-4">System Activity</h3>
+              {(() => {
+                const submissions = systemActivities.filter((a) => a.action === "lead.submission");
+                const others = systemActivities.filter((a) => a.action !== "lead.submission").slice(0, 10);
+                const sorted = [...submissions, ...others].sort(
+                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                );
+                const groups = groupByDay(sorted);
+                return groups.map((group, gi) => (
+                  <div key={group.dayKey}>
+                    <p className={`text-xs font-medium text-muted-foreground mb-2${gi > 0 ? " mt-4" : ""}`}>
+                      {group.label}
+                    </p>
+                    {group.items.map((activity, idx) => (
                       <SystemActivityItem
                         key={activity.id}
                         activity={activity}
                         teamMemberEmails={teamMemberEmails}
+                        teamMemberNames={teamMemberNames}
+                        currentUserId={currentUserId}
                         leadId={leadId}
+                        isLast={idx === group.items.length - 1}
                       />
-                    ));
-                })()}
-              </div>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
           )}
         </>
@@ -508,8 +537,8 @@ export function ActivitiesPanel({
         onActivityLogged={handleActivityLogged}
       />
 
-      {/* Compose Email Dialog — education_consultancy only */}
-      {isEducation && (
+      {/* Compose Email Dialog — tenants with the email feature (education + travel) */}
+      {hasEmail && (
         <ComposeEmailDialog
           open={composeOpen}
           onOpenChange={handleComposeClose}
@@ -524,32 +553,31 @@ export function ActivitiesPanel({
       )}
     </div>
   );
-}
+});
 
-// System activity item — collapsible for lead.submission entries, plain for all others
+// System activity item — monochrome timeline node
 function SystemActivityItem({
   activity,
   teamMemberEmails,
+  teamMemberNames,
+  currentUserId,
   leadId,
+  isLast,
 }: {
   activity: LeadActivity;
   teamMemberEmails: Record<string, string>;
+  teamMemberNames: Record<string, string>;
+  currentUserId: string;
   leadId: string;
+  isLast: boolean;
 }) {
-  const activityDate = new Date(activity.created_at);
-  const isCurrentYear = activityDate.getFullYear() === new Date().getFullYear();
-  const time = activityDate.toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    ...(isCurrentYear ? {} : { year: "numeric" }),
-  });
-  const userEmail = activity.user_id ? teamMemberEmails[activity.user_id] : null;
+  const time = formatTimeOnly(activity.created_at);
+  const actor = resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
   const description = getSystemActivityDescription(activity, teamMemberEmails);
   const isSubmission = activity.action === "lead.submission";
+  const Icon = getSystemActivityIcon(activity);
+  const subline = [time, actor].filter(Boolean).join(" · ");
 
-  // Collapsible state for submission entries
   const [open, setOpen] = useState(false);
   const [submissionData, setSubmissionData] = useState<LeadSubmission | null>(null);
   const [submissionLoading, setSubmissionLoading] = useState(false);
@@ -571,7 +599,11 @@ function SystemActivityItem({
     }
   }
 
-  const dotColor = isSubmission ? "bg-emerald-400" : "bg-gray-300";
+  const nodeCircle = (
+    <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+      <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+    </div>
+  );
 
   if (isSubmission) {
     return (
@@ -582,38 +614,44 @@ function SystemActivityItem({
           if (o) loadSubmission();
         }}
       >
-        <div className="flex items-center gap-2 text-sm py-1">
-          <div className={`h-2 w-2 rounded-full shrink-0 ${dotColor}`} />
-          <CollapsibleTrigger className="flex items-center gap-1 text-foreground hover:underline underline-offset-2 cursor-pointer">
-            <span>{description}</span>
-            <ChevronDown
-              className={`h-3 w-3 text-muted-foreground transition-transform duration-150 ${open ? "rotate-180" : ""}`}
-            />
-          </CollapsibleTrigger>
-          <span className="text-muted-foreground shrink-0">· {time}</span>
-          {userEmail && (
-            <span className="text-muted-foreground truncate">· {userEmail}</span>
-          )}
+        <div className="flex gap-3">
+          <div className="flex flex-col items-center">
+            {nodeCircle}
+            {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+          </div>
+          <div className="min-w-0 pb-3 flex-1">
+            <CollapsibleTrigger className="flex items-center gap-1 text-sm text-foreground hover:underline underline-offset-2 cursor-pointer text-left">
+              <span className="min-w-0">{description}</span>
+              <ChevronDown
+                className={`h-3 w-3 text-muted-foreground transition-transform duration-150 shrink-0 ${open ? "rotate-180" : ""}`}
+              />
+            </CollapsibleTrigger>
+            {subline && <p className="text-xs text-muted-foreground mt-0.5">{subline}</p>}
+            <CollapsibleContent className="pt-2">
+              {submissionLoading ? (
+                <p className="text-xs text-muted-foreground">Loading…</p>
+              ) : submissionData ? (
+                <SubmissionDetail submission={submissionData} />
+              ) : (
+                <p className="text-xs text-muted-foreground">No submission data available.</p>
+              )}
+            </CollapsibleContent>
+          </div>
         </div>
-        <CollapsibleContent className="pl-4 pt-1 pb-2">
-          {submissionLoading ? (
-            <p className="text-xs text-muted-foreground">Loading…</p>
-          ) : submissionData ? (
-            <SubmissionDetail submission={submissionData} />
-          ) : (
-            <p className="text-xs text-muted-foreground">No submission data available.</p>
-          )}
-        </CollapsibleContent>
       </Collapsible>
     );
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm py-1">
-      <div className={`h-2 w-2 rounded-full ${dotColor}`} />
-      <span className="text-foreground">{description}</span>
-      <span className="text-muted-foreground">· {time}</span>
-      {userEmail && <span className="text-muted-foreground">· {userEmail}</span>}
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center">
+        {nodeCircle}
+        {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+      </div>
+      <div className="min-w-0 pb-3 flex-1">
+        <p className="text-sm text-foreground">{description}</p>
+        {subline && <p className="text-xs text-muted-foreground mt-0.5">{subline}</p>}
+      </div>
     </div>
   );
 }
@@ -681,6 +719,87 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
   );
 }
 
+function getSystemActivityIcon(activity: LeadActivity): LucideIcon {
+  const changes = activity.changes || {};
+
+  if (activity.action === "lead.submission") {
+    const isFirst = (changes as Record<string, { new?: unknown }>).is_first?.new === true;
+    return isFirst ? UserPlus : FileText;
+  }
+  if (activity.action === "lead.merged") return GitMerge;
+  if (activity.action === "lead.note_added") return FileText;
+  if (activity.action === "lead.branch_revoked") return UserMinus;
+  if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return Users;
+
+  const ch = changes as Record<string, { old?: unknown; new?: unknown }>;
+  if (ch.list) {
+    const reason = ch.archive_reason?.new as string | null;
+    if (reason) return Archive;
+    const to = ch.list.new as string | null;
+    if (to?.toLowerCase() === "qualified") return CheckCircle2;
+    return ArrowRight;
+  }
+  if (ch.assigned_to) return Users;
+  if (activity.action === "lead.updated") return Pencil;
+  return Check;
+}
+
+function resolveActorLabel(
+  userId: string | null | undefined,
+  currentUserId: string,
+  teamMemberNames: Record<string, string>,
+  teamMemberEmails: Record<string, string>
+): string | null {
+  if (!userId) return null;
+  if (userId === currentUserId) return "you";
+  return teamMemberNames[userId] || teamMemberEmails[userId] || null;
+}
+
+function formatTimeOnly(dateString: string): string {
+  return new Date(dateString).toLocaleString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function formatDayLabel(date: Date): string {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const yesterdayStart = new Date(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  const dateStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+
+  if (dateStart.getTime() === todayStart.getTime()) return "Today";
+  if (dateStart.getTime() === yesterdayStart.getTime()) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" }),
+  });
+}
+
+function groupByDay(
+  activities: LeadActivity[]
+): { dayKey: string; label: string; items: LeadActivity[] }[] {
+  const groups: { dayKey: string; label: string; items: LeadActivity[] }[] = [];
+  const seen = new Map<string, number>();
+
+  for (const activity of activities) {
+    const date = new Date(activity.created_at);
+    const dayKey = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+    const existing = seen.get(dayKey);
+    if (existing !== undefined) {
+      groups[existing].items.push(activity);
+    } else {
+      seen.set(dayKey, groups.length);
+      groups.push({ dayKey, label: formatDayLabel(date), items: [activity] });
+    }
+  }
+
+  return groups;
+}
+
 function getSystemActivityDescription(
   activity: LeadActivity,
   teamMemberEmails: Record<string, string>
@@ -700,6 +819,39 @@ function getSystemActivityDescription(
     return "Duplicate record merged";
   }
 
+  if (activity.action === "lead.note_added") {
+    return "Added a note";
+  }
+
+  if (activity.action === "lead.branch_shared") {
+    const branch = changes.branch?.new as string | null;
+    const a = changes.assigned_to?.new;
+    const email = a ? teamMemberEmails[String(a)] : null;
+    return `Shared to ${branch || "a branch"}${email ? ` · assigned to ${email}` : ""}`;
+  }
+
+  if (activity.action === "lead.branch_revoked") {
+    const branch = changes.branch?.old as string | null;
+    return `Removed from ${branch || "a branch"}`;
+  }
+
+  if (activity.action === "lead.branch_assigned") {
+    const branch = changes.branch?.new as string | null;
+    const a = changes.assigned_to?.new;
+    const email = a ? teamMemberEmails[String(a)] : null;
+    return email
+      ? `Assigned ${email} in ${branch || "a branch"}`
+      : `Unassigned in ${branch || "a branch"}`;
+  }
+
+  if (changes.list) {
+    const from = changes.list.old as string | null;
+    const to = changes.list.new as string | null;
+    const reason = changes.archive_reason?.new as string | null;
+    if (reason) return `Archived · ${reason}`;
+    return from ? `Moved from "${from}" to "${to}"` : `Added to "${to}"`;
+  }
+
   if (changes.status || changes.stage_id) {
     const newStatus = changes.status?.new || changes.stage_id?.new;
     return `Stage changed to "${newStatus}"`;
@@ -714,28 +866,44 @@ function getSystemActivityDescription(
     return "Unassigned";
   }
 
-  return `${activity.action} ${activity.entity_type}`;
-}
-
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-
-  if (diffDays === 0) {
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    if (diffHours === 0) {
-      const diffMinutes = Math.floor(diffMs / (1000 * 60));
-      return diffMinutes <= 1 ? "Just now" : `${diffMinutes}m ago`;
+  // Generic lead.updated: build "Updated name, destinations, …" from the changed fields
+  if (activity.action === "lead.updated" && Object.keys(changes).length > 0) {
+    const FIELD_LABELS: Record<string, string> = {
+      first_name: "name",
+      last_name: "name",
+      phone: "phone",
+      email: "email",
+      destinations: "destinations",
+      field_of_study: "field of study",
+      degree_level: "degree level",
+      tags: "tags",
+      intake_source: "source",
+      source: "source",
+      custom_fields: "details",
+      notes: "notes",
+      status: "stage",
+      stage_id: "stage",
+      city: "city",
+      country: "country",
+      company_name: "company",
+      designation: "designation",
+      salutation: "salutation",
+      preferred_contact_method: "contact method",
+    };
+    const seen = new Set<string>();
+    const labels: string[] = [];
+    for (const key of Object.keys(changes)) {
+      const label = FIELD_LABELS[key] ?? key.replace(/_/g, " ");
+      if (!seen.has(label)) {
+        seen.add(label);
+        labels.push(label);
+      }
     }
-    return `${diffHours}h ago`;
+    if (labels.length > 0) return `Updated ${labels.join(", ")}`;
   }
-  if (diffDays === 1) return "Yesterday";
-  if (diffDays < 7) return `${diffDays}d ago`;
 
-  return date.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-  });
+  // Humanized fallback — never render a raw dotted action string
+  const actionParts = activity.action.split(".");
+  const readable = (actionParts.length > 1 ? actionParts.slice(1).join(" ") : actionParts[0]).replace(/_/g, " ");
+  return readable.charAt(0).toUpperCase() + readable.slice(1);
 }

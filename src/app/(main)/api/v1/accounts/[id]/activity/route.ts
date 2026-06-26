@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { leadIdsVisibleToAssignee } from "@/lib/leads/branch-membership";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -55,9 +56,13 @@ export async function GET(request: NextRequest, { params }: Props) {
       if (shouldRestrictToSelf(auth.permissions)) q = q.eq("assigned_to", auth.userId);
       return q;
     })(),
-    (() => {
+    (async () => {
       let q = db.from("leads").select("id, first_name, last_name, email").eq("account_id", id).is("deleted_at", null);
-      if (shouldRestrictToSelf(auth.permissions)) q = q.eq("assigned_to", auth.userId);
+      if (shouldRestrictToSelf(auth.permissions)) {
+        // Use membership-aware visibility so per-branch assignees see their leads too
+        const visibleIds = await leadIdsVisibleToAssignee(db.raw(), auth.tenantId, auth.userId);
+        q = q.in("id", visibleIds.length > 0 ? visibleIds : ["00000000-0000-0000-0000-000000000000"]);
+      }
       return q;
     })(),
   ]);

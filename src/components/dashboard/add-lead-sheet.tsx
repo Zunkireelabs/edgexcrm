@@ -26,19 +26,26 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
+import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import type { PipelineStage, TenantEntity, UserRole } from "@/types/database";
+import type { Branch, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
+import {
+  DESTINATIONS,
+  FIELDS_OF_STUDY,
+  DEGREE_LEVELS,
+} from "@/industries/_shared/features/lead-lists/taxonomies";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
 interface TeamMember {
   user_id: string;
   email: string;
   role: string;
+  name: string;
 }
 
 interface AddLeadSheetProps {
@@ -53,6 +60,9 @@ interface AddLeadSheetProps {
   role: UserRole;
   currentUserId: string;
   industryId?: string | null;
+  branches?: Branch[];
+  selectedBranchId?: string | null;
+  userBranchId?: string | null;
 }
 
 interface FormData {
@@ -65,6 +75,7 @@ interface FormData {
   stageId: string;
   assignedTo: string;
   entityId: string;
+  branchId: string;
   intakeSource: string;
   intakeMedium: string;
   intakeCampaign: string;
@@ -77,6 +88,10 @@ interface FormData {
   ownerId: string;
   salutation: string;
   companyEmail: string;
+  // education_consultancy only
+  destinations: string[];
+  fieldOfStudy: string;
+  degreeLevel: string;
 }
 
 interface FormErrors {
@@ -130,6 +145,7 @@ const initialFormData: FormData = {
   stageId: "",
   assignedTo: "",
   entityId: "",
+  branchId: "",
   intakeSource: "manual_entry",
   intakeMedium: "dashboard",
   intakeCampaign: "",
@@ -142,7 +158,60 @@ const initialFormData: FormData = {
   ownerId: "",
   salutation: "",
   companyEmail: "",
+  destinations: [],
+  fieldOfStudy: "",
+  degreeLevel: "",
 };
+
+function DestinationsField({
+  selected,
+  onToggle,
+  disabled,
+}: {
+  selected: string[];
+  onToggle: (dest: string) => void;
+  disabled: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs text-gray-600">
+        Interested Destination
+        <span className="ml-1 text-gray-400">(optional)</span>
+      </Label>
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background hover:bg-accent transition-colors"
+      >
+        <span className={selected.length === 0 ? "text-muted-foreground" : ""}>
+          {selected.length === 0
+            ? "Select destinations"
+            : selected.join(", ")}
+        </span>
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
+          {DESTINATIONS.map((dest) => (
+            <div key={dest} className="flex items-center gap-2">
+              <Checkbox
+                id={`dest-${dest}`}
+                checked={selected.includes(dest)}
+                disabled={disabled}
+                onCheckedChange={() => onToggle(dest)}
+              />
+              <label htmlFor={`dest-${dest}`} className="text-xs cursor-pointer select-none">
+                {dest}
+              </label>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function AddLeadSheet({
   open,
@@ -156,6 +225,9 @@ export function AddLeadSheet({
   role,
   currentUserId,
   industryId,
+  branches = [],
+  selectedBranchId = null,
+  userBranchId = null,
 }: AddLeadSheetProps) {
   const router = useRouter();
   const [formData, setFormData] = useState<FormData>(initialFormData);
@@ -175,13 +247,15 @@ export function AddLeadSheet({
         stageId: defaultStage?.id || "",
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
+        // Non-admins locked to their branch; admins default to active branch from switcher
+        branchId: (!isAdmin && userBranchId) ? userBranchId : (selectedBranchId || ""),
       });
       setErrors({});
       setIsDirty(false);
       setSourceOpen(false);
       setNotesOpen(false);
     }
-  }, [open, defaultStage?.id, role, currentUserId]);
+  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -189,6 +263,17 @@ export function AddLeadSheet({
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
+  };
+
+  const toggleDestination = (dest: string) => {
+    setFormData((prev) => {
+      const current = prev.destinations;
+      const next = current.includes(dest)
+        ? current.filter((d) => d !== dest)
+        : [...current, dest];
+      return { ...prev, destinations: next };
+    });
+    setIsDirty(true);
   };
 
   const validate = (): boolean => {
@@ -221,6 +306,7 @@ export function AddLeadSheet({
         stage_id: formData.stageId || undefined,
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
+        branch_id: formData.branchId || null,
         intake_source: formData.intakeSource || "manual_entry",
         intake_medium: "dashboard",
         tags: industryId === "education_consultancy" ? [formData.tag || "student"] : [],
@@ -235,6 +321,9 @@ export function AddLeadSheet({
         owner_id: industryId === "it_agency" ? (formData.ownerId || null) : undefined,
         salutation: industryId === "it_agency" ? (formData.salutation || null) : undefined,
         company_email: industryId === "it_agency" ? (formData.companyEmail || null) : undefined,
+        destinations: industryId === "education_consultancy" ? formData.destinations : undefined,
+        field_of_study: industryId === "education_consultancy" ? (formData.fieldOfStudy || null) : undefined,
+        degree_level: industryId === "education_consultancy" ? (formData.degreeLevel || null) : undefined,
         is_final: true,
         step: 1,
       };
@@ -415,7 +504,7 @@ export function AddLeadSheet({
               <SelectItem value="__none__">Unassigned</SelectItem>
               {assignableMembers.map((member) => (
                 <SelectItem key={member.user_id} value={member.user_id}>
-                  {member.email.split("@")[0]}
+                  {member.name}
                   {member.user_id === currentUserId && " (You)"}
                 </SelectItem>
               ))}
@@ -423,6 +512,35 @@ export function AddLeadSheet({
           </Select>
         </div>
       </div>
+
+      {/* Branch picker — only for tenants with >1 branch */}
+      {branches.length > 1 && (
+        <div className="space-y-1.5">
+          <Label htmlFor="branchId" className="text-xs text-gray-600">
+            Branch
+            {!isAdmin && userBranchId && (
+              <span className="ml-1 text-gray-400">(auto)</span>
+            )}
+          </Label>
+          <Select
+            value={formData.branchId || "__none__"}
+            onValueChange={(v) => updateField("branchId", v === "__none__" ? "" : v)}
+            disabled={isSubmitting || (!isAdmin && !!userBranchId)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="No branch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No branch</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {entities.length > 0 && (
         <div className="space-y-1.5">
@@ -575,7 +693,7 @@ export function AddLeadSheet({
               <SelectContent>
                 {assignableMembers.map((member) => (
                   <SelectItem key={member.user_id} value={member.user_id}>
-                    {member.email.split("@")[0]}
+                    {member.name}
                     {member.user_id === currentUserId && " (You)"}
                   </SelectItem>
                 ))}
@@ -844,6 +962,55 @@ export function AddLeadSheet({
                   {tag.charAt(0).toUpperCase() + tag.slice(1)}
                 </button>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Study Interest — education_consultancy only */}
+        {industryId === "education_consultancy" && (
+          <DestinationsField
+            selected={formData.destinations}
+            onToggle={toggleDestination}
+            disabled={isSubmitting}
+          />
+        )}
+        {industryId === "education_consultancy" && (
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Field of Study</Label>
+              <Select
+                value={formData.fieldOfStudy || "__none__"}
+                onValueChange={(v) => updateField("fieldOfStudy", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select field</SelectItem>
+                  {FIELDS_OF_STUDY.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Select
+                value={formData.degreeLevel || "__none__"}
+                onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
+                disabled={isSubmitting}
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Select level</SelectItem>
+                  {DEGREE_LEVELS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         )}

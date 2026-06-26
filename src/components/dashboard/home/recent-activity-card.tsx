@@ -4,10 +4,10 @@ import Link from "next/link";
 import { Bell } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
-import type { RecentNotification } from "@/lib/supabase/queries";
+import type { RecentActivityItem } from "@/lib/supabase/queries";
 
 interface RecentActivityCardProps {
-  notifications: RecentNotification[];
+  notifications: RecentActivityItem[];
 }
 
 export function RecentActivityCard({ notifications }: RecentActivityCardProps) {

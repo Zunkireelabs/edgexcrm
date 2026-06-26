@@ -31,7 +31,6 @@ import {
   UserCheck,
   Clock,
   ChevronDown,
-  ExternalLink,
   User as UserIcon,
   Search,
   Sparkles,
@@ -44,17 +43,25 @@ import {
   Handshake,
   ChartColumn,
   Megaphone,
+  GraduationCap,
+  BookOpen,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAIAssistant } from "@/contexts/ai-assistant-context";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
+import { useGlobalSearch } from "@/contexts/global-search-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
+import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
+import { Suspense } from "react";
+import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
+import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -111,7 +118,17 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Handshake,
   ChartColumn,
   Megaphone,
+  GraduationCap,
+  BookOpen,
 };
+
+function NavSectionHeader({ label }: { label: string }) {
+  return (
+    <p className="px-3 pt-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
+      {label}
+    </p>
+  );
+}
 
 function SidebarGroupRender({
   group,
@@ -142,7 +159,7 @@ function SidebarGroupRender({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        className={`w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
             : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -199,6 +216,8 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
+  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
+  stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
 }
 
@@ -207,7 +226,6 @@ export function DashboardShell({
   tenant,
   role,
   positionName,
-  formConfigs = [],
   industrySidebarItems = [],
   allowedNavKeys = null,
   branches = [],
@@ -215,6 +233,8 @@ export function DashboardShell({
   userBranchId = null,
   leadScope = "all",
   selectedBranchId = null,
+  leadLists = [],
+  stagingLists = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -223,13 +243,22 @@ export function DashboardShell({
   const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [formsExpanded, setFormsExpanded] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
+  const { openSettings } = useSettingsModal();
+  const { open: openSearch, shortcutLabel } = useGlobalSearch();
   const { counts } = useBadgeCounts();
 
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
+
+  // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
+  const brandSuffix =
+    ({
+      education_consultancy: "edu",
+      travel_agency: "travel",
+      it_agency: "agency",
+    } as Record<string, string>)[tenant.industry_id ?? ""] ?? "";
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
   useEffect(() => {
@@ -260,16 +289,19 @@ export function DashboardShell({
     (e) => e.position === "after-pipeline",
   );
 
-  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number }) {
+  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number; onClick?: () => void }) {
     const isActive =
       pathname === item.href ||
       (item.href !== "/dashboard" && item.href !== "/orca" && pathname.startsWith(item.href));
+    const handleClick = item.onClick
+      ? () => { item.onClick!(); setMobileOpen(false); }
+      : () => setMobileOpen(false);
     return (
       <Link
         key={item.href}
         href={item.href}
-        onClick={() => setMobileOpen(false)}
-        className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors ${
+        onClick={handleClick}
+        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
             : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -304,13 +336,17 @@ export function DashboardShell({
     });
   }
 
-  const hasManyForms = formConfigs.length > 1;
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-[#fafafa]">
       {/* EdgeX product brand wordmark */}
       <div className="px-5 py-3 h-[52px] flex items-center">
-        <span className="text-lg font-semibold text-gray-900 tracking-tight">EdgeX</span>
+        <span className="text-lg font-semibold text-gray-900 tracking-tight">
+          EdgeX
+          {brandSuffix && (
+            <span className="font-normal text-[#2663EB]">{brandSuffix}</span>
+          )}
+        </span>
       </div>
 
       {/* Mode switcher */}
@@ -329,14 +365,121 @@ export function DashboardShell({
         </Tabs>
       </div>
 
+      {/* Global Search row — top of nav, opens command palette */}
+      <div className="px-3 pb-1">
+        <button
+          type="button"
+          onClick={() => { openSearch(); setMobileOpen(false); }}
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+        >
+          <Search className="w-[18px] h-[18px] shrink-0" />
+          <span className="flex-1 text-left">Global Search</span>
+          <kbd className="text-[11px] text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded font-mono leading-none">
+            {shortcutLabel}
+          </kbd>
+        </button>
+      </div>
+
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
         {navMode === "ops" ? (
+          isEducation ? (() => {
+            // Finds a flat industry item by href (all education items are flat after manifest refactor)
+            const eduItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {eduItem("/insights/dashboards") && renderIndustryEntry(eduItem("/insights/dashboards")!)}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Knowledge Base", icon: Library })}
+
+                {/* Leads */}
+                <NavSectionHeader label="Leads" />
+                {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+                  <Suspense key="leads-organise-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                      <span className="w-[18px] h-[18px] shrink-0" />
+                      Leads Organise
+                    </div>
+                  }>
+                    <LeadsOrganiseNavGroup
+                      lists={stagingLists}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  </Suspense>
+                )}
+                <Suspense key="lead-lists-nav" fallback={
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                    <Users className="w-[18px] h-[18px] shrink-0" />
+                    All Leads
+                  </div>
+                }>
+                  <LeadListsNavGroup
+                    lists={leadLists}
+                    onNavigate={() => setMobileOpen(false)}
+                    isAdmin={role === "owner" || role === "admin"}
+                  />
+                </Suspense>
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+
+                {/* Operations */}
+                <NavSectionHeader label="Operations" />
+                {eduItem("/applications") && renderIndustryEntry(eduItem("/applications")!)}
+                {eduItem("/classes") && renderIndustryEntry(eduItem("/classes")!)}
+                {eduItem("/check-in") && renderIndustryEntry(eduItem("/check-in")!)}
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
+
+                {/* Marketing */}
+                <NavSectionHeader label="Marketing" />
+                {eduItem("/forms") && renderIndustryEntry(eduItem("/forms")!)}
+                {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
+
+                {/* Administration */}
+                <NavSectionHeader label="Administration" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+              </>
+            );
+          })() : (
           <>
+            {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+              <Suspense key="leads-organise-nav" fallback={
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                  <span className="w-[18px] h-[18px] shrink-0" />
+                  Leads Organise
+                </div>
+              }>
+                <LeadsOrganiseNavGroup
+                  lists={stagingLists}
+                  onNavigate={() => setMobileOpen(false)}
+                />
+              </Suspense>
+            )}
             {UNIVERSAL_NAV_TOP
               .filter((i) => navAllowed(i.href))
-              .filter((i) => !(isEducation && i.href === "/dashboard"))
               .flatMap((item) => {
+                // Tenants with lead lists: replace flat "All Leads" with the dynamic group
+                if (item.href === "/leads" && leadLists.length > 0) {
+                  return [
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={leadLists}
+                        onNavigate={() => setMobileOpen(false)}
+                        isAdmin={role === "owner" || role === "admin"}
+                      />
+                    </Suspense>,
+                  ];
+                }
                 const node = renderNavItem(
                   item.href === "/leads"
                     ? { ...item, badge: counts.unread_leads || undefined }
@@ -350,64 +493,30 @@ export function DashboardShell({
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {industryAfter.map(renderIndustryEntry)}
-            {UNIVERSAL_NAV_BOTTOM.filter((i) => navAllowed(i.href)).map(renderNavItem)}
-
-            {/* Public Forms Section — hidden when /forms not in position's nav allow-list */}
-            {navAllowed("/forms") && (
-              hasManyForms ? (
-                <div>
-                  <button
-                    onClick={() => setFormsExpanded(!formsExpanded)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                  >
-                    <div className="flex items-center gap-3">
-                      <FileText className="w-[18px] h-[18px]" />
-                      Public Forms
-                    </div>
-                    <ChevronDown
-                      className={`w-4 h-4 transition-transform ${formsExpanded ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {formsExpanded && (
-                    <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300">
-                      {formConfigs.map((form) => (
-                        <a
-                          key={form.slug}
-                          href={`/form/${tenant.slug}/${form.slug}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          onClick={() => setMobileOpen(false)}
-                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900 transition-colors"
-                        >
-                          <span className="flex-1 truncate">{form.name}</span>
-                          <ExternalLink className="h-3 w-3 shrink-0 opacity-50" />
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <a
-                  href={`/form/${tenant.slug}${formConfigs[0] ? `/${formConfigs[0].slug}` : ""}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="w-[18px] h-[18px]" />
-                    View Public Form
-                  </div>
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              )
-            )}
+            {UNIVERSAL_NAV_BOTTOM.filter(
+              (i) => navAllowed(i.href) && i.href !== "/settings",
+            ).map(renderNavItem)}
           </>
+          )
         ) : (
           <>
             {ORCA_NAV.map(renderNavItem)}
           </>
         )}
       </nav>
+
+      {/* Settings — pinned to the bottom of the sidebar (always visible) */}
+      {navMode === "ops" && navAllowed("/settings") && (
+        <div className="border-t border-gray-200 p-3">
+          <button
+            onClick={() => openSettings()}
+            className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+          >
+            <Settings className="w-[18px] h-[18px]" />
+            Settings
+          </button>
+        </div>
+      )}
     </div>
   );
 
@@ -442,26 +551,8 @@ export function DashboardShell({
             )}
           </div>
 
-          {/* Spacer for centering */}
-          <div className="flex-1"></div>
-
-          {/* Search Bar - Centered, Zunkireelabs style */}
-          <div className="w-full max-w-lg">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input
-                type="text"
-                placeholder="Search..."
-                className="w-full h-10 pl-9 pr-12 rounded-xl border border-gray-300 bg-white text-sm placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              <kbd className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
-                ⌘K
-              </kbd>
-            </div>
-          </div>
-
-          {/* Spacer for centering */}
-          <div className="flex-1"></div>
+          {/* Spacer — keeps the right section right-aligned */}
+          <div className="flex-1" />
 
           {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
           <div className="flex items-center gap-3">
@@ -531,14 +622,14 @@ export function DashboardShell({
 
                     {/* Menu Items */}
                     <div className="py-1">
-                      <Link
-                        href="/settings"
-                        onClick={() => setShowAccountDropdown(false)}
+                      <button
+                        type="button"
+                        onClick={() => { setShowAccountDropdown(false); openSettings(); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                       >
                         <Settings className="w-4 h-4 text-gray-500" />
                         <span>Settings</span>
-                      </Link>
+                      </button>
                     </div>
 
                     {/* Logout */}

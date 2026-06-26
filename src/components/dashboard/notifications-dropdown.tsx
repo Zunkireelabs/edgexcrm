@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, Inbox } from "lucide-react";
 
@@ -38,7 +38,10 @@ export function NotificationsDropdown() {
   const [loading] = useState(false);
   const [markingAllRead, setMarkingAllRead] = useState(false);
 
+  const inflightRef = useRef(false);
   const fetchNotifications = useCallback(async () => {
+    if (inflightRef.current) return;
+    inflightRef.current = true;
     try {
       const res = await fetch("/api/v1/notifications?limit=10");
       if (!res.ok) return;
@@ -48,7 +51,10 @@ export function NotificationsDropdown() {
       setUnreadCount(json.data?.unread_count || 0);
     } catch (error) {
       console.error("Failed to fetch notifications:", error);
+    } finally {
+      inflightRef.current = false;
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Fetch notifications on mount and when dropdown opens

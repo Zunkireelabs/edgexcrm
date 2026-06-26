@@ -69,6 +69,7 @@ export default async function InsightsDashboardViewPage({
   ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
+  const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
 
   return (
@@ -77,6 +78,7 @@ export default async function InsightsDashboardViewPage({
       leads={leads}
       stages={stages}
       memberMap={memberMap}
+      memberNames={memberNames}
       formMap={formMap}
       visibleDashboards={visibleDashboards}
       canManage={isAdmin}

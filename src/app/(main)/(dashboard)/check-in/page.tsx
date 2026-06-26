@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant, getPipelines, getTeamMembers } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CheckInPage } from "@/industries/education-consultancy/features/check-in/ui";
+import { CheckInPage } from "@/industries/_shared/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
@@ -34,6 +34,7 @@ export default async function CheckInRoute() {
         pipelines={pipelines}
         stages={stages}
         teamMembers={teamMembers}
+        industryId={tenantData.tenant.industry_id ?? ""}
       />
     </div>
   );

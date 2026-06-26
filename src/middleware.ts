@@ -7,6 +7,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for public consent signing routes — no session needed
+  if (request.nextUrl.pathname.startsWith("/consent")) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 

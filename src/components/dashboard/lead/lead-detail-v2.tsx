@@ -3,25 +3,51 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { createClient } from "@/lib/supabase/client";
+import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
+import { resolveEntitlements } from "@/lib/api/entitlements";
+import {
+  DESTINATIONS,
+  FIELDS_OF_STUDY,
+  DEGREE_LEVELS,
+} from "@/industries/_shared/features/lead-lists/taxonomies";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
+import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
+import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
+import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
 
 interface TeamMember {
   id: string;
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
 }
 
 interface LeadDetailV2Props {
@@ -35,6 +61,15 @@ interface LeadDetailV2Props {
   userId: string;
   entity?: TenantEntity | null;
   industry?: Industry | null;
+  userBranchId?: string | null;
+  leadScope?: "all" | "own" | "team";
+  canManageApplications?: boolean;
+  canManageClasses?: boolean;
+  leadLists?: LeadList[];
+  classesActive?: boolean;
+  applicationsActive?: boolean;
+  consentEnabled?: boolean;
+  consentSigned?: boolean;
 }
 
 interface LeadDraft {
@@ -91,6 +126,15 @@ export function LeadDetailV2({
   userId,
   entity,
   industry,
+  userBranchId,
+  leadScope,
+  canManageApplications,
+  canManageClasses,
+  leadLists,
+  classesActive,
+  applicationsActive,
+  consentEnabled = false,
+  consentSigned = false,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -109,6 +153,17 @@ export function LeadDetailV2({
   const [activeTab, setActiveTab] = useState("activity");
   const [convertDialogOpen, setConvertDialogOpen] = useState(false);
   const [convertedContactName, setConvertedContactName] = useState<string | null>(null);
+  const [consentSignedState, setConsentSignedState] = useState(consentSigned);
+  useEffect(() => { setConsentSignedState(consentSigned); }, [consentSigned]);
+
+  // Qualify dialog state (education_consultancy only)
+  const [qualifyOpen, setQualifyOpen] = useState(false);
+  const [qualifyDests, setQualifyDests] = useState<string[]>([]);
+  const [qualifyField, setQualifyField] = useState("");
+  const [qualifyDegree, setQualifyDegree] = useState("");
+  const [qualifyNote, setQualifyNote] = useState("");
+  const [qualifyDestOpen, setQualifyDestOpen] = useState(false);
+  const [qualifying, setQualifying] = useState(false);
 
   // Edit mode state
   const [currentLead, setCurrentLead] = useState(lead);
@@ -120,12 +175,24 @@ export function LeadDetailV2({
   const isItAgency = tenant.industry_id === "it_agency";
 
   const isAdmin = role === "owner" || role === "admin";
+  const maxBranches = resolveEntitlements({
+    plan: tenant.plan,
+    entitlement_overrides: tenant.entitlement_overrides,
+  }).maxBranches;
   const currentStage = stages.find((s) => s.id === stageId);
 
   // Create email lookup map for activity display
   const teamMemberEmails = teamMembers.reduce<Record<string, string>>(
     (acc, member) => {
       acc[member.user_id] = member.email;
+      return acc;
+    },
+    {}
+  );
+
+  const teamMemberNames = teamMembers.reduce<Record<string, string>>(
+    (acc, member) => {
+      if (member.name) acc[member.user_id] = member.name;
       return acc;
     },
     {}
@@ -265,7 +332,9 @@ export function LeadDetailV2({
 
   // Handlers
   const handleNoteClick = () => {
-    setActiveTab("notes");
+    // Notes now live in the Activity tab's Notes sub-tab; switch there, then
+    // focusComposer routes through LeadTabs → ActivitiesPanel.openNotes(true).
+    setActiveTab("activity");
     setTimeout(() => {
       notesTabRef.current?.focusComposer();
     }, 100);
@@ -330,6 +399,65 @@ export function LeadDetailV2({
     } catch {
       toast.error("Failed to delete lead");
       setDeleting(false);
+    }
+  };
+
+  const openQualifyDialog = () => {
+    const leadWithEdu = currentLead as {
+      destinations?: string[] | null;
+      field_of_study?: string | null;
+      degree_level?: string | null;
+    };
+    setQualifyDests(leadWithEdu.destinations ?? []);
+    setQualifyField(leadWithEdu.field_of_study ?? "");
+    setQualifyDegree(leadWithEdu.degree_level ?? "");
+    setQualifyNote("");
+    setQualifyDestOpen(false);
+    setQualifyOpen(true);
+  };
+
+  const handleQualifySubmit = async () => {
+    const qualifiedList = leadLists?.find((l) => l.slug === "qualified");
+    if (!qualifiedList) {
+      toast.error("Qualified list not found");
+      return;
+    }
+    setQualifying(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          list_id: qualifiedList.id,
+          destinations: qualifyDests,
+          field_of_study: qualifyField || null,
+          degree_level: qualifyDegree || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to qualify lead");
+      const json = await res.json();
+      setCurrentLead(json.data as Lead);
+
+      // Insert note if provided
+      if (qualifyNote.trim()) {
+        const supabase = createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          await supabase.from("lead_notes").insert({
+            lead_id: currentLead.id,
+            user_id: user.id,
+            user_email: user.email ?? "",
+            content: qualifyNote.trim(),
+          });
+        }
+      }
+
+      toast.success(`Moved to ${qualifiedList.name}`);
+      setQualifyOpen(false);
+    } catch {
+      toast.error("Failed to qualify lead");
+    } finally {
+      setQualifying(false);
     }
   };
 
@@ -468,6 +596,9 @@ export function LeadDetailV2({
             draft={draft}
             editErrors={editErrors}
             onDraftChange={updateDraft}
+            maxBranches={maxBranches}
+            userBranchId={userBranchId ?? null}
+            leadScope={leadScope ?? "all"}
             onLeadTypeChange={async (newType) => {
               try {
                 await fetch(`/api/v1/leads/${currentLead.id}`, {
@@ -478,6 +609,30 @@ export function LeadDetailV2({
                 toast.success(`Changed to ${newType}`);
               } catch {
                 toast.error("Failed to update lead type");
+              }
+            }}
+            leadLists={leadLists}
+            onListChange={async (listId, archiveReason) => {
+              const prevLead = currentLead;
+              const targetList = leadLists?.find((l) => l.id === listId);
+              const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
+              setCurrentLead((prev) => ({
+                ...prev,
+                list_id: listId,
+                lead_type: newLeadType,
+                archive_reason: archiveReason ?? null,
+              } as Lead));
+              try {
+                const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ list_id: listId, archive_reason: archiveReason ?? null }),
+                });
+                if (!res.ok) throw new Error("Failed to move lead");
+                toast.success(`Moved to ${targetList?.name ?? "list"}`);
+              } catch {
+                setCurrentLead(prevLead);
+                toast.error("Failed to move lead");
               }
             }}
             onSaveTripFields={async (fields) => {
@@ -493,6 +648,18 @@ export function LeadDetailV2({
               setCustomFields(merged);
               toast.success("Trip details saved");
             }}
+            onSaveStudyFields={async (fields) => {
+              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(fields),
+              });
+              if (!res.ok) throw new Error("Failed to save study details");
+              const json = await res.json();
+              setCurrentLead(json.data as Lead);
+              toast.success("Study details saved");
+            }}
+            onQualify={openQualifyDialog}
           />
         </div>
 
@@ -504,6 +671,7 @@ export function LeadDetailV2({
             notes={notes}
             activities={activities}
             teamMemberEmails={teamMemberEmails}
+            teamMemberNames={teamMemberNames}
             customFields={customFields}
             activeTab={activeTab}
             onTabChange={setActiveTab}
@@ -531,13 +699,51 @@ export function LeadDetailV2({
 
         {/* Right Sidebar */}
         <div className="lg:col-span-full xl:col-span-1">
-          <ManagementPanel
-            ref={checklistRef}
-            lead={currentLead}
-            checklists={checklists}
-            isAdmin={isAdmin}
-            onChecklistsChange={handleChecklistsChange}
-          />
+          {tenant.industry_id === "education_consultancy" ? (
+            <div className="space-y-4">
+              {applicationsActive ? (
+                <>
+                  {consentEnabled && (
+                    <ConsentCard
+                      leadId={currentLead.id}
+                      tenantId={tenant.id}
+                      consentEnabled={consentEnabled}
+                      consentSigned={consentSigned}
+                      canManage={canManageApplications ?? isAdmin}
+                      onSignedChange={setConsentSignedState}
+                    />
+                  )}
+                  <ApplicationsCard
+                    leadId={currentLead.id}
+                    canManage={canManageApplications ?? isAdmin}
+                    disabled={consentEnabled && !consentSignedState}
+                  />
+                </>
+              ) : (
+                <ManagementPanel
+                  ref={checklistRef}
+                  lead={currentLead}
+                  checklists={checklists}
+                  isAdmin={isAdmin}
+                  onChecklistsChange={handleChecklistsChange}
+                />
+              )}
+              {classesActive && (
+                <ClassesCard
+                  leadId={currentLead.id}
+                  canManage={canManageClasses ?? isAdmin}
+                />
+              )}
+            </div>
+          ) : (
+            <ManagementPanel
+              ref={checklistRef}
+              lead={currentLead}
+              checklists={checklists}
+              isAdmin={isAdmin}
+              onChecklistsChange={handleChecklistsChange}
+            />
+          )}
         </div>
       </div>
 
@@ -553,6 +759,114 @@ export function LeadDetailV2({
           onOpenChange={setConvertDialogOpen}
         />
       )}
+
+      {/* Qualify dialog — education_consultancy only */}
+      <Dialog open={qualifyOpen} onOpenChange={setQualifyOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Qualify Lead</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Destinations multi-select */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Interested Destinations</p>
+              <button
+                type="button"
+                onClick={() => setQualifyDestOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background"
+              >
+                <span className={qualifyDests.length === 0 ? "text-muted-foreground" : ""}>
+                  {qualifyDests.length === 0 ? "Select destinations" : qualifyDests.join(", ")}
+                </span>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${qualifyDestOpen ? "rotate-180" : ""}`} />
+              </button>
+              {qualifyDestOpen && (
+                <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background">
+                  {DESTINATIONS.map((dest) => (
+                    <div key={dest} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`qd-${dest}`}
+                        checked={qualifyDests.includes(dest)}
+                        onCheckedChange={() =>
+                          setQualifyDests((prev) =>
+                            prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
+                          )
+                        }
+                      />
+                      <label htmlFor={`qd-${dest}`} className="text-sm cursor-pointer">{dest}</label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Field of Study */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Field of Study</p>
+              <Select value={qualifyField || "__none__"} onValueChange={(v) => setQualifyField(v === "__none__" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select field" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">Not specified</span>
+                  </SelectItem>
+                  {FIELDS_OF_STUDY.map((f) => (
+                    <SelectItem key={f} value={f}>{f}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Degree Level */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Degree Level</p>
+              <Select value={qualifyDegree || "__none__"} onValueChange={(v) => setQualifyDegree(v === "__none__" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select level" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">Not specified</span>
+                  </SelectItem>
+                  {DEGREE_LEVELS.map((d) => (
+                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Optional note */}
+            <div className="space-y-1.5">
+              <p className="text-sm font-medium">Note <span className="text-muted-foreground font-normal">(optional)</span></p>
+              <textarea
+                value={qualifyNote}
+                onChange={(e) => setQualifyNote(e.target.value)}
+                placeholder="Add a note about this qualification…"
+                rows={3}
+                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setQualifyOpen(false)} disabled={qualifying}>
+              Cancel
+            </Button>
+            <Button onClick={handleQualifySubmit} disabled={qualifying}>
+              {qualifying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Qualifying…
+                </>
+              ) : (
+                "Qualify →"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

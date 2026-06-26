@@ -2,6 +2,7 @@ import type { Position } from "@/types/database";
 
 export interface OrgMember {
   user_id: string;
+  name?: string | null;
   email: string;
   role: string;
 }

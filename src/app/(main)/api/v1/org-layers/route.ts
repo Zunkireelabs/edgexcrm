@@ -16,6 +16,7 @@ import type { OrgLayer, Position } from "@/types/database";
 
 interface OrgMember {
   user_id: string;
+  name: string | null;
   email: string;
   role: string;
 }
@@ -52,14 +53,20 @@ export async function GET() {
     .select("user_id, role, position_id")
     .order("created_at", { ascending: true });
 
-  const { data: authData } = await db.raw().auth.admin.listUsers();
+  // perPage:1000 future-proofs against silent truncation as the tenant grows.
+  const { data: authData } = await db.raw().auth.admin.listUsers({ perPage: 1000 });
   const emailMap = new Map<string, string>();
-  for (const u of authData?.users ?? []) emailMap.set(u.id, u.email || "");
+  const nameMap = new Map<string, string | null>();
+  for (const u of authData?.users ?? []) {
+    emailMap.set(u.id, u.email || "");
+    const meta = u.user_metadata as Record<string, unknown> | undefined;
+    nameMap.set(u.id, (meta?.name ?? meta?.full_name ?? null) as string | null);
+  }
 
   const membersByPosition: Record<string, OrgMember[]> = {};
   const unassignedMembers: OrgMember[] = [];
   for (const m of (membersRaw ?? []) as unknown as Array<{ user_id: string; role: string; position_id: string | null }>) {
-    const member: OrgMember = { user_id: m.user_id, email: emailMap.get(m.user_id) || "Unknown", role: m.role };
+    const member: OrgMember = { user_id: m.user_id, name: nameMap.get(m.user_id) ?? null, email: emailMap.get(m.user_id) || "Unknown", role: m.role };
     if (m.position_id) (membersByPosition[m.position_id] ??= []).push(member);
     else unassignedMembers.push(member);
   }

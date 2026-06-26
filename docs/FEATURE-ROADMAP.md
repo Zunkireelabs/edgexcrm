@@ -7,7 +7,7 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-06-16 (Campaigns feature COMPLETE — Phase 2 shipped to prod 2026-06-16; moved WIP→Recently shipped. Prior: 2026-06-10 NEW INDUSTRY `travel_agency`.)
+Last updated: 2026-06-20 (Lead Lists — lifecycle segmentation for Admizz: plan approved, Phase 1 brief written, in build via Sonnet. Prior: 2026-06-16 Campaigns COMPLETE.)
 
 ---
 
@@ -59,6 +59,17 @@ New industry shipped to branch 2026-06-10 (first tenant **Arya Travels**): itine
 - **Channel & capture**
   - WhatsApp-first messaging (travel's dominant channel) + OTA-portal lead capture (MakeMyTrip / Booking.com style inbound).
 
+### Education-consultancy (`education_consultancy`)
+
+Deferred follow-ups surfaced while planning **Lead Lists** (2026-06-20). All confirmed by Sadin as "later" — captured so they're not lost. Lead Lists itself is in **In progress** below.
+
+- **Class Bookings** (Test Prep deal track) — a 2nd deal object parallel to Applications (one student → many bookings). From Admizz's `Test Classes_Bookings` sheet: fields = Test Prep type (IELTS/PTE/…), Joining Date, Fee Paid Amount, Test Booked, Amount Paid for Test Booking. Build mirrors the Applications feature (board + booking object + per-lead rail). The Lead Lists "qualify" step routes a student into Application and/or Class track.
+- **Spreadsheet → CRM importer** — one-off mapped import of Admizz's 3 real workbooks (`temp_ss/cus-admizz-docs/`: Prospects_Leads, Applications, Test Classes_Bookings; ~3,000+ rows) into leads / applications / class-bookings. Own carefully-reviewed task on the shared DB; explicitly **not** part of Lead Lists. (A general import feature is the bigger sibling.)
+- **Processing Fee + Consent Form in prospect/application context** — these are operational flags that belong once a lead is a Prospect / has an Application, NOT on lead capture. Surface them on the prospect detail / Application object.
+- **Centralized per-position list-access in Positions Manager** — Lead Lists v1 stores access **on each list** (per-list, by position). Later, mirror the `nav`/`pipelines`/`widgets` allow-list pattern in `PositionPermissions` so list access is also configurable from Settings ▸ Positions.
+- **Multi-membership "segments"** — optional cross-cutting buckets (e.g. "2026 scholarship applicants") layered on top of the single-membership lifecycle lists. Deliberately deferred to keep v1 simple.
+- **Migrate education `lead_type` reads → `list_id`** — Lead Lists Phase 1 mirrors `lead_type` from list moves to avoid breaking existing `lead_type==="prospect"` UI branches. Fast-follow: migrate those reads to `list_id` and retire the mirror.
+
 ### Other industries
 
 _(no approved features yet)_
@@ -100,6 +111,11 @@ _(Project Workspace moved to Recently shipped — it_agency `/projects` workspac
 ## 🔨 In progress (WIP)
 
 Someone is actively building it. Each entry includes: owner, ETA, branch link, brief link.
+
+- **Lead Lists — lifecycle segmentation** (industry-scoped `education_consultancy`) — **plan approved 2026-06-20; Phase 1 in build via Sonnet (stop-at-review) on `feature/lead-lists` (off `origin/stage @ 4b23916`).** Brief: `docs/LEAD-LISTS-BRIEF.md`; design/rationale: `~/.claude/plans/now-what-we-need-enchanted-parrot.md`.
+  - Single-membership lifecycle lists (Pre-qualified → Qualified → Prospects → Archived + admin "+ add list") replacing the confusing `lead_type` lead/prospect split. "All Leads" master + nested lists in nav; standalone Contacts nav removed for education (Prospects replaces it). Per-list access by position; counselor own-scoping preserved.
+  - **Phase 1 (in build):** `lead_lists` table + additive `leads` columns (`list_id`/`destinations`/`field_of_study`/`degree_level`/`archive_reason`) + RLS; nav group; list filter; move-to-list (mirrors `lead_type`; archive captures Drop Reason). **Migration file only — NOT applied** (shared DB needs Sadin GO). **Phase 2:** lean Create-Lead fields (Destination multi / Field of Study / Degree Level, seeded taxonomies) + qualify flow + list-management UI. **Phase 3:** new-tenant list provisioning + counsellor data cleanup + docs.
+  - Deferred (logged under Approved ▸ Education-consultancy): Class Bookings, spreadsheet importer, Processing Fee/Consent in prospect context, centralized list-access, multi-membership segments, `lead_type`→`list_id` migration.
 
 - **Unified Inbox (omnichannel)** — universal/Global; **Phases 1+2+3a on `stage` (`0279241`); real WhatsApp LIVE end-to-end on `dev-lead-crm`; NOT on prod.** Full detail + dev wiring + prod checklist: **`docs/UNIFIED-INBOX-BRIEF.md`**.
   - **Live now:** 3-pane UI · channel-agnostic tables (mig 044) · sandbox + **WhatsApp Cloud API** channels · inbound (Meta webhook → route by phone_number_id → queue) + outbound + **read receipts** · connect-a-channel Settings UI · **AES-256-GCM token encryption** · enforced 24h-window guard · notifications-on-inbound + deep-link · counselor scoping · realtime · AI seams (4 declared tools). Dev auto-drain cron `*/1`; permanent System User token.

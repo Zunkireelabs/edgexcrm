@@ -33,6 +33,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 
@@ -365,7 +366,7 @@ export async function POST(
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
 
-  // ── 11. Generate display_id for education_consultancy ──
+  // ── 11. Generate display_id (education_consultancy only) ──
   let displayId: string | null = null;
   if (tenant.industry_id === "education_consultancy") {
     const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
@@ -381,7 +382,48 @@ export async function POST(
     displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
   }
 
+  // Resolve intake list for brand-new leads — any tenant with lead-lists (education + travel).
+  // Dedup path already returned above, so this only applies to brand-new inserts.
+  // Falls back to null silently if no intake list exists.
+  let intakeListId: string | null = null;
+  {
+    const { data: intakeList } = await supabase
+      .from("lead_lists")
+      .select("id")
+      .eq("tenant_id", tenant.id)
+      .eq("is_intake", true)
+      .limit(1)
+      .maybeSingle();
+    intakeListId = intakeList?.id ?? null;
+  }
+
+  // List Routing: if this form targets a specific list (set in the Routing tab and
+  // stored in attribution.target_list_id), route new leads into that list instead
+  // of the default intake list — but only if the list belongs to this tenant.
+  let routedListId: string | null = intakeListId;
+  const targetListId = formConfig.attribution?.target_list_id ?? null;
+  if (targetListId) {
+    const { data: targetList } = await supabase
+      .from("lead_lists")
+      .select("id")
+      .eq("id", targetListId)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle();
+    if (targetList) routedListId = targetListId;
+  }
+
   // ── 11. Insert lead ──
+  // Resolve the tenant's default branch for branch inheritance on new public-form inserts.
+  // Uses the is_default column added in migration 060.
+  const { data: defaultBranch } = await supabase
+    .from("branches")
+    .select("id")
+    .eq("tenant_id", tenant.id)
+    .eq("is_default", true)
+    .limit(1)
+    .maybeSingle();
+  const publicFormBranchId: string | null = defaultBranch?.id ?? null;
+
   const leadPayload = {
     tenant_id: tenant.id,
     pipeline_id: resolved.pipelineId,
@@ -410,8 +452,10 @@ export async function POST(
       || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
+    branch_id: publicFormBranchId,
     ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
+    ...(routedListId && { list_id: routedListId }),
   };
 
   const { data: lead, error } = await supabase
@@ -484,6 +528,9 @@ export async function POST(
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
+
+  // Sync origin branch membership (no-op now; Part B wires the default branch)
+  void syncOriginMembership(supabase, tenant.id, lead.id, publicFormBranchId, null).catch(() => {});
 
   // Record submission + fire-and-forget: audit + event + notifications
   const leadId = lead.id;

@@ -1,10 +1,16 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
-import { getIndustrySidebarItems } from "@/industries/_loader";
+import { SettingsModalProvider } from "@/contexts/settings-modal-context";
+import { GlobalSearchProvider } from "@/contexts/global-search-context";
+import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { canAccessList } from "@/lib/api/permissions";
+import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
+import type { LeadList } from "@/types/database";
 
 export default async function DashboardLayout({
   children,
@@ -34,12 +40,27 @@ export default async function DashboardLayout({
   }
 
   const maxBranches = tenantData.entitlements.maxBranches;
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
 
-  const [formConfigs, branches, cookieStore] = await Promise.all([
+  const [formConfigs, branches, cookieStore, allLeadLists] = await Promise.all([
     getFormConfigsForTenant(tenantData.tenant.id),
     maxBranches > 1 ? getBranches(tenantData.tenant.id) : Promise.resolve([]),
     cookies(),
+    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([]),
   ]);
+
+  // Filter lead lists by caller's per-list access, then split staging vs pipeline
+  const accessibleLists = (allLeadLists as LeadList[]).filter((l) =>
+    canAccessList(
+      tenantData.permissions,
+      l.access as { mode: string; positionIds?: string[] },
+      tenantData.positionId,
+    )
+  );
+  const isLayoutAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+  const leadLists = accessibleLists.filter((l) => !l.is_staging);
+  // Leads Organise is admin-only; counselors/viewers never see it in the nav
+  const stagingLists = isLayoutAdmin ? accessibleLists.filter((l) => !!l.is_staging) : [];
 
   const industrySidebarItems = getIndustrySidebarItems(
     tenantData.tenant.industry_id,
@@ -54,24 +75,43 @@ export default async function DashboardLayout({
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
   const selectedBranchId = branchCookieVal === "all" ? null : branchCookieVal;
 
+  const navIndex = buildNavIndex({
+    industrySidebarItems,
+    leadLists,
+    stagingLists,
+    allowedNavKeys,
+    industryId: tenantData.tenant.industry_id ?? null,
+    isOrcaAvailable: true,
+  });
+
   return (
     <AIAssistantProvider>
-      <DashboardShell
-        user={user}
+      <SettingsModalProvider
         tenant={tenantData.tenant}
         role={tenantData.role}
-        positionName={tenantData.positionName}
-        formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
-        industrySidebarItems={industrySidebarItems}
-        allowedNavKeys={allowedNavKeys}
-        branches={branches}
-        maxBranches={maxBranches}
-        userBranchId={tenantData.branchId}
-        leadScope={tenantData.permissions.leadScope}
-        selectedBranchId={selectedBranchId}
+        industryId={tenantData.tenant.industry_id ?? null}
       >
-        {children}
-      </DashboardShell>
+        <GlobalSearchProvider navIndex={navIndex}>
+          <DashboardShell
+            user={user}
+            tenant={tenantData.tenant}
+            role={tenantData.role}
+            positionName={tenantData.positionName}
+            formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
+            industrySidebarItems={industrySidebarItems}
+            allowedNavKeys={allowedNavKeys}
+            branches={branches}
+            maxBranches={maxBranches}
+            userBranchId={tenantData.branchId}
+            leadScope={tenantData.permissions.leadScope}
+            selectedBranchId={selectedBranchId}
+            leadLists={leadLists}
+            stagingLists={stagingLists}
+          >
+            {children}
+          </DashboardShell>
+        </GlobalSearchProvider>
+      </SettingsModalProvider>
     </AIAssistantProvider>
   );
 }

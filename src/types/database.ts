@@ -120,6 +120,18 @@ export interface Branch {
   created_at: string;
 }
 
+export interface LeadBranch {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  branch_id: string;
+  assigned_to: string | null;
+  is_origin: boolean;
+  shared_by: string | null;
+  shared_at: string;
+  created_at: string;
+}
+
 export interface Lead {
   id: string;
   tenant_id: string;
@@ -167,9 +179,60 @@ export interface Lead {
   salutation: string | null;
   company_email: string | null;
   branch_id: string | null;
+  // Lead Lists fields (education_consultancy — migration 059)
+  list_id: string | null;
+  destinations: string[];
+  field_of_study: string | null;
+  degree_level: string | null;
+  archive_reason: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface LeadList {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  sort_order: number;
+  is_system: boolean;
+  is_archive: boolean;
+  is_intake: boolean;
+  is_staging?: boolean;
+  color: string | null;
+  access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
+  created_at: string;
+  updated_at: string;
+  count?: number;
+}
+
+export interface LeadImportSource {
+  id: string;
+  tenant_id: string;
+  staging_list_id: string;
+  source_label: string;
+  raw_rows: number;
+  dropped_rows: number;
+  no_contact_rows: number;
+  with_contact_rows: number;
+  notes: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ImportSourceReconciliationRow {
+  source_label: string;
+  raw_rows: number;
+  dropped_rows: number;
+  no_contact_rows: number;
+  with_contact_rows: number;
+  notes: string | null;
+  sort_order: number;
+  in_crm: number;
+  still_in_staging: number;
+  routed_out: number;
 }
 
 // AI Insights Types
@@ -235,6 +298,9 @@ export interface FormAttribution {
   default_source?: string | null;
   default_medium?: string | null;
   default_campaign?: string | null;
+  // Optional list-routing: send this form's new leads into a specific lead list
+  // (a separate bucket) instead of the tenant's default intake list.
+  target_list_id?: string | null;
 }
 
 export interface UtmLink {
@@ -702,6 +768,51 @@ export interface LeadDuplicateSuggestion {
 }
 
 // ============================================================
+// Application Tracking (education_consultancy feature)
+// ============================================================
+
+export interface ApplicationStage {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  position: number;
+  color: string;
+  is_default: boolean;
+  terminal_type: "won" | "lost" | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Application {
+  id: string;
+  tenant_id: string;
+  lead_id: string;
+  assigned_to: string | null;
+  university_name: string;
+  program_name: string;
+  intake_term: string | null;
+  country: string | null;
+  stage_id: string;
+  status: string;
+  offer_type: "conditional" | "unconditional" | null;
+  application_deadline: string | null;
+  application_fee_paid: boolean;
+  tuition_fee: number | null;
+  deposit_paid: boolean;
+  offer_letter_url: string | null;
+  notes: string | null;
+  agent_id: string | null;
+  applied_date: string | null;
+  intake_start_date: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // Joined fields (present when fetched with select joins)
+  leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;
+  application_stages?: ApplicationStage | null;
+}
+
 // Deals / Opportunities (it_agency feature)
 // ============================================================
 

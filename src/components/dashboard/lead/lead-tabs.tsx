@@ -11,21 +11,20 @@ import { Button } from "@/components/ui/button";
 import { AISparkleIcon } from "@/components/ui/ai-sparkle";
 import type { Lead, LeadNote } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
-import { NotesTab } from "./notes-tab";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
-import { ActivitiesPanel } from "./activities/activities-panel";
+import { ActivitiesPanel, type ActivitiesPanelRef } from "./activities/activities-panel";
 import { MergeDialog } from "./merge-dialog";
-import { useEmailThreads } from "@/industries/education-consultancy/features/email/hooks/use-email-threads";
+import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
-
 interface LeadTabsProps {
   lead: Lead;
   notes: LeadNote[];
   activities: LeadActivity[];
   teamMemberEmails: Record<string, string>;
+  teamMemberNames: Record<string, string>;
   customFields: Record<string, unknown>;
   activeTab: string;
   onTabChange: (tab: string) => void;
@@ -45,20 +44,20 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
-    const notesTabRef = useRef<{ focusComposer: () => void }>(null);
+    const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
     const router = useRouter();
 
     useImperativeHandle(ref, () => ({
       focusComposer: () => {
-        notesTabRef.current?.focusComposer();
+        activitiesPanelRef.current?.openNotes(true);
       },
     }));
 
-    const isEducation = industryId === "education_consultancy";
-    const { threads, setThreads, loading: threadsLoading } = useEmailThreads(isEducation ? lead.id : "");
+    const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
+    const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
     const unreadEmailCount = useMemo(
       () => threads.reduce((n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length, 0),
       [threads]
@@ -73,14 +72,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       <Tabs value={activeTab} onValueChange={onTabChange}>
         <TabsList className="mb-4">
           <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="notes" className="gap-2">
-            Notes
-            {notes.length > 0 && (
-              <Badge variant="secondary" className="h-5 px-1.5 text-xs">
-                {notes.length}
-              </Badge>
-            )}
-          </TabsTrigger>
           <TabsTrigger value="activity" className="gap-2">
             Activity
             {activityUnreadCount > 0 ? (
@@ -154,7 +145,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                   <div key={note.id} className="border-l-2 border-muted pl-3 py-1">
                     <p className="text-sm text-foreground line-clamp-2">{note.content}</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {note.user_email} · {formatRelativeTime(note.created_at)}
+                      {teamMemberNames[note.user_id] || teamMemberEmails[note.user_id] || note.user_email} · {formatRelativeTime(note.created_at)}
                     </p>
                   </div>
                 ))}
@@ -162,7 +153,10 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                   <button
                     type="button"
                     className="text-sm text-primary hover:underline"
-                    onClick={() => onTabChange("notes")}
+                    onClick={() => {
+                      onTabChange("activity");
+                      setTimeout(() => activitiesPanelRef.current?.openNotes(), 50);
+                    }}
                   >
                     View all {notes.length} notes →
                   </button>
@@ -174,21 +168,14 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
           {isAdmin && <PossibleDuplicatesCard lead={lead} onMerged={() => router.refresh()} />}
         </TabsContent>
 
-        <TabsContent value="notes" className="mt-0">
-          <NotesTab
-            ref={notesTabRef}
-            leadId={lead.id}
-            notes={notes}
-            onNotesChange={onNotesChange}
-          />
-        </TabsContent>
-
         <TabsContent value="activity" className="mt-0">
           <ActivitiesPanel
+            ref={activitiesPanelRef}
             leadId={lead.id}
             notes={notes}
             systemActivities={activities}
             teamMemberEmails={teamMemberEmails}
+            teamMemberNames={teamMemberNames}
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
             currentUserId={currentUserId}
@@ -322,6 +309,11 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       branch_id: null,
       last_activity_at: otherLead.created_at,
       updated_at: otherLead.created_at,
+      list_id: null,
+      destinations: [],
+      field_of_study: null,
+      degree_level: null,
+      archive_reason: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

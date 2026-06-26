@@ -5,7 +5,9 @@ import Link from "next/link";
 import { Eye } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
-import type { Lead, PipelineStage } from "@/types/database";
+import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
+import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
 // Column width constants — kept in sync with leads-table.tsx
 export const NAME_COLUMN_WIDTH = 180;
@@ -14,9 +16,11 @@ export const EMAIL_MOBILE_WIDTH = 140;
 
 export interface LeadColumnCtx {
   memberMap: Record<string, string>;
+  memberNames?: Record<string, string>;
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
   branchMap: Record<string, string>;
+  roleMap?: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
   selectedIds: Set<string>;
@@ -25,6 +29,8 @@ export interface LeadColumnCtx {
   onPreviewToggle: (id: string) => void;
   onTagUpdate: (leadId: string, tags: string[]) => void;
   onTypeUpdate: (leadId: string, type: string) => void;
+  leadLists?: LeadList[];
+  onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
 }
 
 export interface LeadColumn {
@@ -197,26 +203,52 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
-  // ── type (education_consultancy only, defaultVisible when showTags)
+  // ── type / list (education_consultancy + travel_agency)
   {
     key: "lead_type",
-    label: "Type",
+    label: "List",
     group: "standard",
-    industries: ["education_consultancy"],
+    industries: ["education_consultancy", "travel_agency"],
     defaultVisible: true,
     renderTh: () => (
-      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[80px]">
-        Type
+      <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[160px]">
+        List
       </th>
     ),
-    renderTd: (lead, ctx) => (
-      <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-        <LeadTypeToggle
-          lead={lead}
-          onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
-        />
-      </td>
-    ),
+    renderTd: (lead, ctx) => {
+      const intakeList = ctx.leadLists?.find((l) => l.is_intake);
+      const qualifiedList = ctx.leadLists?.find((l) => l.slug === "qualified");
+      const isInIntake = intakeList && lead.list_id === intakeList.id;
+      return (
+        <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+          {ctx.leadLists && ctx.leadLists.length > 0 && ctx.onListMove ? (
+            <div className="flex flex-col gap-0.5 items-start">
+              <MoveToListSelector
+                leadId={lead.id}
+                currentListId={lead.list_id ?? null}
+                lists={ctx.leadLists}
+                onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
+              />
+              {ctx.industryId === "education_consultancy" && isInIntake && qualifiedList && (
+                <QualifyRowButton
+                  leadId={lead.id}
+                  currentDestinations={(lead as { destinations?: string[] }).destinations ?? []}
+                  currentFieldOfStudy={(lead as { field_of_study?: string | null }).field_of_study ?? null}
+                  currentDegreeLevel={(lead as { degree_level?: string | null }).degree_level ?? null}
+                  qualifiedList={qualifiedList}
+                  onQualified={(listId) => ctx.onListMove!(lead.id, listId)}
+                />
+              )}
+            </div>
+          ) : (
+            <LeadTypeToggle
+              lead={lead}
+              onUpdate={(newType) => ctx.onTypeUpdate(lead.id, newType)}
+            />
+          )}
+        </td>
+      );
+    },
   },
 
   // ── email
@@ -286,10 +318,11 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => {
       const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
+      const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
       return (
         <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
           {assignedEmail ? (
-            <span>{assignedEmail.split("@")[0]}</span>
+            <span>{assignedName || assignedEmail.split("@")[0]}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}
@@ -634,13 +667,35 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => {
       const ownerEmail = lead.owner_id ? ctx.memberMap[lead.owner_id] : null;
+      const ownerName = lead.owner_id ? ctx.memberNames?.[lead.owner_id] : null;
       return (
         <td key="owner" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
           {ownerEmail ? (
-            <span>{ownerEmail.split("@")[0]}</span>
+            <span>{ownerName || ownerEmail.split("@")[0]}</span>
           ) : (
             <span className="text-gray-400">—</span>
           )}
+        </td>
+      );
+    },
+  },
+
+  // ── assigned_role (universal; default-visible only in staging cockpit via extraDefaultVisibleKeys)
+  {
+    key: "assigned_role",
+    label: "Assigned (Role)",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="assigned_role" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">
+        Assigned (Role)
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const display = lead.assigned_to ? (ctx.roleMap?.[lead.assigned_to] ?? null) : null;
+      return (
+        <td key="assigned_role" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {display ? display : <span className="text-gray-400">—</span>}
         </td>
       );
     },

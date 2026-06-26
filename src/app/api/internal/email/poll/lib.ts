@@ -3,8 +3,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
 import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
-import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/education-consultancy/features/email/lib/gmail-client";
-import type { ParsedMessage } from "@/industries/education-consultancy/features/email/lib/gmail-client";
+import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/_shared/features/email/lib/gmail-client";
+import type { ParsedMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 interface EmailThread {

@@ -1,11 +1,14 @@
 import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
-import { checkInMeta } from "./features/check-in/meta";
+import { checkInMeta } from "../_shared/features/check-in/meta";
 import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
-import { emailMeta } from "./features/email/meta";
+import { emailMeta } from "../_shared/features/email/meta";
 import { insightsMeta } from "./features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
+import { applicationTrackingMeta } from "./features/application-tracking/meta";
+import { leadListsMeta } from "../_shared/features/lead-lists/meta";
+import { classesMeta } from "./features/classes/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -17,43 +20,21 @@ export const manifest: IndustryManifest = {
     { meta: contactsMeta },
     { meta: emailMeta },
     { meta: campaignsMeta },
+    { meta: applicationTrackingMeta },
+    { meta: leadListsMeta },
+    { meta: classesMeta },
   ],
   sidebar: [
-    {
-      kind: "group",
-      position: "after-home",
-      id: "insights",
-      label: "Insights",
-      icon: "ChartColumn",
-      children: [
-        { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
-      ],
-    },
-    {
-      featureId: FEATURES.CONTACTS,
-      href: "/contacts",
-      label: "Contacts",
-      icon: "Users",
-    },
-    {
-      featureId: FEATURES.CHECK_IN,
-      href: "/check-in",
-      label: "Check-In",
-      icon: "UserCheck",
-    },
-    {
-      featureId: FEATURES.FORM_BUILDER,
-      href: "/forms",
-      label: "Forms",
-      icon: "FileText",
-    },
-    {
-      featureId: FEATURES.CAMPAIGNS,
-      href: "/campaigns",
-      label: "Campaigns",
-      icon: "Megaphone",
-      minRoles: ["owner", "admin"],
-    },
+    // Intelligence section
+    { featureId: FEATURES.INSIGHTS, href: "/insights/dashboards", label: "Dashboards", icon: "LayoutDashboard" },
+    // Operations section
+    { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },
+    { featureId: FEATURES.CLASSES, href: "/classes", label: "Classes", icon: "BookOpen" },
+    // Contacts sidebar item removed — /contacts redirects to /leads?list=prospects now that lead-lists is active.
+    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck" },
+    // Marketing section
+    { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
+    { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },
   ],
   ai: aiConfig,
 };

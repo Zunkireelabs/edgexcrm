@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -85,9 +86,10 @@ export async function POST(request: NextRequest, { params }: Props) {
 
   if (leadRow.converted_at) return apiError("INVALID_STATE", "Lead already converted", 409);
 
-  // Counselor: own-only
-  if (shouldRestrictToSelf(auth.permissions) && leadRow.assigned_to !== auth.userId) return apiForbidden();
-  if (!requireLeadBranchAccess(auth, leadRow)) return apiNotFound("Lead");
+  // Counselor: own-only; branch-manager: membership-based
+  const membership = await getLeadMembership(db.raw(), auth.tenantId, id);
+  if (shouldRestrictToSelf(auth.permissions) && !(membership.some((m) => m.assigned_to === auth.userId) || leadRow.assigned_to === auth.userId)) return apiForbidden();
+  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
   // Resolve account
   let resolvedAccountId: string;
@@ -157,6 +159,17 @@ export async function POST(request: NextRequest, { params }: Props) {
     return apiError("INVALID_STATE", "Lead already converted", 409);
   }
 
+  // Resolve converter's branch name for attribution (null for admins without a branch)
+  let convertedInBranch: string | null = null;
+  if (auth.branchId) {
+    const { data: branchRow } = await db
+      .from("branches")
+      .select("name")
+      .eq("id", auth.branchId)
+      .maybeSingle();
+    convertedInBranch = (branchRow as { name?: string } | null)?.name ?? null;
+  }
+
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -164,7 +177,10 @@ export async function POST(request: NextRequest, { params }: Props) {
       action: "lead.converted",
       entityType: "lead",
       entityId: id,
-      changes: { converted_contact_id: { old: null, new: newContact.id } },
+      changes: {
+        converted_contact_id: { old: null, new: newContact.id },
+        converted_in_branch: { old: null, new: convertedInBranch },
+      },
       requestId,
     }),
     emitEvent({

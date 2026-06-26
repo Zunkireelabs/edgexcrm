@@ -5,7 +5,7 @@ import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
 import { createHmac } from "crypto";
-import { getProfileEmail, createOAuth2Client } from "@/industries/education-consultancy/features/email/lib/gmail-client";
+import { getProfileEmail, createOAuth2Client } from "@/industries/_shared/features/email/lib/gmail-client";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 

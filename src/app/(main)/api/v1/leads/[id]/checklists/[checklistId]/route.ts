@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -52,7 +53,8 @@ export async function PATCH(
   if (!lead) return apiNotFound("Lead");
 
   // Access check (requireLeadAccess enforces branch scope for team-scoped members)
-  if (!requireLeadAccess(auth, lead)) {
+  const membership = await getLeadMembership(supabase, auth.tenantId, id);
+  if (!requireLeadAccess(auth, lead, membership)) {
     return apiNotFound("Lead");
   }
 
