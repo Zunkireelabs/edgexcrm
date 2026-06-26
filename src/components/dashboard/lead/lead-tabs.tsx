@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AISparkleIcon } from "@/components/ui/ai-sparkle";
-import type { Lead, LeadNote } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
@@ -30,6 +30,8 @@ interface LeadTabsProps {
   onTabChange: (tab: string) => void;
   onNotesChange: (notes: LeadNote[]) => void;
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
+  checklists: LeadChecklist[];
+  onChecklistsChange: (checklists: LeadChecklist[]) => void;
   isAdmin: boolean;
   currentUserId: string;
   industryId?: string | null;
@@ -44,7 +46,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -178,6 +180,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             teamMemberNames={teamMemberNames}
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
+            checklists={checklists}
+            onChecklistsChange={onChecklistsChange}
             currentUserId={currentUserId}
             industryId={industryId}
             leadEmail={lead.email}
