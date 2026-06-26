@@ -15,6 +15,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { normalizeEmail } from "@/lib/leads/dedup";
+import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -383,6 +384,25 @@ export async function PATCH(
   // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
+  }
+
+  // Assign display ID to education leads moving out of staging (best-effort).
+  const listMovedToNonNull =
+    updatePayload.list_id !== undefined &&
+    updatePayload.list_id !== null &&
+    (existingLead as Record<string, unknown>).list_id !== updatePayload.list_id;
+  if (listMovedToNonNull) {
+    try {
+      await assignDisplayIdsOnMove({
+        supabase,
+        tenantId: auth.tenantId,
+        industryId: auth.industryId,
+        destinationListId: updatePayload.list_id as string,
+        leadIds: [id],
+      });
+    } catch (err) {
+      log.error({ err }, "assignDisplayIdsOnMove failed");
+    }
   }
 
   // Build audit diff

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -214,6 +215,21 @@ export async function PATCH(request: NextRequest) {
   if (updateError) {
     log.error({ err: updateError }, "Failed to bulk update leads");
     return apiServiceUnavailable("Failed to update leads");
+  }
+
+  // Assign display IDs to education leads moving out of staging (best-effort).
+  if (body.list_id !== undefined && body.list_id !== null) {
+    try {
+      await assignDisplayIdsOnMove({
+        supabase,
+        tenantId: auth.tenantId,
+        industryId: auth.industryId,
+        destinationListId: body.list_id,
+        leadIds: idsToUpdate,
+      });
+    } catch (err) {
+      log.error({ err }, "assignDisplayIdsOnMove failed");
+    }
   }
 
   log.info(
