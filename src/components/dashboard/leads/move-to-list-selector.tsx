@@ -6,7 +6,16 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { ChevronDown, Check } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, Check, CornerUpRight } from "lucide-react";
 import type { LeadList } from "@/types/database";
 
 const ARCHIVE_REASONS = [
@@ -16,6 +25,23 @@ const ARCHIVE_REASONS = [
   "Already enrolled elsewhere",
   "Other",
 ];
+
+// Tailored confirmation message per destination list, keyed by slug.
+// Any list not listed here falls back to a generic "Move this lead to {name}?".
+const MOVE_CONFIRM_MESSAGES: Record<string, string> = {
+  "pre-qualified": "Move this lead to Pre-qualified?",
+  qualified: "Move this lead to Qualified?",
+  prospects: "Move this lead to Prospects?",
+  applications: "Move this lead into Applications?",
+  "migration-qc": "Move this lead to Migration (QC)?",
+  migration: "Move this lead to Migration (QC)?",
+  "existing-leads-edgex": "Move this lead to Existing Leads?",
+  delete: "Move this lead to Delete?",
+};
+
+function moveConfirmMessage(list: LeadList): string {
+  return MOVE_CONFIRM_MESSAGES[list.slug] ?? `Move this lead to ${list.name}?`;
+}
 
 interface MoveToListSelectorProps {
   leadId: string;
@@ -33,6 +59,7 @@ export function MoveToListSelector({
 }: MoveToListSelectorProps) {
   const [open, setOpen] = useState(false);
   const [pendingList, setPendingList] = useState<LeadList | null>(null);
+  const [confirmList, setConfirmList] = useState<LeadList | null>(null);
   const [archiveReason, setArchiveReason] = useState("");
   const [customReason, setCustomReason] = useState("");
   const [saving, setSaving] = useState(false);
@@ -49,7 +76,9 @@ export function MoveToListSelector({
       setArchiveReason("");
       setCustomReason("");
     } else {
-      void confirmMove(list, undefined);
+      // Confirm non-archive moves with a destination-tailored modal.
+      setOpen(false);
+      setConfirmList(list);
     }
   }
 
@@ -59,6 +88,7 @@ export function MoveToListSelector({
       await onMove(list.id, reason);
       setOpen(false);
       setPendingList(null);
+      setConfirmList(null);
       setArchiveReason("");
       setCustomReason("");
     } finally {
@@ -75,6 +105,7 @@ export function MoveToListSelector({
   const label = currentList?.name ?? "—";
 
   return (
+    <>
     <Popover open={open} onOpenChange={(v) => { setOpen(v); if (!v) setPendingList(null); }}>
       <PopoverTrigger asChild>
         <button
@@ -160,5 +191,47 @@ export function MoveToListSelector({
         )}
       </PopoverContent>
     </Popover>
+
+    {/* Confirmation modal for non-archive list moves */}
+    <Dialog
+      open={!!confirmList}
+      onOpenChange={(v) => { if (!v && !saving) setConfirmList(null); }}
+    >
+      <DialogContent
+        className="max-w-md sm:max-w-md"
+        overlayClassName="bg-[#0000004d] backdrop-blur-[2px]"
+      >
+        <DialogHeader>
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <CornerUpRight className="h-5 w-5" />
+          </div>
+          <DialogTitle className="pt-1">
+            {confirmList ? moveConfirmMessage(confirmList) : ""}
+          </DialogTitle>
+          <DialogDescription>
+            This lead will be moved to the{" "}
+            <span className="font-medium text-foreground">{confirmList?.name}</span> list.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            disabled={saving}
+            onClick={() => setConfirmList(null)}
+          >
+            Cancel
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={() => {
+              if (confirmList) void confirmMove(confirmList, undefined);
+            }}
+          >
+            {saving ? "Moving…" : "Confirm"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

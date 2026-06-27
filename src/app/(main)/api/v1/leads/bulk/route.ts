@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
-import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -220,7 +220,7 @@ export async function PATCH(request: NextRequest) {
   // Assign display IDs to education leads moving out of staging (best-effort).
   if (body.list_id !== undefined && body.list_id !== null) {
     try {
-      await assignDisplayIdsOnMove({
+      await assignDisplayIds({
         supabase,
         tenantId: auth.tenantId,
         industryId: auth.industryId,
@@ -228,7 +228,7 @@ export async function PATCH(request: NextRequest) {
         leadIds: idsToUpdate,
       });
     } catch (err) {
-      log.error({ err }, "assignDisplayIdsOnMove failed");
+      log.error({ err }, "assignDisplayIds failed");
     }
   }
 

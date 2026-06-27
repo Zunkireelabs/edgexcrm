@@ -62,7 +62,10 @@ export function ActivityCard({ activity, onDelete, canDelete }: ActivityCardProp
     }
 
     if (activity.activity_type === "meeting") {
-      if (activity.location) parts.push(`Location: ${activity.location}`);
+      const mode = activity.metadata?.meeting_mode as string | undefined;
+      if (mode === "online") parts.push("Online");
+      else if (mode === "in_person") parts.push("In Person");
+      if (activity.location) parts.push(`${mode === "online" ? "Link" : "Location"}: ${activity.location}`);
       if (activity.scheduled_at) {
         const date = new Date(activity.scheduled_at).toLocaleString("en-US", {
           month: "short",

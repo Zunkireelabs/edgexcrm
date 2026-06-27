@@ -107,7 +107,7 @@ export function StageStepper({
               </button>
               {index < stages.length - 1 && (
                 <div
-                  className="w-0.5 h-5 mt-0.5"
+                  className="w-0.5 h-4 mt-0.5"
                   style={{
                     backgroundColor: isPast ? `${stage.color}60` : "hsl(var(--border))",
                   }}
@@ -121,7 +121,7 @@ export function StageStepper({
               disabled={!isClickable}
               onClick={() => handleStageClick(stage)}
               className={[
-                "flex-1 text-left pt-1 pb-4 leading-snug transition-colors",
+                "flex-1 text-left pt-0.5 pb-3 leading-snug transition-colors",
                 isCurrent ? "font-semibold text-foreground" : "",
                 isPast ? "text-muted-foreground text-sm" : "text-sm text-muted-foreground",
                 isClickable ? "cursor-pointer hover:text-foreground" : "cursor-default",

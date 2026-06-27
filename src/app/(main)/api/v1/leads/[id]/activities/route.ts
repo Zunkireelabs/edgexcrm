@@ -103,7 +103,7 @@ export async function POST(
     return apiValidationError({ body: ["Invalid JSON body"] });
   }
 
-  const { activity_type, subject, description, call_outcome, duration_minutes, scheduled_at, location, attendees, email_subject, email_body } = body;
+  const { activity_type, subject, description, call_outcome, duration_minutes, scheduled_at, location, attendees, email_subject, email_body, meeting_mode } = body;
 
   // Validate activity_type
   if (!activity_type || !VALID_ACTIVITY_TYPES.includes(activity_type as ActivityType)) {
@@ -113,6 +113,11 @@ export async function POST(
   // Validate call_outcome if provided
   if (call_outcome && !VALID_CALL_OUTCOMES.includes(call_outcome as CallOutcome)) {
     return apiValidationError({ call_outcome: ["Invalid call outcome"] });
+  }
+
+  // Validate meeting_mode if provided
+  if (meeting_mode && !["in_person", "online"].includes(meeting_mode as string)) {
+    return apiValidationError({ meeting_mode: ["Must be one of: in_person, online"] });
   }
 
   const supabase = await createServiceClient();
@@ -153,6 +158,7 @@ export async function POST(
       email_subject: email_subject as string || null,
       email_body: email_body as string || null,
       completed_at: new Date().toISOString(),
+      metadata: meeting_mode ? { meeting_mode } : {},
     })
     .select()
     .single();

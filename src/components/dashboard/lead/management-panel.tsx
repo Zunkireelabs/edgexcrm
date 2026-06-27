@@ -79,7 +79,7 @@ interface ChecklistCardProps {
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
-const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
+export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
   function ChecklistCard({ leadId, checklists, isAdmin, onChecklistsChange }, ref) {
     const [newTitle, setNewTitle] = useState("");
     const [adding, setAdding] = useState(false);

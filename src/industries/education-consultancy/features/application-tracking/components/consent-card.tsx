@@ -12,8 +12,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { SendConsentDialog } from "./send-consent-dialog";
 import { InPersonConsentDialog } from "./in-person-consent-dialog";
+
+type FeeStatus = "paid" | "unpaid" | "waiver";
 
 interface ConsentStatus {
   consent_enabled: boolean;
@@ -37,15 +49,59 @@ interface ConsentCardProps {
   consentSigned: boolean;
   canManage: boolean;
   onSignedChange?: (signed: boolean) => void;
+  // Pre-Application fee (migration 084) — current lead-level values
+  feeStatus?: FeeStatus | null;
+  feeAmount?: number | null;
+  feeNotes?: string | null;
 }
 
-export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: ConsentCardProps) {
+export function ConsentCard({
+  leadId,
+  tenantId,
+  canManage,
+  onSignedChange,
+  feeStatus: initialFeeStatus = null,
+  feeAmount: initialFeeAmount = null,
+  feeNotes: initialFeeNotes = null,
+}: ConsentCardProps) {
   const [status, setStatus] = useState<ConsentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTab, setDialogTab] = useState<"send" | "manual">("send");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [inPersonOpen, setInPersonOpen] = useState(false);
+
+  // ── Pre-Application fee ──────────────────────────────────────────────
+  const [feeStatus, setFeeStatus] = useState<FeeStatus | "">(initialFeeStatus ?? "");
+  const [feeAmount, setFeeAmount] = useState(
+    initialFeeAmount !== null && initialFeeAmount !== undefined ? String(initialFeeAmount) : "",
+  );
+  const [feeNotes, setFeeNotes] = useState(initialFeeNotes ?? "");
+  const [feeDirty, setFeeDirty] = useState(false);
+  const [feeSaving, setFeeSaving] = useState(false);
+
+  async function saveFee() {
+    setFeeSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pre_app_fee_status: feeStatus || null,
+          pre_app_fee_amount:
+            feeStatus === "paid" && feeAmount !== "" ? Number(feeAmount) : null,
+          pre_app_fee_notes: feeNotes.trim() || null,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Application fee saved");
+      setFeeDirty(false);
+    } catch {
+      toast.error("Failed to save application fee");
+    } finally {
+      setFeeSaving(false);
+    }
+  }
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -117,10 +173,11 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Student Consent
+            Pre Application
           </span>
         </CardHeader>
         <CardContent className="pb-4 space-y-3">
+          <p className="text-xs font-medium text-muted-foreground">Student Consent</p>
           {consentStatus === "none" && (
             <>
               <div className="flex items-start gap-2 text-amber-600">
@@ -215,6 +272,84 @@ export function ConsentCard({ leadId, tenantId, canManage, onSignedChange }: Con
               )}
             </>
           )}
+
+          {/* ── Application Fee (pre-application, lead-level) ── */}
+          <div className="border-t pt-3 space-y-3">
+            <p className="text-xs font-medium text-muted-foreground">Application Fee</p>
+
+            {canManage ? (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Fee Paid?</Label>
+                  <Select
+                    value={feeStatus}
+                    onValueChange={(v) => {
+                      setFeeStatus(v as FeeStatus);
+                      setFeeDirty(true);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 text-sm">
+                      <SelectValue placeholder="Not set" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="paid">Paid</SelectItem>
+                      <SelectItem value="unpaid">Unpaid</SelectItem>
+                      <SelectItem value="waiver">Waiver</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {feeStatus === "paid" && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Amount</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="0.00"
+                      value={feeAmount}
+                      onChange={(e) => {
+                        setFeeAmount(e.target.value);
+                        setFeeDirty(true);
+                      }}
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">Notes</Label>
+                  <Textarea
+                    placeholder="Optional notes"
+                    value={feeNotes}
+                    onChange={(e) => {
+                      setFeeNotes(e.target.value);
+                      setFeeDirty(true);
+                    }}
+                    className="text-sm min-h-[60px]"
+                  />
+                </div>
+
+                {feeDirty && (
+                  <Button size="sm" onClick={saveFee} disabled={feeSaving} className="h-7 text-xs">
+                    {feeSaving ? "Saving…" : "Save fee"}
+                  </Button>
+                )}
+              </>
+            ) : feeStatus ? (
+              <div className="text-sm space-y-1">
+                <p className="capitalize">
+                  {feeStatus}
+                  {feeStatus === "paid" && feeAmount !== "" && (
+                    <span className="text-muted-foreground"> · {feeAmount}</span>
+                  )}
+                </p>
+                {feeNotes && <p className="text-xs text-muted-foreground">{feeNotes}</p>}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Not set</p>
+            )}
+          </div>
         </CardContent>
       </Card>
 

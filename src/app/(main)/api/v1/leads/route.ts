@@ -43,6 +43,7 @@ import {
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -327,23 +328,6 @@ async function handlePost(request: NextRequest) {
     }
   }
 
-  // Generate display_id for education_consultancy tenants
-  let displayId: string | null = null;
-  if (tenant.industry_id === "education_consultancy") {
-    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
-    // Use MAX display_id to avoid race conditions
-    const { data: maxRow } = await supabase
-      .from("leads")
-      .select("display_id")
-      .eq("tenant_id", tenantId)
-      .not("display_id", "is", null)
-      .order("display_id", { ascending: false })
-      .limit(1)
-      .single();
-    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
-    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
-  }
-
   const idempotencyKey = body.idempotency_key as string | undefined;
   const leadId = body.lead_id as string | undefined;
   const sessionId = body.session_id as string | undefined;
@@ -477,7 +461,6 @@ async function handlePost(request: NextRequest) {
     destinations: Array.isArray(body.destinations) ? body.destinations : [],
     field_of_study: (body.field_of_study as string | null | undefined) || null,
     degree_level: (body.degree_level as string | null | undefined) || null,
-    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
@@ -907,6 +890,30 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Assign display ID for education leads (best-effort; null list_id → live → assigns).
+  // Re-select display_id so the response includes the freshly-assigned ID.
+  if (tenant.industry_id === "education_consultancy") {
+    try {
+      await assignDisplayIds({
+        supabase,
+        tenantId,
+        industryId: tenant.industry_id,
+        destinationListId: (lead as Lead).list_id ?? null,
+        leadIds: [lead.id],
+      });
+      const { data: refreshed } = await supabase
+        .from("leads")
+        .select("display_id")
+        .eq("id", lead.id)
+        .single();
+      if (refreshed?.display_id) {
+        (lead as Record<string, unknown>).display_id = refreshed.display_id;
+      }
+    } catch (err) {
+      log.error({ err }, "assignDisplayIds on create failed");
+    }
+  }
 
   // Sync origin branch membership so branch-scoped users see the lead (no-op when null)
   void syncOriginMembership(supabase, tenantId, lead.id, creationBranchId, (lead as Lead).assigned_to ?? null).catch(() => {});

@@ -13,6 +13,7 @@ import {
   GraduationCap,
   MapPin,
   Calendar,
+  UserPlus,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -86,6 +87,7 @@ export function ApplicationDetailPage({
 
   const [application, setApplication] = useState<Application>(initialApplication);
   const [teamMemberEmails, setTeamMemberEmails] = useState<Record<string, string>>({});
+  const [teamMemberNames, setTeamMemberNames] = useState<Record<string, string>>({});
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -129,10 +131,13 @@ export function ApplicationDetailPage({
       .then((r) => r.json())
       .then((j) => {
         const emails: Record<string, string> = {};
+        const names: Record<string, string> = {};
         for (const m of j.data ?? []) {
           if (m.user_id && m.email) emails[m.user_id] = m.email;
+          if (m.user_id && m.name) names[m.user_id] = m.name;
         }
         setTeamMemberEmails(emails);
+        setTeamMemberNames(names);
       })
       .catch(() => {});
   }, []);
@@ -233,8 +238,13 @@ export function ApplicationDetailPage({
     } as Lead;
   })();
 
+  // Who created this application — derived from the "application.created" audit entry.
+  const creatorId = activityTimeline.find((a) => a.action === "application.created")?.user_id ?? null;
+  const createdByEmail = creatorId ? (teamMemberEmails[creatorId] ?? null) : null;
+  const createdByName = creatorId ? (teamMemberNames[creatorId] ?? null) : null;
+
   return (
-    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
+    <div className="w-full px-4 py-6 space-y-6">
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
         <Link href="/applications">
@@ -244,7 +254,7 @@ export function ApplicationDetailPage({
       </Button>
 
       {/* 3-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-[290px_1fr_280px] gap-6 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(320px,380px)] gap-6 items-start">
 
         {/* ── LEFT: Student Rail ── */}
         <div className="space-y-4">
@@ -252,7 +262,7 @@ export function ApplicationDetailPage({
             <ContactCard lead={leadForCard} />
           ) : (
             <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-4 text-sm text-muted-foreground text-center">
+              <CardContent className="p-5 text-sm text-muted-foreground text-center">
                 Student not found
               </CardContent>
             </Card>
@@ -261,7 +271,7 @@ export function ApplicationDetailPage({
           {/* Student key info */}
           {fullLead && (
             <Card className="border shadow-none rounded-lg">
-              <CardContent className="p-4 space-y-2">
+              <CardContent className="p-5 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Student Info
                 </p>
@@ -288,10 +298,36 @@ export function ApplicationDetailPage({
               </CardContent>
             </Card>
           )}
+
+          {/* Created By — standalone container, below Student Info */}
+          <Card className="border shadow-none rounded-lg">
+            <CardContent className="p-5">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+                Created By
+              </p>
+              {createdByName || createdByEmail ? (
+                <div className="flex items-start gap-2.5">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                    <UserPlus className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {createdByName ?? createdByEmail}
+                    </p>
+                    {createdByName && createdByEmail && (
+                      <p className="text-xs text-muted-foreground truncate">{createdByEmail}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">—</p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── CENTER: Header + Stepper + Timeline ── */}
-        <div className="space-y-6">
+        <div className="space-y-4">
           {/* Header card */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5 space-y-3">

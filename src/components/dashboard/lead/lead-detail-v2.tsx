@@ -79,8 +79,7 @@ interface LeadDraft {
   phone: string;
   city: string;
   country: string;
-  intake_source: string;
-  intake_campaign: string;
+  nationality: string;
   preferred_contact_method: string;
   // it_agency only
   salutation: string;
@@ -104,8 +103,7 @@ function makeDraft(lead: Lead): LeadDraft {
     phone: lead.phone || "",
     city: lead.city || "",
     country: lead.country || "",
-    intake_source: lead.intake_source || "",
-    intake_campaign: lead.intake_campaign || "",
+    nationality: lead.nationality || "",
     preferred_contact_method: lead.preferred_contact_method || "",
     salutation: lead.salutation || "",
     company_name: lead.company_name || "",
@@ -484,9 +482,16 @@ export function LeadDetailV2({
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">
-              {getLeadFullName(currentLead)}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">
+                {getLeadFullName(currentLead)}
+              </h1>
+              {tenant.industry_id === "education_consultancy" && currentLead.display_id && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-600 font-medium">
+                  {currentLead.display_id}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
               {new Date(currentLead.created_at).toLocaleTimeString()}
@@ -659,6 +664,17 @@ export function LeadDetailV2({
               setCurrentLead(json.data as Lead);
               toast.success("Study details saved");
             }}
+            onSaveSourceFields={async (fields) => {
+              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(fields),
+              });
+              if (!res.ok) throw new Error("Failed to save source details");
+              const json = await res.json();
+              setCurrentLead(json.data as Lead);
+              toast.success("Lead source saved");
+            }}
             onQualify={openQualifyDialog}
           />
         </div>
@@ -677,6 +693,8 @@ export function LeadDetailV2({
             onTabChange={setActiveTab}
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
+            checklists={checklists}
+            onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
@@ -711,6 +729,9 @@ export function LeadDetailV2({
                       consentSigned={consentSigned}
                       canManage={canManageApplications ?? isAdmin}
                       onSignedChange={setConsentSignedState}
+                      feeStatus={currentLead.pre_app_fee_status}
+                      feeAmount={currentLead.pre_app_fee_amount}
+                      feeNotes={currentLead.pre_app_fee_notes}
                     />
                   )}
                   <ApplicationsCard

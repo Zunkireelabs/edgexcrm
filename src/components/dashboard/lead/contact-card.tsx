@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
+import { nationalityFromPhone } from "@/lib/leads/nationality";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
@@ -21,6 +22,8 @@ interface LeadDraftSubset {
   last_name: string;
   email: string;
   phone: string;
+  city: string;
+  nationality: string;
 }
 
 interface ContactCardProps {
@@ -49,7 +52,7 @@ function QuickActionButton({ icon, label, onClick, disabled }: QuickActionButton
       disabled={disabled}
       className="flex flex-col items-center gap-1 group disabled:opacity-40 disabled:cursor-not-allowed"
     >
-      <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground group-disabled:hover:border-border group-disabled:hover:text-muted-foreground transition-colors">
+      <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground group-disabled:hover:border-border group-disabled:hover:text-muted-foreground transition-colors">
         {icon}
       </span>
       <span className="text-xs text-muted-foreground group-hover:text-foreground group-disabled:hover:text-muted-foreground transition-colors">
@@ -163,6 +166,26 @@ export function ContactCard({
                   <p className="text-xs text-destructive mt-1">{editErrors.phone}</p>
                 )}
               </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">Nationality</p>
+                  <Input
+                    className="h-8 text-sm"
+                    value={draft.nationality}
+                    placeholder="e.g. Nepali"
+                    onChange={(e) => onDraftChange?.("nationality", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground mb-1">City</p>
+                  <Input
+                    className="h-8 text-sm"
+                    value={draft.city}
+                    placeholder="Kathmandu"
+                    onChange={(e) => onDraftChange?.("city", e.target.value)}
+                  />
+                </div>
+              </div>
             </div>
           ) : (
             <>
@@ -208,11 +231,29 @@ export function ContactCard({
               <CopyButton value={lead.phone} label="Phone" className="opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
           )}
+          {(() => {
+            const nationality = lead.nationality ?? nationalityFromPhone(lead.phone);
+            const city = lead.city;
+            if (!nationality && !city) return null;
+            return (
+              <div className="flex items-center gap-1.5 pt-1">
+                {nationality && (
+                  <span className="text-xs text-muted-foreground">{nationality}</span>
+                )}
+                {nationality && city && (
+                  <span className="text-xs text-muted-foreground">·</span>
+                )}
+                {city && (
+                  <span className="text-xs text-muted-foreground">{city}</span>
+                )}
+              </div>
+            );
+          })()}
         </div>
         )}
 
         {/* Quick Actions (hidden in edit mode) */}
-        {!isEditing && <div className="flex items-center justify-center gap-4 pt-4 border-t border-border">
+        {!isEditing && <div className="flex items-center justify-between gap-1 pt-4 border-t border-border">
           <QuickActionButton
             icon={<MessageSquare className="h-4 w-4" />}
             label="Note"
@@ -241,7 +282,7 @@ export function ContactCard({
                 type="button"
                 className="flex flex-col items-center gap-1 group"
               >
-                <span className="h-10 w-10 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
+                <span className="h-9 w-9 rounded-full border border-border flex items-center justify-center text-muted-foreground group-hover:border-foreground group-hover:text-foreground transition-colors">
                   <MoreHorizontal className="h-4 w-4" />
                 </span>
                 <span className="text-xs text-muted-foreground group-hover:text-foreground transition-colors">More</span>

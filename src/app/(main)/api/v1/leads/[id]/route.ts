@@ -15,7 +15,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { normalizeEmail } from "@/lib/leads/dedup";
-import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -44,7 +44,9 @@ const UPDATABLE_FIELDS = [
   "is_final",
   "intake_source",
   "intake_medium",
+  "intake_account",
   "intake_campaign",
+  "nationality",
   "preferred_contact_method",
   "tags",
   "lead_type",
@@ -60,6 +62,9 @@ const UPDATABLE_FIELDS = [
   "destinations",
   "field_of_study",
   "degree_level",
+  "pre_app_fee_status",
+  "pre_app_fee_amount",
+  "pre_app_fee_notes",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -364,6 +369,20 @@ export async function PATCH(
     updatePayload.normalized_email = normalizeEmail(body.email as string | null | undefined);
   }
 
+  // Pre-Application fee normalization (migration 084)
+  if (updatePayload.pre_app_fee_status !== undefined) {
+    const fs = updatePayload.pre_app_fee_status;
+    if (fs !== null && !["paid", "unpaid", "waiver"].includes(fs as string)) {
+      return apiValidationError({ pre_app_fee_status: ["Must be one of: paid, unpaid, waiver"] });
+    }
+    // Amount only makes sense when paid — drop it otherwise to keep data clean.
+    if (fs !== "paid") updatePayload.pre_app_fee_amount = null;
+  }
+  if (updatePayload.pre_app_fee_amount !== undefined && updatePayload.pre_app_fee_amount !== null) {
+    const amt = Number(updatePayload.pre_app_fee_amount);
+    updatePayload.pre_app_fee_amount = Number.isFinite(amt) && amt >= 0 ? amt : null;
+  }
+
   if (Object.keys(updatePayload).length === 0) {
     return apiValidationError({ body: ["No valid fields to update"] });
   }
@@ -393,7 +412,7 @@ export async function PATCH(
     (existingLead as Record<string, unknown>).list_id !== updatePayload.list_id;
   if (listMovedToNonNull) {
     try {
-      await assignDisplayIdsOnMove({
+      await assignDisplayIds({
         supabase,
         tenantId: auth.tenantId,
         industryId: auth.industryId,
@@ -401,7 +420,7 @@ export async function PATCH(
         leadIds: [id],
       });
     } catch (err) {
-      log.error({ err }, "assignDisplayIdsOnMove failed");
+      log.error({ err }, "assignDisplayIds failed");
     }
   }
 
