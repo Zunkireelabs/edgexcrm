@@ -1,8 +1,18 @@
-// Custom-field keys that have their own dedicated UI (the Trip Inquiry panel and
-// the Itinerary builder, travel_agency) and must NOT leak into the generic
-// custom-field renderers (Professional Details, Key Information → Additional
-// Details). Structured values like `itinerary` would otherwise render as
-// "[object Object]", and trip_* fields would duplicate the Trip Inquiry panel.
+// Custom-field keys that have their own dedicated UI or have been promoted to
+// first-class columns (migration 087). Must NOT leak into the generic
+// "Additional Details" renderer — they would either duplicate the dedicated UI
+// or render stale pre-backfill values.
+const PROMOTED_KEYS = new Set([
+  "nationality",
+  "source_category",
+  "source_channel",
+  "source_page",
+  "program_level",
+  "program_category",
+  "interested_country",
+  "campaign",
+]);
+
 export function isReservedCustomField(key: string): boolean {
-  return key === "itinerary" || key.startsWith("trip_");
+  return key === "itinerary" || key.startsWith("trip_") || PROMOTED_KEYS.has(key);
 }
