@@ -17,7 +17,7 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
   const isOnOrganise = pathname === "/leads-organise" || pathname.startsWith("/leads-organise/");
   const hasActiveChild = lists.some((l) => pathname === `/leads-organise/${l.slug}`);
   const parentActive = isOnOrganise && !hasActiveChild;
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
