@@ -28,17 +28,6 @@ import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/ty
 import { BranchesBlock } from "./branches-block";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 
-const INTAKE_SOURCES = [
-  { value: "manual_entry", label: "Manual Entry" },
-  { value: "phone_call", label: "Phone Call" },
-  { value: "walk_in", label: "Walk-in" },
-  { value: "referral", label: "Referral" },
-  { value: "trade_show", label: "Trade Show / Event" },
-  { value: "social_media", label: "Social Media" },
-  { value: "email", label: "Email Inquiry" },
-  { value: "other", label: "Other" },
-];
-
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
   { value: "email", label: "Email" },
@@ -61,10 +50,6 @@ interface TeamMember {
 interface LeadDraftSubset {
   country: string;
   nationality: string;
-  intake_source: string;
-  intake_medium: string;
-  intake_account: string;
-  intake_campaign: string;
   preferred_contact_method: string;
   salutation: string;
   company_name: string;
@@ -95,6 +80,7 @@ interface KeyInfoSectionProps {
   leadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveStudyFields?: (fields: Record<string, unknown>) => Promise<void>;
+  onSaveSourceFields?: (fields: Record<string, unknown>) => Promise<void>;
   onQualify?: () => void;
   maxBranches?: number;
   userBranchId?: string | null;
@@ -122,6 +108,7 @@ export function KeyInfoSection({
   leadLists,
   onSaveTripFields,
   onSaveStudyFields,
+  onSaveSourceFields,
   onQualify,
   maxBranches,
   userBranchId,
@@ -134,7 +121,6 @@ export function KeyInfoSection({
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
 
   const assignedMember = teamMembers.find((m) => m.user_id === assignedTo);
-  const hasIntakeInfo = lead.intake_source || lead.intake_medium || lead.intake_account || lead.intake_campaign;
   const entityLabel = industry?.entity_type_singular || "Entity";
 
   // Custom fields
@@ -328,77 +314,7 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── LEAD SOURCE ─────────────────────────────────────────── */}
-          <div className="border-t border-border" />
-          <SectionHeading>Lead Source</SectionHeading>
-
-          {isEditing && draft ? (
-            <>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Source Category</p>
-                <Select
-                  value={draft.intake_source || "__none__"}
-                  onValueChange={(v) => onDraftChange?.("intake_source", v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">Select source</span>
-                    </SelectItem>
-                    {INTAKE_SOURCES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Source Channel</p>
-                <Input
-                  className="h-8 text-sm"
-                  value={draft.intake_medium}
-                  placeholder="e.g. Facebook, Google"
-                  onChange={(e) => onDraftChange?.("intake_medium", e.target.value)}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Source Page / Account</p>
-                <Input
-                  className="h-8 text-sm"
-                  value={draft.intake_account}
-                  placeholder="e.g. admizz.edu.np"
-                  onChange={(e) => onDraftChange?.("intake_account", e.target.value)}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Campaign</p>
-                <Input
-                  className="h-8 text-sm"
-                  value={draft.intake_campaign}
-                  placeholder="e.g. spring-2025"
-                  onChange={(e) => onDraftChange?.("intake_campaign", e.target.value)}
-                />
-              </div>
-            </>
-          ) : hasIntakeInfo ? (
-            <>
-              {lead.intake_source && (
-                <InfoRow label="Source Category" value={lead.intake_source} />
-              )}
-              {lead.intake_medium && (
-                <InfoRow label="Source Channel" value={lead.intake_medium} />
-              )}
-              {lead.intake_account && (
-                <InfoRow label="Source Page / Account" value={lead.intake_account} />
-              )}
-              {lead.intake_campaign && (
-                <InfoRow label="Campaign" value={lead.intake_campaign} />
-              )}
-            </>
-          ) : (
-            <p className="text-xs text-muted-foreground italic">No source data.</p>
-          )}
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} />
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -812,6 +728,129 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         <p className="text-xs text-muted-foreground italic">
           No study details yet.{isAdmin ? " Click Edit to add." : ""}
         </p>
+      )}
+    </>
+  );
+}
+
+// ── Lead Source panel ─────────────────────────────────────────────────────
+
+interface LeadSourcePanelProps {
+  lead: Lead;
+  isAdmin: boolean;
+  onSave?: (fields: Record<string, unknown>) => Promise<void>;
+}
+
+function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
+  const [draftMedium, setDraftMedium] = useState(lead.intake_medium ?? "");
+  const [draftAccount, setDraftAccount] = useState(lead.intake_account ?? "");
+  const [draftCampaign, setDraftCampaign] = useState(lead.intake_campaign ?? "");
+
+  function openEdit() {
+    setDraftSource(lead.intake_source ?? "");
+    setDraftMedium(lead.intake_medium ?? "");
+    setDraftAccount(lead.intake_account ?? "");
+    setDraftCampaign(lead.intake_campaign ?? "");
+    setEditing(true);
+  }
+
+  async function handleSave() {
+    if (!onSave) return;
+    setSaving(true);
+    try {
+      await onSave({
+        intake_source: draftSource || null,
+        intake_medium: draftMedium || null,
+        intake_account: draftAccount || null,
+        intake_campaign: draftCampaign || null,
+      });
+      setEditing(false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      <div className="border-t border-border" />
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+          Lead Source
+        </p>
+        {isAdmin && !editing && (
+          <button
+            type="button"
+            onClick={openEdit}
+            className="text-[10px] text-primary hover:underline"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+
+      {editing ? (
+        <div className="space-y-2">
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Source Category</p>
+            <Input
+              className="h-8 text-sm"
+              value={draftSource}
+              placeholder="e.g. Social Media, Referral"
+              onChange={(e) => setDraftSource(e.target.value)}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Source Channel</p>
+            <Input
+              className="h-8 text-sm"
+              value={draftMedium}
+              placeholder="e.g. Facebook, Google"
+              onChange={(e) => setDraftMedium(e.target.value)}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Source Page / Account</p>
+            <Input
+              className="h-8 text-sm"
+              value={draftAccount}
+              placeholder="e.g. admizz.edu.np"
+              onChange={(e) => setDraftAccount(e.target.value)}
+            />
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1">Campaign</p>
+            <Input
+              className="h-8 text-sm"
+              value={draftCampaign}
+              placeholder="e.g. spring-2025"
+              onChange={(e) => setDraftCampaign(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2 pt-1">
+            <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
+              {saving ? "Saving…" : "Save"}
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs"
+              onClick={() => setEditing(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <InfoRow label="Source Category" value={lead.intake_source || "—"} />
+          <InfoRow label="Source Channel" value={lead.intake_medium || "—"} />
+          <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
+          <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
+        </div>
       )}
     </>
   );

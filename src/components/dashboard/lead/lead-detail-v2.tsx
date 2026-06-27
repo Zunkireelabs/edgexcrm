@@ -80,10 +80,6 @@ interface LeadDraft {
   city: string;
   country: string;
   nationality: string;
-  intake_source: string;
-  intake_medium: string;
-  intake_account: string;
-  intake_campaign: string;
   preferred_contact_method: string;
   // it_agency only
   salutation: string;
@@ -108,10 +104,6 @@ function makeDraft(lead: Lead): LeadDraft {
     city: lead.city || "",
     country: lead.country || "",
     nationality: lead.nationality || "",
-    intake_source: lead.intake_source || "",
-    intake_medium: lead.intake_medium || "",
-    intake_account: lead.intake_account || "",
-    intake_campaign: lead.intake_campaign || "",
     preferred_contact_method: lead.preferred_contact_method || "",
     salutation: lead.salutation || "",
     company_name: lead.company_name || "",
@@ -671,6 +663,17 @@ export function LeadDetailV2({
               const json = await res.json();
               setCurrentLead(json.data as Lead);
               toast.success("Study details saved");
+            }}
+            onSaveSourceFields={async (fields) => {
+              const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(fields),
+              });
+              if (!res.ok) throw new Error("Failed to save source details");
+              const json = await res.json();
+              setCurrentLead(json.data as Lead);
+              toast.success("Lead source saved");
             }}
             onQualify={openQualifyDialog}
           />
