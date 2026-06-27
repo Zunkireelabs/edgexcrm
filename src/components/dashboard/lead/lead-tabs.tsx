@@ -321,6 +321,8 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       pre_app_fee_amount: null,
       pre_app_fee_notes: null,
       archive_reason: null,
+      nationality: null,
+      intake_account: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

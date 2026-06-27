@@ -184,6 +184,9 @@ export interface Lead {
   destinations: string[];
   field_of_study: string | null;
   degree_level: string | null;
+  // Nationality + intake page/account (migration 087)
+  nationality: string | null;
+  intake_account: string | null;
   // Pre-Application fee (education_consultancy — migration 084)
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
   pre_app_fee_amount: number | null;

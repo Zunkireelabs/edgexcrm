@@ -79,7 +79,10 @@ interface LeadDraft {
   phone: string;
   city: string;
   country: string;
+  nationality: string;
   intake_source: string;
+  intake_medium: string;
+  intake_account: string;
   intake_campaign: string;
   preferred_contact_method: string;
   // it_agency only
@@ -104,7 +107,10 @@ function makeDraft(lead: Lead): LeadDraft {
     phone: lead.phone || "",
     city: lead.city || "",
     country: lead.country || "",
+    nationality: lead.nationality || "",
     intake_source: lead.intake_source || "",
+    intake_medium: lead.intake_medium || "",
+    intake_account: lead.intake_account || "",
     intake_campaign: lead.intake_campaign || "",
     preferred_contact_method: lead.preferred_contact_method || "",
     salutation: lead.salutation || "",

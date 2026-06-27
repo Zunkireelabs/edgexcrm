@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { ChevronDown, UserCircle, Building, ArrowRight } from "lucide-react";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
@@ -59,9 +59,11 @@ interface TeamMember {
 }
 
 interface LeadDraftSubset {
-  city: string;
   country: string;
+  nationality: string;
   intake_source: string;
+  intake_medium: string;
+  intake_account: string;
   intake_campaign: string;
   preferred_contact_method: string;
   salutation: string;
@@ -131,9 +133,8 @@ export function KeyInfoSection({
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
 
-  const location = [lead.city, lead.country].filter(Boolean).join(", ");
   const assignedMember = teamMembers.find((m) => m.user_id === assignedTo);
-  const hasIntakeInfo = lead.intake_source || lead.intake_medium || lead.intake_campaign;
+  const hasIntakeInfo = lead.intake_source || lead.intake_medium || lead.intake_account || lead.intake_campaign;
   const entityLabel = industry?.entity_type_singular || "Entity";
 
   // Custom fields
@@ -161,6 +162,10 @@ export function KeyInfoSection({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
+
+          {/* ── STATUS ─────────────────────────────────────────────────── */}
+          <SectionHeading>Status</SectionHeading>
+
           {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
@@ -214,15 +219,6 @@ export function KeyInfoSection({
                 </div>
               )}
             </div>
-          )}
-
-          {/* Study Interest — education_consultancy only */}
-          {industryId === "education_consultancy" && (
-            <StudyInterestPanel
-              lead={lead}
-              isAdmin={isAdmin}
-              onSave={onSaveStudyFields}
-            />
           )}
 
           {/* Stage */}
@@ -313,44 +309,92 @@ export function KeyInfoSection({
             )}
           </div>
 
-          {/* Branches */}
-          {maxBranches && maxBranches > 1 && (
-            <BranchesBlock
-              leadId={lead.id}
+          {/* ── STUDY INTEREST — education_consultancy only ─────────── */}
+          {industryId === "education_consultancy" && (
+            <StudyInterestPanel
+              lead={lead}
               isAdmin={isAdmin}
-              userBranchId={userBranchId ?? null}
-              leadScope={leadScope ?? "all"}
+              onSave={onSaveStudyFields}
             />
           )}
 
-          {/* Entity (e.g., College, Service, Project Type).
-              travel_agency has its own editable Package selector in the Trip
-              Inquiry panel below, so skip this read-only block there to avoid a
-              duplicate "Package" field. */}
-          {entity && industryId !== "travel_agency" && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
-              <div className="flex items-center gap-2">
-                <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                  <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <span className="text-sm font-medium">{entity.name}</span>
+          {/* ── LEAD SOURCE ─────────────────────────────────────────── */}
+          <div className="border-t border-border" />
+          <SectionHeading>Lead Source</SectionHeading>
+
+          {isEditing && draft ? (
+            <>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Source Category</p>
+                <Select
+                  value={draft.intake_source || "__none__"}
+                  onValueChange={(v) => onDraftChange?.("intake_source", v === "__none__" ? "" : v)}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select source" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">
+                      <span className="text-muted-foreground">Select source</span>
+                    </SelectItem>
+                    {INTAKE_SOURCES.map((s) => (
+                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              {entity.description && (
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  {entity.description}
-                </p>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Source Channel</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.intake_medium}
+                  placeholder="e.g. Facebook, Google"
+                  onChange={(e) => onDraftChange?.("intake_medium", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Source Page / Account</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.intake_account}
+                  placeholder="e.g. admizz.edu.np"
+                  onChange={(e) => onDraftChange?.("intake_account", e.target.value)}
+                />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Campaign</p>
+                <Input
+                  className="h-8 text-sm"
+                  value={draft.intake_campaign}
+                  placeholder="e.g. spring-2025"
+                  onChange={(e) => onDraftChange?.("intake_campaign", e.target.value)}
+                />
+              </div>
+            </>
+          ) : hasIntakeInfo ? (
+            <>
+              {lead.intake_source && (
+                <InfoRow label="Source Category" value={lead.intake_source} />
               )}
-            </div>
+              {lead.intake_medium && (
+                <InfoRow label="Source Channel" value={lead.intake_medium} />
+              )}
+              {lead.intake_account && (
+                <InfoRow label="Source Page / Account" value={lead.intake_account} />
+              )}
+              {lead.intake_campaign && (
+                <InfoRow label="Campaign" value={lead.intake_campaign} />
+              )}
+            </>
+          ) : (
+            <p className="text-xs text-muted-foreground italic">No source data.</p>
           )}
 
-          {/* Company / Contact extras — it_agency only */}
+          {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
             <>
               <div className="border-t border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Company
-              </p>
+              <SectionHeading>Company</SectionHeading>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Salutation</p>
                 <Select
@@ -424,9 +468,7 @@ export function KeyInfoSection({
           ) ? (
             <>
               <div className="border-t border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Company
-              </p>
+              <SectionHeading>Company</SectionHeading>
               {lead.owner_id && (() => {
                 const owner = teamMembers.find((m) => m.user_id === lead.owner_id);
                 return owner ? <InfoRow label="Lead Owner" value={owner.email} /> : null;
@@ -452,7 +494,7 @@ export function KeyInfoSection({
             </>
           ) : null}
 
-          {/* Trip Inquiry — travel_agency only */}
+          {/* ── TRIP INQUIRY — travel_agency only ───────────────────── */}
           {industryId === "travel_agency" && (
             <TripInquiryPanel
               lead={lead}
@@ -461,46 +503,33 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* Divider */}
+          {/* ── DETAILS ─────────────────────────────────────────────── */}
           <div className="border-t border-border" />
+          <SectionHeading>Details</SectionHeading>
 
-          {/* Location */}
+          {/* Residence Country */}
           {isEditing && draft ? (
-            <div className="space-y-2">
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Location
-              </p>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">City</p>
-                <Input
-                  className="h-8 text-sm"
-                  value={draft.city}
-                  placeholder="Kathmandu"
-                  onChange={(e) => onDraftChange?.("city", e.target.value)}
-                />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Country</p>
-                <Select
-                  value={draft.country || "__none__"}
-                  onValueChange={(v) => onDraftChange?.("country", v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">Select country</span>
-                    </SelectItem>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Residence Country</p>
+              <Select
+                value={draft.country || "__none__"}
+                onValueChange={(v) => onDraftChange?.("country", v === "__none__" ? "" : v)}
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground">Select country</span>
+                  </SelectItem>
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-          ) : location ? (
-            <InfoRow label="Location" value={location} />
+          ) : lead.country ? (
+            <InfoRow label="Residence Country" value={lead.country} />
           ) : null}
 
           {/* Preferred Contact */}
@@ -531,6 +560,36 @@ export function KeyInfoSection({
             />
           ) : null}
 
+          {/* Branches */}
+          {maxBranches && maxBranches > 1 && (
+            <BranchesBlock
+              leadId={lead.id}
+              isAdmin={isAdmin}
+              userBranchId={userBranchId ?? null}
+              leadScope={leadScope ?? "all"}
+            />
+          )}
+
+          {/* Entity (e.g., College, Service, Project Type).
+              travel_agency has its own editable Package selector in the Trip
+              Inquiry panel above, so skip this read-only block there. */}
+          {entity && industryId !== "travel_agency" && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">{entityLabel}</p>
+              <div className="flex items-center gap-2">
+                <div className="h-6 w-6 rounded-md bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
+                  <Building className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <span className="text-sm font-medium">{entity.name}</span>
+              </div>
+              {entity.description && (
+                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                  {entity.description}
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Created */}
           <InfoRow
             label="Created"
@@ -549,67 +608,11 @@ export function KeyInfoSection({
             value={formatRelativeTime(lead.updated_at)}
           />
 
-          {/* Intake Details */}
-          {isEditing && draft ? (
-            <>
-              <div className="border-t border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Intake Details
-              </p>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Source</p>
-                <Select
-                  value={draft.intake_source || "__none__"}
-                  onValueChange={(v) => onDraftChange?.("intake_source", v === "__none__" ? "" : v)}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Select source" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">
-                      <span className="text-muted-foreground">Select source</span>
-                    </SelectItem>
-                    {INTAKE_SOURCES.map((s) => (
-                      <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">Campaign</p>
-                <Input
-                  className="h-8 text-sm"
-                  value={draft.intake_campaign}
-                  placeholder="e.g. spring-2025"
-                  onChange={(e) => onDraftChange?.("intake_campaign", e.target.value)}
-                />
-              </div>
-            </>
-          ) : hasIntakeInfo ? (
-            <>
-              <div className="border-t border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Intake Details
-              </p>
-              {lead.intake_source && (
-                <InfoRow label="Source" value={lead.intake_source} />
-              )}
-              {lead.intake_medium && (
-                <InfoRow label="Medium" value={lead.intake_medium} />
-              )}
-              {lead.intake_campaign && (
-                <InfoRow label="Campaign" value={lead.intake_campaign} />
-              )}
-            </>
-          ) : null}
-
-          {/* Custom Fields */}
+          {/* ── ADDITIONAL DETAILS (true extras only) ───────────────── */}
           {customFields.length > 0 && (
             <>
               <div className="border-t border-border" />
-              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
-                Additional Details
-              </p>
+              <SectionHeading>Additional Details</SectionHeading>
               {customFields.map(([key, value]) => (
                 <InfoRow
                   key={key}
@@ -1187,6 +1190,14 @@ function InfoRow({ label, value }: { label: string; value: string }) {
       <p className="text-xs text-muted-foreground">{label}</p>
       <p className="text-sm font-medium text-foreground">{value}</p>
     </div>
+  );
+}
+
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+      {children}
+    </p>
   );
 }
 
