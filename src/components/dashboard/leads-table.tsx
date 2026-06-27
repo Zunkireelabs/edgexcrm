@@ -226,7 +226,6 @@ export function LeadsTable({
   // Per-source counts — cross-filtered: reflects all active filters except source itself
   const sourceCounts = useMemo(() => {
     const m = new Map<string, number>();
-    if (!isStagingView) return m;
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     localLeads.forEach((l) => {
@@ -248,10 +247,14 @@ export function LeadsTable({
         }
       }
       if (!matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
-      l.intake_source.split(" | ").forEach((p) => {
-        const t = p.trim();
-        if (t) m.set(t, (m.get(t) ?? 0) + 1);
-      });
+      if (isStagingView) {
+        l.intake_source.split(" | ").forEach((p) => {
+          const t = p.trim();
+          if (t) m.set(t, (m.get(t) ?? 0) + 1);
+        });
+      } else {
+        m.set(l.intake_source, (m.get(l.intake_source) ?? 0) + 1);
+      }
     });
     return m;
   }, [localLeads, isStagingView, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter]);
@@ -259,7 +262,6 @@ export function LeadsTable({
   // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
   const counselorCounts = useMemo(() => {
     const m = new Map<string, number>();
-    if (!isStagingView) return m;
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
     localLeads.forEach((l) => {
@@ -283,7 +285,7 @@ export function LeadsTable({
       m.set(key, (m.get(key) ?? 0) + 1);
     });
     return m;
-  }, [localLeads, isStagingView, sourceFilter, tagFilter, statusFilter, formFilter, createdFilter]);
+  }, [localLeads, sourceFilter, tagFilter, statusFilter, formFilter, createdFilter]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -1058,9 +1060,7 @@ export function LeadsTable({
               icon={<Globe className="h-3 w-3" />}
               options={sources.map((s) => ({
                 value: s,
-                label: isStagingView
-                  ? `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`
-                  : s,
+                label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`,
                 description: `Leads from ${s}`,
               }))}
             />
@@ -1080,16 +1080,12 @@ export function LeadsTable({
               options={[
                 {
                   value: "unassigned",
-                  label: isStagingView
-                    ? `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`
-                    : "Unassigned",
+                  label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
                   description: "Leads not assigned yet",
                 },
                 ...counselors.map(([userId, email]) => ({
                   value: userId,
-                  label: isStagingView
-                    ? `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`
-                    : memberNames[userId] || email.split("@")[0],
+                  label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
                   description: email,
                 })),
               ]}
