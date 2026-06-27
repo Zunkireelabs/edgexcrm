@@ -309,6 +309,16 @@ export function KeyInfoSection({
             )}
           </div>
 
+          {/* Branches */}
+          {maxBranches && maxBranches > 1 && (
+            <BranchesBlock
+              leadId={lead.id}
+              isAdmin={isAdmin}
+              userBranchId={userBranchId ?? null}
+              leadScope={leadScope ?? "all"}
+            />
+          )}
+
           {/* ── STUDY INTEREST — education_consultancy only ─────────── */}
           {industryId === "education_consultancy" && (
             <StudyInterestPanel
@@ -559,16 +569,6 @@ export function KeyInfoSection({
               value={lead.preferred_contact_method.charAt(0).toUpperCase() + lead.preferred_contact_method.slice(1)}
             />
           ) : null}
-
-          {/* Branches */}
-          {maxBranches && maxBranches > 1 && (
-            <BranchesBlock
-              leadId={lead.id}
-              isAdmin={isAdmin}
-              userBranchId={userBranchId ?? null}
-              leadScope={leadScope ?? "all"}
-            />
-          )}
 
           {/* Entity (e.g., College, Service, Project Type).
               travel_agency has its own editable Package selector in the Trip
