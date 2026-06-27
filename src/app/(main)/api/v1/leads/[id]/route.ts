@@ -15,7 +15,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { normalizeEmail } from "@/lib/leads/dedup";
-import { assignDisplayIdsOnMove } from "@/lib/leads/assign-display-ids";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -393,7 +393,7 @@ export async function PATCH(
     (existingLead as Record<string, unknown>).list_id !== updatePayload.list_id;
   if (listMovedToNonNull) {
     try {
-      await assignDisplayIdsOnMove({
+      await assignDisplayIds({
         supabase,
         tenantId: auth.tenantId,
         industryId: auth.industryId,
@@ -401,7 +401,7 @@ export async function PATCH(
         leadIds: [id],
       });
     } catch (err) {
-      log.error({ err }, "assignDisplayIdsOnMove failed");
+      log.error({ err }, "assignDisplayIds failed");
     }
   }
 

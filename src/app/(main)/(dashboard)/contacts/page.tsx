@@ -34,7 +34,7 @@ export default async function ContactsRoutePage() {
   if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.CONTACTS)) {
     const supabase = await createServiceClient();
 
-    const leads = await getLeads(tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
+    const leads = await getLeads(tenantData.tenant.id, { ...leadQueryScope(tenantData.permissions, tenantData.userId), limit: 50000 });
 
     const { data: teamData } = await supabase
       .from("tenant_users")

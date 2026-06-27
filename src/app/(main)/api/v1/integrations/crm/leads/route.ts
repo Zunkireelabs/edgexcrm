@@ -23,6 +23,7 @@ import {
   apiValidationError,
   apiServiceUnavailable,
 } from "@/lib/api/response";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isEmail } from "@/lib/api/validation";
 import type { Lead } from "@/types/database";
@@ -108,6 +109,14 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
   if (!valid) return apiValidationError(errors);
 
   const tenantId = ctx.auth.tenantId;
+
+  const { data: tenantRow } = await ctx.supabase
+    .from("tenants")
+    .select("industry_id")
+    .eq("id", tenantId)
+    .single();
+  const tenantIndustryId = (tenantRow as { industry_id?: string | null } | null)?.industry_id ?? null;
+
   const normalizedEmail = normalizeEmail(body.email as string);
   const normalizedPhone = normalizePhone((body.phone as string | undefined) ?? null);
 
@@ -304,6 +313,15 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     }
     return apiServiceUnavailable("Failed to create lead");
   }
+
+  // Assign display ID for education leads (best-effort; null list_id → live → assigns).
+  void assignDisplayIds({
+    supabase: ctx.supabase,
+    tenantId,
+    industryId: tenantIndustryId,
+    destinationListId: (leadPayload.list_id as string | null | undefined) ?? null,
+    leadIds: [(lead as Lead).id],
+  }).catch((err) => console.error("[crm/leads] assignDisplayIds failed", err));
 
   // New lead — record submission
   let submissionId: string | undefined;

@@ -62,7 +62,7 @@ export default async function LeadsPage({
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
-      getLeads(tenantData.tenant.id, scope),
+      getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),

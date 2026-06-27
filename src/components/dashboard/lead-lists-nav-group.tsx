@@ -22,7 +22,7 @@ export function LeadListsNavGroup({ lists, onNavigate, isAdmin = false }: LeadLi
   const isOnLeads = pathname === "/leads";
   const hasActiveChild = isOnLeads && currentList != null;
   const parentActive = isOnLeads && currentList == null;
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

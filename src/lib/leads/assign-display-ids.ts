@@ -1,11 +1,16 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Assigns sequential ADM-NNN display IDs to education leads moved out of staging.
- * No-ops for non-education tenants, staging destinations, leads that already have IDs,
- * and null destination lists.
+ * Assigns sequential ADM-NNN display IDs to education leads.
+ *
+ * Assignment policy:
+ *   - destinationListId = null  → lead is live (pipeline / no list) → assign.
+ *   - destinationListId = UUID  → look up is_staging; skip if true, assign if false.
+ *
+ * No-ops for non-education tenants, empty leadIds, and staging destinations.
+ * Best-effort: logs on RPC error but never throws.
  */
-export async function assignDisplayIdsOnMove(opts: {
+export async function assignDisplayIds(opts: {
   supabase: SupabaseClient;
   tenantId: string;
   industryId: string | null;
@@ -15,15 +20,18 @@ export async function assignDisplayIdsOnMove(opts: {
   const { supabase, tenantId, industryId, destinationListId, leadIds } = opts;
 
   if (industryId !== "education_consultancy") return;
-  if (!destinationListId || leadIds.length === 0) return;
+  if (leadIds.length === 0) return;
 
-  const { data: destList } = await supabase
-    .from("lead_lists")
-    .select("is_staging")
-    .eq("id", destinationListId)
-    .maybeSingle();
+  if (destinationListId !== null) {
+    const { data: destList } = await supabase
+      .from("lead_lists")
+      .select("is_staging")
+      .eq("id", destinationListId)
+      .maybeSingle();
 
-  if (!destList || destList.is_staging) return;
+    if (!destList || destList.is_staging) return;
+  }
+  // null destinationListId → live / pipeline → proceed to assign
 
   const { data: tenant } = await supabase
     .from("tenants")
@@ -40,6 +48,6 @@ export async function assignDisplayIdsOnMove(opts: {
   });
 
   if (error) {
-    console.error("[assignDisplayIdsOnMove] RPC failed", { tenantId, error });
+    console.error("[assignDisplayIds] RPC failed", { tenantId, error });
   }
 }

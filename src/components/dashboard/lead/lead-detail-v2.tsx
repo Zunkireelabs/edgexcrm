@@ -484,9 +484,16 @@ export function LeadDetailV2({
             </Button>
           </Link>
           <div>
-            <h1 className="text-2xl font-bold">
-              {getLeadFullName(currentLead)}
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-bold">
+                {getLeadFullName(currentLead)}
+              </h1>
+              {tenant.industry_id === "education_consultancy" && currentLead.display_id && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-600 font-medium">
+                  {currentLead.display_id}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
               {new Date(currentLead.created_at).toLocaleTimeString()}
