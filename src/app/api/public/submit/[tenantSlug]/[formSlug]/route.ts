@@ -36,6 +36,7 @@ import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
+import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -366,22 +367,6 @@ export async function POST(
     return cors(apiSuccess({ lead_id: canonicalId, deduped: true }, 200));
   }
 
-  // ── 11. Generate display_id (education_consultancy only) ──
-  let displayId: string | null = null;
-  if (tenant.industry_id === "education_consultancy") {
-    const prefix = (tenant.slug || "lead").slice(0, 3).toUpperCase();
-    const { data: maxRow } = await supabase
-      .from("leads")
-      .select("display_id")
-      .eq("tenant_id", tenant.id)
-      .not("display_id", "is", null)
-      .order("display_id", { ascending: false })
-      .limit(1)
-      .single();
-    const lastNum = maxRow?.display_id ? parseInt(maxRow.display_id.split("-").pop() || "0", 10) : 0;
-    displayId = `${prefix}-${(lastNum + 1).toString().padStart(3, "0")}`;
-  }
-
   // Resolve intake list for brand-new leads — any tenant with lead-lists (education + travel).
   // Dedup path already returned above, so this only applies to brand-new inserts.
   // Falls back to null silently if no intake list exists.
@@ -453,7 +438,6 @@ export async function POST(
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
     branch_id: publicFormBranchId,
-    ...(displayId && { display_id: displayId }),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
     ...(routedListId && { list_id: routedListId }),
   };
@@ -528,6 +512,17 @@ export async function POST(
   }
 
   log.info({ leadId: lead.id }, "Lead created via public API");
+
+  // Assign display ID for education leads (best-effort; routedListId = null when no intake list).
+  if (tenant.industry_id === "education_consultancy") {
+    void assignDisplayIds({
+      supabase,
+      tenantId: tenant.id,
+      industryId: tenant.industry_id,
+      destinationListId: routedListId,
+      leadIds: [lead.id],
+    }).catch((err) => log.error({ err }, "assignDisplayIds on public create failed"));
+  }
 
   // Sync origin branch membership (no-op now; Part B wires the default branch)
   void syncOriginMembership(supabase, tenant.id, lead.id, publicFormBranchId, null).catch(() => {});

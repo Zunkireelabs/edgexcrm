@@ -773,7 +773,11 @@ export function getLeadColumns(
  */
 export function getDefaultVisibleKeys(industryId: string | null | undefined, maxBranches = 1): string[] {
   const cols = getLeadColumns(industryId, [], maxBranches);
-  return cols.filter((c) => c.defaultVisible).map((c) => c.key);
+  const keys = cols.filter((c) => c.defaultVisible).map((c) => c.key);
+  if (industryId === "education_consultancy" && !keys.includes("display_id")) {
+    keys.splice(1, 0, "display_id"); // insert after name column
+  }
+  return keys;
 }
 
 function humanizeKey(key: string): string {
