@@ -426,51 +426,6 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
   );
 }
 
-function LeadTypeSelector({ leadId, currentType }: { leadId: string; currentType: string }) {
-  const [type, setType] = useState(currentType);
-  const [updating, setUpdating] = useState(false);
-
-  async function handleToggle(newType: string) {
-    setUpdating(true);
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_type: newType }),
-      });
-      if (res.ok) {
-        setType(newType);
-        toast.success(`Changed to ${newType}`);
-      }
-    } catch {
-      toast.error("Failed to update lead type");
-    } finally {
-      setUpdating(false);
-    }
-  }
-
-  return (
-    <div className="flex gap-1.5">
-      {["lead", "prospect"].map((t) => (
-        <button
-          key={t}
-          disabled={updating}
-          onClick={() => handleToggle(t)}
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-            type === t
-              ? t === "prospect"
-                ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
-                : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
-              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-          }`}
-        >
-          {t.charAt(0).toUpperCase() + t.slice(1)}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
   const [tags, setTags] = useState(currentTags);
   const [updating, setUpdating] = useState(false);
