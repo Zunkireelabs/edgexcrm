@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AISparkleIcon } from "@/components/ui/ai-sparkle";
-import type { Lead, LeadNote } from "@/types/database";
+import type { Lead, LeadNote, LeadChecklist } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import { AIInsightsTab } from "./ai-insights-tab";
 import { ProfessionalDetailsCard } from "./professional-details-card";
@@ -30,6 +30,8 @@ interface LeadTabsProps {
   onTabChange: (tab: string) => void;
   onNotesChange: (notes: LeadNote[]) => void;
   onCustomFieldsChange: (fields: Record<string, unknown>) => void;
+  checklists: LeadChecklist[];
+  onChecklistsChange: (checklists: LeadChecklist[]) => void;
   isAdmin: boolean;
   currentUserId: string;
   industryId?: string | null;
@@ -44,7 +46,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -178,6 +180,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             teamMemberNames={teamMemberNames}
             isAdmin={isAdmin}
             onNotesChange={onNotesChange}
+            checklists={checklists}
+            onChecklistsChange={onChecklistsChange}
             currentUserId={currentUserId}
             industryId={industryId}
             leadEmail={lead.email}
@@ -313,6 +317,9 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       destinations: [],
       field_of_study: null,
       degree_level: null,
+      pre_app_fee_status: null,
+      pre_app_fee_amount: null,
+      pre_app_fee_notes: null,
       archive_reason: null,
     };
     setMergeTarget(partial);
@@ -415,51 +422,6 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
     <div className="grid grid-cols-[140px_1fr] gap-4 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <span className="font-medium">{displayValue}</span>
-    </div>
-  );
-}
-
-function LeadTypeSelector({ leadId, currentType }: { leadId: string; currentType: string }) {
-  const [type, setType] = useState(currentType);
-  const [updating, setUpdating] = useState(false);
-
-  async function handleToggle(newType: string) {
-    setUpdating(true);
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_type: newType }),
-      });
-      if (res.ok) {
-        setType(newType);
-        toast.success(`Changed to ${newType}`);
-      }
-    } catch {
-      toast.error("Failed to update lead type");
-    } finally {
-      setUpdating(false);
-    }
-  }
-
-  return (
-    <div className="flex gap-1.5">
-      {["lead", "prospect"].map((t) => (
-        <button
-          key={t}
-          disabled={updating}
-          onClick={() => handleToggle(t)}
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-            type === t
-              ? t === "prospect"
-                ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
-                : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
-              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-          }`}
-        >
-          {t.charAt(0).toUpperCase() + t.slice(1)}
-        </button>
-      ))}
     </div>
   );
 }

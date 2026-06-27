@@ -684,6 +684,8 @@ export function LeadDetailV2({
             onTabChange={setActiveTab}
             onNotesChange={handleNotesChange}
             onCustomFieldsChange={handleCustomFieldsChange}
+            checklists={checklists}
+            onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
             currentUserId={userId}
             industryId={tenant.industry_id}
@@ -718,6 +720,9 @@ export function LeadDetailV2({
                       consentSigned={consentSigned}
                       canManage={canManageApplications ?? isAdmin}
                       onSignedChange={setConsentSignedState}
+                      feeStatus={currentLead.pre_app_fee_status}
+                      feeAmount={currentLead.pre_app_fee_amount}
+                      feeNotes={currentLead.pre_app_fee_notes}
                     />
                   )}
                   <ApplicationsCard

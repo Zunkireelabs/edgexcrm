@@ -60,6 +60,9 @@ const UPDATABLE_FIELDS = [
   "destinations",
   "field_of_study",
   "degree_level",
+  "pre_app_fee_status",
+  "pre_app_fee_amount",
+  "pre_app_fee_notes",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -362,6 +365,20 @@ export async function PATCH(
   // Recompute normalized_email when email changes to keep dedup keying accurate
   if (body.email !== undefined) {
     updatePayload.normalized_email = normalizeEmail(body.email as string | null | undefined);
+  }
+
+  // Pre-Application fee normalization (migration 084)
+  if (updatePayload.pre_app_fee_status !== undefined) {
+    const fs = updatePayload.pre_app_fee_status;
+    if (fs !== null && !["paid", "unpaid", "waiver"].includes(fs as string)) {
+      return apiValidationError({ pre_app_fee_status: ["Must be one of: paid, unpaid, waiver"] });
+    }
+    // Amount only makes sense when paid — drop it otherwise to keep data clean.
+    if (fs !== "paid") updatePayload.pre_app_fee_amount = null;
+  }
+  if (updatePayload.pre_app_fee_amount !== undefined && updatePayload.pre_app_fee_amount !== null) {
+    const amt = Number(updatePayload.pre_app_fee_amount);
+    updatePayload.pre_app_fee_amount = Number.isFinite(amt) && amt >= 0 ? amt : null;
   }
 
   if (Object.keys(updatePayload).length === 0) {
