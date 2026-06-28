@@ -94,7 +94,7 @@ export function ConsentCard({
         }),
       });
       if (!res.ok) throw new Error();
-      toast.success("Application fee saved");
+      toast.success("Processing fee saved");
       setFeeDirty(false);
     } catch {
       toast.error("Failed to save application fee");
@@ -273,9 +273,9 @@ export function ConsentCard({
             </>
           )}
 
-          {/* ── Application Fee (pre-application, lead-level) ── */}
+          {/* ── Processing Fee (pre-application, lead-level) ── */}
           <div className="border-t pt-3 space-y-3">
-            <p className="text-xs font-medium text-muted-foreground">Application Fee</p>
+            <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
 
             {canManage ? (
               <>

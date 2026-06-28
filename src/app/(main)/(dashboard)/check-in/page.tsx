@@ -5,6 +5,7 @@ import { CheckInPage } from "@/industries/_shared/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
+import { filterAssignableMembers } from "@/lib/leads/assignable";
 import type { PipelineStage } from "@/types/database";
 
 export default async function CheckInRoute() {
@@ -27,13 +28,21 @@ export default async function CheckInRoute() {
 
   const stages = (stagesResult.data || []) as PipelineStage[];
 
+  // Assign list: branch-scoped users only see their own branch's team; overall
+  // access (owner/admin) sees everyone.
+  const assignableMembers = filterAssignableMembers(
+    teamMembers,
+    tenantData.permissions.leadScope,
+    tenantData.branchId,
+  );
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <CheckInPage
         tenantId={tenantData.tenant.id}
         pipelines={pipelines}
         stages={stages}
-        teamMembers={teamMembers}
+        teamMembers={assignableMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
       />
     </div>

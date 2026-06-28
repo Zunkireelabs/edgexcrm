@@ -39,7 +39,7 @@ const MOVE_CONFIRM_MESSAGES: Record<string, string> = {
   delete: "Move this lead to Delete?",
 };
 
-function moveConfirmMessage(list: LeadList): string {
+export function moveConfirmMessage(list: LeadList): string {
   return MOVE_CONFIRM_MESSAGES[list.slug] ?? `Move this lead to ${list.name}?`;
 }
 

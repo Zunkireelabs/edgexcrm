@@ -11,6 +11,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -68,6 +69,17 @@ export default async function LeadDetailPage({
           l.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
         )
+      )
+    : [];
+
+  // Full active funnel (excludes archive + staging lists) so the list stepper
+  // can compute true neighbours and show their names even when a step is
+  // outside the caller's accessible lists.
+  const activeLeadLists = hasLeadLists
+    ? (allLists as LeadList[]).filter(
+        (l) =>
+          !isOffFunnelLeadList(l) &&
+          !(l as unknown as { is_staging?: boolean }).is_staging
       )
     : [];
 
@@ -148,6 +160,7 @@ export default async function LeadDetailPage({
       canManageApplications={tenantData.permissions.canManageApplications}
       canManageClasses={tenantData.permissions.canManageClasses}
       leadLists={accessibleLists}
+      activeLeadLists={activeLeadLists}
       classesActive={classesActive}
       applicationsActive={applicationsActive}
       consentEnabled={consentEnabled}
