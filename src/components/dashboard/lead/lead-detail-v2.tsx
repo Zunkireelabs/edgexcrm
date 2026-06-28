@@ -66,6 +66,7 @@ interface LeadDetailV2Props {
   canManageApplications?: boolean;
   canManageClasses?: boolean;
   leadLists?: LeadList[];
+  activeLeadLists?: LeadList[];
   classesActive?: boolean;
   applicationsActive?: boolean;
   consentEnabled?: boolean;
@@ -129,6 +130,7 @@ export function LeadDetailV2({
   canManageApplications,
   canManageClasses,
   leadLists,
+  activeLeadLists,
   classesActive,
   applicationsActive,
   consentEnabled = false,
@@ -617,6 +619,7 @@ export function LeadDetailV2({
               }
             }}
             leadLists={leadLists}
+            activeLeadLists={activeLeadLists}
             onListChange={async (listId, archiveReason) => {
               const prevLead = currentLead;
               const targetList = leadLists?.find((l) => l.id === listId);

@@ -61,6 +61,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
+import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -217,6 +218,7 @@ interface DashboardShellProps {
   selectedBranchId?: string | null;
   leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
+  archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
 }
 
@@ -234,6 +236,7 @@ export function DashboardShell({
   selectedBranchId = null,
   leadLists = [],
   stagingLists = [],
+  archiveLists = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -426,6 +429,9 @@ export function DashboardShell({
                   />
                 </Suspense>
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+                {archiveLists.length > 0 && (
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                )}
 
                 {/* Operations */}
                 <NavSectionHeader label="Operations" />
@@ -491,6 +497,9 @@ export function DashboardShell({
               })}
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
+            {archiveLists.length > 0 && (
+              <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+            )}
             {industryAfter.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_BOTTOM.filter(
               (i) => navAllowed(i.href) && i.href !== "/settings",

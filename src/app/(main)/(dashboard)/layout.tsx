@@ -9,6 +9,7 @@ import { GlobalSearchProvider } from "@/contexts/global-search-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canAccessList } from "@/lib/api/permissions";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
 import type { LeadList } from "@/types/database";
 
@@ -58,8 +59,13 @@ export default async function DashboardLayout({
     )
   );
   const isLayoutAdmin = tenantData.role === "owner" || tenantData.role === "admin";
-  const leadLists = accessibleLists.filter((l) => !l.is_staging);
-  // Leads Organise is admin-only; counselors/viewers never see it in the nav
+  // "All Leads" shows only the active funnel; off-funnel lists (Archived, Delete)
+  // render as standalone top-level items in the LEADS section.
+  const leadLists = accessibleLists.filter((l) => !l.is_staging && !isOffFunnelLeadList(l));
+  const archiveLists = accessibleLists
+    .filter((l) => !l.is_staging && isOffFunnelLeadList(l))
+    .sort((a, b) => a.sort_order - b.sort_order);
+  // Leads Organise staging buckets are admin-only; counselors/viewers never see them in the nav
   const stagingLists = isLayoutAdmin ? accessibleLists.filter((l) => !!l.is_staging) : [];
 
   const industrySidebarItems = getIndustrySidebarItems(
@@ -77,7 +83,7 @@ export default async function DashboardLayout({
 
   const navIndex = buildNavIndex({
     industrySidebarItems,
-    leadLists,
+    leadLists: [...leadLists, ...archiveLists],
     stagingLists,
     allowedNavKeys,
     industryId: tenantData.tenant.industry_id ?? null,
@@ -107,6 +113,7 @@ export default async function DashboardLayout({
             selectedBranchId={selectedBranchId}
             leadLists={leadLists}
             stagingLists={stagingLists}
+            archiveLists={archiveLists}
           >
             {children}
           </DashboardShell>
