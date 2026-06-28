@@ -50,6 +50,7 @@ import {
   Building2,
   ArrowRightLeft,
   Archive,
+  RotateCcw,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -104,6 +105,8 @@ interface LeadsTableProps {
   roleMap?: Record<string, string>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
+  viewMode?: "trash" | "archived" | "normal";
+  intakeListId?: string | null;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -133,6 +136,8 @@ export function LeadsTable({
   roleMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
+  viewMode = "normal",
+  intakeListId = null,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -592,6 +597,39 @@ export function LeadsTable({
 
   const CHUNK_SIZE = 100;
 
+  // Restore from the recycle bin (Delete view → clears deleted_at) or un-archive
+  // (Archived view → moves back into the intake/Pre-qualified list).
+  async function restoreLeads(ids: string[]) {
+    const validIds = ids.filter((id) => filteredIds.has(id));
+    if (validIds.length === 0) return;
+    try {
+      let res: Response;
+      if (viewMode === "archived") {
+        if (!intakeListId) {
+          toast.error("No list to restore into");
+          return;
+        }
+        res = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: validIds, list_id: intakeListId }),
+        });
+      } else {
+        res = await fetch("/api/v1/leads/bulk/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: validIds }),
+        });
+      }
+      if (!res.ok) throw new Error("restore failed");
+      toast.success(`Restored ${validIds.length} lead${validIds.length !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch {
+      toast.error("Failed to restore");
+    }
+  }
+
   async function handleBulkMove() {
     const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
     if (idsToMove.length === 0) {
@@ -918,9 +956,14 @@ export function LeadsTable({
             }
           }
         : undefined,
+      viewMode,
+      onRestore:
+        viewMode === "trash" || viewMode === "archived"
+          ? async (leadId: string) => { await restoreLeads([leadId]); }
+          : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
+    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -1225,6 +1268,37 @@ export function LeadsTable({
             {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-1">
+            {viewMode !== "normal" ? (
+              <>
+                {isAdmin && (
+                  <button
+                    onClick={() => restoreLeads(Array.from(selectedIds))}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Restore
+                  </button>
+                )}
+                {viewMode === "archived" && (
+                  <button
+                    onClick={() => setDeleteDialogOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                )}
+                <div className="w-px h-4 bg-gray-200 mx-1" />
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  aria-label="Deselect all"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+            <>
             {isAdmin && teamMembers.length > 0 && (
               <button
                 onClick={() => setAssignDialogOpen(true)}
@@ -1290,6 +1364,8 @@ export function LeadsTable({
             >
               <X className="h-4 w-4" />
             </button>
+            </>
+            )}
           </div>
         </div>
       </div>

@@ -112,6 +112,7 @@ export interface LeadQueryScope {
   branchId: string | null;      // null = no branch filter
   listId?: string | null;          // filter to one list (lead-lists feature)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
+  onlyDeleted?: boolean;            // recycle bin: show soft-deleted leads (deleted_at NOT NULL)
 }
 export function leadQueryScope(
   p: ResolvedPermissions,

@@ -53,12 +53,19 @@ export default async function LeadsPage({
       }
     }
     const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
-    if (activeList) {
+    if (activeList?.slug === "delete") {
+      scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads
+    } else if (activeList) {
       scope.listId = activeList.id;
     } else {
       scope.excludeListIds = excludeIds;
     }
   }
+
+  // View mode for the leads table: "trash" (recycle bin), "archived", or "normal".
+  const viewMode: "trash" | "archived" | "normal" =
+    activeList?.slug === "delete" ? "trash" : activeList?.is_archive ? "archived" : "normal";
+  const intakeListId = allLists.find((l) => l.is_intake)?.id ?? null;
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
@@ -125,6 +132,8 @@ export default async function LeadsPage({
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
+        viewMode={viewMode}
+        intakeListId={intakeListId}
       />
     </div>
   );

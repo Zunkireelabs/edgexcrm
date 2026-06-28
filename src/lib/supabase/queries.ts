@@ -77,6 +77,7 @@ export async function getLeads(
     branchId?: string | null;
     listId?: string | null;
     excludeListIds?: string[];
+    onlyDeleted?: boolean;
   }
 ): Promise<Lead[]> {
   const supabase = await createClient();
@@ -96,21 +97,30 @@ export async function getLeads(
       .from("leads")
       .select("*")
       .eq("tenant_id", tenantId)
-      .is("deleted_at", null)
       .is("converted_at", null)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
+
+    // Recycle bin: show soft-deleted leads; otherwise hide them (default).
+    if (scope?.onlyDeleted) {
+      q = q.not("deleted_at", "is", null);
+    } else {
+      q = q.is("deleted_at", null);
+    }
 
     if (selfIds !== null) q = q.in("id", selfIds);
     else if (branchIds !== null) q = q.in("id", branchIds);
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
 
-    if (scope?.listId) {
-      q = q.eq("list_id", scope.listId);
-    } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
-      // Master view for education: show leads not in any archive list (NULL list_id is included)
-      q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+    // List filters don't apply to the recycle bin (it spans all lists).
+    if (!scope?.onlyDeleted) {
+      if (scope?.listId) {
+        q = q.eq("list_id", scope.listId);
+      } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+        // Master view for education: show leads not in any archive list (NULL list_id is included)
+        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+      }
     }
 
     return q;
