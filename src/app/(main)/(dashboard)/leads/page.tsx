@@ -52,6 +52,23 @@ export default async function LeadsPage({
         if (accessible) activeList = found;
       }
     }
+    // "All Leads" (no ?list=) should land on the user's first accessible funnel
+    // list instead of the combined master view. Redirect server-side so it can't
+    // be bypassed; the target carries a ?list= so this never loops.
+    if (!listSlug) {
+      const firstFunnel = allLists
+        .filter((l) => !l.is_archive && !l.is_staging)
+        .filter((l) =>
+          canAccessList(
+            tenantData.permissions,
+            l.access as { mode: string; positionIds?: string[] },
+            tenantData.positionId,
+          ),
+        )
+        .sort((a, b) => a.sort_order - b.sort_order)[0];
+      if (firstFunnel) redirect(`/leads?list=${firstFunnel.slug}`);
+    }
+
     const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
     if (activeList?.slug === "delete") {
       scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads
