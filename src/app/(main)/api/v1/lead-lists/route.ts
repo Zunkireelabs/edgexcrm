@@ -13,7 +13,7 @@ import {
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
-import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
+import { sharedBranchLeadIdsForAssignee } from "@/lib/leads/branch-membership";
 import type { LeadList } from "@/types/database";
 
 function slugify(name: string): string {
@@ -77,11 +77,15 @@ export async function GET(request: NextRequest) {
     .not("list_id", "is", null);
 
   if (scope.restrictToSelf) {
-    const ids = await leadIdsVisibleToAssignee(supabase, auth.tenantId, auth.userId);
-    countQuery = countQuery.in("id", ids);
+    // Inline column filter — avoids .in("id", 500+ uuids) URL overflow.
+    const sharedIds = await sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId);
+    if (sharedIds.length > 0) {
+      countQuery = countQuery.or(`assigned_to.eq.${auth.userId},id.in.(${sharedIds.join(",")})`);
+    } else {
+      countQuery = countQuery.eq("assigned_to", auth.userId);
+    }
   } else if (scope.branchId) {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
-    countQuery = countQuery.in("id", ids);
+    countQuery = countQuery.in("assigned_to", auth.branchMemberIds);
   }
 
   const { data: countRows } = await countQuery.select("list_id");

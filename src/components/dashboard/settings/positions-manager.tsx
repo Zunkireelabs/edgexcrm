@@ -85,7 +85,7 @@ function buildDefaultForm(navCatalog: NavItem[], widgetCatalog: WidgetItem[]) {
     navKeys: [] as string[],
     pipelinesMode: "all" as "all" | "allow",
     pipelineIds: [] as string[],
-    leadScope: "all" as "all" | "own",
+    leadScope: "all" as "all" | "own" | "team",
     canEditLeads: false,
     canManageApplications: false,
     canExport: false,
@@ -125,7 +125,7 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
     navKeys: p.nav.mode === "allow" ? p.nav.keys : [],
     pipelinesMode: p.pipelines.mode,
     pipelineIds: p.pipelines.mode === "allow" ? p.pipelines.ids : [],
-    leadScope: p.leadScope === "own" ? "own" : "all",
+    leadScope: p.leadScope,
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
     canExport: p.canExport === true,
@@ -468,7 +468,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                 <Label>Lead scope</Label>
                 <Select
                   value={form.leadScope}
-                  onValueChange={(v) => setForm((f) => ({ ...f, leadScope: v as "all" | "own" }))}
+                  onValueChange={(v) => setForm((f) => ({ ...f, leadScope: v as "all" | "own" | "team" }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -476,6 +476,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                   <SelectContent>
                     <SelectItem value="all">All leads — sees every lead in allowed pipelines</SelectItem>
                     <SelectItem value="own">Only their own assigned leads</SelectItem>
+                    <SelectItem value="team">Branch leads — sees assigned leads in their branch</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -503,7 +504,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                     )}
                   </label>
                 </div>
-                {form.base_tier === "member" && form.leadScope === "all" && !form.canEditLeads && (
+                {form.base_tier === "member" && (form.leadScope === "all" || form.leadScope === "team") && !form.canEditLeads && (
                   <p className="text-xs text-muted-foreground pl-6">
                     Unchecked → read-only viewer. Checked → branch manager: sees and edits all leads.
                   </p>

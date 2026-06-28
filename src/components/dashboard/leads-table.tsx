@@ -108,6 +108,7 @@ interface LeadsTableProps {
   viewMode?: "trash" | "archived" | "normal";
   intakeListId?: string | null;
   canExport?: boolean;
+  memberBranchMap?: Record<string, string>;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -140,6 +141,7 @@ export function LeadsTable({
   viewMode = "normal",
   intakeListId = null,
   canExport = false,
+  memberBranchMap = {},
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -896,6 +898,7 @@ export function LeadsTable({
       formMap,
       entityMap,
       branchMap,
+      memberBranchMap,
       roleMap,
       stages,
       industryId,
@@ -965,7 +968,7 @@ export function LeadsTable({
           : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column

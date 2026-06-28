@@ -28,7 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { leadIdsForBranch, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -141,20 +141,24 @@ export async function GET(request: NextRequest) {
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
   if (scope.restrictToSelf) {
-    const ids = await leadIdsVisibleToAssignee(supabase, auth.tenantId, auth.userId);
-    query = query.in("id", ids);
+    // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
+    const sharedIds = await sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId);
+    if (sharedIds.length > 0) {
+      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${sharedIds.join(",")})`);
+    } else {
+      query = query.eq("assigned_to", auth.userId);
+    }
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
-    query = query.in("id", ids);
+    query = query.in("assigned_to", auth.branchMemberIds);
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, adminBranchFilter);
-    query = query.in("id", ids);
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
+    query = query.in("assigned_to", memberIds);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)

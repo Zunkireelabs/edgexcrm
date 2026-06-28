@@ -20,6 +20,7 @@ export interface LeadColumnCtx {
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
   branchMap: Record<string, string>;
+  memberBranchMap: Record<string, string>;
   roleMap?: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
@@ -574,7 +575,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => (
       <td key="branch" className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-        {lead.branch_id ? (ctx.branchMap[lead.branch_id] ?? "—") : <span className="text-gray-400">—</span>}
+        {(() => {
+          const bid = lead.branch_id ?? ctx.memberBranchMap[lead.assigned_to ?? ""] ?? null;
+          return bid ? (ctx.branchMap[bid] ?? "—") : <span className="text-gray-400">—</span>;
+        })()}
       </td>
     ),
   },
