@@ -1,6 +1,6 @@
 import { authenticateRequest } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
-import { leadIdsVisibleToAssignee } from "@/lib/leads/branch-membership";
+import { shouldLeadBeVisibleToAssignee } from "@/lib/leads/branch-membership";
 import {
   apiUnauthorized,
   apiForbidden,
@@ -117,8 +117,8 @@ export async function POST(request: Request) {
     // Counselor scoping: use membership-aware visibility (covers per-branch assignees)
     let allowInterpolation = true;
     if (shouldRestrictToSelf(auth.permissions)) {
-      const visibleIds = await leadIdsVisibleToAssignee(db.raw(), auth.tenantId, auth.userId);
-      allowInterpolation = visibleIds.includes(effectiveLeadId);
+      // Per-lead check avoids enumerating all assigned IDs into memory (URL overflow risk).
+      allowInterpolation = await shouldLeadBeVisibleToAssignee(db.raw(), auth.tenantId, effectiveLeadId, auth.userId);
     }
 
     if (allowInterpolation) {

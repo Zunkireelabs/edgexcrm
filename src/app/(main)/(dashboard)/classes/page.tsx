@@ -6,6 +6,41 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope } from "@/lib/api/permissions";
 import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
 import { ClassesWorkspace } from "@/industries/education-consultancy/features/classes/pages/classes-workspace";
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+// Fetch enrollments in 250-ID chunks to avoid Node/undici 16 KB URL limit.
+async function fetchEnrollmentsByLeadIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: SupabaseClient<any>,
+  tenantId: string,
+  leadIds: string[] | null,
+): Promise<Array<Record<string, unknown>>> {
+  if (leadIds !== null && leadIds.length === 0) return [];
+
+  const buildQ = (chunk?: string[]) => {
+    let q = supabase
+      .from("class_enrollments")
+      .select("*, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,assigned_to)")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false });
+    if (chunk && chunk.length > 0) q = q.in("lead_id", chunk);
+    return q;
+  };
+
+  const CHUNK_SIZE = 250;
+  if (!leadIds || leadIds.length <= CHUNK_SIZE) {
+    const { data } = await buildQ(leadIds ?? undefined);
+    return (data ?? []) as Array<Record<string, unknown>>;
+  }
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < leadIds.length; i += CHUNK_SIZE) {
+    chunks.push(leadIds.slice(i, i + CHUNK_SIZE));
+  }
+  const results = await Promise.all(chunks.map((chunk) => buildQ(chunk)));
+  return results.flatMap((r) => (r.data ?? []) as Array<Record<string, unknown>>);
+}
 
 export default async function ClassesRoute() {
   const tenantData = await getCurrentUserTenant();
@@ -24,25 +59,14 @@ export default async function ClassesRoute() {
     leadIds = await leadIdsForBranch(supabase, tenantData.tenant.id, scope.branchId);
   }
 
-  const [classesResult, enrollmentsResult] = await Promise.all([
+  const [classesResult, enrollments] = await Promise.all([
     supabase
       .from("classes")
       .select("id, name, default_fee, is_active")
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("name", { ascending: true }),
-    leadIds !== null && leadIds.length === 0
-      ? Promise.resolve({ data: [] })
-      : (() => {
-          let q = supabase
-            .from("class_enrollments")
-            .select("*, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,assigned_to)")
-            .eq("tenant_id", tenantData.tenant.id)
-            .is("deleted_at", null)
-            .order("created_at", { ascending: false });
-          if (leadIds && leadIds.length > 0) q = q.in("lead_id", leadIds);
-          return q;
-        })(),
+    fetchEnrollmentsByLeadIds(supabase, tenantData.tenant.id, leadIds),
   ]);
 
   const classes = (classesResult.data ?? []) as Array<{
@@ -51,7 +75,6 @@ export default async function ClassesRoute() {
     default_fee: number | null;
     is_active: boolean;
   }>;
-  const enrollments = (enrollmentsResult.data ?? []) as Array<Record<string, unknown>>;
 
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">

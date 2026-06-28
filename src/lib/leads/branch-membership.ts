@@ -38,6 +38,11 @@ export async function leadIdsForBranch(
 }
 
 // Lead IDs a user can see as a per-branch assignee — membership rows ∪ legacy leads.assigned_to (covers unbranched leads).
+// NOTE: returns the FULL combined set (can be 500+ IDs). Passing this into .in("id", result) builds a long URL
+// that exceeds Node/undici's 16 KB maxHeaderSize at ~440+ leads.
+// For queries on the LEADS table, use sharedBranchLeadIdsForAssignee + inline assigned_to filter instead.
+// This function is still correct for cross-table queries (e.g. applications, classes) where you need
+// the full ID list to filter a foreign-key column — chunk that .in() call into ≤250-ID batches.
 export async function leadIdsVisibleToAssignee(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: SupabaseClient<any>,
@@ -52,6 +57,38 @@ export async function leadIdsVisibleToAssignee(
   (m.data ?? []).forEach((r: { lead_id: string }) => ids.add(r.lead_id));
   (l.data ?? []).forEach((r: { id: string }) => ids.add(r.id));
   return [...ids];
+}
+
+// URL-safe subset: ONLY lead_branches rows for this assignee (the "shared-in" set, normally small).
+// Use this to build an inline OR filter on the leads table:
+//   if (sharedIds.length > 0) q.or(`assigned_to.eq.${userId},id.in.(${sharedIds})`)
+//   else                        q.eq("assigned_to", userId)
+// This avoids the UND_ERR_HEADERS_OVERFLOW that hits when all 500+ assigned lead IDs go into .in("id", bigArray).
+export async function sharedBranchLeadIdsForAssignee(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  userId: string,
+): Promise<string[]> {
+  const { data } = await db.from("lead_branches").select("lead_id")
+    .eq("tenant_id", tenantId).eq("assigned_to", userId);
+  return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
+}
+
+// Targeted visibility check for a single lead — avoids enumerating all assigned IDs.
+// Use instead of leadIdsVisibleToAssignee(...).includes(leadId) to prevent URL overflow.
+export async function shouldLeadBeVisibleToAssignee(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  leadId: string,
+  userId: string,
+): Promise<boolean> {
+  const [direct, branch] = await Promise.all([
+    db.from("leads").select("id").eq("id", leadId).eq("tenant_id", tenantId).eq("assigned_to", userId).is("deleted_at", null).maybeSingle(),
+    db.from("lead_branches").select("lead_id").eq("tenant_id", tenantId).eq("lead_id", leadId).eq("assigned_to", userId).maybeSingle(),
+  ]);
+  return !!direct.data || !!branch.data;
 }
 
 // All membership rows for one lead (for the access checks on single-lead routes).

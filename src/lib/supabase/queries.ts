@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -81,17 +81,20 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const supabase = await createClient();
 
-  // Compute id-lists once (async) before the chunk loop.
-  let selfIds: string[] | null = null;
+  // For self-scope (counselor): only fetch the small shared-branch set, then use inline assigned_to
+  // filter on the leads table. This avoids .in("id", 500+ uuids) which overflows Node/undici's
+  // 16 KB URL limit (UND_ERR_HEADERS_OVERFLOW) and returns empty results.
+  let sharedIds: string[] | null = null;
   let branchIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
-    selfIds = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
+    sharedIds = await sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId);
   } else if (scope?.branchId) {
     branchIds = await leadIdsForBranch(supabase, tenantId, scope.branchId);
   }
 
   // Factory applied on every chunk so all filters + stable sort are consistent.
-  const buildQuery = () => {
+  // idOverride: explicit ID list for the .in("id", ...) filter (branch-scope chunks).
+  const buildQuery = (idOverride?: string[]) => {
     let q = supabase
       .from("leads")
       .select("*")
@@ -101,8 +104,16 @@ export async function getLeads(
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
 
-    if (selfIds !== null) q = q.in("id", selfIds);
-    else if (branchIds !== null) q = q.in("id", branchIds);
+    if (scope?.restrictToSelf && scope.userId) {
+      // Inline column filter — no URL growth regardless of how many leads are assigned.
+      if (sharedIds && sharedIds.length > 0) {
+        q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
+      } else {
+        q = q.eq("assigned_to", scope.userId);
+      }
+    } else if (idOverride !== undefined) {
+      q = q.in("id", idOverride);
+    }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
 
@@ -122,9 +133,41 @@ export async function getLeads(
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
   const out: Lead[] = [];
+
+  // Branch-scope: split into 250-ID chunks to stay under the URL limit.
+  if (branchIds !== null) {
+    if (branchIds.length === 0) return [];
+    const BRANCH_CHUNK = 250;
+    if (branchIds.length > BRANCH_CHUNK) {
+      const seen = new Set<string>();
+      const chunks: string[][] = [];
+      for (let i = 0; i < branchIds.length; i += BRANCH_CHUNK) {
+        chunks.push(branchIds.slice(i, i + BRANCH_CHUNK));
+      }
+      const results = await Promise.all(
+        chunks.map((chunk) =>
+          buildQuery(chunk)
+            .order("created_at", { ascending: false })
+            .order("id", { ascending: false })
+            .limit(max)
+        )
+      );
+      for (const { data } of results) {
+        for (const lead of (data ?? []) as Lead[]) {
+          if (!seen.has(lead.id)) { seen.add(lead.id); out.push(lead); }
+        }
+      }
+      out.sort((a, b) =>
+        b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)
+      );
+      return out.slice(0, max);
+    }
+  }
+
+  // Normal range-based path: self-scope (inline filter) or small branchIds set.
   for (let from = 0; from < max; from += CHUNK) {
     const to = Math.min(from + CHUNK, max) - 1;
-    const { data, error } = await buildQuery().range(from, to);
+    const { data, error } = await buildQuery(branchIds ?? undefined).range(from, to);
     if (error) break;
     out.push(...((data ?? []) as Lead[]));
     if (!data || data.length < CHUNK) break;
@@ -338,10 +381,58 @@ export async function getLeadsForPipeline(
   }
 
   if (options?.restrictToSelf && options.userId) {
-    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, options.userId);
-    query = query.in("id", ids);
+    // Inline column filter avoids .in("id", 500+ uuids) URL overflow.
+    const shared = await sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId);
+    if (shared.length > 0) {
+      query = query.or(`assigned_to.eq.${options.userId},id.in.(${shared.join(",")})`);
+    } else {
+      query = query.eq("assigned_to", options.userId);
+    }
   } else if (options?.branchId) {
     const ids = await leadIdsForBranch(supabase, tenantId, options.branchId);
+    if (ids.length === 0) return [];
+    // Chunk large branch ID sets to stay under 16 KB URL limit.
+    const BRANCH_CHUNK = 250;
+    if (ids.length > BRANCH_CHUNK) {
+      const seen = new Set<string>();
+      const all: Lead[] = [];
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += BRANCH_CHUNK) chunks.push(ids.slice(i, i + BRANCH_CHUNK));
+      const results = await Promise.all(
+        chunks.map((chunk) =>
+          supabase.from("leads").select("*").eq("tenant_id", tenantId).is("deleted_at", null).is("converted_at", null)
+            .not("stage_id", "is", null)
+            .in("id", chunk)
+            .order("created_at", { ascending: false })
+            .limit(500)
+        )
+      );
+      for (const { data } of results) {
+        for (const lead of (data ?? []) as Lead[]) {
+          if (!seen.has(lead.id)) { seen.add(lead.id); all.push(lead); }
+        }
+      }
+      all.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      // Continue with the merged leads set below
+      const leadsForPipeline = all.slice(0, 500);
+      if (leadsForPipeline.length === 0) return [];
+      const leadIdSet = new Set(leadsForPipeline.map((l) => l.id));
+      const { data: checklistCounts, error: clError } = await supabase
+        .from("lead_checklists").select("lead_id, is_completed").eq("tenant_id", tenantId);
+      if (clError) throw clError;
+      const countsMap = new Map<string, { total: number; completed: number }>();
+      for (const item of checklistCounts || []) {
+        if (!leadIdSet.has(item.lead_id)) continue;
+        const entry = countsMap.get(item.lead_id) || { total: 0, completed: 0 };
+        entry.total++;
+        if (item.is_completed) entry.completed++;
+        countsMap.set(item.lead_id, entry);
+      }
+      return leadsForPipeline.map((lead) => {
+        const counts = countsMap.get(lead.id) || { total: 0, completed: 0 };
+        return { ...(lead as Lead), checklist_total: counts.total, checklist_completed: counts.completed };
+      }) as PipelineLead[];
+    }
     query = query.in("id", ids);
   }
 
