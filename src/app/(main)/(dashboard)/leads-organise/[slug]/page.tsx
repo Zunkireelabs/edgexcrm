@@ -115,6 +115,9 @@ export default async function LeadsOrganiseCockpitPage({
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
+  const memberBranchMap = Object.fromEntries(
+    teamMembers.filter((m) => m.branch_id).map((m) => [m.user_id, m.branch_id as string])
+  );
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
   const roleMap = Object.fromEntries(
     teamMembersWithPositions.map((m) => [
@@ -151,6 +154,7 @@ export default async function LeadsOrganiseCockpitPage({
         roleMap={roleMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
+        memberBranchMap={memberBranchMap}
       />
     </div>
   );

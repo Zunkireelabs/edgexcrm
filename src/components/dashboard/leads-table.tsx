@@ -103,6 +103,7 @@ interface LeadsTableProps {
   roleMap?: Record<string, string>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
+  memberBranchMap?: Record<string, string>;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -132,6 +133,7 @@ export function LeadsTable({
   roleMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
+  memberBranchMap = {},
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -853,6 +855,7 @@ export function LeadsTable({
       formMap,
       entityMap,
       branchMap,
+      memberBranchMap,
       roleMap,
       stages,
       industryId,
@@ -917,7 +920,7 @@ export function LeadsTable({
         : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
