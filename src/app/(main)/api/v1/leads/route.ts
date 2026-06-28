@@ -28,7 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { leadIdsForBranch, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -152,8 +152,8 @@ export async function GET(request: NextRequest) {
   // team/own users cannot widen or redirect their scope via this param.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, adminBranchFilter);
-    query = query.in("id", ids);
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
+    query = query.in("assigned_to", memberIds);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
