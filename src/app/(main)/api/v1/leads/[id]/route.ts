@@ -107,8 +107,8 @@ export async function GET(
       !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
     return apiNotFound("Lead");
   }
-  if (scope.branchId && !membership.some((m) => m.branch_id === scope.branchId)) {
-    return apiNotFound("Lead");
+  if (scope.branchId) {
+    if (!lead.assigned_to || !auth.branchMemberIds.includes(lead.assigned_to)) return apiNotFound("Lead");
   }
 
   // Pipeline-access enforcement (dormant until Phase 3)

@@ -4,7 +4,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope } from "@/lib/api/permissions";
-import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
+import { leadIdsVisibleToAssignee, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ApplicationsWorkspace } from "@/industries/education-consultancy/features/application-tracking/pages/applications-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ApplicationStage, Application } from "@/types/database";
@@ -52,14 +52,17 @@ export default async function ApplicationsRoute() {
 
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null);
 
-  // leadIds: null = no filter (all tenant apps); [] = no accessible leads (return empty)
+  // leadIds: null = no filter (all); [] = empty result (own-scope with no leads)
+  // teamMemberIds: set for team scope — filter via embedded lead's assigned_to (no large id list)
   let leadIds: string[] | null = null;
+  let teamMemberIds: string[] | null = null;
 
   if (scope.restrictToSelf && scope.userId) {
     leadIds = await leadIdsVisibleToAssignee(supabase, tenantData.tenant.id, scope.userId);
   } else if (scope.branchId) {
-    leadIds = await leadIdsForBranch(supabase, tenantData.tenant.id, scope.branchId);
+    teamMemberIds = await branchMemberIds(supabase, tenantData.tenant.id, scope.branchId);
   }
+  // else: leadScope 'all' → no filter
 
   const [stagesResult, applications] = await Promise.all([
     supabase
@@ -67,7 +70,20 @@ export default async function ApplicationsRoute() {
       .select("*")
       .eq("tenant_id", tenantData.tenant.id)
       .order("position", { ascending: true }),
-    fetchApplicationsByLeadIds(supabase, tenantData.tenant.id, leadIds),
+    // Branch scope: inner-embed filter on the assignee's branch (no lead-id enumeration).
+    // Self/all scope: chunked lead_id filter (overflow-safe) via the shared helper.
+    teamMemberIds !== null
+      ? (async () => {
+          const { data } = await supabase
+            .from("applications")
+            .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
+            .eq("tenant_id", tenantData.tenant.id)
+            .is("deleted_at", null)
+            .order("created_at", { ascending: false })
+            .in("leads.assigned_to", teamMemberIds);
+          return (data ?? []) as Application[];
+        })()
+      : fetchApplicationsByLeadIds(supabase, tenantData.tenant.id, leadIds),
   ]);
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];

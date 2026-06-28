@@ -26,6 +26,19 @@ export function canManageLeadBranches(
   );
 }
 
+// User IDs of all members assigned to a branch (tenant_users.branch_id).
+// Small set (one row per team member) → safe to use in an .in("assigned_to", ids) filter.
+export async function branchMemberIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  branchId: string,
+): Promise<string[]> {
+  const { data } = await db.from("tenant_users")
+    .select("user_id").eq("tenant_id", tenantId).eq("branch_id", branchId);
+  return (data ?? []).map((r: { user_id: string }) => r.user_id);
+}
+
 // Lead IDs that are MEMBERS of a branch (origin OR shared-in).
 export async function leadIdsForBranch(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

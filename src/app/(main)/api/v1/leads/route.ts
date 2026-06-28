@@ -28,7 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { leadIdsForBranch, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -150,17 +150,15 @@ export async function GET(request: NextRequest) {
     }
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
-    if (ids.length > 0) query = query.in("id", ids);
-    else query = query.in("id", ["00000000-0000-0000-0000-000000000000"]);
+    query = query.in("assigned_to", auth.branchMemberIds);
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, adminBranchFilter);
-    query = query.in("id", ids);
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
+    query = query.in("assigned_to", memberIds);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
