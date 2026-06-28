@@ -145,8 +145,7 @@ export async function GET(request: NextRequest) {
     query = query.in("id", ids);
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
-    query = query.in("id", ids);
+    query = query.in("assigned_to", auth.branchMemberIds);
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;

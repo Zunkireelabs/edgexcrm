@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { leadIdsForBranch, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -81,13 +81,13 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const supabase = await createClient();
 
-  // Compute id-lists once (async) before the chunk loop.
+  // Compute filter sets once (async) before the chunk loop.
   let selfIds: string[] | null = null;
-  let branchIds: string[] | null = null;
+  let memberIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
     selfIds = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
   } else if (scope?.branchId) {
-    branchIds = await leadIdsForBranch(supabase, tenantId, scope.branchId);
+    memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
   }
 
   // Factory applied on every chunk so all filters + stable sort are consistent.
@@ -102,7 +102,7 @@ export async function getLeads(
       .order("id", { ascending: false });
 
     if (selfIds !== null) q = q.in("id", selfIds);
-    else if (branchIds !== null) q = q.in("id", branchIds);
+    else if (memberIds !== null) q = q.in("assigned_to", memberIds);
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
 
@@ -156,7 +156,8 @@ export async function getLead(
       if (!isAssignee) return null;
     }
     if (scope.branchId) {
-      if (!membership.some((m) => m.branch_id === scope.branchId)) return null;
+      const memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
+      if (!data.assigned_to || !memberIds.includes(data.assigned_to)) return null;
     }
   }
 
@@ -341,8 +342,8 @@ export async function getLeadsForPipeline(
     const ids = await leadIdsVisibleToAssignee(supabase, tenantId, options.userId);
     query = query.in("id", ids);
   } else if (options?.branchId) {
-    const ids = await leadIdsForBranch(supabase, tenantId, options.branchId);
-    query = query.in("id", ids);
+    const memberIds = await branchMemberIds(supabase, tenantId, options.branchId);
+    query = query.in("assigned_to", memberIds);
   }
 
   const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });

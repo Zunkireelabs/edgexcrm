@@ -4,7 +4,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope } from "@/lib/api/permissions";
-import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
+import { leadIdsVisibleToAssignee, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ClassesWorkspace } from "@/industries/education-consultancy/features/classes/pages/classes-workspace";
 
 export default async function ClassesRoute() {
@@ -17,11 +17,12 @@ export default async function ClassesRoute() {
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null);
 
   let leadIds: string[] | null = null;
+  let teamMemberIds: string[] | null = null;
 
   if (scope.restrictToSelf && scope.userId) {
     leadIds = await leadIdsVisibleToAssignee(supabase, tenantData.tenant.id, scope.userId);
   } else if (scope.branchId) {
-    leadIds = await leadIdsForBranch(supabase, tenantData.tenant.id, scope.branchId);
+    teamMemberIds = await branchMemberIds(supabase, tenantData.tenant.id, scope.branchId);
   }
 
   const [classesResult, enrollmentsResult] = await Promise.all([
@@ -36,11 +37,12 @@ export default async function ClassesRoute() {
       : (() => {
           let q = supabase
             .from("class_enrollments")
-            .select("*, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,assigned_to)")
+            .select("*, leads!class_enrollments_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
             .eq("tenant_id", tenantData.tenant.id)
             .is("deleted_at", null)
             .order("created_at", { ascending: false });
           if (leadIds && leadIds.length > 0) q = q.in("lead_id", leadIds);
+          if (teamMemberIds) q = q.in("leads.assigned_to", teamMemberIds);
           return q;
         })(),
   ]);
