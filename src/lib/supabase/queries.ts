@@ -89,7 +89,11 @@ export async function getLeads(
   if (scope?.restrictToSelf && scope.userId) {
     sharedIds = await sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId);
   } else if (scope?.branchId) {
-    memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
+    // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
+    // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
+    // and .in("assigned_to", []) yields zero leads. Use the service client to resolve real members.
+    const svc = await createServiceClient();
+    memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
   }
 
   // Factory applied on every range page so all filters + stable sort are consistent.
@@ -169,7 +173,9 @@ export async function getLead(
       if (!isAssignee) return null;
     }
     if (scope.branchId) {
-      const memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
+      // Service client: tenant_users RLS hides other users' rows from the RLS client.
+      const svc = await createServiceClient();
+      const memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
       if (!data.assigned_to || !memberIds.includes(data.assigned_to)) return null;
     }
   }
@@ -360,7 +366,9 @@ export async function getLeadsForPipeline(
       query = query.eq("assigned_to", options.userId);
     }
   } else if (options?.branchId) {
-    const memberIds = await branchMemberIds(supabase, tenantId, options.branchId);
+    // Service client: tenant_users RLS hides other users' rows from the RLS client.
+    const svc = await createServiceClient();
+    const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
     query = query.in("assigned_to", memberIds);
   }
 
