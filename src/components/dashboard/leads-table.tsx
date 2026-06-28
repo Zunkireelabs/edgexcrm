@@ -49,6 +49,7 @@ import {
   Pencil,
   Building2,
   ArrowRightLeft,
+  Archive,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -586,6 +587,8 @@ export function LeadsTable({
 
   const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
   const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
+  // The "Archived" list, used by the bulk Archive shortcut (opens the move dialog pre-targeted here).
+  const archivedList = leadLists.find((l) => l.slug === "archived") ?? leadLists.find((l) => l.is_archive) ?? null;
 
   const CHUNK_SIZE = 100;
 
@@ -1249,6 +1252,20 @@ export function LeadsTable({
                 Move to list
               </button>
             )}
+            {isAdmin && archivedList && (
+              <button
+                onClick={() => {
+                  setMoveArchiveReason("");
+                  setMoveAssignTo("keep");
+                  setMoveListId(archivedList.id);
+                  setMoveListDialogOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+              >
+                <Archive className="h-4 w-4" />
+                Archive
+              </button>
+            )}
             {isAdmin && !isStagingView && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
@@ -1577,7 +1594,11 @@ export function LeadsTable({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to list</DialogTitle>
+            <DialogTitle>
+              {moveTargetIsArchive
+                ? `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`
+                : `Move ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to list`}
+            </DialogTitle>
             <DialogDescription>
               Select a target list. Leads will be moved out of their current list.
             </DialogDescription>
@@ -1684,7 +1705,9 @@ export function LeadsTable({
               onClick={handleBulkMove}
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
             >
-              {isMoveList ? "Moving…" : "Move"}
+              {isMoveList
+                ? (moveTargetIsArchive ? "Archiving…" : "Moving…")
+                : (moveTargetIsArchive ? "Archive" : "Move")}
             </Button>
           </DialogFooter>
         </DialogContent>
