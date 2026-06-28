@@ -7,6 +7,7 @@ import {
   getLeadActivity,
   getPipelineStages,
   getLeadListsByTenant,
+  getListPipeline,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
@@ -34,10 +35,13 @@ export default async function LeadDetailPage({
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
   const hasClasses = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES);
 
-  const [notes, checklists, activities, stages, entityResult, industryResult, allLists] = await Promise.all([
+  const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
+  const [notes, checklists, activities, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
+    // Load this lead's list-pipeline stages (preferred); fallback to all tenant stages
+    leadListId ? getListPipeline(leadListId, tenantData.tenant.id) : Promise.resolve(null),
     getPipelineStages(tenantData.tenant.id),
     // Fetch entity if lead has one
     lead.entity_id
@@ -61,6 +65,8 @@ export default async function LeadDetailPage({
 
   const entity = entityResult.data as TenantEntity | null;
   const industry = industryResult.data as Industry | null;
+  // Use list-scoped stages when available; fall back to all tenant stages for leads without a list
+  const stages = listPipelineResult?.stages ?? fallbackStages;
 
   const accessibleLists = hasLeadLists
     ? (allLists as LeadList[]).filter((l) =>
@@ -84,7 +90,6 @@ export default async function LeadDetailPage({
     : [];
 
   // Compute list-position gates for Classes and Applications cards (education only)
-  const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
   const allListsTyped = allLists as LeadList[];
   const qualifiedList = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "qualified");
   const prospectsListItem = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "prospects");
