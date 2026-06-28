@@ -5,6 +5,7 @@ import { resolvePermissions, type ResolvedPermissions, type PositionPermissions 
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
 import type { LeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds as fetchBranchMemberIds } from "@/lib/leads/branch-membership";
 
 export interface AuthContext {
   userId: string;
@@ -14,6 +15,7 @@ export interface AuthContext {
   industryId: string | null;
   positionId: string | null;
   branchId: string | null;
+  branchMemberIds: string[];
   permissions: ResolvedPermissions;
   plan: string;
   entitlements: Entitlements;
@@ -79,6 +81,13 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       ? membership.positions[0] ?? null
       : membership.positions;
     const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
+    const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
+    const resolvedBranchId = membership.branch_id ?? null;
+
+    const memberIds =
+      permissions.leadScope === "team" && resolvedBranchId
+        ? await fetchBranchMemberIds(serviceClient, membership.tenant_id, resolvedBranchId)
+        : [];
 
     return {
       userId: user.id,
@@ -87,8 +96,9 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       role: membership.role as UserRole,
       industryId: tenantsEmbed?.industry_id ?? null,
       positionId: membership.position_id ?? null,
-      branchId: membership.branch_id ?? null,
-      permissions: resolvePermissions(membership.role as UserRole, positionPermissions),
+      branchId: resolvedBranchId,
+      branchMemberIds: memberIds,
+      permissions,
       plan: tenantsEmbed?.plan ?? "starter",
       entitlements: resolveEntitlements({
         plan: tenantsEmbed?.plan,
@@ -111,7 +121,7 @@ export function requireLeadBranchAccess(
 ): boolean {
   if (auth.permissions.leadScope !== "team") return true;
   if (!auth.branchId) return membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId; // §4.1
-  return membership.some((m) => m.branch_id === auth.branchId);
+  return lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to);
 }
 
 export interface UserContext {
@@ -163,7 +173,7 @@ export function requireLeadAccess(
   if (p.leadScope === "own") return isAssignee;
   if (p.leadScope === "team") {
     if (!auth.branchId) return isAssignee; // §4.1 NULL-branch fallback
-    return membership.some((m) => m.branch_id === auth.branchId);
+    return lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to);
   }
   return true;
 }

@@ -4,7 +4,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope } from "@/lib/api/permissions";
-import { leadIdsVisibleToAssignee, leadIdsForBranch } from "@/lib/leads/branch-membership";
+import { leadIdsVisibleToAssignee, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ApplicationsWorkspace } from "@/industries/education-consultancy/features/application-tracking/pages/applications-workspace";
 import type { ApplicationStage, Application } from "@/types/database";
 
@@ -15,22 +15,19 @@ export default async function ApplicationsRoute() {
 
   const supabase = await createServiceClient();
 
-  // Fix 5: build the accessible-lead-id set the same way getLeads() does,
-  // mirroring leadQueryScope + leadIdsVisibleToAssignee / leadIdsForBranch.
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null);
 
-  // leadIds: null = no filter (all tenant apps); [] = no accessible leads (return empty)
+  // leadIds: null = no filter (all); [] = empty result (own-scope with no leads)
+  // teamMemberIds: set for team scope — filter via embedded lead's assigned_to (no large id list)
   let leadIds: string[] | null = null;
+  let teamMemberIds: string[] | null = null;
 
   if (scope.restrictToSelf && scope.userId) {
-    // 'own' scope (counselor) or 'team' with no branch (null-branch fallback):
-    // leads.assigned_to === userId UNION lead_branches.assigned_to === userId
     leadIds = await leadIdsVisibleToAssignee(supabase, tenantData.tenant.id, scope.userId);
   } else if (scope.branchId) {
-    // 'team' scope with a branch: leads in that branch (via lead_branches)
-    leadIds = await leadIdsForBranch(supabase, tenantData.tenant.id, scope.branchId);
+    teamMemberIds = await branchMemberIds(supabase, tenantData.tenant.id, scope.branchId);
   }
-  // else: leadScope 'all' → leadIds stays null → no filter
+  // else: leadScope 'all' → no filter
 
   const [stagesResult, applicationsResult] = await Promise.all([
     supabase
@@ -43,11 +40,12 @@ export default async function ApplicationsRoute() {
       : (() => {
           let q = supabase
             .from("applications")
-            .select("*, leads!applications_lead_id_fkey(id,first_name,last_name,email)")
+            .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
             .eq("tenant_id", tenantData.tenant.id)
             .is("deleted_at", null)
             .order("created_at", { ascending: false });
           if (leadIds && leadIds.length > 0) q = q.in("lead_id", leadIds);
+          if (teamMemberIds) q = q.in("leads.assigned_to", teamMemberIds);
           return q;
         })(),
   ]);
