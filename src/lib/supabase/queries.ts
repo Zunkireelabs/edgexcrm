@@ -434,7 +434,6 @@ export interface TeamMember {
   name: string;
   branch_id: string | null;
   created_at: string;
-  branch_id: string | null;
 }
 
 export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
@@ -463,9 +462,8 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       role: m.role,
       email: user.email,
       name: user.name,
-      branch_id: (m as { branch_id?: string | null }).branch_id ?? null,
-      created_at: m.created_at,
       branch_id: (m.branch_id as string | null) ?? null,
+      created_at: m.created_at,
     };
   });
 }
