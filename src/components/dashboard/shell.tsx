@@ -251,6 +251,14 @@ export function DashboardShell({
   const { open: openSearch, shortcutLabel } = useGlobalSearch();
   const { counts } = useBadgeCounts();
 
+  // Logged-in user's display name (so the account footer shows whose account it is).
+  const userMeta = user.user_metadata as { name?: string; full_name?: string } | undefined;
+  const userName =
+    userMeta?.name?.trim() ||
+    userMeta?.full_name?.trim() ||
+    user.email?.split("@")[0] ||
+    "User";
+
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
 
@@ -526,7 +534,7 @@ export function DashboardShell({
             {tenant.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-gray-900 truncate">{tenant.name}</p>
+            <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
             <p className="text-xs text-gray-500 truncate">{user.email}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
@@ -539,7 +547,7 @@ export function DashboardShell({
               {/* User info */}
               <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-900 truncate">
-                  {user.email?.split("@")[0] || "User"}
+                  {userName}
                 </p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
                 <span className="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium capitalize">
