@@ -107,6 +107,7 @@ interface LeadsTableProps {
   isStagingView?: boolean;
   viewMode?: "trash" | "archived" | "normal";
   intakeListId?: string | null;
+  canExport?: boolean;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -138,6 +139,7 @@ export function LeadsTable({
   isStagingView = false,
   viewMode = "normal",
   intakeListId = null,
+  canExport = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -1065,15 +1067,17 @@ export function LeadsTable({
             </PopoverContent>
           </Popover>
 
-          {/* Export */}
-          <button
-            type="button"
-            onClick={exportCSV}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
-          >
-            <Download className="h-3 w-3 shrink-0" />
-            Export
-          </button>
+          {/* Export — owner/admin always; members only if their position grants it */}
+          {canExport && (
+            <button
+              type="button"
+              onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Download className="h-3 w-3 shrink-0" />
+              Export
+            </button>
+          )}
 
           {/* Add Lead Button */}
           {canCreateLead && tenantId && (

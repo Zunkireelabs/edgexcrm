@@ -151,6 +151,7 @@ export default async function LeadsPage({
         leadLists={accessibleLists}
         viewMode={viewMode}
         intakeListId={intakeListId}
+        canExport={tenantData.permissions.canExport}
       />
     </div>
   );
