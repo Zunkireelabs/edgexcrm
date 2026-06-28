@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { Eye } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
@@ -32,6 +32,8 @@ export interface LeadColumnCtx {
   onTypeUpdate: (leadId: string, type: string) => void;
   leadLists?: LeadList[];
   onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
+  viewMode?: "trash" | "archived" | "normal";
+  onRestore?: (leadId: string) => Promise<void>;
 }
 
 export interface LeadColumn {
@@ -217,6 +219,27 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
+      // Recycle-bin views (Delete / Archived) replace the move control with Restore.
+      if (ctx.viewMode === "trash" || ctx.viewMode === "archived") {
+        return (
+          <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+            {ctx.onRestore ? (
+              <button
+                type="button"
+                onClick={() => ctx.onRestore!(lead.id)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Restore
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {ctx.viewMode === "trash" ? "Deleted" : "Archived"}
+              </span>
+            )}
+          </td>
+        );
+      }
       const intakeList = ctx.leadLists?.find((l) => l.is_intake);
       const qualifiedList = ctx.leadLists?.find((l) => l.slug === "qualified");
       const isInIntake = intakeList && lead.list_id === intakeList.id;

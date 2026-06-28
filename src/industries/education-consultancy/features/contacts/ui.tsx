@@ -61,6 +61,7 @@ export function ContactsPage({
           entityLabel={entityLabel}
           currentUserId={currentUserId}
           industryId={industryId}
+          canExport={role === "owner" || role === "admin"}
         />
       )}
     </div>

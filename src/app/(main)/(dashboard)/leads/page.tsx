@@ -52,13 +52,37 @@ export default async function LeadsPage({
         if (accessible) activeList = found;
       }
     }
+    // "All Leads" (no ?list=) should land on the user's first accessible funnel
+    // list instead of the combined master view. Redirect server-side so it can't
+    // be bypassed; the target carries a ?list= so this never loops.
+    if (!listSlug) {
+      const firstFunnel = allLists
+        .filter((l) => !l.is_archive && !l.is_staging)
+        .filter((l) =>
+          canAccessList(
+            tenantData.permissions,
+            l.access as { mode: string; positionIds?: string[] },
+            tenantData.positionId,
+          ),
+        )
+        .sort((a, b) => a.sort_order - b.sort_order)[0];
+      if (firstFunnel) redirect(`/leads?list=${firstFunnel.slug}`);
+    }
+
     const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
-    if (activeList) {
+    if (activeList?.slug === "delete") {
+      scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads
+    } else if (activeList) {
       scope.listId = activeList.id;
     } else {
       scope.excludeListIds = excludeIds;
     }
   }
+
+  // View mode for the leads table: "trash" (recycle bin), "archived", or "normal".
+  const viewMode: "trash" | "archived" | "normal" =
+    activeList?.slug === "delete" ? "trash" : activeList?.is_archive ? "archived" : "normal";
+  const intakeListId = allLists.find((l) => l.is_intake)?.id ?? null;
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
@@ -128,6 +152,9 @@ export default async function LeadsPage({
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
+        viewMode={viewMode}
+        intakeListId={intakeListId}
+        canExport={tenantData.permissions.canExport}
         memberBranchMap={memberBranchMap}
       />
     </div>

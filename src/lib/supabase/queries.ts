@@ -77,6 +77,7 @@ export async function getLeads(
     branchId?: string | null;
     listId?: string | null;
     excludeListIds?: string[];
+    onlyDeleted?: boolean;
   }
 ): Promise<Lead[]> {
   const supabase = await createClient();
@@ -102,13 +103,20 @@ export async function getLeads(
       .from("leads")
       .select("*")
       .eq("tenant_id", tenantId)
-      .is("deleted_at", null)
       .is("converted_at", null)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
 
+    // Recycle bin: show soft-deleted leads; otherwise hide them (default).
+    if (scope?.onlyDeleted) {
+      q = q.not("deleted_at", "is", null);
+    } else {
+      q = q.is("deleted_at", null);
+    }
+
+    // Scope (hotfix shape — inline assigned_to filters, never .in("id", 500+ uuids) which
+    // overflows undici's 16KB URL limit). DO NOT replace with .in("id", selfIds/branchIds).
     if (scope?.restrictToSelf && scope.userId) {
-      // Inline column filter — no URL growth regardless of how many leads are assigned.
       if (sharedIds && sharedIds.length > 0) {
         q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
       } else {
@@ -120,11 +128,14 @@ export async function getLeads(
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
 
-    if (scope?.listId) {
-      q = q.eq("list_id", scope.listId);
-    } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
-      // Master view for education: show leads not in any archive list (NULL list_id is included)
-      q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+    // List filters don't apply to the recycle bin (it spans all lists).
+    if (!scope?.onlyDeleted) {
+      if (scope?.listId) {
+        q = q.eq("list_id", scope.listId);
+      } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+        // Master view for education: show leads not in any archive list (NULL list_id is included)
+        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+      }
     }
 
     return q;
@@ -421,8 +432,8 @@ export interface TeamMember {
   role: string;
   email: string;
   name: string;
-  created_at: string;
   branch_id: string | null;
+  created_at: string;
 }
 
 export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
@@ -451,8 +462,8 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       role: m.role,
       email: user.email,
       name: user.name,
-      created_at: m.created_at,
       branch_id: (m.branch_id as string | null) ?? null,
+      created_at: m.created_at,
     };
   });
 }

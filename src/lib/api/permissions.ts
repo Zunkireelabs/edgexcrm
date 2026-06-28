@@ -8,6 +8,7 @@ export interface PositionPermissions {
   canEditLeads?: boolean;                                          // only meaningful for member+leadScope:all (branch manager). Absent ⇒ default per resolver.
   canManageApplications?: boolean;                                 // controls write access to the Application Tracking feature. Absent ⇒ default per resolver.
   canManageClasses?: boolean;                                      // controls write access to the Classes feature. Absent ⇒ default per resolver.
+  canExport?: boolean;                                            // controls access to the leads Export button. Absent => default per resolver (owner/admin only).
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -20,6 +21,7 @@ export interface ResolvedPermissions {
   canEditLeads: boolean;
   canManageApplications: boolean;
   canManageClasses: boolean;
+  canExport: boolean;
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
@@ -40,6 +42,7 @@ export function resolvePermissions(
       canEditLeads: true,
       canManageApplications: true,
       canManageClasses: true,
+      canExport: true,
       dashboardWidgets: null,
     };
   }
@@ -55,6 +58,7 @@ export function resolvePermissions(
       canEditLeads: role === "counselor", // counselors edit own; viewers don't
       canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
       canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
+      canExport: false, // only owner/admin export by default
       dashboardWidgets: null,
     };
   }
@@ -68,6 +72,7 @@ export function resolvePermissions(
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
     canManageClasses: p.canManageClasses === true,
+    canExport: p.canExport === true,
     dashboardWidgets:
       p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
   };
@@ -112,6 +117,7 @@ export interface LeadQueryScope {
   branchId: string | null;      // null = no branch filter
   listId?: string | null;          // filter to one list (lead-lists feature)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
+  onlyDeleted?: boolean;            // recycle bin: show soft-deleted leads (deleted_at NOT NULL)
 }
 export function leadQueryScope(
   p: ResolvedPermissions,
@@ -193,6 +199,11 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canManageClasses (optional)
   if (p.canManageClasses !== undefined && typeof p.canManageClasses !== "boolean") {
     return "permissions.canManageClasses must be a boolean";
+  }
+
+  // canExport (optional)
+  if (p.canExport !== undefined && typeof p.canExport !== "boolean") {
+    return "permissions.canExport must be a boolean";
   }
 
   // dashboard

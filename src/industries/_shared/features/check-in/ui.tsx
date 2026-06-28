@@ -602,7 +602,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                         <SelectContent>
                           {teamMembers.map((m) => (
                             <SelectItem key={m.user_id} value={m.user_id}>
-                              {m.email} ({m.role})
+                              {m.name || m.email.split("@")[0]} ({m.role})
                             </SelectItem>
                           ))}
                         </SelectContent>

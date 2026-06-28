@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building, ArrowRight } from "lucide-react";
+import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
@@ -26,7 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
-import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -45,6 +45,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
 }
 
 interface LeadDraftSubset {
@@ -78,6 +79,7 @@ interface KeyInfoSectionProps {
   onLeadTypeChange?: (newType: string) => void;
   onListChange?: (listId: string, archiveReason?: string) => Promise<void>;
   leadLists?: LeadList[];
+  activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveStudyFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveSourceFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -106,6 +108,7 @@ export function KeyInfoSection({
   onLeadTypeChange,
   onListChange,
   leadLists,
+  activeLeadLists,
   onSaveTripFields,
   onSaveStudyFields,
   onSaveSourceFields,
@@ -159,32 +162,14 @@ export function KeyInfoSection({
                 {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
               </p>
               {leadLists && leadLists.length > 0 && onListChange ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <MoveToListSelector
-                    leadId={lead.id}
-                    currentListId={(lead as { list_id?: string | null }).list_id ?? null}
-                    lists={leadLists}
-                    onMove={onListChange}
-                  />
-                  {/* Qualify CTA — only when lead is in the intake (Pre-qualified) list */}
-                  {(() => {
-                    const intakeList = leadLists.find((l) => l.is_intake);
-                    const leadWithList = lead as { list_id?: string | null };
-                    if (industryId === "education_consultancy" && intakeList && leadWithList.list_id === intakeList.id && onQualify) {
-                      return (
-                        <button
-                          type="button"
-                          onClick={onQualify}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                        >
-                          Qualify
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
+                <ListStepper
+                  currentListId={(lead as { list_id?: string | null }).list_id ?? null}
+                  activeLists={activeLeadLists ?? leadLists}
+                  accessibleLists={leadLists}
+                  industryId={industryId}
+                  onMove={(listId) => onListChange(listId)}
+                  onQualify={onQualify}
+                />
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (
@@ -268,7 +253,7 @@ export function KeyInfoSection({
                               {getInitials(m.email)}
                             </span>
                           </div>
-                          <span className="truncate">{m.email}</span>
+                          <span className="truncate">{m.name || m.email.split("@")[0]}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -283,7 +268,7 @@ export function KeyInfoSection({
                         {getInitials(assignedMember.email)}
                       </span>
                     </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.email}</span>
+                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.email.split("@")[0]}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
