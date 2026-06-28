@@ -394,6 +394,7 @@ export interface TeamMember {
   role: string;
   email: string;
   name: string;
+  branch_id: string | null;
   created_at: string;
 }
 
@@ -401,7 +402,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
   const supabase = await createServiceClient();
   const { data: members, error } = await supabase
     .from("tenant_users")
-    .select("id, user_id, role, created_at")
+    .select("id, user_id, role, branch_id, created_at")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true });
 
@@ -423,6 +424,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       role: m.role,
       email: user.email,
       name: user.name,
+      branch_id: (m as { branch_id?: string | null }).branch_id ?? null,
       created_at: m.created_at,
     };
   });

@@ -45,6 +45,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
 }
 
 interface LeadDraftSubset {
@@ -252,7 +253,7 @@ export function KeyInfoSection({
                               {getInitials(m.email)}
                             </span>
                           </div>
-                          <span className="truncate">{m.email}</span>
+                          <span className="truncate">{m.name || m.email.split("@")[0]}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -267,7 +268,7 @@ export function KeyInfoSection({
                         {getInitials(assignedMember.email)}
                       </span>
                     </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.email}</span>
+                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.email.split("@")[0]}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
