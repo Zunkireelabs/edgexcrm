@@ -28,7 +28,7 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { branchMemberIds, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
 import {
   normalizeEmail,
   normalizePhone,
@@ -141,8 +141,13 @@ export async function GET(request: NextRequest) {
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
   if (scope.restrictToSelf) {
-    const ids = await leadIdsVisibleToAssignee(supabase, auth.tenantId, auth.userId);
-    query = query.in("id", ids);
+    // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
+    const sharedIds = await sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId);
+    if (sharedIds.length > 0) {
+      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${sharedIds.join(",")})`);
+    } else {
+      query = query.eq("assigned_to", auth.userId);
+    }
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
     query = query.in("assigned_to", auth.branchMemberIds);

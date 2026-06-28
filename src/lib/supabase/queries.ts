@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, leadIdsVisibleToAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -81,16 +81,18 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const supabase = await createClient();
 
-  // Compute filter sets once (async) before the chunk loop.
-  let selfIds: string[] | null = null;
+  // Compute filter sets once. Both self-scope (counselor) and branch-scope use INLINE column
+  // filters (assigned_to) rather than .in("id", 500+ uuids), which overflows Node/undici's 16 KB
+  // URL limit (UND_ERR_HEADERS_OVERFLOW) and returns empty results.
+  let sharedIds: string[] | null = null;
   let memberIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
-    selfIds = await leadIdsVisibleToAssignee(supabase, tenantId, scope.userId);
+    sharedIds = await sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId);
   } else if (scope?.branchId) {
     memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
   }
 
-  // Factory applied on every chunk so all filters + stable sort are consistent.
+  // Factory applied on every range page so all filters + stable sort are consistent.
   const buildQuery = () => {
     let q = supabase
       .from("leads")
@@ -101,8 +103,16 @@ export async function getLeads(
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
 
-    if (selfIds !== null) q = q.in("id", selfIds);
-    else if (memberIds !== null) q = q.in("assigned_to", memberIds);
+    if (scope?.restrictToSelf && scope.userId) {
+      // Inline column filter — no URL growth regardless of how many leads are assigned.
+      if (sharedIds && sharedIds.length > 0) {
+        q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
+      } else {
+        q = q.eq("assigned_to", scope.userId);
+      }
+    } else if (memberIds !== null) {
+      q = q.in("assigned_to", memberIds);
+    }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
 
@@ -122,6 +132,9 @@ export async function getLeads(
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
   const out: Lead[] = [];
+
+  // Range-based paging. Both self-scope and branch-scope use inline assigned_to filters,
+  // so no per-ID chunking is needed — the URL stays small regardless of result size.
   for (let from = 0; from < max; from += CHUNK) {
     const to = Math.min(from + CHUNK, max) - 1;
     const { data, error } = await buildQuery().range(from, to);
@@ -339,8 +352,13 @@ export async function getLeadsForPipeline(
   }
 
   if (options?.restrictToSelf && options.userId) {
-    const ids = await leadIdsVisibleToAssignee(supabase, tenantId, options.userId);
-    query = query.in("id", ids);
+    // Inline column filter avoids .in("id", 500+ uuids) URL overflow.
+    const shared = await sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId);
+    if (shared.length > 0) {
+      query = query.or(`assigned_to.eq.${options.userId},id.in.(${shared.join(",")})`);
+    } else {
+      query = query.eq("assigned_to", options.userId);
+    }
   } else if (options?.branchId) {
     const memberIds = await branchMemberIds(supabase, tenantId, options.branchId);
     query = query.in("assigned_to", memberIds);
