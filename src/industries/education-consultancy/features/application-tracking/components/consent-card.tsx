@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -170,12 +171,17 @@ export function ConsentCard({
 
   return (
     <>
+      <Collapsible defaultOpen={false}>
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Pre Application
-          </span>
+          <CollapsibleTrigger className="flex items-center justify-between w-full group">
+            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Pre Application
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+          </CollapsibleTrigger>
         </CardHeader>
+        <CollapsibleContent>
         <CardContent className="pb-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground">Student Consent</p>
           {consentStatus === "none" && (
@@ -351,7 +357,9 @@ export function ConsentCard({
             )}
           </div>
         </CardContent>
+        </CollapsibleContent>
       </Card>
+      </Collapsible>
 
       <SendConsentDialog
         open={dialogOpen}

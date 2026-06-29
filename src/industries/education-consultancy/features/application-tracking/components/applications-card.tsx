@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
 import { AddApplicationToLeadSheet } from "./add-application-to-lead-sheet";
@@ -46,17 +47,21 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
 
   return (
     <>
+      <Collapsible defaultOpen={false}>
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-              Applications
-              {!loading && (
-                <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
-                  {applications.length}
-                </Badge>
-              )}
-            </span>
+            <CollapsibleTrigger className="flex items-center gap-2 group flex-1 text-left">
+              <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                Applications
+                {!loading && (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs normal-case">
+                    {applications.length}
+                  </Badge>
+                )}
+              </span>
+              <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
             {canManage && (
               <Button
                 size="sm"
@@ -72,6 +77,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
           </div>
         </CardHeader>
 
+        <CollapsibleContent>
         <CardContent className="pb-4">
           {loading ? (
             <div className="flex justify-center py-3">
@@ -132,7 +138,9 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
             </div>
           )}
         </CardContent>
+        </CollapsibleContent>
       </Card>
+      </Collapsible>
 
       <AddApplicationToLeadSheet
         open={addOpen}
