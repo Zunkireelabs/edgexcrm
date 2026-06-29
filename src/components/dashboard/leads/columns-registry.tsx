@@ -193,14 +193,16 @@ function LeadTypeSelect({
   options: NonNullable<LeadColumnCtx["leadTypes"]>;
   onUpdate: (tags: string[]) => void;
 }) {
+  const [open, setOpen] = React.useState(false);
   const defaultSlug = options.find((o) => o.is_default)?.slug ?? options[0]?.slug ?? "";
   const currentSlug = lead.tags?.[0] ?? defaultSlug;
+  const currentLabel = options.find((o) => o.slug === currentSlug)?.label ?? currentSlug;
 
-  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const slug = e.target.value;
-    if (slug === lead.tags?.[0]) return;
+  async function select(slug: string) {
+    if (slug === currentSlug) { setOpen(false); return; }
     const newTags = [slug];
     const prev = lead.tags ?? [];
+    setOpen(false);
     onUpdate(newTags);
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
@@ -215,18 +217,39 @@ function LeadTypeSelect({
   }
 
   return (
-    <select
-      value={currentSlug}
-      onChange={handleChange}
-      onClick={(e) => e.stopPropagation()}
-      className="h-6 rounded border border-input bg-background px-1.5 text-[10px] font-medium focus:outline-none focus:ring-2 focus:ring-ring max-w-[120px]"
-    >
-      {options.map((o) => (
-        <option key={o.id} value={o.slug}>
-          {o.label}
-        </option>
-      ))}
-    </select>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          onClick={(e) => e.stopPropagation()}
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 transition-colors"
+        >
+          {currentLabel}
+          <svg className="h-2.5 w-2.5 opacity-50" viewBox="0 0 10 6" fill="none">
+            <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-36 p-1"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {options.map((o) => (
+          <button
+            key={o.slug}
+            type="button"
+            onClick={() => select(o.slug)}
+            className={`w-full flex items-center justify-between px-2.5 py-1.5 text-xs rounded hover:bg-gray-100 transition-colors ${
+              o.slug === currentSlug ? "font-semibold text-blue-700" : "text-gray-700"
+            }`}
+          >
+            {o.label}
+            {o.slug === currentSlug && <Check className="h-3 w-3" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 
