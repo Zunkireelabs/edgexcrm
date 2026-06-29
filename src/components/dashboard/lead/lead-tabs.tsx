@@ -105,17 +105,6 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             <CardContent className="grid gap-3 pb-4">
               <InfoGridRow label="Full Name" value={getLeadFullName(lead, "—")} />
               {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
-              {industryId === "education_consultancy" && (
-                <InfoGridRow
-                  label="Lead Type"
-                  value={
-                    <LeadTypeSelector
-                      leadId={lead.id}
-                      currentTags={lead.tags || []}
-                    />
-                  }
-                />
-              )}
               <InfoGridRow label="Email" value={lead.email} isLink linkType="email" />
               <InfoGridRow label="Phone" value={lead.phone} isLink linkType="phone" />
               {location && <InfoGridRow label="Location" value={location} />}
