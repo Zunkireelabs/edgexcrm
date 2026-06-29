@@ -1,6 +1,7 @@
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { canSeeNav, deriveRole } from "@/lib/api/permissions";
+import { canSeeNav, deriveRole, resolvePermissions, positionPermissionsFromEmbed } from "@/lib/api/permissions";
 import type { PositionPermissions } from "@/lib/api/permissions";
+import type { UserRole } from "@/types/database";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
@@ -31,7 +32,7 @@ export async function GET() {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at, positions(permissions)")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -48,6 +49,7 @@ export async function GET() {
     branch_id: string | null;
     default_hourly_rate: number | null;
     created_at: string;
+    positions: { permissions: PositionPermissions | null } | { permissions: PositionPermissions | null }[] | null;
   }>;
 
   // Fetch user emails + names from auth.users — uses raw() escape hatch since
@@ -62,17 +64,22 @@ export async function GET() {
     nameMap.set(u.id, (meta?.name ?? meta?.full_name ?? null) as string | null);
   }
 
-  const enriched = members.map((m) => ({
-    id: m.id,
-    user_id: m.user_id,
-    role: m.role,
-    position_id: m.position_id,
-    branch_id: m.branch_id,
-    name: nameMap.get(m.user_id) ?? null,
-    email: userMap.get(m.user_id) || "Unknown",
-    default_hourly_rate: m.default_hourly_rate,
-    created_at: m.created_at,
-  }));
+  const enriched = members.map((m) => {
+    // Position is the source of truth for assignability — resolve it, don't read legacy `role`.
+    const { canEditLeads } = resolvePermissions(m.role as UserRole, positionPermissionsFromEmbed(m.positions));
+    return {
+      id: m.id,
+      user_id: m.user_id,
+      role: m.role,
+      position_id: m.position_id,
+      branch_id: m.branch_id,
+      name: nameMap.get(m.user_id) ?? null,
+      email: userMap.get(m.user_id) || "Unknown",
+      default_hourly_rate: m.default_hourly_rate,
+      created_at: m.created_at,
+      canEditLeads,
+    };
+  });
 
   return apiSuccess(enriched);
 }

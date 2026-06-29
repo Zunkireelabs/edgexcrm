@@ -4,7 +4,7 @@ import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, g
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
-import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
@@ -79,6 +79,13 @@ export default async function LeadsPage({
       scope.onlyDeleted = true; // Delete view = recycle bin of soft-deleted leads
     } else if (activeList) {
       scope.listId = activeList.id;
+      // Shared-pool override: for own-scope holders, this list is a branch-wide pool.
+      // Widen from own-only to their whole branch (reuses the branch-scope path in getLeads).
+      // Guard: no branch ⇒ don't widen (stays own-scope), mirroring the §4.1 NULL-branch rule.
+      if (isSharedPoolList(tenantData.permissions, activeList.id) && tenantData.branchId) {
+        scope.restrictToSelf = false;
+        scope.branchId = tenantData.branchId;
+      }
     } else {
       scope.excludeListIds = excludeIds;
     }
@@ -175,6 +182,8 @@ export default async function LeadsPage({
           entityLabel={industry?.entity_type_label}
           industryId={tenantData.tenant.industry_id}
           isAdmin={isAdmin}
+          canEditLeads={tenantData.permissions.canEditLeads}
+          restrictToSelf={tenantData.permissions.leadScope === "own"}
         />
       </div>
     );
@@ -207,6 +216,7 @@ export default async function LeadsPage({
         viewMode={tableViewMode}
         intakeListId={intakeListId}
         canExport={tenantData.permissions.canExport}
+        canEditLeads={tenantData.permissions.canEditLeads}
         memberBranchMap={memberBranchMap}
         activeListSlug={activeList?.slug ?? null}
         hasListPipeline={hasListPipeline}

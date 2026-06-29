@@ -83,6 +83,7 @@ interface TeamMember {
   email: string;
   role: string;
   name: string;
+  canEditLeads?: boolean;
 }
 
 interface LeadsTableProps {
@@ -109,6 +110,8 @@ interface LeadsTableProps {
   viewMode?: "trash" | "archived" | "normal";
   intakeListId?: string | null;
   canExport?: boolean;
+  /** Current user's position-derived edit capability; gates the Add Lead button. */
+  canEditLeads?: boolean;
   memberBranchMap?: Record<string, string>;
   /** Slug of the currently active list; enables the Kanban toggle. */
   activeListSlug?: string | null;
@@ -146,6 +149,7 @@ export function LeadsTable({
   viewMode = "normal",
   intakeListId = null,
   canExport = false,
+  canEditLeads,
   memberBranchMap = {},
   activeListSlug = null,
   hasListPipeline = false,
@@ -219,7 +223,9 @@ export function LeadsTable({
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
 
   const isAdmin = role === "admin" || role === "owner";
-  const canCreateLead = role !== "viewer";
+  // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
+  // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
+  const canCreateLead = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
   const showBranches = maxBranches > 1;
 
@@ -1609,7 +1615,7 @@ export function LeadsTable({
                   <span className="text-muted-foreground">Unassign (remove assignment)</span>
                 </SelectItem>
                 {teamMembers
-                  .filter((m) => m.role !== "viewer")
+                  .filter((m) => m.canEditLeads !== false)
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
@@ -1780,7 +1786,7 @@ export function LeadsTable({
                         <span className="text-muted-foreground">Unassign</span>
                       </SelectItem>
                       {teamMembers
-                        .filter((m) => m.role !== "viewer")
+                        .filter((m) => m.canEditLeads !== false)
                         .map((member) => (
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">

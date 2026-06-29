@@ -170,10 +170,14 @@ export async function PATCH(
     return apiForbidden();
   }
 
-  // Plain counselors/viewers cannot update admin-only fields.
+  // Plain counselors cannot update admin-only fields.
   // Team-scoped branch managers CAN (subject to the §4.2 guard that follows).
   if (auth.permissions.baseTier === "member" && auth.permissions.leadScope !== "team") {
-    for (const field of ADMIN_ONLY_FIELDS) {
+    // canAssignLeads lets a member set the assignee (assigned_to); branch/owner stay admin-only.
+    const blockedFields = auth.permissions.canAssignLeads
+      ? ADMIN_ONLY_FIELDS.filter((f) => f !== "assigned_to")
+      : ADMIN_ONLY_FIELDS;
+    for (const field of blockedFields) {
       if (body[field] !== undefined) {
         return apiForbidden();
       }

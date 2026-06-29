@@ -64,6 +64,7 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
+  canAssign?: boolean;
   canManageApplications?: boolean;
   canManageClasses?: boolean;
   leadLists?: LeadList[];
@@ -129,6 +130,7 @@ export function LeadDetailV2({
   industry,
   userBranchId,
   leadScope,
+  canAssign = false,
   canManageApplications,
   canManageClasses,
   leadLists,
@@ -216,10 +218,10 @@ export function LeadDetailV2({
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin || canAssign) {
       fetchTeamMembers();
     }
-  }, [isAdmin, fetchTeamMembers]);
+  }, [isAdmin, canAssign, fetchTeamMembers]);
 
   useEffect(() => {
     if (!lead.converted_contact_id || !isItAgency) return;
@@ -598,6 +600,7 @@ export function LeadDetailV2({
             assignedTo={assignedTo}
             teamMembers={teamMembers}
             isAdmin={isAdmin}
+            canAssign={canAssign}
             onStageChange={handleStageChange}
             onAssignmentChange={handleAssignmentChange}
             entity={entity}
