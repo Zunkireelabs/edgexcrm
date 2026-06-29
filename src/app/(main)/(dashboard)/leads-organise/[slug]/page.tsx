@@ -57,6 +57,7 @@ export default async function LeadsOrganiseCockpitPage({
     tenantData.permissions,
     stagingList.access as { mode: string; positionIds?: string[] },
     tenantData.positionId,
+    stagingList.id,
   );
   if (!accessible) notFound();
 
@@ -75,6 +76,7 @@ export default async function LeadsOrganiseCockpitPage({
         tenantData.permissions,
         l.access as { mode: string; positionIds?: string[] },
         tenantData.positionId,
+        l.id,
       )
   );
 

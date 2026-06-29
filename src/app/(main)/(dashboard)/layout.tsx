@@ -56,6 +56,7 @@ export default async function DashboardLayout({
       tenantData.permissions,
       l.access as { mode: string; positionIds?: string[] },
       tenantData.positionId,
+      l.id,
     )
   );
   const isLayoutAdmin = tenantData.role === "owner" || tenantData.role === "admin";

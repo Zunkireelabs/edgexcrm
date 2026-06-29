@@ -495,6 +495,8 @@ export interface LeadChecklist {
   completed_at: string | null;
   completed_by: string | null;
   position: number;
+  remind_at: string | null;
+  reminded_at: string | null;
   created_at: string;
   updated_at: string;
 }

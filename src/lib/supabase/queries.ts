@@ -3,6 +3,7 @@ import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, Pipel
 import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -88,7 +89,14 @@ export async function getLeads(
   let sharedIds: string[] | null = null;
   let memberIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
-    sharedIds = await sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId);
+    // Widen own-scope to leads the user has ever been assigned (collaborators),
+    // so handed-off leads stay visible. Merged with branch shared-in ids.
+    const [branchShared, collab] = await Promise.all([
+      sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId),
+      collaboratorLeadIdsForUser(supabase, tenantId, scope.userId),
+    ]);
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    sharedIds = [...new Set([...branchShared, ...collab])].slice(0, 300);
   } else if (scope?.branchId) {
     // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
     // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
@@ -181,7 +189,9 @@ export async function getLead(
     const membership = await getLeadMembership(supabase, tenantId, leadId);
     if (scope.restrictToSelf && scope.userId) {
       const isAssignee = membership.some((m) => m.assigned_to === scope.userId) || data?.assigned_to === scope.userId;
-      if (!isAssignee) return null;
+      // Collaborators (anyone ever assigned) keep view access after reassignment / list moves.
+      const isCollab = isAssignee || (await isLeadCollaborator(supabase, tenantId, leadId, scope.userId));
+      if (!isCollab) return null;
     }
     if (scope.branchId) {
       // Service client: tenant_users RLS hides other users' rows from the RLS client.
@@ -400,9 +410,15 @@ export async function getLeadsForPipeline(
 
   if (options?.restrictToSelf && options.userId) {
     // Inline column filter avoids .in("id", 500+ uuids) URL overflow.
-    const shared = await sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId);
-    if (shared.length > 0) {
-      query = query.or(`assigned_to.eq.${options.userId},id.in.(${shared.join(",")})`);
+    // Widen to collaborator leads (ever assigned) so handed-off leads stay on the board.
+    const [shared, collab] = await Promise.all([
+      sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId),
+      collaboratorLeadIdsForUser(supabase, tenantId, options.userId),
+    ]);
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    const extra = [...new Set([...shared, ...collab])].slice(0, 300);
+    if (extra.length > 0) {
+      query = query.or(`assigned_to.eq.${options.userId},id.in.(${extra.join(",")})`);
     } else {
       query = query.eq("assigned_to", options.userId);
     }

@@ -86,6 +86,7 @@ export const NotificationTypes = {
   INBOX_MESSAGE_RECEIVED: "inbox.message_received",
   INBOX_ASSIGNED: "inbox.assigned",
   NOTE_MENTION: "note.mention",
+  TASK_REMINDER: "task.reminder",
 } as const;
 
 /**

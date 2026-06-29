@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -50,8 +50,10 @@ export default async function LeadsPage({
           tenantData.permissions,
           found.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
+          found.id,
         );
-        if (accessible) activeList = found;
+        if (!accessible) notFound(); // bar URL bypass: forbidden list → 404, not master view
+        activeList = found;
       }
     }
     // "All Leads" (no ?list=) should land on the user's first accessible funnel
@@ -65,6 +67,7 @@ export default async function LeadsPage({
             tenantData.permissions,
             l.access as { mode: string; positionIds?: string[] },
             tenantData.positionId,
+            l.id,
           ),
         )
         .sort((a, b) => a.sort_order - b.sort_order)[0];
@@ -141,6 +144,7 @@ export default async function LeadsPage({
           tenantData.permissions,
           l.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
+          l.id,
         )
       )
     : [];

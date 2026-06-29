@@ -8,6 +8,7 @@ import {
   getPipelineStages,
   getLeadListsByTenant,
   getListPipeline,
+  getTeamMembers,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
@@ -74,6 +75,7 @@ export default async function LeadDetailPage({
           tenantData.permissions,
           l.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
+          l.id,
         )
       )
     : [];
@@ -148,9 +150,18 @@ export default async function LeadDetailPage({
     consentSigned = !!signedRes.data;
   }
 
+  // Full-roster user_id → display name map for the activity feed. Resolved
+  // server-side so it works for non-admins (who can't call /api/v1/team).
+  const roster = await getTeamMembers(tenantData.tenant.id);
+  const memberNames = roster.reduce<Record<string, string>>((acc, m) => {
+    acc[m.user_id] = m.name || m.email?.split("@")[0] || "Unknown";
+    return acc;
+  }, {});
+
   return (
     <LeadDetailV2
       lead={lead}
+      memberNames={memberNames}
       notes={notes}
       checklists={checklists}
       activities={activities}
