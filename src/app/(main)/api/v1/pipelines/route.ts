@@ -36,6 +36,7 @@ export async function GET() {
     .select("*")
     .eq("tenant_id", auth.tenantId)
     .eq("is_active", true)
+    .is("list_id", null)
     .order("position", { ascending: true });
 
   if (error) {

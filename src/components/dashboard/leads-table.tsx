@@ -51,6 +51,7 @@ import {
   ArrowRightLeft,
   Archive,
   RotateCcw,
+  Columns4,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -109,6 +110,10 @@ interface LeadsTableProps {
   intakeListId?: string | null;
   canExport?: boolean;
   memberBranchMap?: Record<string, string>;
+  /** Slug of the currently active list; enables the Kanban toggle. */
+  activeListSlug?: string | null;
+  /** When true the active list has its own pipeline and can show kanban. */
+  hasListPipeline?: boolean;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -142,6 +147,8 @@ export function LeadsTable({
   intakeListId = null,
   canExport = false,
   memberBranchMap = {},
+  activeListSlug = null,
+  hasListPipeline = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -1009,6 +1016,18 @@ export function LeadsTable({
             <Columns3 className="h-3 w-3 shrink-0" />
             <span>Edit columns</span>
           </button>
+
+          {/* Kanban toggle — only when the active list has its own pipeline */}
+          {hasListPipeline && activeListSlug && (
+            <button
+              type="button"
+              onClick={() => router.push(`/leads?list=${activeListSlug}&view=kanban`)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Columns4 className="h-3 w-3 shrink-0" />
+              <span>Kanban view</span>
+            </button>
+          )}
 
           <div className="flex-1" />
 

@@ -357,7 +357,7 @@ export function LeadDetailV2({
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStage.slug }),
+        body: JSON.stringify({ stage_id: newStageId }),
       });
       if (!res.ok) throw new Error("Failed to update stage");
       toast.success("Stage updated");
