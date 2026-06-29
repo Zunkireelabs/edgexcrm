@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { Check, Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
@@ -213,6 +214,7 @@ function LeadTypeSelect({
       if (!res.ok) throw new Error();
     } catch {
       onUpdate(prev);
+      toast.error("Failed to update lead type");
     }
   }
 

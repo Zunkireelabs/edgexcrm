@@ -43,6 +43,8 @@ function LeadTypeBadge({ leadId, tags }: { leadId: string; tags: string[] }) {
       .catch(() => {});
   }, []);
 
+  useEffect(() => { setCurrentTags(tags); }, [tags]);
+
   const currentSlug = currentTags[0] ?? options.find((o) => o.is_default)?.slug ?? null;
   const currentLabel = options.find((o) => o.slug === currentSlug)?.label ?? currentSlug ?? "Student";
 
