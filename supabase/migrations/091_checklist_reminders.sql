@@ -1,4 +1,4 @@
--- Migration 090: Task reminders on lead checklists
+-- Migration 091: Task reminders on lead checklists
 -- Adds an optional reminder time to a lead task. A scheduled job
 -- (/api/internal/reminders/run) finds due reminders and notifies the lead's
 -- assignee, then stamps reminded_at so each fires once. Additive + idempotent.

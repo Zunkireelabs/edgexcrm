@@ -1,4 +1,4 @@
--- Migration 089: Lead Collaborators
+-- Migration 090: Lead Collaborators
 -- Remembers every user who has been assigned to a lead, so they retain VIEW
 -- access to that lead even after it is reassigned / moves stage or list.
 -- Additive + idempotent. No behavior change until rows exist (own-scope query
@@ -63,7 +63,7 @@ DO $$
 DECLARE v_rows INT;
 BEGIN
   SELECT COUNT(*) INTO v_rows FROM lead_collaborators;
-  RAISE NOTICE '089 lead_collaborators: % rows after backfill', v_rows;
+  RAISE NOTICE '090 lead_collaborators: % rows after backfill', v_rows;
 END$$;
 
 COMMIT;
