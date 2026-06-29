@@ -2,12 +2,22 @@
 
 import React from "react";
 import Link from "next/link";
-import { Eye, RotateCcw } from "lucide-react";
+import { Check, Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
+import type { TeamMember } from "@/lib/supabase/queries";
 
 // Column width constants — kept in sync with leads-table.tsx
 export const NAME_COLUMN_WIDTH = 180;
@@ -34,6 +44,12 @@ export interface LeadColumnCtx {
   onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
   viewMode?: "trash" | "archived" | "normal";
   onRestore?: (leadId: string) => Promise<void>;
+  // Inline Assigned-cell editing
+  canAssign?: boolean;
+  teamMembers?: TeamMember[];
+  onAssignedChange?: (leadId: string, userId: string | null) => Promise<void>;
+  // Lead Type (education_consultancy) — configurable dropdown sourced from /api/v1/lead-types
+  leadTypes?: { id: string; slug: string; label: string; is_default: boolean }[];
 }
 
 export interface LeadColumn {
@@ -84,12 +100,107 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
   );
 }
 
-function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
-  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
-  const nextTag = currentTag === "student" ? "parent" : "student";
+function AssignedCellEditor({ lead, ctx }: { lead: Lead; ctx: LeadColumnCtx }) {
+  const [open, setOpen] = React.useState(false);
+  const [pending, setPending] = React.useState(false);
 
-  async function toggle() {
-    const newTags = [nextTag];
+  const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
+  const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
+  const display = assignedEmail ? assignedName || assignedEmail.split("@")[0] : null;
+
+  // Read-only when the viewer isn't allowed to reassign, or when no team data is plumbed.
+  if (!ctx.canAssign || !ctx.onAssignedChange || !ctx.teamMembers) {
+    return display ? (
+      <span>{display}</span>
+    ) : (
+      <span className="text-gray-400">—</span>
+    );
+  }
+
+  const handleSelect = async (userId: string | null) => {
+    if (userId === (lead.assigned_to ?? null)) {
+      setOpen(false);
+      return;
+    }
+    setPending(true);
+    try {
+      await ctx.onAssignedChange!(lead.id, userId);
+    } finally {
+      setPending(false);
+      setOpen(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={pending}
+          className={`inline-flex items-center text-left text-sm rounded px-1 -mx-1 hover:bg-gray-100 transition-colors ${
+            display ? "" : "text-gray-400"
+          } ${pending ? "opacity-50" : ""}`}
+        >
+          {display ?? "—"}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        className="w-64 p-0"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Command>
+          <CommandInput placeholder="Search team member…" />
+          <CommandList>
+            <CommandEmpty>No member found.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="__unassigned" onSelect={() => handleSelect(null)}>
+                <span className="text-gray-500">Unassigned</span>
+                {lead.assigned_to == null && <Check className="ml-auto h-4 w-4" />}
+              </CommandItem>
+              {ctx.teamMembers.map((m) => {
+                const label = m.name || m.email.split("@")[0];
+                return (
+                  <CommandItem
+                    key={m.user_id}
+                    value={`${m.name || ""} ${m.email}`}
+                    onSelect={() => handleSelect(m.user_id)}
+                  >
+                    <div className="flex flex-col min-w-0">
+                      <span className="truncate">{label}</span>
+                      <span className="truncate text-xs text-gray-400">{m.email}</span>
+                    </div>
+                    {lead.assigned_to === m.user_id && (
+                      <Check className="ml-auto h-4 w-4 shrink-0" />
+                    )}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function LeadTypeSelect({
+  lead,
+  options,
+  onUpdate,
+}: {
+  lead: Lead;
+  options: NonNullable<LeadColumnCtx["leadTypes"]>;
+  onUpdate: (tags: string[]) => void;
+}) {
+  const defaultSlug = options.find((o) => o.is_default)?.slug ?? options[0]?.slug ?? "";
+  const currentSlug = lead.tags?.[0] ?? defaultSlug;
+
+  async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const slug = e.target.value;
+    if (slug === lead.tags?.[0]) return;
+    const newTags = [slug];
+    const prev = lead.tags ?? [];
     onUpdate(newTags);
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
@@ -99,22 +210,23 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
       });
       if (!res.ok) throw new Error();
     } catch {
-      onUpdate(lead.tags || ["student"]);
+      onUpdate(prev);
     }
   }
 
   return (
-    <button
-      onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-        currentTag === "parent"
-          ? "bg-green-100 text-green-700 hover:bg-green-200"
-          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-      }`}
-      title={`Click to change to ${nextTag}`}
+    <select
+      value={currentSlug}
+      onChange={handleChange}
+      onClick={(e) => e.stopPropagation()}
+      className="h-6 rounded border border-input bg-background px-1.5 text-[10px] font-medium focus:outline-none focus:ring-2 focus:ring-ring max-w-[120px]"
     >
-      {currentTag === "parent" ? "Parent" : "Student"}
-    </button>
+      {options.map((o) => (
+        <option key={o.id} value={o.slug}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -184,24 +296,30 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
-  // ── tags (education_consultancy only, defaultVisible when showTags)
+  // ── tags (education_consultancy only, defaultVisible)
+  // Storage is still `leads.tags[0]`; options come from per-tenant `lead_types` (mig 090).
   {
     key: "tags",
-    label: "Tag",
+    label: "Lead Type",
     group: "standard",
     industries: ["education_consultancy"],
     defaultVisible: true,
     renderTh: () => (
-      <th key="tags" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[70px]">
-        Tag
+      <th key="tags" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[120px]">
+        Lead Type
       </th>
     ),
     renderTd: (lead, ctx) => (
       <td key="tags" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
-        <LeadTagToggle
-          lead={lead}
-          onUpdate={(newTags) => ctx.onTagUpdate(lead.id, newTags)}
-        />
+        {ctx.leadTypes && ctx.leadTypes.length > 0 ? (
+          <LeadTypeSelect
+            lead={lead}
+            options={ctx.leadTypes}
+            onUpdate={(newTags) => ctx.onTagUpdate(lead.id, newTags)}
+          />
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
       </td>
     ),
   },
@@ -340,19 +458,15 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Assigned
       </th>
     ),
-    renderTd: (lead, ctx) => {
-      const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
-      const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
-      return (
-        <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-          {assignedEmail ? (
-            <span>{assignedName || assignedEmail.split("@")[0]}</span>
-          ) : (
-            <span className="text-gray-400">—</span>
-          )}
-        </td>
-      );
-    },
+    renderTd: (lead, ctx) => (
+      <td
+        key="assigned"
+        className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <AssignedCellEditor lead={lead} ctx={ctx} />
+      </td>
+    ),
   },
 
   // ── status

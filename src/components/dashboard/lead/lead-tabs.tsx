@@ -107,9 +107,9 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
               {lead.display_id && <InfoGridRow label="Lead ID" value={lead.display_id} />}
               {industryId === "education_consultancy" && (
                 <InfoGridRow
-                  label="Tag"
+                  label="Lead Type"
                   value={
-                    <TagSelector
+                    <LeadTypeSelector
                       leadId={lead.id}
                       currentTags={lead.tags || []}
                     />
@@ -428,49 +428,67 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
   );
 }
 
-function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
+interface LeadTypeOption {
+  id: string;
+  slug: string;
+  label: string;
+  sort_order: number;
+  is_default: boolean;
+}
+
+function LeadTypeSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
+  const [options, setOptions] = useState<LeadTypeOption[]>([]);
   const [tags, setTags] = useState(currentTags);
   const [updating, setUpdating] = useState(false);
 
-  async function handleToggle(tag: string) {
+  useEffect(() => {
+    fetch("/api/v1/lead-types")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.data) setOptions(json.data as LeadTypeOption[]);
+      })
+      .catch(() => {});
+  }, []);
+
+  const currentSlug = tags[0] ?? options.find((o) => o.is_default)?.slug ?? null;
+
+  async function handleChange(slug: string) {
+    if (slug === currentSlug) return;
     setUpdating(true);
-    const newTags = [tag];
+    const newTags = [slug];
+    const prev = tags;
+    setTags(newTags);
     try {
       const res = await fetch(`/api/v1/leads/${leadId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tags: newTags }),
       });
-      if (res.ok) {
-        setTags(newTags);
-        toast.success(`Tagged as ${tag}`);
-      }
+      if (!res.ok) throw new Error();
+      const label = options.find((o) => o.slug === slug)?.label ?? slug;
+      toast.success(`Set to ${label}`);
     } catch {
-      toast.error("Failed to update tag");
+      setTags(prev);
+      toast.error("Failed to update lead type");
     } finally {
       setUpdating(false);
     }
   }
 
   return (
-    <div className="flex gap-1.5">
-      {["student", "parent"].map((tag) => (
-        <button
-          key={tag}
-          disabled={updating}
-          onClick={() => handleToggle(tag)}
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-            tags.includes(tag)
-              ? tag === "parent"
-                ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-          }`}
-        >
-          {tag.charAt(0).toUpperCase() + tag.slice(1)}
-        </button>
+    <select
+      value={currentSlug ?? ""}
+      disabled={updating || options.length === 0}
+      onChange={(e) => handleChange(e.target.value)}
+      className="h-7 rounded-md border border-input bg-background px-2 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+    >
+      {options.length === 0 && <option value="">Loading…</option>}
+      {options.map((o) => (
+        <option key={o.id} value={o.slug}>
+          {o.label}
+        </option>
       ))}
-    </div>
+    </select>
   );
 }
 

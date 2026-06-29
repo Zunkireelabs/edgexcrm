@@ -521,6 +521,31 @@ export async function PATCH(
           }),
         ]
       : []),
+    // Lead assignment history: only true user→user handoffs (both ends non-null),
+    // snapshotting each user's position at the moment of the handoff.
+    ...(assignedChanged && existingLead.assigned_to && updated.assigned_to
+      ? [
+          (async () => {
+            const { data: members } = await supabase
+              .from("tenant_users")
+              .select("user_id, position_id")
+              .eq("tenant_id", auth.tenantId)
+              .in("user_id", [existingLead.assigned_to, updated.assigned_to]);
+            const byUser = new Map<string, string | null>(
+              (members ?? []).map((m) => [m.user_id as string, (m.position_id as string | null) ?? null])
+            );
+            await supabase.from("lead_assignment_history").insert({
+              tenant_id: auth.tenantId,
+              lead_id: id,
+              from_user_id: existingLead.assigned_to,
+              to_user_id: updated.assigned_to,
+              from_position_id: byUser.get(existingLead.assigned_to) ?? null,
+              to_position_id: byUser.get(updated.assigned_to) ?? null,
+              changed_by: auth.userId,
+            });
+          })(),
+        ]
+      : []),
     ...(listChanged
       ? [
           emitEvent({

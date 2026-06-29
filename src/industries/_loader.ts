@@ -89,6 +89,7 @@ export function getIndustrySidebarItems(
   function isItemAllowed(item: SidebarItem): boolean {
     if (!registeredFeatureIds.has(item.featureId)) return false;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
+    if (item.requireLeadScope === "own" && permissions?.leadScope !== "own") return false;
     if (permissions && !canSeeNav(permissions, item.href)) return false;
     return true;
   }

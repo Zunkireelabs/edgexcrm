@@ -159,6 +159,17 @@ export function LeadsTable({
   useEffect(() => {
     setLocalLeads(leads);
   }, [leads]);
+  // Lead Types (education_consultancy only — empty array for other industries).
+  const [leadTypes, setLeadTypes] = useState<{ id: string; slug: string; label: string; is_default: boolean }[]>([]);
+  useEffect(() => {
+    if (industryId !== "education_consultancy") return;
+    fetch("/api/v1/lead-types")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => {
+        if (json?.data) setLeadTypes(json.data);
+      })
+      .catch(() => {});
+  }, [industryId]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [formFilter, setFormFilter] = useState<string>("all");
@@ -973,9 +984,35 @@ export function LeadsTable({
         viewMode === "trash" || viewMode === "archived"
           ? async (leadId: string) => { await restoreLeads([leadId]); }
           : undefined,
+      canAssign: isAdmin && teamMembers.length > 0,
+      teamMembers,
+      leadTypes,
+      onAssignedChange: async (leadId: string, userId: string | null) => {
+        const prev = leads.find((l) => l.id === leadId)?.assigned_to ?? null;
+        setLocalLeads((ls) =>
+          ls.map((l) => (l.id === leadId ? { ...l, assigned_to: userId } : l)),
+        );
+        try {
+          const res = await fetch(`/api/v1/leads/${leadId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assigned_to: userId }),
+          });
+          if (!res.ok) throw new Error("Failed to update assignment");
+          const assigneeName = userId
+            ? (memberNames[userId] || memberMap[userId]?.split("@")[0]) ?? "member"
+            : null;
+          toast.success(assigneeName ? `Assigned to ${assigneeName}` : "Unassigned");
+        } catch {
+          setLocalLeads((ls) =>
+            ls.map((l) => (l.id === leadId ? { ...l, assigned_to: prev } : l)),
+          );
+          toast.error("Failed to update assignment");
+        }
+      },
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, isAdmin, teamMembers, leads, leadTypes],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column

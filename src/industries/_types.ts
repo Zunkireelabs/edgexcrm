@@ -48,6 +48,15 @@ export interface SidebarItem {
    * roles in the tenant.
    */
   minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[];
+  /**
+   * If set to "own", only show this sidebar item to users whose
+   * resolved permissions have `leadScope === "own"` — i.e. users
+   * restricted to their personally-assigned leads. Useful for pages
+   * (like Follow-ups) that only make sense for own-scope users
+   * because admins, branch-managers, and other broader-scope users
+   * already see everything in All Leads.
+   */
+  requireLeadScope?: "own";
 }
 
 /**
