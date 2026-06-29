@@ -35,6 +35,11 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
+import {
+  DESTINATIONS,
+  DEGREE_LEVELS,
+  HEARD_ABOUT_US,
+} from "@/industries/_shared/features/lead-lists/taxonomies";
 
 interface LeadResult {
   id: string;
@@ -55,6 +60,8 @@ interface CheckInRecord {
   last_name: string | null;
   email: string | null;
   phone: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
@@ -69,6 +76,7 @@ interface CheckInPageProps {
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   industryId: string;
+  canAssign: boolean;
 }
 
 type DateFilter = "today" | "week" | "month" | "custom";
@@ -147,8 +155,12 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId, canAssign }: CheckInPageProps) {
   const router = useRouter();
+  const memberNameById = new Map(
+    teamMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
+  );
+  const [assigningId, setAssigningId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LeadResult[]>([]);
@@ -172,14 +184,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
   const [leadTag, setLeadTag] = useState<string>("student");
   const [submitting, setSubmitting] = useState(false);
 
+  // Student-only education fields (revealed when the Student tag is active)
+  const [destination, setDestination] = useState("");
+  const [studyLevel, setStudyLevel] = useState("");
+  const [referralSource, setReferralSource] = useState("");
+  const [referredBy, setReferredBy] = useState("");
+
   // Check-in history state
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
-
-  const filteredStages = stages.filter((s) => s.pipeline_id === pipelineId);
 
   // Auto-focus input on mount
   useEffect(() => {
@@ -296,6 +312,33 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
     }
   };
 
+  const handleAssign = async (record: CheckInRecord, userId: string | null) => {
+    if (!record.lead_id || assigningId) return;
+    setAssigningId(record.id);
+    try {
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to assign lead");
+        return;
+      }
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Lead assigned" : "Lead unassigned");
+    } catch {
+      toast.error("Failed to assign lead");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firstName && !email && !phone) {
@@ -317,10 +360,22 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
           pipeline_id: pipelineId,
           stage_id: stageId,
           assigned_to: assignedTo || null,
-          intake_source: "walk_in",
+          intake_source: referralSource || null,
+          intake_campaign:
+            (referralSource === "referral" || referralSource === "other") &&
+            referredBy.trim()
+              ? referredBy.trim()
+              : null,
           intake_medium: "check_in",
           custom_fields: notes.trim() ? { initial_notes: notes.trim() } : {},
           tags: industryId === "travel_agency" ? [] : [leadTag],
+          // Student-only structured education fields
+          ...(industryId !== "travel_agency" && leadTag === "student"
+            ? {
+                destinations: destination ? [destination] : [],
+                degree_level: studyLevel || null,
+              }
+            : {}),
           is_final: true,
           step: 1,
         }),
@@ -349,6 +404,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
         setPhone("");
         setNotes("");
         setAssignedTo("");
+        setDestination("");
+        setStudyLevel("");
+        setReferralSource("");
+        setReferredBy("");
         setSubmitting(false);
       }
     } catch {
@@ -554,45 +613,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1">
-                        <Label className="text-xs">Pipeline</Label>
-                        <Select value={pipelineId} onValueChange={(v) => setPipelineId(v)}>
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select pipeline" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {pipelines.map((p) => (
-                              <SelectItem key={p.id} value={p.id}>
-                                {p.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-xs">Stage</Label>
-                        <Select value={stageId} onValueChange={(v) => setStageId(v)}>
-                          <SelectTrigger className="h-9">
-                            <SelectValue placeholder="Select stage" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {filteredStages.map((s) => (
-                              <SelectItem key={s.id} value={s.id}>
-                                <span className="flex items-center gap-2">
-                                  <span
-                                    className="h-2 w-2 rounded-full"
-                                    style={{ backgroundColor: s.color }}
-                                  />
-                                  {s.name}
-                                </span>
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
                     <div className="space-y-1">
                       <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assign Counselor"}</Label>
                       <Select value={assignedTo} onValueChange={(v) => setAssignedTo(v)}>
@@ -610,26 +630,106 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                     </div>
 
                     {industryId !== "travel_agency" && (
-                      <div className="space-y-1">
-                        <Label className="text-xs">Tag</Label>
-                        <div className="flex gap-2">
-                          {["student", "parent"].map((tag) => (
-                            <button
-                              key={tag}
-                              type="button"
-                              className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                                leadTag === tag
-                                  ? tag === "parent"
-                                    ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                                    : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-                                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                              }`}
-                              onClick={() => setLeadTag(tag)}
-                            >
-                              {tag.charAt(0).toUpperCase() + tag.slice(1)}
-                            </button>
-                          ))}
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs">Tag</Label>
+                          <div className="flex gap-2">
+                            {["student", "parent"].map((tag) => (
+                              <button
+                                key={tag}
+                                type="button"
+                                className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                                  leadTag === tag
+                                    ? tag === "parent"
+                                      ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                                      : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                }`}
+                                onClick={() => setLeadTag(tag)}
+                              >
+                                {tag.charAt(0).toUpperCase() + tag.slice(1)}
+                              </button>
+                            ))}
+                          </div>
                         </div>
+
+                        {/* Student-only structured fields */}
+                        {leadTag === "student" && (
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Destination</Label>
+                              <Select value={destination} onValueChange={setDestination}>
+                                <SelectTrigger className="h-9">
+                                  <SelectValue placeholder="Select destination (optional)" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DESTINATIONS.map((d) => (
+                                    <SelectItem key={d} value={d}>
+                                      {d}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Interested Study Level</Label>
+                                <Select value={studyLevel} onValueChange={setStudyLevel}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select level (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {DEGREE_LEVELS.map((d) => (
+                                      <SelectItem key={d} value={d}>
+                                        {d}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Where did you hear about us?</Label>
+                                <Select
+                                  value={referralSource}
+                                  onValueChange={(v) => {
+                                    setReferralSource(v);
+                                    if (v !== "referral" && v !== "other") setReferredBy("");
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select an option" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {HEARD_ABOUT_US.map((s) => (
+                                      <SelectItem key={s.value} value={s.value}>
+                                        {s.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+
+                            {(referralSource === "referral" || referralSource === "other") && (
+                              <div className="space-y-1">
+                                <Label htmlFor="referredBy" className="text-xs">
+                                  {referralSource === "referral" ? "Referred by" : "Please specify"}
+                                </Label>
+                                <Input
+                                  id="referredBy"
+                                  value={referredBy}
+                                  onChange={(e) => setReferredBy(e.target.value)}
+                                  placeholder={
+                                    referralSource === "referral"
+                                      ? "Name of the person who referred them"
+                                      : "Where / how did they hear about us?"
+                                  }
+                                  className="h-9"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     )}
 
@@ -776,6 +876,39 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                         {record.email && <span>{record.email}</span>}
                         {record.phone && <span>{record.phone}</span>}
                       </div>
+                    </div>
+                    <div
+                      className="hidden sm:flex flex-1 justify-center text-xs"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      {canAssign ? (
+                        <Select
+                          value={record.assigned_to ?? undefined}
+                          onValueChange={(v) =>
+                            handleAssign(record, v === "__unassigned__" ? null : v)
+                          }
+                          disabled={assigningId === record.id}
+                        >
+                          <SelectTrigger className="h-7 w-auto gap-1 border-none bg-transparent px-2 shadow-none text-xs hover:bg-muted focus:ring-0">
+                            <SelectValue placeholder="Unassigned" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__unassigned__">Unassigned</SelectItem>
+                            {teamMembers.map((m) => (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                {m.name || m.email.split("@")[0]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : record.assigned_to_name ? (
+                        <span className="truncate">
+                          <span className="text-muted-foreground">Assigned: </span>
+                          <span className="font-medium">{record.assigned_to_name}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground italic">Unassigned</span>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       <div className="text-xs font-medium">{formatTime(record.checked_in_at)}</div>

@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { getTeamMembers } from "@/lib/supabase/queries";
 
 // GET /api/v1/check-ins?from=<ISO>&to=<ISO>
 // Returns check-in notes with lead info, filtered by date range
@@ -28,7 +29,7 @@ export async function GET(request: NextRequest) {
     .from("lead_notes")
     .select(`
       id, content, created_at, user_email,
-      leads!inner(id, first_name, last_name, email, phone, tenant_id, deleted_at,
+      leads!inner(id, first_name, last_name, email, phone, assigned_to, tenant_id, deleted_at,
         pipeline_stages(name, color),
         pipelines(name)
       )
@@ -61,6 +62,7 @@ export async function GET(request: NextRequest) {
       last_name: string | null;
       email: string | null;
       phone: string | null;
+      assigned_to: string | null;
       pipeline_stages: { name: string; color: string } | null;
       pipelines: { name: string } | null;
     };
@@ -71,6 +73,7 @@ export async function GET(request: NextRequest) {
       last_name: lead?.last_name || null,
       email: lead?.email || null,
       phone: lead?.phone || null,
+      assigned_to: lead?.assigned_to || null,
       stage_name: lead?.pipeline_stages?.name || null,
       stage_color: lead?.pipeline_stages?.color || null,
       pipeline_name: lead?.pipelines?.name || null,
@@ -80,5 +83,19 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return apiSuccess(checkIns);
+  // Resolve assignee display names server-side (the full tenant roster, not the
+  // branch-scoped assignable list) so cross-branch assignees still resolve.
+  const hasAssignees = checkIns.some((c) => c.assigned_to);
+  const nameById = new Map<string, string>();
+  if (hasAssignees) {
+    const team = await getTeamMembers(auth.tenantId);
+    for (const m of team) nameById.set(m.user_id, m.name);
+  }
+
+  const withAssignees = checkIns.map((c) => ({
+    ...c,
+    assigned_to_name: c.assigned_to ? nameById.get(c.assigned_to) ?? null : null,
+  }));
+
+  return apiSuccess(withAssignees);
 }

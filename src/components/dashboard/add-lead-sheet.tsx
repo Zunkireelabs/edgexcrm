@@ -38,6 +38,7 @@ import {
   DESTINATIONS,
   FIELDS_OF_STUDY,
   DEGREE_LEVELS,
+  INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 
@@ -115,17 +116,6 @@ const COUNTRIES = [
   "Singapore",
   "UAE",
   "Other",
-];
-
-const INTAKE_SOURCES = [
-  { value: "manual_entry", label: "Manual Entry" },
-  { value: "phone_call", label: "Phone Call" },
-  { value: "walk_in", label: "Walk-in" },
-  { value: "referral", label: "Referral" },
-  { value: "trade_show", label: "Trade Show / Event" },
-  { value: "social_media", label: "Social Media" },
-  { value: "email", label: "Email Inquiry" },
-  { value: "other", label: "Other" },
 ];
 
 const CONTACT_METHODS = [
