@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
-import { apiUnauthorized, apiSuccess } from "@/lib/api/response";
+import { apiUnauthorized, apiSuccess, apiInternalError } from "@/lib/api/response";
 import { logger } from "@/lib/logger";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
 
@@ -33,16 +33,19 @@ export async function POST(request: Request) {
 
   if (error) {
     logger.error({ err: error }, "reminders run: failed to fetch due reminders");
-    return apiSuccess({ processed: 0, notified: 0, errors: 1 });
+    return apiInternalError(); // non-200 so cron job marks the run as failed
   }
 
   let notified = 0;
   const processedIds: string[] = [];
 
   for (const row of due ?? []) {
-    processedIds.push(row.id);
     const lead = row.leads as unknown as { assigned_to: string | null };
-    if (!lead?.assigned_to) continue; // no assignee → nothing to notify (still stamped to avoid re-scan)
+    if (!lead?.assigned_to) {
+      // No assignee — stamp to avoid perpetual re-scan, no notification needed.
+      processedIds.push(row.id);
+      continue;
+    }
     try {
       await createNotification({
         tenantId: row.tenant_id,
@@ -53,8 +56,10 @@ export async function POST(request: Request) {
         link: `/leads/${row.lead_id}`,
       });
       notified++;
+      processedIds.push(row.id); // stamp only after confirmed delivery
     } catch (err) {
       logger.error({ err, checklistId: row.id }, "reminders run: failed to notify");
+      // Row NOT stamped — will be retried on the next cron run.
     }
   }
 

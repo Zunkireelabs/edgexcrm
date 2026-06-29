@@ -360,7 +360,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
           pipeline_id: pipelineId,
           stage_id: stageId,
           assigned_to: assignedTo || null,
-          intake_source: referralSource || null,
+          intake_source: referralSource || "walk_in",
           intake_campaign:
             (referralSource === "referral" || referralSource === "other") &&
             referredBy.trim()

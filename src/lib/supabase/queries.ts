@@ -95,7 +95,8 @@ export async function getLeads(
       sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId),
       collaboratorLeadIdsForUser(supabase, tenantId, scope.userId),
     ]);
-    sharedIds = [...new Set([...branchShared, ...collab])];
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    sharedIds = [...new Set([...branchShared, ...collab])].slice(0, 300);
   } else if (scope?.branchId) {
     // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
     // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
@@ -414,7 +415,8 @@ export async function getLeadsForPipeline(
       sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId),
       collaboratorLeadIdsForUser(supabase, tenantId, options.userId),
     ]);
-    const extra = [...new Set([...shared, ...collab])];
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    const extra = [...new Set([...shared, ...collab])].slice(0, 300);
     if (extra.length > 0) {
       query = query.or(`assigned_to.eq.${options.userId},id.in.(${extra.join(",")})`);
     } else {

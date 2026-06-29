@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -52,7 +52,8 @@ export default async function LeadsPage({
           tenantData.positionId,
           found.id,
         );
-        if (accessible) activeList = found;
+        if (!accessible) notFound(); // bar URL bypass: forbidden list → 404, not master view
+        activeList = found;
       }
     }
     // "All Leads" (no ?list=) should land on the user's first accessible funnel

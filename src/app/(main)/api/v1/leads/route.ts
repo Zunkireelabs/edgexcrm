@@ -149,7 +149,9 @@ export async function GET(request: NextRequest) {
       sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
       collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
     ]);
-    const extraIds = [...new Set([...sharedIds, ...collabIds])];
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    const rawExtra = [...new Set([...sharedIds, ...collabIds])];
+    const extraIds = rawExtra.slice(0, 300);
     if (extraIds.length > 0) {
       query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);
     } else {
