@@ -209,6 +209,7 @@ export interface LeadList {
   is_staging?: boolean;
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
+  pipeline_id: string | null;
   created_at: string;
   updated_at: string;
   count?: number;
@@ -438,6 +439,8 @@ export interface Pipeline {
   is_default: boolean;
   position: number;
   is_active: boolean;
+  /** Non-null when this pipeline is owned by a specific lead list. */
+  list_id: string | null;
   created_at: string;
   updated_at: string;
 }

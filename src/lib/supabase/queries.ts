@@ -291,6 +291,7 @@ export async function getPipelines(tenantId: string): Promise<PipelineWithCounts
     .select("*")
     .eq("tenant_id", tenantId)
     .eq("is_active", true)
+    .is("list_id", null)
     .order("position", { ascending: true });
 
   if (error) throw error;
@@ -328,6 +329,35 @@ export async function getPipelines(tenantId: string): Promise<PipelineWithCounts
     stage_count: stageCountMap.get(p.id) || 0,
     lead_count: leadCountMap.get(p.id) || 0,
   })) as PipelineWithCounts[];
+}
+
+export async function getListPipeline(
+  listId: string,
+  tenantId: string,
+): Promise<{ pipeline: Pipeline; stages: PipelineStage[] } | null> {
+  const supabase = await createClient();
+
+  const { data: list } = await supabase
+    .from("lead_lists")
+    .select("pipeline_id")
+    .eq("id", listId)
+    .eq("tenant_id", tenantId)
+    .single();
+
+  if (!list?.pipeline_id) return null;
+
+  const [{ data: pipeline }, { data: stages }] = await Promise.all([
+    supabase.from("pipelines").select("*").eq("id", list.pipeline_id).single(),
+    supabase
+      .from("pipeline_stages")
+      .select("*")
+      .eq("pipeline_id", list.pipeline_id)
+      .eq("tenant_id", tenantId)
+      .order("position", { ascending: true }),
+  ]);
+
+  if (!pipeline) return null;
+  return { pipeline: pipeline as Pipeline, stages: (stages || []) as PipelineStage[] };
 }
 
 export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | null> {

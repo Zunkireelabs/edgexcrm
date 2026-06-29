@@ -201,17 +201,25 @@ export async function PATCH(
 
     body.stage_id = stage.id;
   } else if (body.stage_id && typeof body.stage_id === "string") {
-    // Resolve status slug from stage_id
-    const { data: stage } = await supabase
+    // Resolve status slug from stage_id; when the lead is in a list, validate
+    // the stage belongs to that list's pipeline.
+    let stageQuery = supabase
       .from("pipeline_stages")
-      .select("slug")
+      .select("slug, pipeline_id")
       .eq("id", body.stage_id)
-      .eq("tenant_id", auth.tenantId)
-      .single();
+      .eq("tenant_id", auth.tenantId);
+
+    // If the lead currently belongs to a list, scope to that list's pipeline
+    const currentPipelineId = (existingLead as Record<string, unknown>).pipeline_id as string | null;
+    if (currentPipelineId) {
+      stageQuery = stageQuery.eq("pipeline_id", currentPipelineId);
+    }
+
+    const { data: stage } = await stageQuery.single();
 
     if (!stage) {
       return apiValidationError({
-        stage_id: ["Invalid stage_id. No matching pipeline stage found."],
+        stage_id: ["Invalid stage_id. Stage does not belong to this lead's pipeline."],
       });
     }
 
@@ -347,12 +355,26 @@ export async function PATCH(
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")
-      .select("id, slug, name")
+      .select("id, slug, name, pipeline_id")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
+      // Reset stage to the destination list's default stage on list move
+      if (targetList.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", targetList.pipeline_id)
+          .eq("is_default", true)
+          .single();
+        if (defaultStage) {
+          updatePayload.pipeline_id = targetList.pipeline_id;
+          updatePayload.stage_id = defaultStage.id;
+          updatePayload.status = defaultStage.slug;
+        }
+      }
     }
   }
   if ((existingLead as Record<string, unknown>).list_id) {

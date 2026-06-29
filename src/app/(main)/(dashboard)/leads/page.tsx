@@ -1,23 +1,25 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
+import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
 import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import type { TenantEntity, Industry, LeadList } from "@/types/database";
+import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string }>;
+  searchParams: Promise<{ list?: string; view?: string }>;
 }) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const { list: listSlug } = await searchParams;
+  const { list: listSlug, view } = await searchParams;
+  const viewMode2 = view === "kanban" ? "kanban" : "list";
 
   const [serviceClient, cookieStore] = await Promise.all([
     createServiceClient(),
@@ -80,9 +82,21 @@ export default async function LeadsPage({
   }
 
   // View mode for the leads table: "trash" (recycle bin), "archived", or "normal".
-  const viewMode: "trash" | "archived" | "normal" =
+  const tableViewMode: "trash" | "archived" | "normal" =
     activeList?.slug === "delete" ? "trash" : activeList?.is_archive ? "archived" : "normal";
   const intakeListId = allLists.find((l) => l.is_intake)?.id ?? null;
+
+  // Kanban is only available for normal (non-trash, non-archive) lists that have a pipeline
+  const canShowKanban =
+    viewMode2 === "kanban" &&
+    activeList !== null &&
+    tableViewMode === "normal";
+
+  // Load the list's pipeline when kanban is requested
+  const listPipelineResult =
+    canShowKanban && activeList
+      ? await getListPipeline(activeList.id, tenantData.tenant.id)
+      : null;
 
   const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
     await Promise.all([
@@ -131,6 +145,40 @@ export default async function LeadsPage({
       )
     : [];
 
+  const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+
+  // Render kanban board when requested and list has a pipeline
+  if (canShowKanban && listPipelineResult && activeList) {
+    const pipeline: PipelineWithCounts = {
+      ...listPipelineResult.pipeline,
+      stage_count: listPipelineResult.stages.length,
+      lead_count: leads.length,
+    };
+
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <ListKanbanView
+          listSlug={activeList.slug}
+          pipeline={pipeline}
+          stages={listPipelineResult.stages}
+          leads={leads}
+          role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
+          userId={tenantData.userId}
+          tenantId={tenantData.tenant.id}
+          teamMembers={teamMembers}
+          entities={entities}
+          entityLabel={industry?.entity_type_label}
+          industryId={tenantData.tenant.industry_id}
+          isAdmin={isAdmin}
+        />
+      </div>
+    );
+  }
+
+  // Default: list view
+  const hasListPipeline = !!(activeList && activeList.pipeline_id);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
@@ -152,10 +200,12 @@ export default async function LeadsPage({
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
-        viewMode={viewMode}
+        viewMode={tableViewMode}
         intakeListId={intakeListId}
         canExport={tenantData.permissions.canExport}
         memberBranchMap={memberBranchMap}
+        activeListSlug={activeList?.slug ?? null}
+        hasListPipeline={hasListPipeline}
       />
     </div>
   );

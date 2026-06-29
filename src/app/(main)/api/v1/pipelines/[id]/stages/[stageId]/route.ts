@@ -155,6 +155,14 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return apiNotFound("Stage");
   }
 
+  // Determine if this is a list-bound pipeline (relaxed won/lost validation)
+  const { data: ownerPipeline } = await supabase
+    .from("pipelines")
+    .select("list_id")
+    .eq("id", pipelineId)
+    .single();
+  const isListPipeline = !!ownerPipeline?.list_id;
+
   // Check if stage has leads
   const { count: leadCount } = await supabase
     .from("leads")
@@ -176,8 +184,8 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     return apiConflict("Cannot delete the last stage. A pipeline must have at least one stage.");
   }
 
-  // Check we're not deleting the only won or lost stage
-  if (existing.is_terminal && existing.terminal_type) {
+  // Check we're not deleting the only won or lost stage (skipped for list-pipelines)
+  if (!isListPipeline && existing.is_terminal && existing.terminal_type) {
     const { count: terminalCount } = await supabase
       .from("pipeline_stages")
       .select("id", { count: "exact", head: true })
