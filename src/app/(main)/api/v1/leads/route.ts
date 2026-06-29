@@ -113,6 +113,7 @@ export async function GET(request: NextRequest) {
           auth.permissions,
           targetList.access as { mode: string; positionIds?: string[] },
           auth.positionId,
+          targetList.id,
         );
         if (!accessible) return apiForbidden();
         resolvedListId = targetList.id;

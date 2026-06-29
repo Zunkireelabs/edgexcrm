@@ -74,6 +74,7 @@ export default async function LeadDetailPage({
           tenantData.permissions,
           l.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
+          l.id,
         )
       )
     : [];

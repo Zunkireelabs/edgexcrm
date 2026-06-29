@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
 
   // Filter by per-list access
   const accessible = (lists as LeadList[]).filter((l) =>
-    canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId)
+    canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId, l.id)
   );
 
   // Count leads per list, respecting caller's lead scope

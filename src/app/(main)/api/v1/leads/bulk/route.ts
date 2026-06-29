@@ -150,6 +150,7 @@ export async function PATCH(request: NextRequest) {
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
+      listCheck.id,
     );
     if (!accessible) return apiForbidden();
     if (listCheck.is_archive && !body.archive_reason) {

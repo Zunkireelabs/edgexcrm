@@ -45,9 +45,15 @@ interface Pipeline {
   name: string;
 }
 
+interface LeadList {
+  id: string;
+  name: string;
+}
+
 interface PositionPermissions {
   nav: { mode: "all" } | { mode: "allow"; keys: string[] };
   pipelines: { mode: "all" } | { mode: "allow"; ids: string[] };
+  lists?: { mode: "all" } | { mode: "allow"; ids: string[] };
   leadScope: "all" | "own" | "team";
   canEditLeads?: boolean;
   canManageApplications?: boolean;
@@ -85,6 +91,8 @@ function buildDefaultForm(navCatalog: NavItem[], widgetCatalog: WidgetItem[]) {
     navKeys: [] as string[],
     pipelinesMode: "all" as "all" | "allow",
     pipelineIds: [] as string[],
+    listsMode: "all" as "all" | "allow",
+    listIds: [] as string[],
     leadScope: "all" as "all" | "own" | "team",
     canEditLeads: false,
     canManageApplications: false,
@@ -106,6 +114,9 @@ function permissionsFromForm(form: FormState): PositionPermissions {
     pipelines: form.pipelinesMode === "all"
       ? { mode: "all" }
       : { mode: "allow", ids: form.pipelineIds },
+    lists: form.listsMode === "all"
+      ? { mode: "all" }
+      : { mode: "allow", ids: form.listIds },
     leadScope: form.leadScope,
     ...(form.base_tier === "member" ? { canEditLeads: form.leadScope === "own" ? true : form.canEditLeads } : {}),
     ...(form.base_tier === "member" ? { canManageApplications: form.canManageApplications } : {}),
@@ -125,6 +136,8 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
     navKeys: p.nav.mode === "allow" ? p.nav.keys : [],
     pipelinesMode: p.pipelines.mode,
     pipelineIds: p.pipelines.mode === "allow" ? p.pipelines.ids : [],
+    listsMode: p.lists?.mode ?? "all",
+    listIds: p.lists?.mode === "allow" ? p.lists.ids : [],
     leadScope: p.leadScope,
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
@@ -139,6 +152,7 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
 export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManagerProps) {
   const [positions, setPositions] = useState<Position[]>([]);
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [leadLists, setLeadLists] = useState<LeadList[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingPosition, setEditingPosition] = useState<Position | null>(null);
@@ -148,9 +162,10 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [posRes, pipRes] = await Promise.all([
+      const [posRes, pipRes, listRes] = await Promise.all([
         fetch("/api/v1/positions"),
         fetch("/api/v1/pipelines"),
+        fetch("/api/v1/lead-lists"),
       ]);
       if (posRes.ok) {
         const json = await posRes.json();
@@ -159,6 +174,10 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
       if (pipRes.ok) {
         const json = await pipRes.json();
         setPipelines(json.data ?? []);
+      }
+      if (listRes.ok) {
+        const json = await listRes.json();
+        setLeadLists(json.data ?? []);
       }
     } catch {
       toast.error("Failed to load positions");
@@ -254,6 +273,15 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
       pipelineIds: f.pipelineIds.includes(id)
         ? f.pipelineIds.filter((k) => k !== id)
         : [...f.pipelineIds, id],
+    }));
+  }
+
+  function toggleListId(id: string) {
+    setForm((f) => ({
+      ...f,
+      listIds: f.listIds.includes(id)
+        ? f.listIds.filter((k) => k !== id)
+        : [...f.listIds, id],
     }));
   }
 
@@ -461,6 +489,41 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                 </div>
               )}
             </div>
+
+            {/* Lead lists */}
+            {leadLists.length > 0 && (
+              <div className="space-y-2">
+                <Label>Lead lists</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="list-all"
+                    checked={form.listsMode === "all"}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, listsMode: c ? "all" : "allow" }))
+                    }
+                  />
+                  <label htmlFor="list-all" className="text-sm cursor-pointer">
+                    All lists
+                  </label>
+                </div>
+                {form.listsMode === "allow" && (
+                  <div className="space-y-1.5 pl-6">
+                    {leadLists.map((l) => (
+                      <div key={l.id} className="flex items-center gap-2">
+                        <Checkbox
+                          id={`list-${l.id}`}
+                          checked={form.listIds.includes(l.id)}
+                          onCheckedChange={() => toggleListId(l.id)}
+                        />
+                        <label htmlFor={`list-${l.id}`} className="text-sm cursor-pointer">
+                          {l.name}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Lead scope (member tier only) */}
             {form.base_tier === "member" && (
