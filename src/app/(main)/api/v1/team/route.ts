@@ -24,7 +24,12 @@ export async function GET() {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!canSeeNav(auth.permissions, "/team")) return apiForbidden();
+  // The Org Structure page needs /team nav; the lead assignee dropdowns ALSO read this
+  // roster, so a member who can assign leads may fetch it even without the /team nav item
+  // (e.g. a Lead TeleCaller whose nav omits /team but has canAssignLeads).
+  if (!canSeeNav(auth.permissions, "/team") && !auth.permissions.canAssignLeads) {
+    return apiForbidden();
+  }
 
   // Migrated to scopedClient — auto-injects `.eq("tenant_id", auth.tenantId)`.
   // See CLAUDE.md § Hardening discipline.
