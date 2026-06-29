@@ -14,6 +14,9 @@ import {
   MapPin,
   Calendar,
   UserPlus,
+  Users,
+  BookOpen,
+  Clock,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -38,6 +41,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
+import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
 import { StageStepper } from "../components/stage-stepper";
 import { ApplicationActivityTimeline } from "../components/application-activity-timeline";
@@ -110,6 +114,8 @@ export function ApplicationDetailPage({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<{ id: string; name: string; agent_type: string }[]>([]);
+  const [assignedTo, setAssignedTo] = useState("");
+  const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
   const progress = computeProgress(stages, application.stage_id);
@@ -132,12 +138,15 @@ export function ApplicationDetailPage({
       .then((j) => {
         const emails: Record<string, string> = {};
         const names: Record<string, string> = {};
+        const members: { user_id: string; name: string; email: string }[] = [];
         for (const m of j.data ?? []) {
           if (m.user_id && m.email) emails[m.user_id] = m.email;
           if (m.user_id && m.name) names[m.user_id] = m.name;
+          if (m.user_id) members.push({ user_id: m.user_id, name: m.name ?? m.email ?? m.user_id, email: m.email ?? "" });
         }
         setTeamMemberEmails(emails);
         setTeamMemberNames(names);
+        setTeamMembers(members);
       })
       .catch(() => {});
   }, []);
@@ -157,6 +166,7 @@ export function ApplicationDetailPage({
     setAgentId(application.agent_id ?? "");
     setAppliedDate(application.applied_date ?? "");
     setIntakeStartDate(application.intake_start_date ?? "");
+    setAssignedTo(application.assigned_to ?? "");
     setEditing(true);
   }
 
@@ -180,6 +190,7 @@ export function ApplicationDetailPage({
         agent_id: agentId && agentId !== "__none__" ? agentId : null,
         applied_date: appliedDate || null,
         intake_start_date: intakeStartDate || null,
+        assigned_to: assignedTo && assignedTo !== "__none__" ? assignedTo : null,
       };
 
       const res = await fetch(`/api/v1/applications/${application.id}`, {
@@ -287,6 +298,34 @@ export function ApplicationDetailPage({
                     <span className="text-xs">{fullLead.intake_source}</span>
                   </div>
                 )}
+                {/* Counselor */}
+                <div className="flex items-center gap-2 text-sm">
+                  <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground text-xs">Counselor:</span>
+                  <span className="text-xs truncate">
+                    {fullLead.assigned_to
+                      ? (teamMemberNames[fullLead.assigned_to] ?? teamMemberEmails[fullLead.assigned_to] ?? "Unassigned")
+                      : "Unassigned"}
+                  </span>
+                </div>
+                {/* Degree Level */}
+                {(fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level) && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-muted-foreground text-xs">Degree:</span>
+                    <span className="text-xs">
+                      {fullLead.degree_level ?? (fullLead.custom_fields as Record<string, string> | null)?.degree_level}
+                    </span>
+                  </div>
+                )}
+                {/* Days with Admizz */}
+                <div className="flex items-center gap-2 text-sm">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span className="text-muted-foreground text-xs">With Admizz:</span>
+                  <span className="text-xs">
+                    {Math.floor((Date.now() - new Date(fullLead.created_at).getTime()) / 86400000)} days
+                  </span>
+                </div>
                 <div className="pt-1">
                   <Link
                     href={`/leads/${leadId}`}
@@ -461,6 +500,35 @@ export function ApplicationDetailPage({
                       {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                     </Button>
                   </div>
+                )}
+              </div>
+
+              {/* Application Executive */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Application Executive</Label>
+                {editing && canManageApplications ? (
+                  <Select
+                    value={assignedTo || "__none__"}
+                    onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Unassigned" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Unassigned</SelectItem>
+                      {teamMembers.map((m) => (
+                        <SelectItem key={m.user_id} value={m.user_id}>
+                          {m.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm font-medium">
+                    {application.assigned_to
+                      ? (teamMemberNames[application.assigned_to] ?? teamMemberEmails[application.assigned_to] ?? "—")
+                      : "Unassigned"}
+                  </p>
                 )}
               </div>
 
@@ -670,6 +738,20 @@ export function ApplicationDetailPage({
               </div>
             </CardContent>
           </Card>
+
+          {/* Consent + Processing Fee */}
+          {fullLead && (
+            <ConsentCard
+              leadId={leadId}
+              tenantId={fullLead.tenant_id}
+              consentEnabled={true}
+              consentSigned={false}
+              canManage={canManageApplications}
+              feeStatus={fullLead.pre_app_fee_status}
+              feeAmount={fullLead.pre_app_fee_amount}
+              feeNotes={fullLead.pre_app_fee_notes}
+            />
+          )}
         </div>
       </div>
 
