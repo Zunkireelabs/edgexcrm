@@ -98,6 +98,19 @@ export async function PATCH(
     if (body.is_completed !== undefined) {
       updatePayload.is_completed = body.is_completed;
     }
+    // Reminder: set or clear; changing it re-arms the fired-once guard.
+    if (body.remind_at !== undefined) {
+      if (body.remind_at === null || body.remind_at === "") {
+        updatePayload.remind_at = null;
+      } else {
+        const d = new Date(body.remind_at as string);
+        if (Number.isNaN(d.getTime())) {
+          return apiValidationError({ remind_at: ["Invalid date"] });
+        }
+        updatePayload.remind_at = d.toISOString();
+      }
+      updatePayload.reminded_at = null;
+    }
   }
 
   // Handle completion timestamps
