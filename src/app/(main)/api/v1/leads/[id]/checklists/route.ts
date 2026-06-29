@@ -106,6 +106,13 @@ export async function POST(
 
   if (!lead) return apiNotFound("Lead");
 
+  // Optional reminder time (ISO). Invalid values are ignored (stored as null).
+  let remindAt: string | null = null;
+  if (body.remind_at) {
+    const d = new Date(body.remind_at as string);
+    if (!Number.isNaN(d.getTime())) remindAt = d.toISOString();
+  }
+
   const { data: checklist, error } = await supabase
     .from("lead_checklists")
     .insert({
@@ -113,6 +120,7 @@ export async function POST(
       tenant_id: auth.tenantId,
       title: body.title as string,
       position: body.position !== undefined ? Number(body.position) : 0,
+      remind_at: remindAt,
     })
     .select()
     .single();

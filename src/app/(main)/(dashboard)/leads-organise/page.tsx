@@ -24,6 +24,7 @@ export default async function LeadsOrganisePage() {
       tenantData.permissions,
       l.access as { mode: string; positionIds?: string[] },
       tenantData.positionId,
+      l.id,
     )
   );
 

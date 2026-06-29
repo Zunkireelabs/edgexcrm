@@ -29,6 +29,7 @@ import {
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
 import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborator, collaboratorLeadIdsForUser } from "@/lib/leads/collaborators";
 import {
   normalizeEmail,
   normalizePhone,
@@ -113,6 +114,7 @@ export async function GET(request: NextRequest) {
           auth.permissions,
           targetList.access as { mode: string; positionIds?: string[] },
           auth.positionId,
+          targetList.id,
         );
         if (!accessible) return apiForbidden();
         resolvedListId = targetList.id;
@@ -142,9 +144,16 @@ export async function GET(request: NextRequest) {
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
   if (scope.restrictToSelf) {
     // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
-    const sharedIds = await sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId);
-    if (sharedIds.length > 0) {
-      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${sharedIds.join(",")})`);
+    // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
+    const [sharedIds, collabIds] = await Promise.all([
+      sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
+      collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
+    ]);
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    const rawExtra = [...new Set([...sharedIds, ...collabIds])];
+    const extraIds = rawExtra.slice(0, 300);
+    if (extraIds.length > 0) {
+      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);
     } else {
       query = query.eq("assigned_to", auth.userId);
     }
@@ -894,6 +903,15 @@ async function handlePost(request: NextRequest) {
   }
 
   log.info({ leadId: lead.id }, "Lead created");
+
+  // Register the initial assignee as a collaborator (engaged-user visibility).
+  if ((lead as Lead).assigned_to) {
+    try {
+      await addLeadCollaborator(supabase, tenantId, lead.id, (lead as Lead).assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator on create failed");
+    }
+  }
 
   // Assign display ID for education leads (best-effort; null list_id → live → assigns).
   // Re-select display_id so the response includes the freshly-assigned ID.

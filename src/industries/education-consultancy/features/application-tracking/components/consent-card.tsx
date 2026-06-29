@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine } from "lucide-react";
+import { AlertTriangle, Clock, CheckCircle2, Loader2, Copy, RefreshCw, FileText, Upload, PenLine, ChevronDown } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -77,6 +77,7 @@ export function ConsentCard({
     initialFeeAmount !== null && initialFeeAmount !== undefined ? String(initialFeeAmount) : "",
   );
   const [feeNotes, setFeeNotes] = useState(initialFeeNotes ?? "");
+  const [open, setOpen] = useState(false); // collapsible: collapsed by default
   const [feeDirty, setFeeDirty] = useState(false);
   const [feeSaving, setFeeSaving] = useState(false);
 
@@ -172,10 +173,21 @@ export function ConsentCard({
     <>
       <Card className="shadow-none rounded-lg py-0">
         <CardHeader className="pt-4 pb-3">
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-            Pre Application
-          </span>
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            aria-expanded={open}
+            className="flex w-full items-center justify-between"
+          >
+            <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
+              Pre Application
+            </span>
+            <ChevronDown
+              className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
+            />
+          </button>
         </CardHeader>
+        {open && (
         <CardContent className="pb-4 space-y-3">
           <p className="text-xs font-medium text-muted-foreground">Student Consent</p>
           {consentStatus === "none" && (
@@ -351,6 +363,7 @@ export function ConsentCard({
             )}
           </div>
         </CardContent>
+        )}
       </Card>
 
       <SendConsentDialog

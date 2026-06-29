@@ -576,7 +576,7 @@ function SystemActivityItem({
 }) {
   const time = formatTimeOnly(activity.created_at);
   const actor = resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
-  const description = getSystemActivityDescription(activity, teamMemberEmails);
+  const description = getSystemActivityDescription(activity, teamMemberEmails, teamMemberNames);
   const isSubmission = activity.action === "lead.submission";
   const Icon = getSystemActivityIcon(activity);
   const subline = [time, actor].filter(Boolean).join(" · ");
@@ -805,9 +805,12 @@ function groupByDay(
 
 function getSystemActivityDescription(
   activity: LeadActivity,
-  teamMemberEmails: Record<string, string>
+  teamMemberEmails: Record<string, string>,
+  teamMemberNames: Record<string, string> = {}
 ): string {
   const changes = activity.changes || {};
+  const nameOf = (id: unknown): string | null =>
+    id ? teamMemberNames[String(id)] || teamMemberEmails[String(id)] || null : null;
 
   // Submission (dedup-aware)
   if (activity.action === "lead.submission") {
@@ -828,9 +831,8 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.branch_shared") {
     const branch = changes.branch?.new as string | null;
-    const a = changes.assigned_to?.new;
-    const email = a ? teamMemberEmails[String(a)] : null;
-    return `Shared to ${branch || "a branch"}${email ? ` · assigned to ${email}` : ""}`;
+    const name = nameOf(changes.assigned_to?.new);
+    return `Shared to ${branch || "a branch"}${name ? ` · assigned to ${name}` : ""}`;
   }
 
   if (activity.action === "lead.branch_revoked") {
@@ -840,10 +842,9 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.branch_assigned") {
     const branch = changes.branch?.new as string | null;
-    const a = changes.assigned_to?.new;
-    const email = a ? teamMemberEmails[String(a)] : null;
-    return email
-      ? `Assigned ${email} in ${branch || "a branch"}`
+    const name = nameOf(changes.assigned_to?.new);
+    return name
+      ? `Assigned ${name} in ${branch || "a branch"}`
       : `Unassigned in ${branch || "a branch"}`;
   }
 
@@ -862,9 +863,8 @@ function getSystemActivityDescription(
 
   if (changes.assigned_to) {
     const newAssignee = changes.assigned_to.new;
-    const assigneeEmail = newAssignee ? teamMemberEmails[String(newAssignee)] : null;
     if (newAssignee) {
-      return `Assigned to ${assigneeEmail || "a team member"}`;
+      return `Assigned to ${nameOf(newAssignee) || "a team member"}`;
     }
     return "Unassigned";
   }

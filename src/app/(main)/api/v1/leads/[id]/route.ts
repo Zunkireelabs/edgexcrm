@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborator, isLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -105,7 +106,9 @@ export async function GET(
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
   if (scope.restrictToSelf &&
       !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
-    return apiNotFound("Lead");
+    // Collaborators (anyone ever assigned) keep VIEW access even after reassignment.
+    const isCollab = await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
+    if (!isCollab) return apiNotFound("Lead");
   }
   if (scope.branchId) {
     if (!lead.assigned_to || !auth.branchMemberIds.includes(lead.assigned_to)) return apiNotFound("Lead");
@@ -336,6 +339,7 @@ export async function PATCH(
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
+      listCheck.id,
     );
     if (!accessible) return apiForbidden();
   }
@@ -425,6 +429,15 @@ export async function PATCH(
   // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
+  }
+
+  // New assignee becomes a permanent collaborator (engaged-user visibility).
+  if (updatePayload.assigned_to !== undefined && (updated as Lead).assigned_to) {
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, (updated as Lead).assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator on assign failed");
+    }
   }
 
   // Assign display ID to education leads moving out of staging (best-effort).

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -150,6 +151,7 @@ export async function PATCH(request: NextRequest) {
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
+      listCheck.id,
     );
     if (!accessible) return apiForbidden();
     if (listCheck.is_archive && !body.archive_reason) {
@@ -236,6 +238,15 @@ export async function PATCH(request: NextRequest) {
     { count: idsToUpdate.length, ids: idsToUpdate, assigned_to: body.assigned_to },
     "Bulk updated leads"
   );
+
+  // Record the new assignee as a collaborator on every updated lead (engaged-user visibility).
+  if (body.assigned_to) {
+    try {
+      await addLeadCollaborators(supabase, auth.tenantId, idsToUpdate, body.assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborators on bulk assign failed");
+    }
+  }
 
   // Keep lead_branches origin rows in sync for each updated lead
   if (body.branch_id !== undefined || body.assigned_to !== undefined) {

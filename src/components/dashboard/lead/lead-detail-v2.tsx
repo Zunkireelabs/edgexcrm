@@ -52,6 +52,7 @@ interface TeamMember {
 
 interface LeadDetailV2Props {
   lead: Lead;
+  memberNames?: Record<string, string>;
   notes: LeadNote[];
   checklists: LeadChecklist[];
   activities: LeadActivity[];
@@ -116,6 +117,7 @@ function makeDraft(lead: Lead): LeadDraft {
 
 export function LeadDetailV2({
   lead,
+  memberNames = {},
   notes: initialNotes,
   checklists: initialChecklists,
   activities,
@@ -190,12 +192,14 @@ export function LeadDetailV2({
     {}
   );
 
+  // Seed with the server-resolved full roster (works for non-admins, who can't
+  // call /api/v1/team), then overlay any client-fetched names.
   const teamMemberNames = teamMembers.reduce<Record<string, string>>(
     (acc, member) => {
       if (member.name) acc[member.user_id] = member.name;
       return acc;
     },
-    {}
+    { ...memberNames }
   );
 
   // Fetch team members for assignment
