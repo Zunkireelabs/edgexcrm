@@ -115,6 +115,8 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         entities={entities}
         entityLabel={industry?.entity_type_label}
         industryId={tenantData.tenant.industry_id}
+        canEditLeads={tenantData.permissions.canEditLeads}
+        restrictToSelf={tenantData.permissions.leadScope === "own"}
       />
     </div>
   );

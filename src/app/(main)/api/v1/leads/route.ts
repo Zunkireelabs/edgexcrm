@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { leadQueryScope, canSeeNav, canAccessList } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import {
@@ -142,7 +142,13 @@ export async function GET(request: NextRequest) {
 
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (scope.restrictToSelf) {
+  if (auth.branchId && isSharedPoolList(auth.permissions, resolvedListId)) {
+    // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
+    // not just their own. auth.branchMemberIds is empty for own-scope, so resolve explicitly.
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId);
+    query = query.in("assigned_to", memberIds);
+    assignedTo = null;
+  } else if (scope.restrictToSelf) {
     // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
     // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
     const [sharedIds, collabIds] = await Promise.all([

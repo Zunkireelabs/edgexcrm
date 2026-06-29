@@ -29,6 +29,8 @@ interface ListKanbanViewProps {
   entityLabel?: string;
   industryId?: string | null;
   isAdmin: boolean;
+  canEditLeads?: boolean;
+  restrictToSelf?: boolean;
 }
 
 export function ListKanbanView({
@@ -44,6 +46,8 @@ export function ListKanbanView({
   entityLabel,
   industryId,
   isAdmin,
+  canEditLeads,
+  restrictToSelf,
 }: ListKanbanViewProps) {
   const router = useRouter();
   const [manageOpen, setManageOpen] = useState(false);
@@ -84,6 +88,8 @@ export function ListKanbanView({
         entities={entities}
         entityLabel={entityLabel}
         industryId={industryId}
+        canEditLeads={canEditLeads}
+        restrictToSelf={restrictToSelf}
       />
 
       {isAdmin && (

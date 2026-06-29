@@ -47,6 +47,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  canEditLeads?: boolean;
 }
 
 interface LeadDetailProps {
@@ -410,7 +411,7 @@ export function LeadDetail({
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
                     {teamMembers
-                      .filter((m) => m.role !== "viewer")
+                      .filter((m) => m.canEditLeads !== false)
                       .map((m) => (
                         <SelectItem key={m.user_id} value={m.user_id}>
                           {m.email} ({m.role})

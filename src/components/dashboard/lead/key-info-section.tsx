@@ -46,6 +46,7 @@ interface TeamMember {
   role: string;
   email: string;
   name?: string | null;
+  canEditLeads?: boolean;
 }
 
 interface LeadDraftSubset {
@@ -67,6 +68,7 @@ interface KeyInfoSectionProps {
   assignedTo: string;
   teamMembers: TeamMember[];
   isAdmin: boolean;
+  canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
   onStageChange: (stageId: string) => void;
   onAssignmentChange: (userId: string) => void;
   entity?: TenantEntity | null;
@@ -97,6 +99,7 @@ export function KeyInfoSection({
   assignedTo,
   teamMembers,
   isAdmin,
+  canAssign = false,
   onStageChange,
   onAssignmentChange,
   entity,
@@ -231,7 +234,7 @@ export function KeyInfoSection({
           {/* Assigned To */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin ? (
+            {isAdmin || canAssign ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -244,7 +247,7 @@ export function KeyInfoSection({
                     <span className="text-muted-foreground">Unassigned</span>
                   </SelectItem>
                   {teamMembers
-                    .filter((m) => m.role !== "viewer")
+                    .filter((m) => m.canEditLeads !== false)
                     .map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
                         <div className="flex items-center gap-2">

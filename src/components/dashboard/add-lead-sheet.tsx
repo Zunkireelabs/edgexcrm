@@ -47,6 +47,7 @@ interface TeamMember {
   email: string;
   role: string;
   name: string;
+  canEditLeads?: boolean;
 }
 
 interface AddLeadSheetProps {
@@ -359,9 +360,9 @@ export function AddLeadSheet({
     }
   };
 
-  const assignableMembers = teamMembers.filter(
-    (m) => m.role === "counselor" || m.role === "admin" || m.role === "owner"
-  );
+  // Assignable = members whose position lets them act on leads (owner/admin always can).
+  // Position-driven, not the legacy role string — so Branch Managers are included.
+  const assignableMembers = teamMembers.filter((m) => m.canEditLeads !== false);
 
   // ── Shared render helpers ────────────────────────────────────────────────
 

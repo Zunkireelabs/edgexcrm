@@ -6,6 +6,8 @@ export interface PositionPermissions {
   pipelines: { mode: "all" } | { mode: "allow"; ids: string[] };  // pipelines.id values
   lists?: { mode: "all" } | { mode: "allow"; ids: string[] };     // lead_lists.id values. Absent ⇒ all lists (backward compat).
   leadScope: "all" | "own" | "team";                              // "team" reserved → resolves as "all" in v1
+  sharedPoolListIds?: string[];                                   // lead_lists.id values. For an own-scope holder, these lists are a BRANCH-wide shared pool (sees all branch leads, not just own). Absent ⇒ none.
+  canAssignLeads?: boolean;                                        // lets a member set a lead's assignee (assigned_to). Branch/owner stay admin-only. Absent ⇒ default per resolver.
   canEditLeads?: boolean;                                          // only meaningful for member+leadScope:all (branch manager). Absent ⇒ default per resolver.
   canManageApplications?: boolean;                                 // controls write access to the Application Tracking feature. Absent ⇒ default per resolver.
   canManageClasses?: boolean;                                      // controls write access to the Classes feature. Absent ⇒ default per resolver.
@@ -20,6 +22,8 @@ export interface ResolvedPermissions {
   pipelineAccess: "all" | { ids: Set<string> };
   listAccess: "all" | { ids: Set<string> };    // position-side lead-list allowlist; "all" = every list
   leadScope: "all" | "own" | "team";
+  sharedPoolListIds: Set<string>;              // lists where an own-scope holder sees their whole BRANCH's leads (shared pool). Empty = none.
+  canAssignLeads: boolean;                      // can set a lead's assignee
   canEditLeads: boolean;
   canManageApplications: boolean;
   canManageClasses: boolean;
@@ -42,6 +46,8 @@ export function resolvePermissions(
       pipelineAccess: "all",
       listAccess: "all",
       leadScope: "all",
+      sharedPoolListIds: new Set(),
+      canAssignLeads: true,
       canEditLeads: true,
       canManageApplications: true,
       canManageClasses: true,
@@ -59,6 +65,8 @@ export function resolvePermissions(
       pipelineAccess: "all",
       listAccess: "all",
       leadScope,
+      sharedPoolListIds: new Set(),
+      canAssignLeads: false,
       canEditLeads: role === "counselor", // counselors edit own; viewers don't
       canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
       canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
@@ -74,6 +82,8 @@ export function resolvePermissions(
     pipelineAccess: p.pipelines.mode === "all" ? "all" : { ids: new Set(p.pipelines.ids) },
     listAccess: p.lists && p.lists.mode === "allow" ? { ids: new Set(p.lists.ids) } : "all",
     leadScope: p.leadScope, // "team" treated as "all" by callers in v1; see helpers below
+    sharedPoolListIds: new Set(p.sharedPoolListIds ?? []),
+    canAssignLeads: p.canAssignLeads === true,
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
     canManageClasses: p.canManageClasses === true,
@@ -86,6 +96,24 @@ export function resolvePermissions(
 // ── Check helpers ──────────────────────────────────────────────────
 export function shouldRestrictToSelf(p: ResolvedPermissions): boolean {
   return p.leadScope === "own";
+}
+/**
+ * Does this own-scope holder view `listId` as a branch-wide shared pool?
+ * When true, callers widen the lead query from own-only to the user's whole branch
+ * for that one list (e.g. telecallers sharing the Pre-qualified intake pool).
+ * Only meaningful for own-scope members; admins/all-scope already see everything.
+ */
+export function isSharedPoolList(p: ResolvedPermissions, listId: string | null | undefined): boolean {
+  return !!listId && p.leadScope === "own" && p.sharedPoolListIds.has(listId);
+}
+/**
+ * Unwrap a Supabase `positions(permissions)` embed (object OR single-element array,
+ * depending on the relationship inference) into a PositionPermissions | null.
+ * Centralizes the embed-shape handling used wherever a tenant_users row is joined to positions.
+ */
+export function positionPermissionsFromEmbed(embed: unknown): PositionPermissions | null {
+  const e = Array.isArray(embed) ? embed[0] ?? null : embed;
+  return ((e as { permissions?: unknown } | null)?.permissions ?? null) as PositionPermissions | null;
 }
 export function canManageApplications(p: ResolvedPermissions): boolean {
   return p.canManageApplications;
@@ -211,6 +239,18 @@ export function validatePositionPermissions(input: unknown): string | null {
   // leadScope
   if (!["all", "own", "team"].includes(p.leadScope as string)) {
     return "permissions.leadScope must be \"all\", \"own\", or \"team\"";
+  }
+
+  // sharedPoolListIds (optional)
+  if (p.sharedPoolListIds !== undefined) {
+    if (!Array.isArray(p.sharedPoolListIds) || p.sharedPoolListIds.some((k) => typeof k !== "string")) {
+      return "permissions.sharedPoolListIds must be an array of strings";
+    }
+  }
+
+  // canAssignLeads (optional)
+  if (p.canAssignLeads !== undefined && typeof p.canAssignLeads !== "boolean") {
+    return "permissions.canAssignLeads must be a boolean";
   }
 
   // canEditLeads (optional)

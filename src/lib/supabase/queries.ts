@@ -1,6 +1,6 @@
 import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
-import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
+import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
@@ -106,7 +106,9 @@ export async function getLeads(
   }
 
   // Factory applied on every range page so all filters + stable sort are consistent.
-  const buildQuery = () => {
+  // `widen` controls the own-scope collaborator/shared-branch widening: when false we fall
+  // back to a plain assigned_to filter (used if the widened OR query errors — see loop below).
+  const buildQuery = (widen: boolean) => {
     let q = supabase
       .from("leads")
       .select("*")
@@ -125,7 +127,7 @@ export async function getLeads(
     // Scope (hotfix shape — inline assigned_to filters, never .in("id", 500+ uuids) which
     // overflows undici's 16KB URL limit). DO NOT replace with .in("id", selfIds/branchIds).
     if (scope?.restrictToSelf && scope.userId) {
-      if (sharedIds && sharedIds.length > 0) {
+      if (widen && sharedIds && sharedIds.length > 0) {
         q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
       } else {
         q = q.eq("assigned_to", scope.userId);
@@ -154,18 +156,39 @@ export async function getLeads(
   // slices via .range() and concatenate until a short page or the caller's ceiling (scope.limit) is reached.
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
-  const out: Lead[] = [];
 
-  // Range-based paging. Both self-scope and branch-scope use inline assigned_to filters,
-  // so no per-ID chunking is needed — the URL stays small regardless of result size.
-  for (let from = 0; from < max; from += CHUNK) {
-    const to = Math.min(from + CHUNK, max) - 1;
-    const { data, error } = await buildQuery().range(from, to);
-    if (error) break;
-    out.push(...((data ?? []) as Lead[]));
-    if (!data || data.length < CHUNK) break;
+  // Page through every range with a FIXED widen setting. Returns null on any page error
+  // so the caller can cleanly retry the WHOLE query with a narrower filter — avoiding
+  // mid-stream offset drift or a permanently-flipped flag (both would silently drop rows).
+  const fetchPaged = async (widen: boolean): Promise<Lead[] | null> => {
+    const acc: Lead[] = [];
+    for (let from = 0; from < max; from += CHUNK) {
+      const to = Math.min(from + CHUNK, max) - 1;
+      const { data, error } = await buildQuery(widen).range(from, to);
+      if (error) {
+        console.error("[getLeads] leads query page failed", {
+          tenantId, listId: scope?.listId, from, widen, error,
+        });
+        return null;
+      }
+      acc.push(...((data ?? []) as Lead[]));
+      if (!data || data.length < CHUNK) break;
+    }
+    return acc;
+  };
+
+  // Own-scope users start widened (so collaborator/shared-branch leads show too).
+  const widenInitial = !!(scope?.restrictToSelf && scope.userId && sharedIds && sharedIds.length > 0);
+  let result = await fetchPaged(widenInitial);
+  // Defensive: if the widened own-scope query failed, retry the WHOLE query assigned-only
+  // (from offset 0) so a user's own leads never vanish behind a collaborator-widening failure.
+  if (result === null && widenInitial) {
+    console.error("[getLeads] widened own-scope query failed; retrying assigned-only", {
+      tenantId, userId: scope?.userId, sharedIdCount: sharedIds?.length,
+    });
+    result = await fetchPaged(false);
   }
-  return out;
+  return result ?? [];
 }
 
 export async function getLead(
@@ -480,13 +503,15 @@ export interface TeamMember {
   name: string;
   branch_id: string | null;
   created_at: string;
+  /** Position-derived: can this member act on (be assigned) leads? Drives assignee dropdowns. */
+  canEditLeads: boolean;
 }
 
 export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
   const supabase = await createServiceClient();
   const { data: members, error } = await supabase
     .from("tenant_users")
-    .select("id, user_id, role, branch_id, created_at")
+    .select("id, user_id, role, branch_id, created_at, position_id, positions(permissions)")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true });
 
@@ -502,6 +527,12 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
 
   return (members || []).map((m) => {
     const user = userMap.get(m.user_id) ?? { email: "Unknown", name: "Unknown" };
+    // Resolve position → permissions to decide assignability (position is the source of truth,
+    // not the legacy `role`).
+    const { canEditLeads } = resolvePermissions(
+      m.role as UserRole,
+      positionPermissionsFromEmbed(m.positions),
+    );
     return {
       id: m.id,
       user_id: m.user_id,
@@ -510,6 +541,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       name: user.name,
       branch_id: (m.branch_id as string | null) ?? null,
       created_at: m.created_at,
+      canEditLeads,
     };
   });
 }

@@ -157,6 +157,7 @@ export default async function LeadsOrganiseCockpitPage({
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
         canExport={tenantData.permissions.canExport}
+        canEditLeads={tenantData.permissions.canEditLeads}
         memberBranchMap={memberBranchMap}
       />
     </div>
