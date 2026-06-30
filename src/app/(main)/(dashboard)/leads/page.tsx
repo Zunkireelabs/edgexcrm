@@ -7,6 +7,7 @@ import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
 import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
 export default async function LeadsPage({
@@ -56,22 +57,37 @@ export default async function LeadsPage({
         activeList = found;
       }
     }
-    // "All Leads" (no ?list=) should land on the user's first accessible funnel
-    // list instead of the combined master view. Redirect server-side so it can't
-    // be bypassed; the target carries a ?list= so this never loops.
+    // "All Leads" (no ?list=): admin/owner see the global view; everyone else lands
+    // on their position's home list. Falls back to first accessible list if no mapping.
     if (!listSlug) {
-      const firstFunnel = allLists
-        .filter((l) => !l.is_archive && !l.is_staging)
-        .filter((l) =>
-          canAccessList(
-            tenantData.permissions,
-            l.access as { mode: string; positionIds?: string[] },
-            tenantData.positionId,
-            l.id,
-          ),
-        )
-        .sort((a, b) => a.sort_order - b.sort_order)[0];
-      if (firstFunnel) redirect(`/leads?list=${firstFunnel.slug}`);
+      const isAdminOrOwner = tenantData.role === "owner" || tenantData.role === "admin";
+      if (!isAdminOrOwner) {
+        const homeSlug = tenantData.positionSlug ? POSITION_HOME_LIST[tenantData.positionSlug] : null;
+        const homeList = homeSlug
+          ? allLists.find((l) => l.slug === homeSlug && !l.is_archive && !l.is_staging)
+          : null;
+        if (homeList && canAccessList(
+          tenantData.permissions,
+          homeList.access as { mode: string; positionIds?: string[] },
+          tenantData.positionId,
+          homeList.id,
+        )) {
+          redirect(`/leads?list=${homeList.slug}`);
+        }
+        // Fallback: first accessible funnel list (for users with no position mapping)
+        const firstFunnel = allLists
+          .filter((l) => !l.is_archive && !l.is_staging)
+          .filter((l) =>
+            canAccessList(
+              tenantData.permissions,
+              l.access as { mode: string; positionIds?: string[] },
+              tenantData.positionId,
+              l.id,
+            ),
+          )
+          .sort((a, b) => a.sort_order - b.sort_order)[0];
+        if (firstFunnel) redirect(`/leads?list=${firstFunnel.slug}`);
+      }
     }
 
     const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
@@ -220,6 +236,7 @@ export default async function LeadsPage({
         memberBranchMap={memberBranchMap}
         activeListSlug={activeList?.slug ?? null}
         hasListPipeline={hasListPipeline}
+        isTeamScoped={tenantData.permissions.leadScope === "team"}
       />
     </div>
   );

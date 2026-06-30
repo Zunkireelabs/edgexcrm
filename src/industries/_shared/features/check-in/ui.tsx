@@ -77,6 +77,7 @@ interface CheckInPageProps {
   teamMembers: TeamMember[];
   industryId: string;
   canAssign: boolean;
+  isAdmin: boolean;
 }
 
 type DateFilter = "today" | "week" | "month" | "custom";
@@ -155,7 +156,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId, canAssign }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId, canAssign, isAdmin }: CheckInPageProps) {
   const router = useRouter();
   const memberNameById = new Map(
     teamMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
@@ -819,19 +820,21 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
         {/* History Card — fills remaining space with scrollable content */}
         <Card className="flex-1 flex flex-col min-h-0">
           <CardContent className="flex-1 flex flex-col min-h-0 p-0">
-            {/* CSV Download inside card top-right */}
-            <div className="flex justify-end p-3 pb-0 shrink-0">
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-7 px-2.5"
-                onClick={handleExportCSV}
-                disabled={checkIns.length === 0}
-              >
-                <Download className="h-3.5 w-3.5 mr-1" />
-                Export CSV
-              </Button>
-            </div>
+            {/* CSV Download inside card top-right — admin/owner only */}
+            {isAdmin && (
+              <div className="flex justify-end p-3 pb-0 shrink-0">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-7 px-2.5"
+                  onClick={handleExportCSV}
+                  disabled={checkIns.length === 0}
+                >
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Export CSV
+                </Button>
+              </div>
+            )}
 
             {loadingHistory ? (
               <div className="flex items-center justify-center py-8">
