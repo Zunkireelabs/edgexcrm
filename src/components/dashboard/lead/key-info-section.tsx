@@ -67,6 +67,8 @@ interface KeyInfoSectionProps {
   stageId: string | null;
   assignedTo: string;
   teamMembers: TeamMember[];
+  /** Pre-filtered assignable subset for the dropdown; falls back to teamMembers.filter(canEditLeads) if absent. */
+  assignableMembers?: TeamMember[];
   isAdmin: boolean;
   canEdit?: boolean;            // member with canEditLeads: can change stage even when not admin
   canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
@@ -99,6 +101,7 @@ export function KeyInfoSection({
   stageId,
   assignedTo,
   teamMembers,
+  assignableMembers,
   isAdmin,
   canEdit = false,
   canAssign = false,
@@ -248,8 +251,7 @@ export function KeyInfoSection({
                   <SelectItem value="unassigned">
                     <span className="text-muted-foreground">Unassigned</span>
                   </SelectItem>
-                  {teamMembers
-                    .filter((m) => m.canEditLeads !== false)
+                  {(assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false))
                     .map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
                         <div className="flex items-center gap-2">

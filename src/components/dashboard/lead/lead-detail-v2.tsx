@@ -66,6 +66,8 @@ interface LeadDetailV2Props {
   leadScope?: "all" | "own" | "team";
   canAssign?: boolean;
   canEditLeads?: boolean;
+  /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
+  assignableMembers?: TeamMember[];
   canManageApplications?: boolean;
   canManageClasses?: boolean;
   leadLists?: LeadList[];
@@ -133,6 +135,7 @@ export function LeadDetailV2({
   leadScope,
   canAssign = false,
   canEditLeads = false,
+  assignableMembers,
   canManageApplications,
   canManageClasses,
   leadLists,
@@ -605,6 +608,7 @@ export function LeadDetailV2({
             stageId={stageId}
             assignedTo={assignedTo}
             teamMembers={teamMembers}
+            assignableMembers={assignableMembers}
             isAdmin={isAdmin}
             canEdit={canEdit}
             canAssign={canAssign}

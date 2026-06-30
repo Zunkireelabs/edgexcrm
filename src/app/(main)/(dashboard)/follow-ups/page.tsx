@@ -10,6 +10,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { canAccessList } from "@/lib/api/permissions";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { Lead, TenantEntity, Industry, LeadList } from "@/types/database";
@@ -102,6 +103,14 @@ export default async function FollowUpsPage() {
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
+  const assignableMembers = filterAssignableMembersByChain(teamMembers, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+  });
+
   const accessibleLists = (leadListsRaw as LeadList[]).filter((l) =>
     canAccessList(
       tenantData.permissions,
@@ -139,6 +148,7 @@ export default async function FollowUpsPage() {
         viewMode="normal"
         intakeListId={null}
         canExport={tenantData.permissions.canExport}
+        assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
         activeListSlug={null}
         hasListPipeline={false}

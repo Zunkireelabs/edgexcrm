@@ -8,6 +8,7 @@ import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList } from "@/li
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
 export default async function LeadsPage({
@@ -173,6 +174,13 @@ export default async function LeadsPage({
     : [];
 
   const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+  const assignableMembers = filterAssignableMembersByChain(teamMembers, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+  });
 
   // Render kanban board when requested and list has a pipeline
   if (canShowKanban && listPipelineResult && activeList) {
@@ -233,6 +241,7 @@ export default async function LeadsPage({
         intakeListId={intakeListId}
         canExport={tenantData.permissions.canExport}
         canEditLeads={tenantData.permissions.canEditLeads}
+        assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
         activeListSlug={activeList?.slug ?? null}
         hasListPipeline={hasListPipeline}
