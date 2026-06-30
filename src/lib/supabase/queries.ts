@@ -517,7 +517,25 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
 
   if (error) throw error;
 
-  const { data: authData } = await supabase.auth.admin.listUsers();
+  // Race listUsers against a 7s deadline — it has no built-in timeout, so a slow GoTrue
+  // response can stall the entire page indefinitely. Map-miss fallback below returns "Unknown".
+  const TIMEOUT_MS = 7_000;
+  let authData: Awaited<ReturnType<typeof supabase.auth.admin.listUsers>>["data"] | null = null;
+  try {
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), TIMEOUT_MS)
+    );
+    const result = await Promise.race([
+      supabase.auth.admin.listUsers().then((r) => r.data),
+      timeoutPromise,
+    ]);
+    authData = result;
+    if (!result) {
+      console.error("[getTeamMembers] auth.admin.listUsers() timed out after", TIMEOUT_MS, "ms — members will show as Unknown");
+    }
+  } catch (listErr) {
+    console.error("[getTeamMembers] auth.admin.listUsers() failed — members will show as Unknown", listErr);
+  }
   const userMap = new Map<string, { email: string; name: string }>();
   for (const u of authData?.users || []) {
     const email = u.email || "";
@@ -899,9 +917,25 @@ export async function getTeamMembersWithPositions(
 
   if (error) throw error;
 
-  const { data: authData } = await supabase.auth.admin.listUsers();
+  const TIMEOUT_MS = 7_000;
+  let authData2: Awaited<ReturnType<typeof supabase.auth.admin.listUsers>>["data"] | null = null;
+  try {
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), TIMEOUT_MS)
+    );
+    const result = await Promise.race([
+      supabase.auth.admin.listUsers().then((r) => r.data),
+      timeoutPromise,
+    ]);
+    authData2 = result;
+    if (!result) {
+      console.error("[getTeamMembersWithPositions] auth.admin.listUsers() timed out after", TIMEOUT_MS, "ms");
+    }
+  } catch (listErr) {
+    console.error("[getTeamMembersWithPositions] auth.admin.listUsers() failed", listErr);
+  }
   const userMap = new Map<string, { email: string; name: string }>();
-  for (const u of authData?.users || []) {
+  for (const u of authData2?.users || []) {
     const email = u.email || "";
     const meta = u.user_metadata as Record<string, unknown> | undefined;
     userMap.set(u.id, { email, name: resolveDisplayName(email, meta) });
