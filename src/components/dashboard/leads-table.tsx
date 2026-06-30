@@ -226,6 +226,8 @@ export function LeadsTable({
   // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
   // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
   const canCreateLead = canEditLeads ?? role !== "viewer";
+  // Same position-first gate for inline row edits (stage change, list move).
+  const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
   const showBranches = maxBranches > 1;
 
@@ -939,7 +941,32 @@ export function LeadsTable({
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
       leadLists: leadLists.length > 0 ? leadLists : undefined,
-      onListMove: leadLists.length > 0
+      canEditLeads: canEditRows,
+      // Inline stage change from the table (normal view only). Optimistic + revert,
+      // mirroring onListMove. stage_id is editable by non-admins server-side.
+      onStageChange:
+        canEditRows && viewMode === "normal"
+          ? async (leadId: string, stageId: string) => {
+              setLocalLeads((prev) =>
+                prev.map((l) => (l.id === leadId ? { ...l, stage_id: stageId } : l)),
+              );
+              try {
+                const res = await fetch(`/api/v1/leads/${leadId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ stage_id: stageId }),
+                });
+                if (!res.ok) throw new Error("Failed to change stage");
+              } catch {
+                setLocalLeads((prev) =>
+                  prev.map((l) =>
+                    l.id === leadId ? { ...(leads.find((orig) => orig.id === leadId) ?? l) } : l,
+                  ),
+                );
+              }
+            }
+          : undefined,
+      onListMove: leadLists.length > 0 && canEditRows
         ? async (leadId: string, listId: string, archiveReason?: string) => {
             // Optimistic update
             const targetList = leadLists.find((l) => l.id === listId);
@@ -981,7 +1008,7 @@ export function LeadsTable({
           : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column

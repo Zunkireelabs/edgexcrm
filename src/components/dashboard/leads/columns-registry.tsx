@@ -6,6 +6,7 @@ import { Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
@@ -32,6 +33,8 @@ export interface LeadColumnCtx {
   onTypeUpdate: (leadId: string, type: string) => void;
   leadLists?: LeadList[];
   onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
+  canEditLeads?: boolean;
+  onStageChange?: (leadId: string, stageId: string) => Promise<void>;
   viewMode?: "trash" | "archived" | "normal";
   onRestore?: (leadId: string) => Promise<void>;
 }
@@ -367,7 +370,14 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
-      const stage = ctx.stages.find((s) => s.id === lead.stage_id);
+      // Stages of THIS lead's pipeline (ctx.stages spans all pipelines).
+      const leadStages = ctx.stages.filter((s) => s.pipeline_id === lead.pipeline_id);
+      const stage =
+        leadStages.find((s) => s.id === lead.stage_id) ??
+        ctx.stages.find((s) => s.id === lead.stage_id);
+      // Editable inline when the user can edit leads and the lead's pipeline stages
+      // are available. Trash/archive views pass no onStageChange ⇒ read-only badge.
+      const editable = !!ctx.canEditLeads && !!ctx.onStageChange && leadStages.length > 0;
       const badgeColors: Record<string, string> = {
         new: "bg-blue-100 text-blue-800",
         contacted: "bg-yellow-100 text-yellow-800",
@@ -375,15 +385,23 @@ const STATIC_COLUMNS: LeadColumn[] = [
         rejected: "bg-red-100 text-red-800",
       };
       return (
-        <td key="status" className="px-3 py-1.5">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-              stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
-            }`}
-            style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
-          >
-            {stage?.name || lead.status}
-          </span>
+        <td key="status" className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+          {editable ? (
+            <StageSelector
+              currentStageId={lead.stage_id}
+              stages={leadStages}
+              onChange={(stageId) => ctx.onStageChange!(lead.id, stageId)}
+            />
+          ) : (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
+              }`}
+              style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
+            >
+              {stage?.name || lead.status}
+            </span>
+          )}
         </td>
       );
     },
