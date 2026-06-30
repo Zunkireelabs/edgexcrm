@@ -68,6 +68,7 @@ interface KeyInfoSectionProps {
   assignedTo: string;
   teamMembers: TeamMember[];
   isAdmin: boolean;
+  canEdit?: boolean;            // member with canEditLeads: can change stage even when not admin
   canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
   onStageChange: (stageId: string) => void;
   onAssignmentChange: (userId: string) => void;
@@ -99,6 +100,7 @@ export function KeyInfoSection({
   assignedTo,
   teamMembers,
   isAdmin,
+  canEdit = false,
   canAssign = false,
   onStageChange,
   onAssignmentChange,
@@ -198,7 +200,7 @@ export function KeyInfoSection({
           {/* Stage */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
-            {isAdmin ? (
+            {(isAdmin || canEdit) ? (
               <Select value={stageId || ""} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />

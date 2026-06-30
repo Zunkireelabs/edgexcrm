@@ -65,6 +65,7 @@ interface LeadDetailV2Props {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   canAssign?: boolean;
+  canEditLeads?: boolean;
   canManageApplications?: boolean;
   canManageClasses?: boolean;
   leadLists?: LeadList[];
@@ -131,6 +132,7 @@ export function LeadDetailV2({
   userBranchId,
   leadScope,
   canAssign = false,
+  canEditLeads = false,
   canManageApplications,
   canManageClasses,
   leadLists,
@@ -179,6 +181,9 @@ export function LeadDetailV2({
   const isItAgency = tenant.industry_id === "it_agency";
 
   const isAdmin = role === "owner" || role === "admin";
+  // Position-derived edit capability: admins always, plus members whose position grants
+  // canEditLeads. Gates the same lead working-data controls (stage, tasks) that isAdmin did.
+  const canEdit = isAdmin || canEditLeads;
   const maxBranches = resolveEntitlements({
     plan: tenant.plan,
     entitlement_overrides: tenant.entitlement_overrides,
@@ -600,6 +605,7 @@ export function LeadDetailV2({
             assignedTo={assignedTo}
             teamMembers={teamMembers}
             isAdmin={isAdmin}
+            canEdit={canEdit}
             canAssign={canAssign}
             onStageChange={handleStageChange}
             onAssignmentChange={handleAssignmentChange}
@@ -706,6 +712,7 @@ export function LeadDetailV2({
             checklists={checklists}
             onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
+            canEdit={canEdit}
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}
@@ -756,6 +763,7 @@ export function LeadDetailV2({
                   lead={currentLead}
                   checklists={checklists}
                   isAdmin={isAdmin}
+                  canEdit={canEdit}
                   onChecklistsChange={handleChecklistsChange}
                 />
               )}
@@ -772,6 +780,7 @@ export function LeadDetailV2({
               lead={currentLead}
               checklists={checklists}
               isAdmin={isAdmin}
+              canEdit={canEdit}
               onChecklistsChange={handleChecklistsChange}
             />
           )}
