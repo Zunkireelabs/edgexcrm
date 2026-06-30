@@ -117,6 +117,8 @@ interface LeadsTableProps {
   activeListSlug?: string | null;
   /** When true the active list has its own pipeline and can show kanban. */
   hasListPipeline?: boolean;
+  /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
+  isTeamScoped?: boolean;
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
@@ -153,6 +155,7 @@ export function LeadsTable({
   memberBranchMap = {},
   activeListSlug = null,
   hasListPipeline = false,
+  isTeamScoped = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -320,6 +323,7 @@ export function LeadsTable({
     });
     return Array.from(c.entries());
   }, [memberMap]);
+
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -1171,8 +1175,8 @@ export function LeadsTable({
             />
           )}
 
-          {/* Counselor Filter (Admin only) */}
-          {isAdmin && counselors.length > 0 && (
+          {/* Counselor Filter (Admin + Branch Manager) */}
+          {(isAdmin || isTeamScoped) && counselors.length > 0 && (
             <FilterDropdown
               label="All Counselors"
               multiple

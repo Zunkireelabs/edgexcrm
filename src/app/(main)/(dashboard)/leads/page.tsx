@@ -220,6 +220,7 @@ export default async function LeadsPage({
         memberBranchMap={memberBranchMap}
         activeListSlug={activeList?.slug ?? null}
         hasListPipeline={hasListPipeline}
+        isTeamScoped={tenantData.permissions.leadScope === "team"}
       />
     </div>
   );
