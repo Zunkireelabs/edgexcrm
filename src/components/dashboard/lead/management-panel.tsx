@@ -91,6 +91,7 @@ interface ManagementPanelProps {
   lead: Lead;
   checklists: LeadChecklist[];
   isAdmin: boolean;
+  canEdit?: boolean;
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
@@ -104,6 +105,7 @@ export const ManagementPanel = forwardRef<ManagementPanelRef, ManagementPanelPro
       lead,
       checklists,
       isAdmin,
+      canEdit,
       onChecklistsChange,
     },
     ref
@@ -127,6 +129,7 @@ export const ManagementPanel = forwardRef<ManagementPanelRef, ManagementPanelPro
           leadId={lead.id}
           checklists={checklists}
           isAdmin={isAdmin}
+          canEdit={canEdit}
           onChecklistsChange={onChecklistsChange}
         />
 
@@ -155,11 +158,14 @@ interface ChecklistCardProps {
   leadId: string;
   checklists: LeadChecklist[];
   isAdmin: boolean;
+  canEdit?: boolean;
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
 export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
-  function ChecklistCard({ leadId, checklists, isAdmin, onChecklistsChange }, ref) {
+  function ChecklistCard({ leadId, checklists, isAdmin, canEdit = false, onChecklistsChange }, ref) {
+    // Admins, plus members whose position grants canEditLeads, can add/manage tasks.
+    const canManageTasks = isAdmin || canEdit;
     const [newTitle, setNewTitle] = useState("");
     const [adding, setAdding] = useState(false);
     const [remindAt, setRemindAt] = useState<string | null>(null);
@@ -312,7 +318,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                     {formatRemind(item.remind_at)}
                   </span>
                 )}
-                {isAdmin && (
+                {canManageTasks && (
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
                     <ReminderButton
                       value={item.remind_at}
@@ -339,7 +345,7 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
             </p>
           )}
 
-          {isAdmin && (
+          {canManageTasks && (
             <div className="space-y-2 pt-2">
               <div className="flex gap-2">
                 <Input

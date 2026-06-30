@@ -174,6 +174,7 @@ export default async function LeadDetailPage({
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
       canAssign={tenantData.permissions.canAssignLeads}
+      canEditLeads={tenantData.permissions.canEditLeads}
       canManageApplications={tenantData.permissions.canManageApplications}
       canManageClasses={tenantData.permissions.canManageClasses}
       leadLists={accessibleLists}
