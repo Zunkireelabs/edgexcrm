@@ -173,7 +173,13 @@ export function requireLeadAccess(
   if (p.leadScope === "own") return isAssignee;
   if (p.leadScope === "team") {
     if (!auth.branchId) return isAssignee; // §4.1 NULL-branch fallback
-    return lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to);
+    // Mirror getLeads branch scope: lead is editable if it's in the manager's branch
+    // (via lead_branches roster or direct branch_id), not just if assigned to a branch member.
+    return (
+      membership.some((m) => m.branch_id === auth.branchId) ||
+      lead.branch_id === auth.branchId ||
+      (lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to))
+    );
   }
   return true;
 }

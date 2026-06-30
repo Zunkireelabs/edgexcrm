@@ -111,7 +111,11 @@ export async function GET(
     if (!isCollab) return apiNotFound("Lead");
   }
   if (scope.branchId) {
-    if (!lead.assigned_to || !auth.branchMemberIds.includes(lead.assigned_to)) return apiNotFound("Lead");
+    const inBranch =
+      membership.some((m) => m.branch_id === auth.branchId) ||
+      lead.branch_id === auth.branchId ||
+      (lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to));
+    if (!inBranch) return apiNotFound("Lead");
   }
 
   // Pipeline-access enforcement (dormant until Phase 3)
