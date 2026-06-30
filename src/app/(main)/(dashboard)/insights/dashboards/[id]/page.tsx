@@ -49,7 +49,8 @@ export default async function InsightsDashboardViewPage({
   const dashboard = dashboardResult.data as Dashboard;
 
   // Grant check: members must be in granted_position_ids.
-  if (!isAdmin && (positionId === null || !dashboard.granted_position_ids.includes(positionId))) {
+  const grantedIds = Array.isArray(dashboard.granted_position_ids) ? dashboard.granted_position_ids : [];
+  if (!isAdmin && (positionId === null || !grantedIds.includes(positionId))) {
     notFound();
   }
 
@@ -57,7 +58,8 @@ export default async function InsightsDashboardViewPage({
   const visibleDashboards = isAdmin
     ? allDashboards
     : allDashboards.filter((d) =>
-        positionId !== null && d.granted_position_ids.includes(positionId)
+        positionId !== null &&
+        (Array.isArray(d.granted_position_ids) ? d.granted_position_ids : []).includes(positionId)
       );
 
   const scope = leadQueryScope(permissions, userId);
