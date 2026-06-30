@@ -80,6 +80,11 @@ export default async function LeadsOrganiseCockpitPage({
       )
   );
 
+  // New Leads triage: only allow moving to Pre-qualified
+  const moveTargets = stagingList.slug === "new-leads"
+    ? pipelineLists.filter((l) => l.slug === "pre-qualified")
+    : pipelineLists;
+
   const [
     leads,
     teamMembers,
@@ -152,7 +157,7 @@ export default async function LeadsOrganiseCockpitPage({
         maxBranches={tenantData.entitlements.maxBranches}
         selectedBranchId={selectedBranchId}
         userBranchId={tenantData.branchId}
-        leadLists={pipelineLists}
+        leadLists={moveTargets}
         roleMap={roleMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
