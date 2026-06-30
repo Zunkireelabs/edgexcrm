@@ -15,6 +15,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
 import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -134,6 +135,14 @@ export default async function LeadsOrganiseCockpitPage({
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
+  const assignableMembers = filterAssignableMembersByChain(teamMembers, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+  });
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
@@ -162,6 +171,7 @@ export default async function LeadsOrganiseCockpitPage({
         isStagingView
         canExport={tenantData.permissions.canExport}
         canEditLeads={tenantData.permissions.canEditLeads}
+        assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
       />
     </div>

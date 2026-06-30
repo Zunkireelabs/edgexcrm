@@ -17,6 +17,7 @@ import {
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
+import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -100,7 +101,7 @@ export async function PATCH(request: NextRequest) {
   if (body.assigned_to) {
     const { data: member } = await supabase
       .from("tenant_users")
-      .select("id, branch_id")
+      .select("id, branch_id, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to)
       .single();
@@ -112,6 +113,26 @@ export async function PATCH(request: NextRequest) {
     // §4.2: branch manager may only assign to users in their own branch
     if (isTeamScoped && member.branch_id !== auth.branchId) {
       return apiForbidden();
+    }
+
+    // Chain check: education chain-position callers (non-admin, non-team-scope) may
+    // only assign to their allowed chain targets.
+    if (
+      auth.industryId === "education_consultancy" &&
+      auth.positionSlug != null &&
+      ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+      auth.permissions.baseTier === "member" &&
+      !isTeamScoped
+    ) {
+      const posEmbed = Array.isArray((member as unknown as { positions: unknown }).positions)
+        ? ((member as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+        : ((member as unknown as { positions: { slug: string } | null }).positions);
+      const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+      const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
+      const okBranch = auth.branchId == null || (member.branch_id ?? null) === auth.branchId;
+      if (!targetSlug || !allowed.has(targetSlug) || !okBranch) {
+        return apiForbidden();
+      }
     }
   }
 

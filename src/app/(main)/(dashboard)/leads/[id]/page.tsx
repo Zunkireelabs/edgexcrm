@@ -14,6 +14,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -157,6 +158,13 @@ export default async function LeadDetailPage({
     acc[m.user_id] = m.name || m.email?.split("@")[0] || "Unknown";
     return acc;
   }, {});
+  const assignableMembers = filterAssignableMembersByChain(roster, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+  });
 
   return (
     <LeadDetailV2
@@ -175,6 +183,7 @@ export default async function LeadDetailPage({
       leadScope={tenantData.permissions.leadScope}
       canAssign={tenantData.permissions.canAssignLeads}
       canEditLeads={tenantData.permissions.canEditLeads}
+      assignableMembers={assignableMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
       canManageClasses={tenantData.permissions.canManageClasses}
       leadLists={accessibleLists}
