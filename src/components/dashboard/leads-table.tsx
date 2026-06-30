@@ -174,6 +174,12 @@ export function LeadsTable({
   }, [leads]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Reset status filter when switching lists so a stale status doesn't hide all rows.
+  useEffect(() => {
+    setStatusFilter("all");
+  }, [activeListSlug]);
+
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -481,6 +487,29 @@ export function LeadsTable({
   }, [currentPage, totalPages]);
 
   const filteredIds = useMemo(() => new Set(paginatedLeads.map((l) => l.id)), [paginatedLeads]);
+
+  const statusFilterOptions = useMemo(() => {
+    const activeList = leadLists.find((l) => l.slug === activeListSlug);
+    const pid = activeList?.pipeline_id ?? null;
+    const listStages = pid
+      ? stages.filter((s) => s.pipeline_id === pid).sort((a, b) => a.position - b.position)
+      : [];
+    // Lists without a pipeline (master "All Leads" view, staging lists) keep the legacy global statuses.
+    if (listStages.length === 0) {
+      return [
+        { value: "all", label: "All Status", description: "Show all leads" },
+        { value: "new", label: "New", description: "Fresh submissions" },
+        { value: "partial", label: "Partial", description: "Incomplete forms" },
+        { value: "contacted", label: "Contacted", description: "In communication" },
+        { value: "enrolled", label: "Enrolled", description: "Successfully converted" },
+        { value: "rejected", label: "Rejected", description: "Not moving forward" },
+      ];
+    }
+    return [
+      { value: "all", label: "All Status", description: "Show all leads" },
+      ...listStages.map((s) => ({ value: s.slug, label: s.name })),
+    ];
+  }, [leadLists, activeListSlug, stages]);
 
   const selectedCount = selectedIds.size;
   const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
@@ -1284,14 +1313,7 @@ export function LeadsTable({
               setCurrentPage(1);
             }}
             searchable={false}
-            options={[
-              { value: "all", label: "All Status", description: "Show all leads" },
-              { value: "new", label: "New", description: "Fresh submissions" },
-              { value: "partial", label: "Partial", description: "Incomplete forms" },
-              { value: "contacted", label: "Contacted", description: "In communication" },
-              { value: "enrolled", label: "Enrolled", description: "Successfully converted" },
-              { value: "rejected", label: "Rejected", description: "Not moving forward" },
-            ]}
+            options={statusFilterOptions}
           />
 
           {/* Form Filter (if multiple forms) */}
