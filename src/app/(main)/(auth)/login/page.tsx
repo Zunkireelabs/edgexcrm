@@ -9,6 +9,47 @@ import { Eye, EyeOff } from 'lucide-react';
 
 type AuthMode = 'signin' | 'signup';
 
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// True only for transient network/edge failures — NOT for real auth/validation errors.
+function isTransientNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true; // fetch failed / NetworkError
+  const e = err as { status?: number; name?: string; message?: string } | null;
+  if (!e) return false;
+  return (
+    e.status === 0 ||
+    e.name === 'AuthRetryableFetchError' ||
+    /network ?error|failed to fetch|fetch resource/i.test(e.message ?? '')
+  );
+}
+
+// Runs a Supabase call (which may THROW a network error or RETURN { error }),
+// retrying with backoff on transient failures only. Real errors (or success) pass through.
+async function withRetry<T extends { error: unknown }>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  baseDelayMs = 400,
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fn();
+      if (res.error && isTransientNetworkError(res.error) && i < attempts - 1) {
+        last = res.error;
+      } else {
+        return res; // success, or a real (non-transient) error → return as-is
+      }
+    } catch (err) {
+      if (!isTransientNetworkError(err) || i === attempts - 1) throw err;
+      last = err;
+    }
+    await sleep(baseDelayMs * 2 ** i); // 400ms, 800ms, 1600ms
+  }
+  throw last;
+}
+
 export default function LoginPage() {
   return (
     <Suspense fallback={<LoginPageSkeleton />}>
@@ -56,7 +97,9 @@ function LoginPageContent() {
 
     const checkConnection = async () => {
       try {
-        const { error } = await supabase.from('tenants').select('count', { count: 'exact', head: true });
+        const { error } = await withRetry(async () =>
+          await supabase.from('tenants').select('count', { count: 'exact', head: true })
+        );
         setDbStatus(error ? 'offline' : 'online');
       } catch {
         setDbStatus('offline');
@@ -168,10 +211,9 @@ function LoginPageContent() {
         if (error) throw error;
         setMessage('Check your email for the confirmation link!');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await withRetry(() =>
+          supabase.auth.signInWithPassword({ email, password })
+        );
         if (error) throw error;
 
         // If there's an invite token, accept it — only redirect on success
