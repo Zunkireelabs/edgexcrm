@@ -23,6 +23,7 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
+import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import type { Lead } from "@/types/database";
@@ -241,7 +242,7 @@ export async function PATCH(
   if (body.assigned_to !== undefined && body.assigned_to !== null) {
     const { data: memberCheck } = await supabase
       .from("tenant_users")
-      .select("user_id")
+      .select("user_id, branch_id, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to as string)
       .single();
@@ -250,6 +251,26 @@ export async function PATCH(
       return apiValidationError({
         assigned_to: ["Assigned user is not a member of this tenant"],
       });
+    }
+
+    // Chain check: education chain-position callers (non-admin, non-team-scope) may
+    // only assign to their allowed chain targets.
+    if (
+      auth.industryId === "education_consultancy" &&
+      auth.positionSlug != null &&
+      ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+      auth.permissions.baseTier === "member" &&
+      auth.permissions.leadScope !== "team"
+    ) {
+      const posEmbed = Array.isArray((memberCheck as unknown as { positions: unknown }).positions)
+        ? ((memberCheck as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+        : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
+      const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+      const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
+      const okBranch = auth.branchId == null || ((memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null) === auth.branchId;
+      if (!targetSlug || !allowed.has(targetSlug) || !okBranch) {
+        return apiForbidden();
+      }
     }
   }
 

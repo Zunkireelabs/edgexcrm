@@ -507,13 +507,15 @@ export interface TeamMember {
   created_at: string;
   /** Position-derived: can this member act on (be assigned) leads? Drives assignee dropdowns. */
   canEditLeads: boolean;
+  /** Slug of the member's current position (null if no position assigned). */
+  position_slug: string | null;
 }
 
 export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
   const supabase = await createServiceClient();
   const { data: members, error } = await supabase
     .from("tenant_users")
-    .select("id, user_id, role, branch_id, created_at, position_id, positions(permissions)")
+    .select("id, user_id, role, branch_id, created_at, position_id, positions(permissions, slug)")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: true });
 
@@ -553,6 +555,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       m.role as UserRole,
       positionPermissionsFromEmbed(m.positions),
     );
+    const posEmbed = Array.isArray(m.positions) ? (m.positions[0] ?? null) : m.positions;
     return {
       id: m.id,
       user_id: m.user_id,
@@ -562,6 +565,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
       branch_id: (m.branch_id as string | null) ?? null,
       created_at: m.created_at,
       canEditLeads,
+      position_slug: (posEmbed as { slug?: string } | null)?.slug ?? null,
     };
   });
 }

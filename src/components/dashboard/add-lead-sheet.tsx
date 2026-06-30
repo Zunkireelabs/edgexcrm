@@ -360,8 +360,7 @@ export function AddLeadSheet({
     }
   };
 
-  // Assignable = members whose position lets them act on leads (owner/admin always can).
-  // Position-driven, not the legacy role string — so Branch Managers are included.
+  // Caller passes a pre-chain-filtered set; keep canEditLeads guard as a safety net.
   const assignableMembers = teamMembers.filter((m) => m.canEditLeads !== false);
 
   // ── Shared render helpers ────────────────────────────────────────────────

@@ -114,6 +114,8 @@ interface LeadsTableProps {
   canExport?: boolean;
   /** Current user's position-derived edit capability; gates the Add Lead button. */
   canEditLeads?: boolean;
+  /** Pre-filtered assignable members for the Assigned-To dropdowns. Full teamMembers used for display. */
+  assignableMembers?: TeamMember[];
   memberBranchMap?: Record<string, string>;
   /** Slug of the currently active list; enables the Kanban toggle. */
   activeListSlug?: string | null;
@@ -158,6 +160,7 @@ export function LeadsTable({
   intakeListId = null,
   canExport = false,
   canEditLeads,
+  assignableMembers,
   memberBranchMap = {},
   activeListSlug = null,
   hasListPipeline = false,
@@ -1710,7 +1713,7 @@ export function LeadsTable({
                 <SelectItem value="unassign">
                   <span className="text-muted-foreground">Unassign (remove assignment)</span>
                 </SelectItem>
-                {Array.from(new Map(teamMembers.filter((m) => m.canEditLeads !== false).map((m) => [m.user_id, m])).values())
+                {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
@@ -1896,7 +1899,7 @@ export function LeadsTable({
                       <SelectItem value="unassign">
                         <span className="text-muted-foreground">Unassign</span>
                       </SelectItem>
-                      {Array.from(new Map(teamMembers.filter((m) => m.canEditLeads !== false).map((m) => [m.user_id, m])).values())
+                      {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
                         .map((member) => (
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">
@@ -1958,7 +1961,7 @@ export function LeadsTable({
           onOpenChange={setAddLeadOpen}
           tenantId={tenantId}
           stages={stages}
-          teamMembers={teamMembers}
+          teamMembers={assignableMembers ?? teamMembers}
           entities={entities}
           entityLabel={entityLabel}
           role={role}

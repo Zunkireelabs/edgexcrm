@@ -14,6 +14,7 @@ export interface AuthContext {
   role: UserRole;
   industryId: string | null;
   positionId: string | null;
+  positionSlug: string | null;
   branchId: string | null;
   branchMemberIds: string[];
   permissions: ResolvedPermissions;
@@ -57,7 +58,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions)")
+      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)")
       .eq("user_id", user.id)
       .single<{
         tenant_id: string;
@@ -69,8 +70,8 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
           | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
           | null;
         positions:
-          | { permissions: PositionPermissions }
-          | { permissions: PositionPermissions }[]
+          | { permissions: PositionPermissions; slug: string }
+          | { permissions: PositionPermissions; slug: string }[]
           | null;
       }>();
 
@@ -84,6 +85,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       ? membership.positions[0] ?? null
       : membership.positions;
     const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
+    const positionSlug = positionEmbed?.slug ?? null;
     const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
     const resolvedBranchId = membership.branch_id ?? null;
 
@@ -99,6 +101,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       role: membership.role as UserRole,
       industryId: tenantsEmbed?.industry_id ?? null,
       positionId: membership.position_id ?? null,
+      positionSlug,
       branchId: resolvedBranchId,
       branchMemberIds: memberIds,
       permissions,

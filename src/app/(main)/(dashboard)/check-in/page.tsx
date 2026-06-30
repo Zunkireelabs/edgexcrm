@@ -5,7 +5,7 @@ import { CheckInPage } from "@/industries/_shared/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
-import { filterAssignableMembers } from "@/lib/leads/assignable";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import type { PipelineStage } from "@/types/database";
 
 export default async function CheckInRoute() {
@@ -28,13 +28,15 @@ export default async function CheckInRoute() {
 
   const stages = (stagesResult.data || []) as PipelineStage[];
 
-  // Assign list: branch-scoped users only see their own branch's team; overall
-  // access (owner/admin) sees everyone.
-  const assignableMembers = filterAssignableMembers(
-    teamMembers,
-    tenantData.permissions.leadScope,
-    tenantData.branchId,
-  );
+  // Assign list: chain filter narrows to role-chain peers/next; branch-scoped
+  // users are further constrained to their own branch.
+  const assignableMembers = filterAssignableMembersByChain(teamMembers, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+  });
 
   // Only owner/admin can (re)assign a lead's assigned_to via the leads PATCH
   // route — team-scope members are blocked from assigning an unassigned lead
