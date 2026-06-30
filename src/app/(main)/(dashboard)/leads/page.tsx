@@ -7,6 +7,7 @@ import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
 import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
 export default async function LeadsPage({
@@ -61,13 +62,6 @@ export default async function LeadsPage({
     if (!listSlug) {
       const isAdminOrOwner = tenantData.role === "owner" || tenantData.role === "admin";
       if (!isAdminOrOwner) {
-        const POSITION_HOME_LIST: Record<string, string> = {
-          "lead-caller":           "pre-qualified",
-          "lead-executive":        "qualified",
-          "branch-manager":        "prospects",
-          "counselor":             "prospects",
-          "application-executive": "applications",
-        };
         const homeSlug = tenantData.positionSlug ? POSITION_HOME_LIST[tenantData.positionSlug] : null;
         const homeList = homeSlug
           ? allLists.find((l) => l.slug === homeSlug && !l.is_archive && !l.is_staging)

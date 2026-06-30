@@ -74,6 +74,7 @@ import {
 } from "@/components/dashboard/leads/columns-registry";
 import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
+import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -123,15 +124,7 @@ interface LeadsTableProps {
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
-const POSITION_ROUTE_MAP: Record<string, string> = {
-  "lead-caller":           "pre-qualified",
-  "lead-executive":        "qualified",
-  "branch-manager":        "prospects",
-  "counselor":             "prospects",
-  "application-executive": "applications",
-  "admin":                 "prospects",
-  "owner":                 "prospects",
-};
+const POSITION_ROUTE_MAP = POSITION_ROUTE_MAP_WITH_ADMIN;
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";

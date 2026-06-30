@@ -120,7 +120,6 @@ function permissionsFromForm(form: FormState): PositionPermissions {
     leadScope: form.leadScope,
     ...(form.base_tier === "member" ? { canEditLeads: form.leadScope === "own" ? true : form.canEditLeads } : {}),
     ...(form.base_tier === "member" ? { canManageApplications: form.canManageApplications } : {}),
-    ...(form.base_tier === "member" ? { canExport: form.canExport } : {}),
     dashboard: form.widgetsMode === "all"
       ? { widgets: { mode: "all" } }
       : { widgets: { mode: "allow", keys: form.widgetKeys } },
@@ -572,28 +571,6 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                     Unchecked → read-only viewer. Checked → branch manager: sees and edits all leads.
                   </p>
                 )}
-              </div>
-            )}
-
-            {/* Can export leads (member tier only; owner/admin always can) */}
-            {form.base_tier === "member" && (
-              <div className="space-y-1.5">
-                <Label>Export</Label>
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="can-export"
-                    checked={form.canExport}
-                    onCheckedChange={(c) =>
-                      setForm((f) => ({ ...f, canExport: Boolean(c) }))
-                    }
-                  />
-                  <label htmlFor="can-export" className="text-sm cursor-pointer">
-                    Can export leads
-                  </label>
-                </div>
-                <p className="text-xs text-muted-foreground pl-6">
-                  Shows the Export button on the leads list. Owner/admin can always export.
-                </p>
               </div>
             )}
 

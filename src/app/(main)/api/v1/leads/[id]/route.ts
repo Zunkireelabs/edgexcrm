@@ -308,7 +308,10 @@ export async function PATCH(
     const touchingBranchFields =
       body.assigned_to !== undefined || body.branch_id !== undefined;
     if (touchingBranchFields) {
-      if (!auth.branchId || existingLead.branch_id !== auth.branchId) {
+      const leadInManagerBranch =
+        existingLead.branch_id === auth.branchId ||
+        patchMembership.some((m) => m.branch_id === auth.branchId);
+      if (!auth.branchId || !leadInManagerBranch) {
         return apiForbidden();
       }
       if (body.assigned_to !== undefined && body.assigned_to !== null) {
