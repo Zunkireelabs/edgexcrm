@@ -11,6 +11,7 @@ export async function getCurrentUserTenant(): Promise<{
   userId: string;
   positionId: string | null;
   positionName: string | null;
+  positionSlug: string | null;
   permissions: ResolvedPermissions;
   entitlements: Entitlements;
   branchId: string | null;
@@ -23,7 +24,7 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, positions(permissions, name)")
+    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug)")
     .eq("user_id", user.id)
     .single();
 
@@ -51,6 +52,7 @@ export async function getCurrentUserTenant(): Promise<{
     userId: user.id,
     positionId: (membership.position_id as string | null) ?? null,
     positionName: (positionEmbed?.name ?? null) as string | null,
+    positionSlug: (positionEmbed?.slug ?? null) as string | null,
     permissions,
     entitlements: resolveEntitlements(tenant as Tenant),
     branchId: (membership.branch_id as string | null) ?? null,
@@ -904,6 +906,7 @@ export interface TeamMemberWithPosition {
   user_id: string;
   display: string;
   position_name: string | null;
+  position_slug: string | null;
 }
 
 export async function getTeamMembersWithPositions(
@@ -912,7 +915,7 @@ export async function getTeamMembersWithPositions(
   const supabase = await createServiceClient();
   const { data: members, error } = await supabase
     .from("tenant_users")
-    .select("user_id, positions(name)")
+    .select("user_id, positions(name, slug)")
     .eq("tenant_id", tenantId);
 
   if (error) throw error;
@@ -949,7 +952,8 @@ export async function getTeamMembersWithPositions(
     return {
       user_id: m.user_id,
       display: user.name || user.email.split("@")[0] || user.email,
-      position_name: (posEmbed as { name?: string } | null)?.name ?? null,
+      position_name: (posEmbed as { name?: string; slug?: string } | null)?.name ?? null,
+      position_slug: (posEmbed as { name?: string; slug?: string } | null)?.slug ?? null,
     };
   });
 }
