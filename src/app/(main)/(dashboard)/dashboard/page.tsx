@@ -3,14 +3,19 @@ import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
-import { canSeeWidget, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, canSeeWidget, leadQueryScope } from "@/lib/api/permissions";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  // Education tenants have their own Insights → Dashboards surface.
-  if (tenantData.tenant.industry_id === "education_consultancy") {
+  // Education tenants have their own Insights → Dashboards surface — but only send
+  // users who can actually see it. Redirecting a user without insights nav access
+  // creates an infinite loop: /insights/dashboards bounces them straight back here.
+  if (
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    canSeeNav(tenantData.permissions, "/insights/dashboards")
+  ) {
     redirect("/insights/dashboards");
   }
 
