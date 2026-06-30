@@ -594,6 +594,7 @@ export function LeadDetailV2({
             draft={draft}
             editErrors={editErrors}
             onDraftChange={updateDraft}
+            industryId={tenant.industry_id}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}

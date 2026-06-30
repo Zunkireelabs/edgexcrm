@@ -44,6 +44,7 @@ import {
   Megaphone,
   GraduationCap,
   BookOpen,
+  Repeat2,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -120,6 +121,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Megaphone,
   GraduationCap,
   BookOpen,
+  Repeat2,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -338,6 +340,9 @@ export function DashboardShell({
           onNavigate={() => setMobileOpen(false)}
         />
       );
+    }
+    if (entry.hideForBroadScope && (role === "owner" || role === "admin" || leadScope === "team")) {
+      return null;
     }
     return renderNavItem({
       href: entry.href,

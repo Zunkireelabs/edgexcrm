@@ -48,6 +48,8 @@ export const FEATURES = {
   // Industry-scoped (travel_agency)
   TRIP_INQUIRY: "trip-inquiry",
   ITINERARY: "itinerary",
+  // Industry-scoped (education_consultancy)
+  FOLLOW_UPS: "follow-ups",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];
