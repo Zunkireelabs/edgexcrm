@@ -649,15 +649,17 @@ export function PipelineBoard({
             </PopoverContent>
           </Popover>
 
-          {/* Export */}
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
-          >
-            <Download className="h-3 w-3 shrink-0" />
-            Export
-          </button>
+          {/* Export — admin/owner only */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Download className="h-3 w-3 shrink-0" />
+              Export
+            </button>
+          )}
 
           {/* Add Lead Button */}
           {canCreateLead && (

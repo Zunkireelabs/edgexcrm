@@ -87,7 +87,7 @@ export function resolvePermissions(
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
     canManageClasses: p.canManageClasses === true,
-    canExport: p.canExport === true,
+    canExport: false, // export is owner/admin only; position config cannot grant it
     dashboardWidgets:
       p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
   };

@@ -133,14 +133,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Validate list_id: feature gate, resolve, check access, require archive_reason
-  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown } | null = null;
+  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown; pipeline_id: string | null } | null = null;
   if (body.list_id !== undefined && body.list_id !== null) {
     if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
       return apiForbidden();
     }
     const { data: listCheck } = await supabase
       .from("lead_lists")
-      .select("id, slug, name, is_archive, access")
+      .select("id, slug, name, is_archive, access, pipeline_id")
       .eq("tenant_id", auth.tenantId)
       .eq("id", body.list_id)
       .maybeSingle();
@@ -204,6 +204,20 @@ export async function PATCH(request: NextRequest) {
     if (targetList) {
       bulkUpdatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       if (body.archive_reason) bulkUpdatePayload.archive_reason = body.archive_reason;
+      // Sync pipeline + default stage so stage updates work after the move
+      if (targetList.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", targetList.pipeline_id)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (defaultStage) {
+          bulkUpdatePayload.pipeline_id = targetList.pipeline_id;
+          bulkUpdatePayload.stage_id = defaultStage.id;
+          bulkUpdatePayload.status = defaultStage.slug;
+        }
+      }
     }
   }
 

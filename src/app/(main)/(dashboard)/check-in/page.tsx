@@ -52,6 +52,7 @@ export default async function CheckInRoute() {
         teamMembers={assignableMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
         canAssign={canAssign}
+        isAdmin={tenantData.permissions.baseTier === "owner" || tenantData.permissions.baseTier === "admin"}
       />
     </div>
   );
