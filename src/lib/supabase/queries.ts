@@ -904,6 +904,7 @@ export interface TeamMemberWithPosition {
   user_id: string;
   display: string;
   position_name: string | null;
+  position_slug: string | null;
 }
 
 export async function getTeamMembersWithPositions(
@@ -912,7 +913,7 @@ export async function getTeamMembersWithPositions(
   const supabase = await createServiceClient();
   const { data: members, error } = await supabase
     .from("tenant_users")
-    .select("user_id, positions(name)")
+    .select("user_id, positions(name, slug)")
     .eq("tenant_id", tenantId);
 
   if (error) throw error;
@@ -949,7 +950,8 @@ export async function getTeamMembersWithPositions(
     return {
       user_id: m.user_id,
       display: user.name || user.email.split("@")[0] || user.email,
-      position_name: (posEmbed as { name?: string } | null)?.name ?? null,
+      position_name: (posEmbed as { name?: string; slug?: string } | null)?.name ?? null,
+      position_slug: (posEmbed as { name?: string; slug?: string } | null)?.slug ?? null,
     };
   });
 }

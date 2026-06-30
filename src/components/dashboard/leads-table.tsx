@@ -105,6 +105,7 @@ interface LeadsTableProps {
   userBranchId?: string | null;
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
+  positionSlugMap?: Record<string, string | null>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
   viewMode?: "trash" | "archived" | "normal";
@@ -120,6 +121,17 @@ interface LeadsTableProps {
   /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
   isTeamScoped?: boolean;
 }
+
+// Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
+const POSITION_ROUTE_MAP: Record<string, string> = {
+  "lead-caller":           "pre-qualified",
+  "lead-executive":        "qualified",
+  "branch-manager":        "prospects",
+  "counselor":             "prospects",
+  "application-executive": "applications",
+  "admin":                 "prospects",
+  "owner":                 "prospects",
+};
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";
@@ -146,6 +158,7 @@ export function LeadsTable({
   userBranchId = null,
   leadLists = [],
   roleMap,
+  positionSlugMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
   viewMode = "normal",
@@ -479,6 +492,15 @@ export function LeadsTable({
   const selectedCount = selectedIds.size;
   const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
   const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
+  const allResultsSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+
+  // For isStagingView: the list a lead should auto-move to when assigned (based on assignee's position).
+  const assignAutoListId = useMemo(() => {
+    if (!isStagingView || !assignTo || assignTo === "unassign") return null;
+    const posSlug = positionSlugMap?.[assignTo] ?? null;
+    const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+    return listSlug ? (leadLists.find((l) => l.slug === listSlug)?.id ?? null) : null;
+  }, [isStagingView, assignTo, positionSlugMap, leadLists]);
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -557,6 +579,7 @@ export function LeadsTable({
         body: JSON.stringify({
           ids: idsToAssign,
           assigned_to: assignTo === "unassign" ? null : assignTo,
+          ...(isStagingView && assignAutoListId ? { list_id: assignAutoListId } : {}),
         }),
       });
 
@@ -1433,6 +1456,33 @@ export function LeadsTable({
         </div>
       </div>
 
+      {/* Select-all-results banner: shown when current page is fully selected but more leads exist */}
+      {allSelected && filtered.length > paginatedLeads.length && (
+        <div className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          {allResultsSelected ? (
+            <>
+              <span>All <strong>{filtered.length}</strong> leads are selected.</span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="underline font-medium hover:text-blue-900"
+              >
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <>
+              <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected.</span>
+              <button
+                onClick={() => setSelectedIds(new Set(filtered.map((l) => l.id)))}
+                className="underline font-medium hover:text-blue-900"
+              >
+                Select all {filtered.length} leads
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Table - Compact style with sticky header and horizontal scroll */}
       <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
@@ -1645,18 +1695,22 @@ export function LeadsTable({
                 <SelectItem value="unassign">
                   <span className="text-muted-foreground">Unassign (remove assignment)</span>
                 </SelectItem>
-                {teamMembers
-                  .filter((m) => m.canEditLeads !== false)
+                {Array.from(new Map(teamMembers.filter((m) => m.canEditLeads !== false).map((m) => [m.user_id, m])).values())
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
                         <span>{member.name}</span>
-                        <span className="text-xs text-muted-foreground">({member.role})</span>
+                        <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
                       </div>
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
+            {isStagingView && assignAutoListId && (
+              <p className="mt-2 text-xs text-blue-600 font-medium">
+                → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1805,7 +1859,18 @@ export function LeadsTable({
                 )}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
-                  <Select value={moveAssignTo} onValueChange={setMoveAssignTo}>
+                  <Select
+                    value={moveAssignTo}
+                    onValueChange={(v) => {
+                      setMoveAssignTo(v);
+                      if (v !== "keep" && v !== "unassign" && positionSlugMap) {
+                        const posSlug = positionSlugMap[v] ?? null;
+                        const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+                        const autoList = listSlug ? leadLists.find((l) => l.slug === listSlug) : null;
+                        if (autoList) setMoveListId(autoList.id);
+                      }
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Keep current assignee" />
                     </SelectTrigger>
@@ -1816,13 +1881,12 @@ export function LeadsTable({
                       <SelectItem value="unassign">
                         <span className="text-muted-foreground">Unassign</span>
                       </SelectItem>
-                      {teamMembers
-                        .filter((m) => m.canEditLeads !== false)
+                      {Array.from(new Map(teamMembers.filter((m) => m.canEditLeads !== false).map((m) => [m.user_id, m])).values())
                         .map((member) => (
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">
                               <span>{member.name}</span>
-                              <span className="text-xs text-muted-foreground">({member.role})</span>
+                              <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
                             </div>
                           </SelectItem>
                         ))}
