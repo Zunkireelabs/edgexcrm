@@ -441,6 +441,7 @@ export function DashboardShell({
                     isAdmin={role === "owner" || role === "admin"}
                   />
                 </Suspense>
+                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
@@ -451,7 +452,6 @@ export function DashboardShell({
                 {eduItem("/applications") && renderIndustryEntry(eduItem("/applications")!)}
                 {eduItem("/classes") && renderIndustryEntry(eduItem("/classes")!)}
                 {eduItem("/check-in") && renderIndustryEntry(eduItem("/check-in")!)}
-                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
 
                 {/* Marketing */}
