@@ -451,6 +451,7 @@ export function DashboardShell({
                 {eduItem("/applications") && renderIndustryEntry(eduItem("/applications")!)}
                 {eduItem("/classes") && renderIndustryEntry(eduItem("/classes")!)}
                 {eduItem("/check-in") && renderIndustryEntry(eduItem("/check-in")!)}
+                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
 
                 {/* Marketing */}
