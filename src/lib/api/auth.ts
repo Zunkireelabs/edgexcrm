@@ -33,8 +33,15 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
           getAll() {
             return cookieStore.getAll();
           },
-          setAll() {
-            // API routes don't need to set cookies
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Called from a read-only context (e.g. Server Component); safe to ignore —
+              // middleware has already refreshed the session and written the new tokens.
+            }
           },
         },
       }
@@ -57,10 +64,6 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
         role: string;
         position_id: string | null;
         branch_id: string | null;
-        // PostgREST returns embedded FK relations as an object for
-        // many-to-one (the case here: tenant_users.tenant_id ->
-        // tenants.id), but may return an array if the schema cache is
-        // stale or a second FK gets introduced. Accept both shapes.
         tenants:
           | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
           | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
@@ -105,7 +108,8 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
         entitlement_overrides: tenantsEmbed?.entitlement_overrides,
       }),
     };
-  } catch {
+  } catch (e) {
+    console.error("[authenticateRequest] unexpected error", e);
     return null;
   }
 }
@@ -141,7 +145,15 @@ export async function authenticateUser(): Promise<UserContext | null> {
           getAll() {
             return cookieStore.getAll();
           },
-          setAll() {},
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Called from a read-only context; safe to ignore.
+            }
+          },
         },
       }
     );
@@ -156,7 +168,8 @@ export async function authenticateUser(): Promise<UserContext | null> {
       userId: user.id,
       email: user.email || "",
     };
-  } catch {
+  } catch (e) {
+    console.error("[authenticateUser] unexpected error", e);
     return null;
   }
 }
