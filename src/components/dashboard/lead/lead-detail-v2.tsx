@@ -187,6 +187,9 @@ export function LeadDetailV2({
   // Position-derived edit capability: admins always, plus members whose position grants
   // canEditLeads. Gates the same lead working-data controls (stage, tasks) that isAdmin did.
   const canEdit = isAdmin || canEditLeads;
+  // Note-editing gate: owner/admin, branch-manager, or the lead's own-scope assignee.
+  // Author-of-the-note is a separate, per-note check made in NoteCard itself.
+  const canManageNotes = isAdmin || leadScope === "team" || userId === currentLead.assigned_to;
   const maxBranches = resolveEntitlements({
     plan: tenant.plan,
     entitlement_overrides: tenant.entitlement_overrides,
@@ -718,6 +721,7 @@ export function LeadDetailV2({
             onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
             canEdit={canEdit}
+            canManageNotes={canManageNotes}
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}
