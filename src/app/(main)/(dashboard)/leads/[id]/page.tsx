@@ -12,7 +12,7 @@ import {
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
-import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -185,7 +185,7 @@ export default async function LeadDetailPage({
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
-      canManageClasses={tenantData.permissions.canManageClasses}
+      canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}
       activeLeadLists={activeLeadLists}
       classesActive={classesActive}
