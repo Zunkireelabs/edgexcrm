@@ -40,6 +40,25 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(50);
 
+  // Scope the history by lead-visibility level, keyed on who performed the check-in
+  // (lead_notes.user_id):
+  //   all  → every tenant check-in (owner/admin)
+  //   team → check-ins by the manager's branch roster (§4.1: no branch ⇒ own-only)
+  //   own  → only the caller's own check-ins (lead-executive, counselor, etc.)
+  const scope = auth.permissions.leadScope;
+  if (scope === "own") {
+    query = query.eq("user_id", auth.userId);
+  } else if (scope === "team") {
+    if (auth.branchId) {
+      const performerIds = Array.from(new Set([auth.userId, ...auth.branchMemberIds]));
+      query = query.in("user_id", performerIds);
+    } else {
+      // §4.1 guard: team-scope with no branch must never see all — fall back to own-only
+      query = query.eq("user_id", auth.userId);
+    }
+  }
+  // scope === "all" → no additional filter (owner/admin see everything)
+
   if (from) {
     query = query.gte("created_at", from);
   }
