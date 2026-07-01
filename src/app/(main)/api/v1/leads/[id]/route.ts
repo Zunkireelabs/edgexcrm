@@ -171,7 +171,30 @@ export async function PATCH(
 
   // Access check: admin or counselor with assignment
   const patchMembership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (!requireLeadAccess(auth, existingLead, patchMembership)) {
+
+  // Narrow exception: own-scope education chain member who checked in this unassigned lead
+  // may assign it (e.g. lead-executive assigning a counselor to a walk-in they checked in).
+  let isSelfCheckInAssign = false;
+  if (
+    auth.industryId === "education_consultancy" &&
+    auth.positionSlug != null &&
+    ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+    auth.permissions.leadScope === "own" &&
+    auth.permissions.canAssignLeads &&
+    existingLead.assigned_to == null &&
+    Object.keys(body).length === 1 &&
+    body.assigned_to !== undefined
+  ) {
+    const { count } = await supabase
+      .from("lead_notes")
+      .select("id", { count: "exact", head: true })
+      .eq("lead_id", id)
+      .eq("user_id", auth.userId)
+      .like("content", "[CHECK-IN]%");
+    isSelfCheckInAssign = (count ?? 0) > 0;
+  }
+
+  if (!isSelfCheckInAssign && !requireLeadAccess(auth, existingLead, patchMembership)) {
     return apiForbidden();
   }
 
