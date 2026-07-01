@@ -11,7 +11,7 @@ SET permissions = jsonb_set(
   (
     SELECT jsonb_agg(DISTINCT k)
     FROM jsonb_array_elements_text(
-      (permissions -> 'nav' -> 'keys') || '["/applications","/classes","/check-in","/pipeline"]'::jsonb
+      COALESCE(permissions -> 'nav' -> 'keys', '[]'::jsonb) || '["/applications","/classes","/check-in","/pipeline"]'::jsonb
     ) AS k
   ),
   true
