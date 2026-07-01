@@ -67,6 +67,7 @@ interface CheckInRecord {
   pipeline_name: string | null;
   checked_in_at: string;
   checked_in_by: string;
+  checked_in_by_id: string | null;
   note: string;
 }
 
@@ -76,7 +77,9 @@ interface CheckInPageProps {
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   industryId: string;
-  canAssign: boolean;
+  canAssignAny: boolean;
+  canAssignOwnCheckIns: boolean;
+  currentUserId: string;
   isAdmin: boolean;
 }
 
@@ -156,11 +159,16 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId, canAssign, isAdmin }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin }: CheckInPageProps) {
   const router = useRouter();
   const memberNameById = new Map(
     teamMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
   );
+  const isCounselor = (m: TeamMember) =>
+    m.position_slug === "counselor" || (m.position_slug == null && m.role === "counselor");
+  const counselorMembers = industryId !== "travel_agency"
+    ? teamMembers.filter(isCounselor)
+    : teamMembers;
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -630,7 +638,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                           <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select counselor (optional)"} />
                         </SelectTrigger>
                         <SelectContent>
-                          {teamMembers.map((m) => (
+                          {counselorMembers.map((m) => (
                             <SelectItem key={m.user_id} value={m.user_id}>
                               {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
                             </SelectItem>
@@ -893,7 +901,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                       className="hidden sm:flex flex-1 justify-center text-xs"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {canAssign ? (
+                      {(canAssignAny || (canAssignOwnCheckIns && !record.assigned_to && record.checked_in_by_id === currentUserId)) ? (
                         <Select
                           value={record.assigned_to ?? undefined}
                           onValueChange={(v) =>
@@ -906,7 +914,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__unassigned__">Unassigned</SelectItem>
-                            {teamMembers.map((m) => (
+                            {counselorMembers.map((m) => (
                               <SelectItem key={m.user_id} value={m.user_id}>
                                 {m.name || m.email.split("@")[0]}
                               </SelectItem>
