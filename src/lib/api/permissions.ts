@@ -118,8 +118,19 @@ export function positionPermissionsFromEmbed(embed: unknown): PositionPermission
 export function canManageApplications(p: ResolvedPermissions): boolean {
   return p.canManageApplications;
 }
+const APP_EDIT_POSITIONS = new Set(["branch-manager", "application-executive"]);
+export function canEditApplication(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
+  return p.baseTier === "owner" || p.baseTier === "admin" || APP_EDIT_POSITIONS.has(positionSlug ?? "");
+}
+export function canDeleteApplication(p: ResolvedPermissions): boolean {
+  return p.baseTier === "owner" || p.baseTier === "admin";
+}
 export function canManageClasses(p: ResolvedPermissions): boolean {
   return p.canManageClasses;
+}
+const CLASS_ENROLL_POSITIONS = new Set(["branch-manager", "lead-executive", "counselor"]);
+export function canEnrollStudents(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
+  return p.baseTier === "owner" || p.baseTier === "admin" || CLASS_ENROLL_POSITIONS.has(positionSlug ?? "");
 }
 export function canAccessPipeline(p: ResolvedPermissions, pipelineId: string): boolean {
   return p.pipelineAccess === "all" || p.pipelineAccess.ids.has(pipelineId);

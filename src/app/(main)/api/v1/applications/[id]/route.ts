@@ -14,7 +14,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
+import { shouldRestrictToSelf, canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
 interface Props {
@@ -48,7 +48,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canManageApplications(auth.permissions)) return apiForbidden();
+  if (!canEditApplication(auth.permissions, auth.positionSlug)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -200,7 +200,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canManageApplications(auth.permissions)) return apiForbidden();
+  if (!canDeleteApplication(auth.permissions)) return apiForbidden();
 
   const supabase = await createServiceClient();
   const db = await scopedClient(auth);

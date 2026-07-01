@@ -3,7 +3,7 @@ import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
-import { leadQueryScope } from "@/lib/api/permissions";
+import { leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
 import { leadIdsVisibleToAssignee, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ClassesWorkspace } from "@/industries/education-consultancy/features/classes/pages/classes-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -96,6 +96,7 @@ export default async function ClassesRoute() {
         classes={classes}
         enrollments={enrollments}
         canManage={tenantData.permissions.canManageClasses}
+        canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
         tenantId={tenantData.tenant.id}
       />
     </div>
