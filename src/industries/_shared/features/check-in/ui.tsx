@@ -300,7 +300,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
   const handleCheckIn = async (leadId: string) => {
     setCheckingIn(leadId);
     try {
-      await fetch(`/api/v1/leads/${leadId}/check-in`, { method: "POST" });
+      const res = await fetch(`/api/v1/leads/${leadId}/check-in`, { method: "POST" });
+      if (!res.ok) {
+        toast.error("Failed to check in");
+        setCheckingIn(null);
+        return;
+      }
       toast.success("Check-in recorded");
       fetchHistory();
       setQuery("");
@@ -391,8 +396,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
 
       const newLeadId = json.data?.id;
       if (newLeadId) {
-        await fetch(`/api/v1/leads/${newLeadId}/check-in`, { method: "POST" });
-        toast.success("Lead added and checked in");
+        const checkInRes = await fetch(`/api/v1/leads/${newLeadId}/check-in`, { method: "POST" });
+        if (checkInRes.ok) {
+          toast.success("Lead added and checked in");
+        } else {
+          toast.error("Lead added, but check-in failed");
+        }
         fetchHistory();
         // Reset form
         setQuery("");

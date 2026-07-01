@@ -128,7 +128,10 @@ export function requireLeadBranchAccess(
 ): boolean {
   if (auth.permissions.leadScope !== "team") return true;
   if (!auth.branchId) return membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId; // §4.1
-  return lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to);
+  // Unassigned lead (e.g. just created via walk-in Check-In): fall back to a
+  // branch match, since there's no assignee yet to check against.
+  if (lead.assigned_to === null) return lead.branch_id === auth.branchId;
+  return auth.branchMemberIds.includes(lead.assigned_to);
 }
 
 export interface UserContext {

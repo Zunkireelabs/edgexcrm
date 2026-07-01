@@ -92,7 +92,7 @@ export function ApplicationsCard({ leadId, canManage, disabled = false }: Applic
                 return (
                   <Link
                     key={app.id}
-                    href={`/applications/${app.id}`}
+                    href={`/applications/${app.id}?from=lead&leadId=${leadId}`}
                     className="block border rounded-md p-3 hover:bg-muted/30 transition-colors"
                   >
                     <p className="text-sm font-medium">{app.university_name}</p>

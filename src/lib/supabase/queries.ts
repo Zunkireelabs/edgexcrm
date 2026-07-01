@@ -135,7 +135,14 @@ export async function getLeads(
         q = q.eq("assigned_to", scope.userId);
       }
     } else if (memberIds !== null) {
-      q = q.in("assigned_to", memberIds);
+      // Include unassigned leads in this branch too (e.g. a walk-in just created via
+      // Check-In, before anyone claims it) — .in("assigned_to", memberIds) alone never
+      // matches NULL, so an unassigned branch lead would otherwise be invisible here.
+      if (memberIds.length > 0) {
+        q = q.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
+      } else {
+        q = q.is("assigned_to", null).eq("branch_id", scope!.branchId as string);
+      }
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
@@ -222,7 +229,12 @@ export async function getLead(
       // Service client: tenant_users RLS hides other users' rows from the RLS client.
       const svc = await createServiceClient();
       const memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
-      if (!data.assigned_to || !memberIds.includes(data.assigned_to)) return null;
+      // Unassigned lead (e.g. a walk-in just created via Check-In): fall back to a
+      // branch match, same as requireLeadBranchAccess in src/lib/api/auth.ts.
+      const branchOk = data.assigned_to
+        ? memberIds.includes(data.assigned_to)
+        : data.branch_id === scope.branchId;
+      if (!branchOk) return null;
     }
   }
 
@@ -451,7 +463,12 @@ export async function getLeadsForPipeline(
     // Service client: tenant_users RLS hides other users' rows from the RLS client.
     const svc = await createServiceClient();
     const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
-    query = query.in("assigned_to", memberIds);
+    // Include unassigned leads in this branch too — see getLeads() above for why.
+    if (memberIds.length > 0) {
+      query = query.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
+    } else {
+      query = query.is("assigned_to", null).eq("branch_id", options.branchId);
+    }
   }
 
   const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
