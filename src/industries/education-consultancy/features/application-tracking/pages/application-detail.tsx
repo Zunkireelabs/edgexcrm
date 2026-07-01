@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Pencil,
@@ -90,6 +90,13 @@ export function ApplicationDetailPage({
   canDelete,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  // If opened from a lead's Applications card (?from=lead&leadId=...), back nav
+  // should return there instead of the global Applications board.
+  const fromLeadId = searchParams.get("from") === "lead" ? searchParams.get("leadId") : null;
+  const backHref = fromLeadId ? `/leads/${fromLeadId}` : "/applications";
+  const backLabel = fromLeadId ? "Back to Lead" : "Applications";
 
   const [application, setApplication] = useState<Application>(initialApplication);
   const [teamMemberEmails, setTeamMemberEmails] = useState<Record<string, string>>({});
@@ -232,7 +239,7 @@ export function ApplicationDetailPage({
       const res = await fetch(`/api/v1/applications/${application.id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Failed to delete");
       toast.success("Application deleted");
-      router.push("/applications");
+      router.push(backHref);
     } catch {
       toast.error("Failed to delete application");
       setDeleting(false);
@@ -260,9 +267,9 @@ export function ApplicationDetailPage({
     <div className="w-full px-4 py-6 space-y-6">
       {/* Back nav */}
       <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/applications">
+        <Link href={backHref}>
           <ArrowLeft className="h-4 w-4 mr-1.5" />
-          Applications
+          {backLabel}
         </Link>
       </Button>
 
