@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
-import { addLeadCollaborator, isLeadCollaborator } from "@/lib/leads/collaborators";
+import { addLeadCollaborator, isLeadCollaborator, removeLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -464,11 +464,70 @@ export async function PATCH(
   }
 
   // New assignee becomes a permanent collaborator (engaged-user visibility).
+  // Track whether this is a NEW grant (vs. already a collaborator) so the move
+  // log can record precisely what an undo should revoke.
+  let collaboratorAddedUserId: string | null = null;
   if (updatePayload.assigned_to !== undefined && (updated as Lead).assigned_to) {
     try {
-      await addLeadCollaborator(supabase, auth.tenantId, id, (updated as Lead).assigned_to);
+      const inserted = await addLeadCollaborator(supabase, auth.tenantId, id, (updated as Lead).assigned_to);
+      if (inserted) collaboratorAddedUserId = (updated as Lead).assigned_to as string;
     } catch (err) {
       log.error({ err }, "addLeadCollaborator on assign failed");
+    }
+  }
+
+  // Move/assignment log — powers the Undo + manual-override edit affordance.
+  // Snapshot the FULL prior state so undo restores the exact prior stage, not
+  // just the destination list's default stage.
+  const listOrAssignChanged =
+    (updatePayload.list_id !== undefined && (existingLead as Record<string, unknown>).list_id !== updated.list_id) ||
+    (updatePayload.assigned_to !== undefined && existingLead.assigned_to !== updated.assigned_to);
+  if (listOrAssignChanged) {
+    try {
+      await supabase.from("lead_move_log").insert({
+        tenant_id: auth.tenantId,
+        lead_id: id,
+        changed_by: auth.userId,
+        prev_list_id: (existingLead as Record<string, unknown>).list_id ?? null,
+        prev_pipeline_id: existingLead.pipeline_id ?? null,
+        prev_stage_id: existingLead.stage_id ?? null,
+        prev_status: existingLead.status ?? null,
+        prev_lead_type: (existingLead as Record<string, unknown>).lead_type ?? null,
+        prev_archive_reason: (existingLead as Record<string, unknown>).archive_reason ?? null,
+        prev_assigned_to: existingLead.assigned_to ?? null,
+        new_list_id: updated.list_id ?? null,
+        new_assigned_to: updated.assigned_to ?? null,
+        collaborator_added_user_id: collaboratorAddedUserId,
+      });
+    } catch (err) {
+      log.error({ err }, "lead_move_log insert failed");
+    }
+  }
+
+  // Manual override: caller explicitly asked to revoke the PREVIOUS assignee's
+  // view access as part of this reassignment (e.g. fixing a mistaken assign).
+  // Opt-in only — normal reassignment flows (chain handoffs, dropdown changes)
+  // must keep the previous assignee's collaborator row so they retain history view.
+  // Authority gate mirrors canManageMove in revert-move/route.ts: owner/admin, or
+  // a branch-manager whose branch contains this lead (same check as the §4.2 guard above).
+  const canRevokePreviousAssignee =
+    auth.role === "owner" ||
+    auth.role === "admin" ||
+    (auth.permissions.leadScope === "team" &&
+      auth.permissions.baseTier === "member" &&
+      auth.branchId != null &&
+      (existingLead.branch_id === auth.branchId || patchMembership.some((m) => m.branch_id === auth.branchId)));
+  if (
+    body.revoke_previous_assignee === true &&
+    canRevokePreviousAssignee &&
+    updatePayload.assigned_to !== undefined &&
+    existingLead.assigned_to &&
+    existingLead.assigned_to !== updated.assigned_to
+  ) {
+    try {
+      await removeLeadCollaborator(supabase, auth.tenantId, id, existingLead.assigned_to);
+    } catch (err) {
+      log.error({ err }, "removeLeadCollaborator failed");
     }
   }
 

@@ -184,7 +184,7 @@ export async function PATCH(request: NextRequest) {
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, list_id")
+    .select("id, assigned_to, branch_id, list_id, pipeline_id, stage_id, status, lead_type, archive_reason")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -196,7 +196,16 @@ export async function PATCH(request: NextRequest) {
   }
 
   const existingMap = new Map(
-    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id, list_id: l.list_id as string | null }])
+    (existingLeads ?? []).map((l) => [l.id, {
+      assigned_to: l.assigned_to,
+      branch_id: l.branch_id,
+      list_id: l.list_id as string | null,
+      pipeline_id: l.pipeline_id as string | null,
+      stage_id: l.stage_id as string | null,
+      status: l.status as string | null,
+      lead_type: l.lead_type as string | null,
+      archive_reason: l.archive_reason as string | null,
+    }])
   );
   const notFoundIds = body.ids.filter((id) => !existingMap.has(id));
 
@@ -275,9 +284,12 @@ export async function PATCH(request: NextRequest) {
   );
 
   // Record the new assignee as a collaborator on every updated lead (engaged-user visibility).
+  // Track which leads got a NEW grant (vs. already-collaborator) for the move log below.
+  let newlyCollaboratedLeadIds = new Set<string>();
   if (body.assigned_to) {
     try {
-      await addLeadCollaborators(supabase, auth.tenantId, idsToUpdate, body.assigned_to);
+      const inserted = await addLeadCollaborators(supabase, auth.tenantId, idsToUpdate, body.assigned_to);
+      newlyCollaboratedLeadIds = new Set(inserted);
     } catch (err) {
       log.error({ err }, "addLeadCollaborators on bulk assign failed");
     }
@@ -378,6 +390,30 @@ export async function PATCH(request: NextRequest) {
           },
           requestId,
         }));
+      }
+
+      // Move/assignment log — powers the Undo + manual-override edit affordance.
+      const assignedToChanged = body.assigned_to !== undefined && (prev?.assigned_to ?? null) !== (body.assigned_to ?? null);
+      const listIdChanged = body.list_id !== undefined && (prev?.list_id ?? null) !== (body.list_id ?? null);
+      if (assignedToChanged || listIdChanged) {
+        const newAssignedTo = body.assigned_to !== undefined ? (body.assigned_to ?? null) : (prev?.assigned_to ?? null);
+        ops.push(
+          Promise.resolve(supabase.from("lead_move_log").insert({
+            tenant_id: auth.tenantId,
+            lead_id: id,
+            changed_by: auth.userId,
+            prev_list_id: prev?.list_id ?? null,
+            prev_pipeline_id: prev?.pipeline_id ?? null,
+            prev_stage_id: prev?.stage_id ?? null,
+            prev_status: prev?.status ?? null,
+            prev_lead_type: prev?.lead_type ?? null,
+            prev_archive_reason: prev?.archive_reason ?? null,
+            prev_assigned_to: prev?.assigned_to ?? null,
+            new_list_id: body.list_id !== undefined ? (body.list_id ?? null) : (prev?.list_id ?? null),
+            new_assigned_to: newAssignedTo,
+            collaborator_added_user_id: newAssignedTo && newlyCollaboratedLeadIds.has(id) ? newAssignedTo : null,
+          }))
+        );
       }
 
       return ops;
