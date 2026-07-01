@@ -41,6 +41,7 @@ import { getLeadFullName } from "./lead-name";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
+import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
   id: string;
@@ -74,6 +75,7 @@ interface LeadDetailV2Props {
   activeLeadLists?: LeadList[];
   classesActive?: boolean;
   applicationsActive?: boolean;
+  checkInActive?: boolean;
   consentEnabled?: boolean;
   consentSigned?: boolean;
 }
@@ -142,6 +144,7 @@ export function LeadDetailV2({
   activeLeadLists,
   classesActive,
   applicationsActive,
+  checkInActive,
   consentEnabled = false,
   consentSigned = false,
 }: LeadDetailV2Props) {
@@ -782,6 +785,7 @@ export function LeadDetailV2({
                   canManage={canEnroll ?? isAdmin}
                 />
               )}
+              {checkInActive && <CheckInHistoryCard leadId={currentLead.id} />}
             </div>
           ) : (
             <ManagementPanel
