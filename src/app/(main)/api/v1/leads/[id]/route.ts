@@ -508,8 +508,18 @@ export async function PATCH(
   // view access as part of this reassignment (e.g. fixing a mistaken assign).
   // Opt-in only — normal reassignment flows (chain handoffs, dropdown changes)
   // must keep the previous assignee's collaborator row so they retain history view.
+  // Authority gate mirrors canManageMove in revert-move/route.ts: owner/admin, or
+  // a branch-manager whose branch contains this lead (same check as the §4.2 guard above).
+  const canRevokePreviousAssignee =
+    auth.role === "owner" ||
+    auth.role === "admin" ||
+    (auth.permissions.leadScope === "team" &&
+      auth.permissions.baseTier === "member" &&
+      auth.branchId != null &&
+      (existingLead.branch_id === auth.branchId || patchMembership.some((m) => m.branch_id === auth.branchId)));
   if (
     body.revoke_previous_assignee === true &&
+    canRevokePreviousAssignee &&
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to &&
     existingLead.assigned_to !== updated.assigned_to
