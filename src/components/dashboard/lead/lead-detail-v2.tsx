@@ -69,7 +69,7 @@ interface LeadDetailV2Props {
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
   assignableMembers?: TeamMember[];
   canManageApplications?: boolean;
-  canManageClasses?: boolean;
+  canEnroll?: boolean;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   classesActive?: boolean;
@@ -137,7 +137,7 @@ export function LeadDetailV2({
   canEditLeads = false,
   assignableMembers,
   canManageApplications,
-  canManageClasses,
+  canEnroll,
   leadLists,
   activeLeadLists,
   classesActive,
@@ -775,7 +775,7 @@ export function LeadDetailV2({
               {classesActive && (
                 <ClassesCard
                   leadId={currentLead.id}
-                  canManage={canManageClasses ?? isAdmin}
+                  canManage={canEnroll ?? isAdmin}
                 />
               )}
             </div>
