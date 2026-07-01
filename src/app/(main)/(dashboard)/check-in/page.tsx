@@ -38,12 +38,15 @@ export default async function CheckInRoute() {
     industryId: tenantData.tenant.industry_id,
   });
 
-  // Only owner/admin can (re)assign a lead's assigned_to via the leads PATCH
-  // route — team-scope members are blocked from assigning an unassigned lead
-  // (requireLeadAccess fails when assigned_to is null), so gate to admins.
-  const canAssign =
+  const canAssignAny =
     tenantData.permissions.baseTier === "owner" ||
-    tenantData.permissions.baseTier === "admin";
+    tenantData.permissions.baseTier === "admin" ||
+    tenantData.permissions.leadScope === "team";
+  const canAssignOwnCheckIns =
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    tenantData.positionSlug === "lead-executive" &&
+    tenantData.permissions.leadScope === "own" &&
+    !!tenantData.permissions.canAssignLeads;
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -53,7 +56,9 @@ export default async function CheckInRoute() {
         stages={stages}
         teamMembers={assignableMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
-        canAssign={canAssign}
+        canAssignAny={canAssignAny}
+        canAssignOwnCheckIns={canAssignOwnCheckIns}
+        currentUserId={tenantData.userId}
         isAdmin={tenantData.permissions.baseTier === "owner" || tenantData.permissions.baseTier === "admin"}
       />
     </div>

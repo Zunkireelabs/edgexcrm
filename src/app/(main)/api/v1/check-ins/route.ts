@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("lead_notes")
     .select(`
-      id, content, created_at, user_email,
+      id, user_id, content, created_at, user_email,
       leads!inner(id, first_name, last_name, email, phone, assigned_to, tenant_id, deleted_at,
         pipeline_stages(name, color),
         pipelines(name)
@@ -79,6 +79,7 @@ export async function GET(request: NextRequest) {
       pipeline_name: lead?.pipelines?.name || null,
       checked_in_at: note.created_at,
       checked_in_by: note.user_email,
+      checked_in_by_id: note.user_id,
       note: note.content,
     };
   });
