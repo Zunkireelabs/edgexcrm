@@ -163,6 +163,42 @@ export function KeyInfoSection({
           {/* ── STATUS ─────────────────────────────────────────────────── */}
           <SectionHeading>Status</SectionHeading>
 
+          {/* Stage */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
+            {(isAdmin || canEdit) ? (
+              <Select value={stageId || ""} onValueChange={onStageChange}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select stage" />
+                </SelectTrigger>
+                <SelectContent>
+                  {stages.map((stage) => (
+                    <SelectItem key={stage.id} value={stage.id}>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-2 w-2 rounded-full"
+                          style={{ backgroundColor: stage.color }}
+                        />
+                        {stage.name}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Badge
+                variant="secondary"
+                style={
+                  currentStage
+                    ? { backgroundColor: `${currentStage.color}20`, color: currentStage.color }
+                    : undefined
+                }
+              >
+                {currentStage?.name || "Unknown"}
+              </Badge>
+            )}
+          </div>
+
           {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
@@ -199,42 +235,6 @@ export function KeyInfoSection({
               )}
             </div>
           )}
-
-          {/* Stage */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
-            {(isAdmin || canEdit) ? (
-              <Select value={stageId || ""} onValueChange={onStageChange}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select stage" />
-                </SelectTrigger>
-                <SelectContent>
-                  {stages.map((stage) => (
-                    <SelectItem key={stage.id} value={stage.id}>
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: stage.color }}
-                        />
-                        {stage.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Badge
-                variant="secondary"
-                style={
-                  currentStage
-                    ? { backgroundColor: `${currentStage.color}20`, color: currentStage.color }
-                    : undefined
-                }
-              >
-                {currentStage?.name || "Unknown"}
-              </Badge>
-            )}
-          </div>
 
           {/* Assigned To */}
           <div>
