@@ -2,7 +2,7 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, Send } from "lucide-react";
+import { Clock, Send, Pencil, X, Check } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -28,6 +28,8 @@ interface NotesTabProps {
   teamMemberEmails?: Record<string, string>;
   /** Auth user id of the viewer — own notes render chat-style on the right. */
   currentUserId?: string;
+  /** owner/admin, a branch-manager, or the lead's own-scope assignee — may edit any note on this lead. */
+  canManageNotes?: boolean;
 }
 
 /** Resolve a note author's display name: real name → team email → stored email. */
@@ -49,7 +51,7 @@ export interface NotesTabRef {
 
 export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
   function NotesTab(
-    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId },
+    { leadId, notes, onNotesChange, teamMemberNames = {}, teamMemberEmails = {}, currentUserId, canManageNotes = false },
     ref,
   ) {
     const router = useRouter();
@@ -182,6 +184,10 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
       }
     };
 
+    const handleNoteEdited = (updated: LeadNote) => {
+      onNotesChange(notes.map((n) => (n.id === updated.id ? updated : n)));
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (mentionOpen && mentionMatches.length > 0) {
         if (e.key === "ArrowDown") {
@@ -289,11 +295,14 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
             {notes.map((note) => (
               <NoteCard
                 key={note.id}
+                leadId={leadId}
                 note={note}
                 teamMemberNames={teamMemberNames}
                 teamMemberEmails={teamMemberEmails}
                 currentUserId={currentUserId}
                 mentionLabels={mentionLabels}
+                canManageNotes={canManageNotes}
+                onEdited={handleNoteEdited}
               />
             ))}
           </div>
@@ -304,23 +313,69 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
 );
 
 function NoteCard({
+  leadId,
   note,
   teamMemberNames,
   teamMemberEmails,
   currentUserId,
   mentionLabels,
+  canManageNotes,
+  onEdited,
 }: {
+  leadId: string;
   note: LeadNote;
   teamMemberNames: Record<string, string>;
   teamMemberEmails: Record<string, string>;
   currentUserId?: string;
   mentionLabels: string[];
+  canManageNotes: boolean;
+  onEdited: (updated: LeadNote) => void;
 }) {
   const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
   const initials = getInitials(authorName);
   // Chat-style: the viewer's own notes sit on the right (mirrored + tinted);
   // everyone else's stay on the left exactly as before.
   const isOwn = !!currentUserId && note.user_id === currentUserId;
+  const canEditThisNote = canManageNotes || isOwn;
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [draft, setDraft] = useState(note.content);
+  const [saving, setSaving] = useState(false);
+
+  const startEdit = () => {
+    setDraft(note.content);
+    setIsEditing(true);
+  };
+
+  const cancelEdit = () => {
+    setIsEditing(false);
+    setDraft(note.content);
+  };
+
+  const saveEdit = async () => {
+    const content = draft.trim();
+    if (!content || content === note.content) {
+      setIsEditing(false);
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/notes/${note.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      const json = await res.json();
+      onEdited(json.data as LeadNote);
+      setIsEditing(false);
+      toast.success("Note updated");
+    } catch {
+      toast.error("Failed to edit note");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
@@ -335,16 +390,47 @@ function NoteCard({
               <span className="text-xs font-medium text-primary">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`flex items-center ${isOwn ? "justify-end" : "justify-start"}`}>
+              <div className={`flex items-center gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
                 <span className="text-sm font-medium truncate">{authorName}</span>
+                {canEditThisNote && !isEditing && (
+                  <button
+                    type="button"
+                    onClick={startEdit}
+                    className="text-muted-foreground hover:text-foreground"
+                    aria-label="Edit note"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
               </div>
-              <p
-                className={`text-sm text-foreground mt-1 whitespace-pre-wrap ${
-                  isOwn ? "text-right" : ""
-                }`}
-              >
-                {renderWithMentions(note.content, mentionLabels)}
-              </p>
+              {isEditing ? (
+                <div className="mt-1 space-y-2">
+                  <Textarea
+                    value={draft}
+                    onChange={(e) => setDraft(e.target.value)}
+                    className="min-h-[80px] resize-none text-sm"
+                    autoFocus
+                  />
+                  <div className="flex items-center gap-2 justify-end">
+                    <Button variant="ghost" size="sm" onClick={cancelEdit} disabled={saving}>
+                      <X className="h-3.5 w-3.5 mr-1" />
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={saveEdit} disabled={saving || !draft.trim()}>
+                      <Check className="h-3.5 w-3.5 mr-1" />
+                      {saving ? "Saving..." : "Save"}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <p
+                  className={`text-sm text-foreground mt-1 whitespace-pre-wrap ${
+                    isOwn ? "text-right" : ""
+                  }`}
+                >
+                  {renderWithMentions(note.content, mentionLabels)}
+                </p>
+              )}
               {/* Exact date + time — always visible, aligned to the bubble side */}
               <div
                 className={`mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/70 ${
