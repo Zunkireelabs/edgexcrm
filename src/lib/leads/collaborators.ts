@@ -9,7 +9,9 @@ const INLINE_ID_CAP = 300;
 /**
  * Record that a user has engaged with (been assigned to) a lead. The row persists
  * even after the lead is reassigned, so the user keeps view access. Idempotent;
- * no-op when userId is null/undefined.
+ * no-op when userId is null/undefined. Returns whether a row was newly inserted
+ * (false if the user was already a collaborator) — callers use this to know
+ * precisely which grant an undo should revoke.
  */
 export async function addLeadCollaborator(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -17,27 +19,48 @@ export async function addLeadCollaborator(
   tenantId: string,
   leadId: string,
   userId: string | null | undefined,
-): Promise<void> {
-  if (!userId) return;
-  await db.from("lead_collaborators").upsert(
+): Promise<boolean> {
+  if (!userId) return false;
+  const { data } = await db.from("lead_collaborators").upsert(
     { tenant_id: tenantId, lead_id: leadId, user_id: userId },
     { onConflict: "lead_id,user_id", ignoreDuplicates: true },
-  );
+  ).select("lead_id");
+  return (data ?? []).length > 0;
 }
 
-/** Bulk variant — record one collaborator across many leads in a single upsert. */
+/**
+ * Bulk variant — record one collaborator across many leads in a single upsert.
+ * Returns the subset of leadIds where the row was newly inserted.
+ */
 export async function addLeadCollaborators(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: SupabaseClient<any>,
   tenantId: string,
   leadIds: string[],
   userId: string | null | undefined,
-): Promise<void> {
-  if (!userId || leadIds.length === 0) return;
-  await db.from("lead_collaborators").upsert(
+): Promise<string[]> {
+  if (!userId || leadIds.length === 0) return [];
+  const { data } = await db.from("lead_collaborators").upsert(
     leadIds.map((lead_id) => ({ tenant_id: tenantId, lead_id, user_id: userId })),
     { onConflict: "lead_id,user_id", ignoreDuplicates: true },
-  );
+  ).select("lead_id");
+  return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
+}
+
+/** Revoke a user's collaborator access to a lead — used by move-undo and manual override. */
+export async function removeLeadCollaborator(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  leadId: string,
+  userId: string | null | undefined,
+): Promise<void> {
+  if (!userId) return;
+  await db.from("lead_collaborators")
+    .delete()
+    .eq("tenant_id", tenantId)
+    .eq("lead_id", leadId)
+    .eq("user_id", userId);
 }
 
 /**

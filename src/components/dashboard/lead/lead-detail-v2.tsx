@@ -35,6 +35,7 @@ import {
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
+import { MoveUndoCard } from "./move-undo-card";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
@@ -697,6 +698,24 @@ export function LeadDetailV2({
               toast.success("Lead source saved");
             }}
             onQualify={openQualifyDialog}
+          />
+
+          {/* Move / assignment undo + manual override — owner/admin or branch-manager only */}
+          <MoveUndoCard
+            leadId={currentLead.id}
+            canManage={isAdmin || leadScope === "team"}
+            currentListId={(currentLead as unknown as { list_id?: string | null }).list_id ?? null}
+            currentAssignedTo={currentLead.assigned_to ?? null}
+            assignableLists={leadLists}
+            allLists={activeLeadLists ?? leadLists}
+            teamMembers={teamMembers}
+            memberNames={teamMemberNames}
+            onUpdated={(updatedLead) => {
+              setCurrentLead(updatedLead);
+              setStageId(updatedLead.stage_id);
+              setStatus(updatedLead.status);
+              setAssignedTo(updatedLead.assigned_to || "");
+            }}
           />
         </div>
 
