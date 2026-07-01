@@ -623,7 +623,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                         <SelectContent>
                           {teamMembers.map((m) => (
                             <SelectItem key={m.user_id} value={m.user_id}>
-                              {m.name || m.email.split("@")[0]} ({m.role})
+                              {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
                             </SelectItem>
                           ))}
                         </SelectContent>
