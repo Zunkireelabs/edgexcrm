@@ -55,6 +55,7 @@ interface ActivitiesPanelProps {
   teamMemberNames: Record<string, string>;
   isAdmin: boolean;
   canEdit?: boolean;
+  canManageNotes?: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
   checklists: LeadChecklist[];
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
@@ -91,6 +92,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   teamMemberNames,
   isAdmin,
   canEdit,
+  canManageNotes,
   onNotesChange,
   checklists,
   onChecklistsChange,
@@ -385,6 +387,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           teamMemberNames={teamMemberNames}
           teamMemberEmails={teamMemberEmails}
           currentUserId={currentUserId}
+          canManageNotes={canManageNotes}
         />
       )}
 
