@@ -36,6 +36,7 @@ export default async function LeadDetailPage({
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
   const hasClasses = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES);
+  const checkInActive = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN);
 
   const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
   const [notes, checklists, activities, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
@@ -190,6 +191,7 @@ export default async function LeadDetailPage({
       activeLeadLists={activeLeadLists}
       classesActive={classesActive}
       applicationsActive={applicationsActive}
+      checkInActive={checkInActive}
       consentEnabled={consentEnabled}
       consentSigned={consentSigned}
     />
