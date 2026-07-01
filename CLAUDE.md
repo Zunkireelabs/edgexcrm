@@ -436,6 +436,20 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 
 Apply new migrations to **stage** (`dymeudcddasqpomfpjvt`) first → verify on dev/local → then apply to **prod** (`pirhnklvtjjpuvbvibxf`) at promotion time. (Historically migrations hit one shared DB; that's no longer true — a migration is not on prod until you run it on prod.) Apply in a txn with before/after counts, additive-only.
 
+### Production DB changes — per-action approval
+
+The session MAY apply changes (migrations, admin SQL) to the production DB
+(`pirhnklvtjjpuvbvibxf`), but only under all of these conditions:
+- Brief first: state the exact SQL and expected before/after row counts before running.
+- Explicit per-action approval: run only after I say go for that specific change. Never
+  standing/blanket approval; never batch multiple prod changes off one go-ahead.
+- Additive + reversible: additive-only schema changes, wrapped in a transaction, with
+  before/after counts logged. Have a rollback ready.
+- Stage first: apply to stage (`dymeudcddasqpomfpjvt`) and verify before touching prod.
+
+This overrides the "prod only at promotion" default: prod changes are allowed mid-work, but
+always gated behind an explicit, per-action approval — not run unsupervised.
+
 ### Server
 - **The ONLY Zunkiree Labs VPS is `root@94.136.189.213`.** There is no other zunkireelabs server.
 - **Always connect with `ssh vps`** (alias in `~/.ssh/config`), never the raw IP. The raw IP `ssh root@94.136.189.213` does NOT match the `vps` Host block, so it skips the `~/.ssh/vps_zunkireelabs` identity file and falls back to password auth — which fails non-interactively (e.g. via Claude's `!` prefix).
