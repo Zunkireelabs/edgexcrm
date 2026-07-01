@@ -14,7 +14,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { shouldRestrictToSelf, canManageClasses } from "@/lib/api/permissions";
+import { shouldRestrictToSelf, canEnrollStudents } from "@/lib/api/permissions";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
 interface Props {
@@ -74,7 +74,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
-  if (!canManageClasses(auth.permissions)) return apiForbidden();
+  if (!canEnrollStudents(auth.permissions, auth.positionSlug)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -176,7 +176,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
-  if (!canManageClasses(auth.permissions)) return apiForbidden();
+  if (!canEnrollStudents(auth.permissions, auth.positionSlug)) return apiForbidden();
 
   const supabase = await createServiceClient();
   const db = await scopedClient(auth);

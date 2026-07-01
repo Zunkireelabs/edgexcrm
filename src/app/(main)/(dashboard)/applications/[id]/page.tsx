@@ -3,7 +3,7 @@ import { getCurrentUserTenant, getApplicationActivity } from "@/lib/supabase/que
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { shouldRestrictToSelf, canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
 import { getLeadMembership, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ApplicationDetailPage } from "@/industries/education-consultancy/features/application-tracking/pages/application-detail";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
@@ -104,7 +104,8 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       stages={stages}
       fullLead={fullLead}
       activityTimeline={activityTimeline}
-      canManageApplications={tenantData.permissions.canManageApplications}
+      canEdit={canEditApplication(tenantData.permissions, tenantData.positionSlug)}
+      canDelete={canDeleteApplication(tenantData.permissions)}
     />
   );
 }

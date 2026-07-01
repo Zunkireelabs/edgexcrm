@@ -36,10 +36,11 @@ interface ClassesWorkspaceProps {
   classes: ClassRow[];
   enrollments: Array<Record<string, unknown>>;
   canManage: boolean;
+  canEnroll: boolean;
   tenantId: string;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage }: ClassesWorkspaceProps) {
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll }: ClassesWorkspaceProps) {
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
@@ -79,7 +80,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
             {classes.length} class{classes.length !== 1 ? "es" : ""}
           </p>
         </div>
-        {canManage && (
+        {canEnroll && (
           <Button size="sm" onClick={() => setEnrollOpen(true)}>
             <Plus className="h-4 w-4 mr-1.5" />
             Enroll Student
@@ -146,7 +147,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                   <span className="text-sm font-semibold">{selectedClass.name}</span>
                   <span className="text-xs text-muted-foreground ml-2">{roster.length} student{roster.length !== 1 ? "s" : ""}</span>
                 </div>
-                {canManage && (
+                {canEnroll && (
                   <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
                     <Plus className="h-3.5 w-3.5 mr-1" />
                     Enroll
@@ -158,7 +159,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                 <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
                   <Users className="h-8 w-8 opacity-30" />
                   <p className="text-sm">No students enrolled yet.</p>
-                  {canManage && (
+                  {canEnroll && (
                     <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
                       <Plus className="h-3.5 w-3.5 mr-1" />
                       Enroll first student

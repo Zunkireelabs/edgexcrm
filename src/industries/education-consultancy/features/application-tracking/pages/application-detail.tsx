@@ -77,7 +77,8 @@ interface ApplicationDetailPageProps {
   stages: ApplicationStage[];
   fullLead: Lead | null;
   activityTimeline: LeadActivity[];
-  canManageApplications: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
 }
 
 export function ApplicationDetailPage({
@@ -85,7 +86,8 @@ export function ApplicationDetailPage({
   stages,
   fullLead,
   activityTimeline,
-  canManageApplications,
+  canEdit,
+  canDelete,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
 
@@ -443,7 +445,7 @@ export function ApplicationDetailPage({
                 stages={stages}
                 currentStageId={application.stage_id}
                 applicationId={application.id}
-                canManage={canManageApplications}
+                canManage={canEdit}
                 onStageChange={handleStageChange}
               />
             </CardContent>
@@ -471,19 +473,23 @@ export function ApplicationDetailPage({
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                   Details
                 </p>
-                {canManageApplications && !editing && (
+                {(canEdit || canDelete) && !editing && (
                   <div className="flex items-center gap-1">
-                    <Button size="sm" variant="ghost" onClick={startEdit} className="h-7 px-2">
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => setDeleteOpen(true)}
-                      className="h-7 px-2 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {canEdit && (
+                      <Button size="sm" variant="ghost" onClick={startEdit} className="h-7 px-2">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDeleteOpen(true)}
+                        className="h-7 px-2 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 )}
                 {editing && (
@@ -506,7 +512,7 @@ export function ApplicationDetailPage({
               {/* Application Executive */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Application Executive</Label>
-                {editing && canManageApplications ? (
+                {editing && canEdit ? (
                   <Select
                     value={assignedTo || "__none__"}
                     onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}
@@ -746,7 +752,7 @@ export function ApplicationDetailPage({
               tenantId={fullLead.tenant_id}
               consentEnabled={true}
               consentSigned={false}
-              canManage={canManageApplications}
+              canManage={canEdit}
               feeStatus={fullLead.pre_app_fee_status}
               feeAmount={fullLead.pre_app_fee_amount}
               feeNotes={fullLead.pre_app_fee_notes}
