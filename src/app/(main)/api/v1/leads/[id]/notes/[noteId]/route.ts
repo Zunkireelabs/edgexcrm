@@ -1,7 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireLeadAccess } from "@/lib/api/auth";
-import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { authenticateRequest } from "@/lib/api/auth";
 import { validate, required, maxLength } from "@/lib/api/validation";
 import {
   apiSuccess,
@@ -14,12 +13,13 @@ import {
 import { createAuditLog } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
+const EDIT_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
 /**
  * PATCH /api/v1/leads/[id]/notes/[noteId]
  *
- * Edit a note's content. Allowed for owner/admin, a branch-manager whose
- * branch contains the lead, the lead's own-scope assignee (requireLeadAccess
- * covers all three), or the note's original author editing their own note.
+ * Edit a note's content. Only the original author may edit, and only
+ * within 15 minutes of creation. Sets edited_at on save.
  */
 export async function PATCH(
   request: NextRequest,
@@ -38,9 +38,10 @@ export async function PATCH(
 
   const supabase = await createServiceClient();
 
+  // Verify lead belongs to tenant
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id")
+    .select("id")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -49,15 +50,18 @@ export async function PATCH(
 
   const { data: note } = await supabase
     .from("lead_notes")
-    .select("id, lead_id, user_id, content")
+    .select("id, lead_id, user_id, content, created_at")
     .eq("id", noteId)
     .eq("lead_id", id)
     .maybeSingle();
   if (!note) return apiNotFound("Note");
 
-  const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  const isAuthor = note.user_id === auth.userId;
-  if (!requireLeadAccess(auth, lead, membership) && !isAuthor) {
+  // Only the original author can edit their own note
+  if (note.user_id !== auth.userId) return apiForbidden();
+
+  // Only within 15 minutes of creation
+  const ageMs = Date.now() - new Date(note.created_at).getTime();
+  if (ageMs > EDIT_WINDOW_MS) {
     return apiForbidden();
   }
 
@@ -74,7 +78,7 @@ export async function PATCH(
 
   const { data: updated, error } = await supabase
     .from("lead_notes")
-    .update({ content })
+    .update({ content, edited_at: new Date().toISOString() })
     .eq("id", noteId)
     .eq("lead_id", id)
     .select()

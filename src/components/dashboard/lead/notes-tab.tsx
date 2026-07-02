@@ -301,7 +301,6 @@ export const NotesTab = forwardRef<NotesTabRef, NotesTabProps>(
                 teamMemberEmails={teamMemberEmails}
                 currentUserId={currentUserId}
                 mentionLabels={mentionLabels}
-                canManageNotes={canManageNotes}
                 onEdited={handleNoteEdited}
               />
             ))}
@@ -319,7 +318,6 @@ function NoteCard({
   teamMemberEmails,
   currentUserId,
   mentionLabels,
-  canManageNotes,
   onEdited,
 }: {
   leadId: string;
@@ -328,7 +326,6 @@ function NoteCard({
   teamMemberEmails: Record<string, string>;
   currentUserId?: string;
   mentionLabels: string[];
-  canManageNotes: boolean;
   onEdited: (updated: LeadNote) => void;
 }) {
   const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
@@ -336,7 +333,8 @@ function NoteCard({
   // Chat-style: the viewer's own notes sit on the right (mirrored + tinted);
   // everyone else's stay on the left exactly as before.
   const isOwn = !!currentUserId && note.user_id === currentUserId;
-  const canEditThisNote = canManageNotes || isOwn;
+  const withinEditWindow = (Date.now() - new Date(note.created_at).getTime()) < 15 * 60 * 1000;
+  const canEditThisNote = isOwn && withinEditWindow;
 
   const [isEditing, setIsEditing] = useState(false);
   const [draft, setDraft] = useState(note.content);
@@ -433,12 +431,15 @@ function NoteCard({
               )}
               {/* Exact date + time — always visible, aligned to the bubble side */}
               <div
-                className={`mt-1.5 flex items-center gap-1 text-[11px] text-muted-foreground/70 ${
+                className={`mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70 ${
                   isOwn ? "justify-end" : "justify-start"
                 }`}
               >
                 <Clock className="h-3 w-3 shrink-0" />
                 <span>{formatExactStamp(note.created_at)}</span>
+                {note.edited_at && (
+                  <span className="italic">· Edited</span>
+                )}
               </div>
             </div>
           </div>

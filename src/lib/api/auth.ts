@@ -207,6 +207,23 @@ export function isCounselorOrAbove(auth: AuthContext): boolean {
   return auth.role === "owner" || auth.role === "admin" || auth.role === "counselor";
 }
 
+export async function resolvePositionSlug(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  tenantId: string,
+  userId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("positions(slug)")
+    .eq("user_id", userId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ positions: { slug: string } | { slug: string }[] | null }>();
+
+  if (!data) return null;
+  const positionEmbed = Array.isArray(data.positions) ? data.positions[0] ?? null : data.positions;
+  return positionEmbed?.slug ?? null;
+}
+
 export function getClientIp(request: Request): string {
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
