@@ -330,8 +330,7 @@ function NoteCard({
 }) {
   const authorName = resolveAuthor(note, teamMemberNames, teamMemberEmails);
   const initials = getInitials(authorName);
-  // Chat-style: the viewer's own notes sit on the right (mirrored + tinted);
-  // everyone else's stay on the left exactly as before.
+  // Uniform note styling for all authors; isOwn only gates the edit affordance.
   const isOwn = !!currentUserId && note.user_id === currentUserId;
   const withinEditWindow = (Date.now() - new Date(note.created_at).getTime()) < 15 * 60 * 1000;
   const canEditThisNote = isOwn && withinEditWindow;
@@ -376,19 +375,15 @@ function NoteCard({
   };
 
   return (
-    <div className={`flex ${isOwn ? "justify-end" : "justify-start"}`}>
-      <Card
-        className={`shadow-none rounded-lg py-0 max-w-[80%] ${
-          isOwn ? "bg-primary/5 border-primary/20" : ""
-        }`}
-      >
+    <div className="flex justify-start">
+      <Card className="shadow-none rounded-lg py-0 w-full">
         <CardContent className="p-4 pb-4">
-          <div className={`flex gap-3 ${isOwn ? "flex-row-reverse" : ""}`}>
+          <div className="flex gap-3">
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
               <span className="text-xs font-medium text-primary">{initials}</span>
             </div>
             <div className="flex-1 min-w-0">
-              <div className={`flex items-center gap-1.5 ${isOwn ? "justify-end" : "justify-start"}`}>
+              <div className="flex items-center gap-1.5 justify-start">
                 <span className="text-sm font-medium truncate">{authorName}</span>
                 {canEditThisNote && !isEditing && (
                   <button
@@ -421,20 +416,12 @@ function NoteCard({
                   </div>
                 </div>
               ) : (
-                <p
-                  className={`text-sm text-foreground mt-1 whitespace-pre-wrap ${
-                    isOwn ? "text-right" : ""
-                  }`}
-                >
+                <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">
                   {renderWithMentions(note.content, mentionLabels)}
                 </p>
               )}
               {/* Exact date + time — always visible, aligned to the bubble side */}
-              <div
-                className={`mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70 ${
-                  isOwn ? "justify-end" : "justify-start"
-                }`}
-              >
+              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground/70 justify-start">
                 <Clock className="h-3 w-3 shrink-0" />
                 <span>{formatExactStamp(note.created_at)}</span>
                 {note.edited_at && (
