@@ -128,7 +128,7 @@ export function canDeleteApplication(p: ResolvedPermissions): boolean {
 export function canManageClasses(p: ResolvedPermissions): boolean {
   return p.canManageClasses;
 }
-const CLASS_ENROLL_POSITIONS = new Set(["branch-manager", "lead-executive", "counselor"]);
+const CLASS_ENROLL_POSITIONS = new Set(["branch-manager", "lead-executive", "counselor", "application-executive"]);
 export function canEnrollStudents(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
   return p.baseTier === "owner" || p.baseTier === "admin" || CLASS_ENROLL_POSITIONS.has(positionSlug ?? "");
 }
