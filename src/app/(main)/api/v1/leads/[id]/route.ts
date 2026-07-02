@@ -495,6 +495,16 @@ export async function PATCH(
     }
   }
 
+  // Two-step check-in assign: the lead-exec who did the initial walk-in retains lifecycle
+  // visibility after handing the lead off to a counselor.
+  if (isSelfCheckInAssign) {
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator (checker) on self check-in assign failed");
+    }
+  }
+
   // Assign display ID to education leads moving out of staging (best-effort).
   const listMovedToNonNull =
     updatePayload.list_id !== undefined &&

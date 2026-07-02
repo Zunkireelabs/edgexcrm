@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, resolvePositionSlug } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import {
   apiSuccess,
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // user with check-in access can log a visit for any lead in the tenant.
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, list_id")
+    .select("id, list_id, assigned_to")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -77,6 +77,14 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // never regress a lead that's already at Prospects or further along
   // (Applications/Archived). Best-effort: a failure here must not fail the
   // check-in itself, since the note is already logged.
+  // Promotion is gated on the lead being assigned to a counselor-position user.
+  // A lead-exec self-assignment also sets assigned_to but must stay in Qualified.
+  let assignedIsCounselor = false;
+  if (lead.assigned_to) {
+    const assignedPositionSlug = await resolvePositionSlug(supabase, auth.tenantId, lead.assigned_to);
+    assignedIsCounselor = assignedPositionSlug === "counselor";
+  }
+
   try {
     const { data: prospectsList } = await supabase
       .from("lead_lists")
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq("slug", "prospects")
       .maybeSingle();
 
-    if (prospectsList) {
+    if (prospectsList && assignedIsCounselor) {
       let currentSortOrder: number | null = null;
       let currentIsStaging = false;
       if (lead.list_id) {

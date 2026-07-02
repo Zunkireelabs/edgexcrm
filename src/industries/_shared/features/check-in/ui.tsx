@@ -930,7 +930,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                       className="hidden sm:flex flex-1 justify-center text-xs"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {(canAssignAny || (canAssignOwnCheckIns && !record.assigned_to && record.checked_in_by_id === currentUserId)) ? (
+                      {(canAssignAny || (canAssignOwnCheckIns && (!record.assigned_to || record.assigned_to === currentUserId) && record.checked_in_by_id === currentUserId)) ? (
                         <Select
                           value={record.assigned_to ?? undefined}
                           onValueChange={(v) =>
