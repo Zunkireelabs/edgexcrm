@@ -17,6 +17,7 @@ architected. It has two kinds of documents:
 | ADR | Title | Status | Date |
 |-----|-------|--------|------|
 | [ADR-0001](./ADR-0001-gcp-adoption-strategy.md) | GCP adoption strategy — compute + AI/data on GCP, data/auth/realtime stays on Supabase | **Approved** | 2026-07-02 |
+| [ADR-0002](./ADR-0002-infra-spend-sequencing.md) | Infra spend sequencing — Supabase Pro now; GCP $300 = staging sandbox, not a prod migration | **Approved** | 2026-07-02 |
 
 ## How to add an ADR
 1. Copy the format of ADR-0001. Number sequentially.

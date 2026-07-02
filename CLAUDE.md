@@ -232,6 +232,7 @@ When the user gives ANY development request (build, create, implement, fix, upda
 | Skill | Domain |
 |-------|--------|
 | `/project-pm` | Orchestrator for all dev tasks |
+| `/architecture-officer` | Architecture governance, ADRs, cloud/tech decisions, scalability, Reference Architecture upkeep |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
 | `/frontend-dev` | Pages, components, forms, React/shadcn/Tailwind |
