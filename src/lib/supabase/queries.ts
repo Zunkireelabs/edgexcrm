@@ -2,8 +2,8 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
-import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
+import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -83,34 +83,65 @@ export async function getLeads(
     onlyDeleted?: boolean;
   }
 ): Promise<Lead[]> {
-  const supabase = await createClient();
-
-  // Compute filter sets once. Both self-scope (counselor) and branch-scope use INLINE column
-  // filters (assigned_to) rather than .in("id", 500+ uuids), which overflows Node/undici's 16 KB
-  // URL limit (UND_ERR_HEADERS_OVERFLOW) and returns empty results.
-  let sharedIds: string[] | null = null;
-  let memberIds: string[] | null = null;
-  if (scope?.restrictToSelf && scope.userId) {
-    // Widen own-scope to leads the user has ever been assigned (collaborators),
-    // so handed-off leads stay visible. Merged with branch shared-in ids.
-    const [branchShared, collab] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId),
-      collaboratorLeadIdsForUser(supabase, tenantId, scope.userId),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    sharedIds = [...new Set([...branchShared, ...collab])].slice(0, 300);
-  } else if (scope?.branchId) {
-    // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
-    // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
-    // and .in("assigned_to", []) yields zero leads. Use the service client to resolve real members.
+  // Own-scope / branch-scope: the ENTIRE filtered/sorted query — including the visibility
+  // predicate (assignee, lead_collaborators, lead_branches, branch roster) — runs inside
+  // get_scoped_leads (migration 101). No client-built ID array, ever, so staff who've personally
+  // touched >300 leads never silently lose visibility the way the old INLINE_ID_CAP=300 .slice()
+  // did (src/lib/leads/collaborators.ts). Service client: branchMemberIds reads OTHER users'
+  // tenant_users rows, which the RLS client (createClient) can't see — the tenant_users SELECT
+  // policy is (user_id = auth.uid()) — and the RPC itself is service_role-only (migration 101).
+  if ((scope?.restrictToSelf && scope.userId) || scope?.branchId) {
     const svc = await createServiceClient();
-    memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
+    const branchMembers = scope?.branchId
+      ? await branchMemberIds(svc, tenantId, scope.branchId)
+      : null;
+
+    const { data, error } = await svc.rpc("get_scoped_leads", {
+      p_tenant_id: tenantId,
+      p_scope_mode: scope?.restrictToSelf ? "self" : "branch",
+      p_user_id: scope?.userId ?? null,
+      p_branch_id: scope?.branchId ?? null,
+      p_branch_member_ids: branchMembers,
+      p_pipeline_ids: scope?.pipelineIds ?? null,
+      p_list_id: scope?.listId ?? null,
+      p_exclude_list_ids: scope?.excludeListIds && scope.excludeListIds.length > 0 ? scope.excludeListIds : null,
+      p_only_deleted: !!scope?.onlyDeleted,
+      p_order_by: "created_at",
+      p_page: 1,
+      p_page_size: scope?.limit ?? 1000,
+    });
+
+    if (error) {
+      console.error("[getLeads] get_scoped_leads RPC failed", {
+        tenantId, userId: scope?.userId, branchId: scope?.branchId, error,
+      });
+      // Defensive fallback (own-scope only): never let a user's own leads vanish behind an
+      // RPC failure. No collaborator/branch widening in the fallback, same tradeoff as before.
+      if (scope?.restrictToSelf && scope.userId) {
+        const supabase = await createClient();
+        let q = supabase
+          .from("leads")
+          .select("*")
+          .eq("tenant_id", tenantId)
+          .eq("assigned_to", scope.userId)
+          .is("converted_at", null);
+        q = scope.onlyDeleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
+        const { data: fallback } = await q
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .limit(scope.limit ?? 1000);
+        return (fallback ?? []) as Lead[];
+      }
+      return [];
+    }
+
+    return ((data as { rows: Lead[] } | null)?.rows ?? []) as Lead[];
   }
 
+  const supabase = await createClient();
+
   // Factory applied on every range page so all filters + stable sort are consistent.
-  // `widen` controls the own-scope collaborator/shared-branch widening: when false we fall
-  // back to a plain assigned_to filter (used if the widened OR query errors — see loop below).
-  const buildQuery = (widen: boolean) => {
+  const buildQuery = () => {
     let q = supabase
       .from("leads")
       .select("*")
@@ -124,25 +155,6 @@ export async function getLeads(
       q = q.not("deleted_at", "is", null);
     } else {
       q = q.is("deleted_at", null);
-    }
-
-    // Scope (hotfix shape — inline assigned_to filters, never .in("id", 500+ uuids) which
-    // overflows undici's 16KB URL limit). DO NOT replace with .in("id", selfIds/branchIds).
-    if (scope?.restrictToSelf && scope.userId) {
-      if (widen && sharedIds && sharedIds.length > 0) {
-        q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
-      } else {
-        q = q.eq("assigned_to", scope.userId);
-      }
-    } else if (memberIds !== null) {
-      // Include unassigned leads in this branch too (e.g. a walk-in just created via
-      // Check-In, before anyone claims it) — .in("assigned_to", memberIds) alone never
-      // matches NULL, so an unassigned branch lead would otherwise be invisible here.
-      if (memberIds.length > 0) {
-        q = q.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
-      } else {
-        q = q.is("assigned_to", null).eq("branch_id", scope!.branchId as string);
-      }
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
@@ -166,38 +178,18 @@ export async function getLeads(
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
 
-  // Page through every range with a FIXED widen setting. Returns null on any page error
-  // so the caller can cleanly retry the WHOLE query with a narrower filter — avoiding
-  // mid-stream offset drift or a permanently-flipped flag (both would silently drop rows).
-  const fetchPaged = async (widen: boolean): Promise<Lead[] | null> => {
-    const acc: Lead[] = [];
-    for (let from = 0; from < max; from += CHUNK) {
-      const to = Math.min(from + CHUNK, max) - 1;
-      const { data, error } = await buildQuery(widen).range(from, to);
-      if (error) {
-        console.error("[getLeads] leads query page failed", {
-          tenantId, listId: scope?.listId, from, widen, error,
-        });
-        return null;
-      }
-      acc.push(...((data ?? []) as Lead[]));
-      if (!data || data.length < CHUNK) break;
+  const acc: Lead[] = [];
+  for (let from = 0; from < max; from += CHUNK) {
+    const to = Math.min(from + CHUNK, max) - 1;
+    const { data, error } = await buildQuery().range(from, to);
+    if (error) {
+      console.error("[getLeads] leads query page failed", { tenantId, listId: scope?.listId, from, error });
+      return acc;
     }
-    return acc;
-  };
-
-  // Own-scope users start widened (so collaborator/shared-branch leads show too).
-  const widenInitial = !!(scope?.restrictToSelf && scope.userId && sharedIds && sharedIds.length > 0);
-  let result = await fetchPaged(widenInitial);
-  // Defensive: if the widened own-scope query failed, retry the WHOLE query assigned-only
-  // (from offset 0) so a user's own leads never vanish behind a collaborator-widening failure.
-  if (result === null && widenInitial) {
-    console.error("[getLeads] widened own-scope query failed; retrying assigned-only", {
-      tenantId, userId: scope?.userId, sharedIdCount: sharedIds?.length,
-    });
-    result = await fetchPaged(false);
+    acc.push(...((data ?? []) as Lead[]));
+    if (!data || data.length < CHUNK) break;
   }
-  return result ?? [];
+  return acc;
 }
 
 export async function getLead(
@@ -425,55 +417,67 @@ export async function getLeadsForPipeline(
   tenantId: string,
   options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string; branchId?: string | null }
 ): Promise<PipelineLead[]> {
-  const supabase = await createClient();
-
-  // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
-  let query = supabase
-    .from("leads")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .is("deleted_at", null)
-    .is("converted_at", null)
-    .not("stage_id", "is", null)
-    .limit(500);
-
+  // Resolve the effective pipeline restriction once (single pipelineId narrowed against the
+  // allowed pipelineIds set, or the allowed set itself) — shared by both the RPC and
+  // unrestricted paths below.
+  let effectivePipelineIds: string[] | null = options?.pipelineIds ?? null;
   if (options?.pipelineId) {
-    // If this specific pipeline isn't in the allowed set, return empty immediately.
     if (options.pipelineIds && !options.pipelineIds.includes(options.pipelineId)) return [];
-    query = query.eq("pipeline_id", options.pipelineId);
-  } else if (options?.pipelineIds) {
-    query = query.in("pipeline_id", options.pipelineIds);
+    effectivePipelineIds = [options.pipelineId];
   }
 
-  if (options?.restrictToSelf && options.userId) {
-    // Inline column filter avoids .in("id", 500+ uuids) URL overflow.
-    // Widen to collaborator leads (ever assigned) so handed-off leads stay on the board.
-    const [shared, collab] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId),
-      collaboratorLeadIdsForUser(supabase, tenantId, options.userId),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    const extra = [...new Set([...shared, ...collab])].slice(0, 300);
-    if (extra.length > 0) {
-      query = query.or(`assigned_to.eq.${options.userId},id.in.(${extra.join(",")})`);
-    } else {
-      query = query.eq("assigned_to", options.userId);
-    }
-  } else if (options?.branchId) {
-    // Service client: tenant_users RLS hides other users' rows from the RLS client.
+  let leads: Lead[];
+
+  if ((options?.restrictToSelf && options.userId) || options?.branchId) {
+    // Own-scope / branch-scope: the ENTIRE filtered query — including the visibility predicate
+    // (assignee, lead_collaborators, lead_branches, branch roster) — runs inside
+    // get_scoped_leads (migration 101). No client-built ID array, ever, so staff who've
+    // personally touched >300 leads never silently lose cards off their own board the way the
+    // old INLINE_ID_CAP=300 .slice() did (src/lib/leads/collaborators.ts). Service client:
+    // branchMemberIds reads OTHER users' tenant_users rows, invisible to the RLS client, and the
+    // RPC itself is service_role-only (migration 101).
     const svc = await createServiceClient();
-    const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
-    // Include unassigned leads in this branch too — see getLeads() above for why.
-    if (memberIds.length > 0) {
-      query = query.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
-    } else {
-      query = query.is("assigned_to", null).eq("branch_id", options.branchId);
-    }
+    const branchMembers = options?.branchId
+      ? await branchMemberIds(svc, tenantId, options.branchId)
+      : null;
+
+    const { data, error } = await svc.rpc("get_scoped_leads", {
+      p_tenant_id: tenantId,
+      p_scope_mode: options?.restrictToSelf ? "self" : "branch",
+      p_user_id: options?.userId ?? null,
+      p_branch_id: options?.branchId ?? null,
+      p_branch_member_ids: branchMembers,
+      p_pipeline_ids: effectivePipelineIds,
+      p_require_stage: true,
+      p_order_by: "created_at",
+      p_page: 1,
+      p_page_size: 500,
+    });
+    if (error) throw error;
+    leads = ((data as { rows: Lead[] } | null)?.rows ?? []) as Lead[];
+  } else {
+    const supabase = await createClient();
+
+    // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
+    let query = supabase
+      .from("leads")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .is("deleted_at", null)
+      .is("converted_at", null)
+      .not("stage_id", "is", null)
+      .limit(500);
+
+    if (effectivePipelineIds) query = query.in("pipeline_id", effectivePipelineIds);
+
+    const { data: unrestrictedLeads, error: leadsError } = await query.order("created_at", { ascending: false });
+    if (leadsError) throw leadsError;
+    leads = (unrestrictedLeads ?? []) as Lead[];
   }
 
-  const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
-  if (leadsError) throw leadsError;
-  if (!leads || leads.length === 0) return [];
+  if (leads.length === 0) return [];
+
+  const supabase = await createClient();
 
   // Fetch checklist counts - use tenant_id filter instead of .in() to avoid URL length limits
   const { data: checklistCounts, error: clError } = await supabase
