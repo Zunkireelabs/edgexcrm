@@ -68,16 +68,16 @@ export function ProjectRow({ project, team, onProjectUpdated }: ProjectRowProps)
   }
 
   return (
-    <tr className={`border-b border-gray-100 hover:bg-gray-50/50 transition-colors ${saving ? "opacity-60" : ""}`}>
+    <tr className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${saving ? "opacity-60" : ""}`}>
       <td className="py-2.5 px-3">
         <Link
           href={`/time-tracking/projects/${project.id}`}
-          className="text-sm font-medium text-gray-900 hover:text-blue-600 hover:underline"
+          className="text-sm font-medium text-[#0f0f10] hover:underline"
         >
           {project.name}
         </Link>
       </td>
-      <td className="py-2.5 px-3 text-sm text-gray-500">{project.account_name}</td>
+      <td className="py-2.5 px-3 text-sm text-[#787871]">{project.account_name}</td>
       <td className="py-2.5 px-3">
         <OwnerPicker
           ownerId={project.owner_id}
@@ -104,7 +104,7 @@ export function ProjectRow({ project, team, onProjectUpdated }: ProjectRowProps)
           </SelectContent>
         </Select>
       </td>
-      <td className="py-2.5 px-3 text-xs text-gray-400">{relativeTime(project.updated_at)}</td>
+      <td className="py-2.5 px-3 text-xs text-[#787871]">{relativeTime(project.updated_at)}</td>
     </tr>
   );
 }

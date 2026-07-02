@@ -62,7 +62,7 @@ export function TableView({ projects, team, teamMap, onProjectUpdated, onClearFi
         <button
           type="button"
           onClick={onClearFilters}
-          className="text-xs text-blue-600 hover:underline underline-offset-2"
+          className="text-xs text-gray-600 hover:text-[#0f0f10] hover:underline underline-offset-2"
         >
           Clear filters
         </button>
@@ -70,12 +70,12 @@ export function TableView({ projects, team, teamMap, onProjectUpdated, onClearFi
     );
   }
 
-  const headCls = "text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-900 select-none";
+  const headCls = "text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none";
 
   return (
     <Table>
       <TableHeader>
-        <TableRow className="border-b border-gray-200">
+        <TableRow className="bg-gray-50 border-b border-gray-200">
           <TableHead
             className={headCls}
             onClick={() => handleSort("name")}
