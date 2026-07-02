@@ -633,11 +633,14 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
 
                     <div className="space-y-1">
                       <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assign Counselor"}</Label>
-                      <Select value={assignedTo} onValueChange={(v) => setAssignedTo(v)}>
+                      <Select value={assignedTo || "__none__"} onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}>
                         <SelectTrigger className="h-9">
                           <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select counselor (optional)"} />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="__none__">
+                            {industryId === "travel_agency" ? "No team member" : "No counselor"}
+                          </SelectItem>
                           {counselorMembers.map((m) => (
                             <SelectItem key={m.user_id} value={m.user_id}>
                               {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
@@ -762,19 +765,45 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                       />
                     </div>
 
-                    <Button type="submit" className="w-full h-9" disabled={submitting}>
-                      {submitting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                          Adding...
-                        </>
-                      ) : (
-                        <>
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          Add Lead & Check In
-                        </>
-                      )}
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex-1 h-9"
+                        disabled={submitting}
+                        onClick={() => {
+                          setQuery("");
+                          setResults([]);
+                          setSearched(false);
+                          setShowAddForm(false);
+                          setFirstName("");
+                          setLastName("");
+                          setEmail("");
+                          setPhone("");
+                          setNotes("");
+                          setAssignedTo("");
+                          setDestination("");
+                          setStudyLevel("");
+                          setReferralSource("");
+                          setReferredBy("");
+                        }}
+                      >
+                        Cancel
+                      </Button>
+                      <Button type="submit" className="flex-1 h-9" disabled={submitting}>
+                        {submitting ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Adding...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Add Lead & Check In
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </form>
                 </CardContent>
               </Card>
@@ -901,7 +930,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, industry
                       className="hidden sm:flex flex-1 justify-center text-xs"
                       onClick={(e) => e.stopPropagation()}
                     >
-                      {(canAssignAny || (canAssignOwnCheckIns && !record.assigned_to && record.checked_in_by_id === currentUserId)) ? (
+                      {(canAssignAny || (canAssignOwnCheckIns && (!record.assigned_to || record.assigned_to === currentUserId) && record.checked_in_by_id === currentUserId)) ? (
                         <Select
                           value={record.assigned_to ?? undefined}
                           onValueChange={(v) =>

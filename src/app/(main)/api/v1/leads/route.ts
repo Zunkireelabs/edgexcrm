@@ -483,18 +483,43 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
-  // For tenants with lead-lists: assign new leads to the intake list when list_id not supplied.
+  // For tenants with lead-lists: assign new leads to the correct list when list_id not supplied.
   // Only applies to brand-new inserts — the update path strips list_id from its payload.
-  // Falls back to null silently if no intake list exists (edge tenant, older setup).
+  // Check-in routing:
+  //   counselor assigned → Prospects   (walk-in is handed off immediately)
+  //   no counselor, lead-exec checker → Qualified (lead-exec owns it)
+  //   no counselor, owner/admin/branch-mgr → Qualified (shared pool, assigned_to = null)
+  // All other leads go to the intake list. Falls back to null if no matching list exists.
   if (!body.list_id) {
-    const { data: intakeList } = await supabase
-      .from("lead_lists")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_intake", true)
-      .limit(1)
-      .maybeSingle();
-    leadPayload.list_id = intakeList?.id ?? null;
+    const isCheckIn = body.intake_medium === "check_in";
+    if (isCheckIn) {
+      const targetSlug = body.assigned_to ? "prospects" : "qualified";
+      const { data: targetList } = await supabase
+        .from("lead_lists")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("slug", targetSlug)
+        .limit(1)
+        .maybeSingle();
+      leadPayload.list_id = targetList?.id ?? null;
+
+      if (!body.assigned_to) {
+        if (dashAuth?.positionSlug === "lead-executive") {
+          leadPayload.assigned_to = dashAuth.userId;
+        } else {
+          leadPayload.assigned_to = null;
+        }
+      }
+    } else {
+      const { data: intakeList } = await supabase
+        .from("lead_lists")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("is_intake", true)
+        .limit(1)
+        .maybeSingle();
+      leadPayload.list_id = intakeList?.id ?? null;
+    }
   } else {
     leadPayload.list_id = (body.list_id as string | null) ?? null;
   }
@@ -916,6 +941,21 @@ async function handlePost(request: NextRequest) {
       await addLeadCollaborator(supabase, tenantId, lead.id, (lead as Lead).assigned_to);
     } catch (err) {
       log.error({ err }, "addLeadCollaborator on create failed");
+    }
+  }
+
+  // Lead-exec who checked in retains lifecycle visibility even after a counselor owns it.
+  // Guard: skip when lead-exec is already the assignee (prevents duplicate; UNIQUE constraint
+  // makes it idempotent anyway, but avoids the extra round-trip).
+  if (
+    body.intake_medium === "check_in" &&
+    dashAuth?.userId &&
+    dashAuth.userId !== (lead as Lead).assigned_to
+  ) {
+    try {
+      await addLeadCollaborator(supabase, tenantId, lead.id, dashAuth.userId);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator (checker) on check-in create failed");
     }
   }
 
