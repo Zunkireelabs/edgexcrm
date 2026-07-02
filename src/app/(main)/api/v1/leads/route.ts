@@ -28,8 +28,8 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
-import { addLeadCollaborator, collaboratorLeadIdsForUser } from "@/lib/leads/collaborators";
+import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import {
   normalizeEmail,
   normalizePhone,
@@ -142,30 +142,59 @@ export async function GET(request: NextRequest) {
 
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (auth.branchId && isSharedPoolList(auth.permissions, resolvedListId)) {
+  const sharedPool = !!auth.branchId && isSharedPoolList(auth.permissions, resolvedListId);
+
+  if (!sharedPool && (scope.restrictToSelf || scope.branchId)) {
+    // Own-scope / branch-scope: the ENTIRE filtered/sorted/paginated query — including the
+    // visibility predicate (assignee, lead_collaborators, lead_branches, branch roster) — runs
+    // inside get_scoped_leads (migration 101). No client-built ID array, ever, so staff who've
+    // personally touched >300 leads never silently lose visibility the way the old
+    // INLINE_ID_CAP=300 .slice() did (src/lib/leads/collaborators.ts).
+    const branchMembers = scope.branchId
+      ? await branchMemberIds(supabase, auth.tenantId, scope.branchId)
+      : null;
+
+    const { data: scoped, error: rpcError } = await supabase.rpc("get_scoped_leads", {
+      p_tenant_id: auth.tenantId,
+      p_scope_mode: scope.restrictToSelf ? "self" : "branch",
+      p_user_id: auth.userId,
+      p_branch_id: scope.branchId,
+      p_branch_member_ids: branchMembers,
+      p_pipeline_ids: auth.permissions.pipelineAccess === "all" ? null : [...auth.permissions.pipelineAccess.ids],
+      p_list_id: resolvedListId,
+      p_exclude_list_ids: archiveListIds.length > 0 ? archiveListIds : null,
+      p_status: status,
+      p_search: search,
+      p_include_converted: includeConverted,
+      // self-scoped users: ignore any client assigned_to param, same as before the RPC migration
+      p_assigned_to: scope.restrictToSelf ? null : assignedTo,
+      p_page: page,
+      p_page_size: pageSize,
+    });
+
+    if (rpcError) {
+      log.error({ err: rpcError }, "Failed to fetch scoped leads");
+      return apiServiceUnavailable("Failed to fetch leads");
+    }
+
+    const rows = (scoped?.rows ?? []) as Lead[];
+    const total = scoped?.total ?? 0;
+    log.info({ total, page, pageSize }, "Leads fetched (scoped RPC)");
+
+    return apiPaginated(rows, {
+      page,
+      pageSize,
+      total,
+      totalPages: Math.ceil(total / pageSize),
+    });
+  }
+
+  if (sharedPool) {
     // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
     // not just their own. auth.branchMemberIds is empty for own-scope, so resolve explicitly.
-    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId);
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId as string);
     query = query.in("assigned_to", memberIds);
     assignedTo = null;
-  } else if (scope.restrictToSelf) {
-    // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
-    // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
-    const [sharedIds, collabIds] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
-      collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    const rawExtra = [...new Set([...sharedIds, ...collabIds])];
-    const extraIds = rawExtra.slice(0, 300);
-    if (extraIds.length > 0) {
-      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);
-    } else {
-      query = query.eq("assigned_to", auth.userId);
-    }
-    assignedTo = null; // self-scoped users: ignore any client assignedTo param
-  } else if (scope.branchId) {
-    query = query.in("assigned_to", auth.branchMemberIds);
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
