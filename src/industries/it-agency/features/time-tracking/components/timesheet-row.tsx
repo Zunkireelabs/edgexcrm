@@ -210,9 +210,9 @@ export function TimesheetRow({
             {isAdmin && canEdit && (
               <>
                 <Button
+                  variant="ghost"
                   size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs text-green-700 border-green-200 hover:bg-green-50"
+                  className="h-7 w-7 p-0"
                   onClick={() => approve(entry.id)}
                   disabled={isProcessing}
                   title="Approve"
@@ -220,18 +220,18 @@ export function TimesheetRow({
                   {isProcessing ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <ThumbsUp className="h-3.5 w-3.5" />
+                    <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />
                   )}
                 </Button>
                 <Button
+                  variant="ghost"
                   size="sm"
-                  variant="outline"
-                  className="h-7 px-2 text-xs text-red-700 border-red-200 hover:bg-red-50"
+                  className="h-7 w-7 p-0"
                   onClick={() => setRejectOpen(true)}
                   disabled={isProcessing}
                   title="Reject"
                 >
-                  <ThumbsDown className="h-3.5 w-3.5" />
+                  <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
                 </Button>
               </>
             )}
