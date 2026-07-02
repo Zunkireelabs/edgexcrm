@@ -483,18 +483,24 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
-  // For tenants with lead-lists: assign new leads to the intake list when list_id not supplied.
+  // For tenants with lead-lists: assign new leads to the correct list when list_id not supplied.
   // Only applies to brand-new inserts — the update path strips list_id from its payload.
-  // Falls back to null silently if no intake list exists (edge tenant, older setup).
+  // Check-in leads (walk-ins) skip triage and land directly in Prospects.
+  // All other leads go to the intake list. Falls back to null if no matching list exists.
   if (!body.list_id) {
-    const { data: intakeList } = await supabase
+    const isCheckIn = body.intake_medium === "check_in";
+    let targetListQuery = supabase
       .from("lead_lists")
       .select("id")
       .eq("tenant_id", tenantId)
-      .eq("is_intake", true)
-      .limit(1)
-      .maybeSingle();
-    leadPayload.list_id = intakeList?.id ?? null;
+      .limit(1);
+    if (isCheckIn) {
+      targetListQuery = targetListQuery.eq("slug", "prospects");
+    } else {
+      targetListQuery = targetListQuery.eq("is_intake", true);
+    }
+    const { data: targetList } = await targetListQuery.maybeSingle();
+    leadPayload.list_id = targetList?.id ?? null;
   } else {
     leadPayload.list_id = (body.list_id as string | null) ?? null;
   }
