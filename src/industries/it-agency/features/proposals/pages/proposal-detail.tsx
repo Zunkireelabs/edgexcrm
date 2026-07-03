@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Trash2, Plus, X, Printer } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -44,6 +44,123 @@ const STATUS_STYLES: Record<string, string> = {
   expired: "bg-yellow-50 text-yellow-700",
 };
 
+function ShareDialog({
+  proposalId,
+  proposal,
+  open,
+  onClose,
+  onUpdated,
+}: {
+  proposalId: string;
+  proposal: Proposal;
+  open: boolean;
+  onClose: () => void;
+  onUpdated: (patch: { public_enabled: boolean; public_token: string | null }) => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const publicUrl = proposal.public_token
+    ? `${process.env.NEXT_PUBLIC_APP_URL ?? (typeof window !== "undefined" ? window.location.origin : "")}/proposals/share/${proposal.public_token}`
+    : null;
+
+  async function patchProposal(body: { public_enabled?: boolean; regenerate_token?: boolean }) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/proposals/${proposalId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed to update share settings");
+      const { data } = await res.json();
+      onUpdated({ public_enabled: data.public_enabled, public_token: data.public_token });
+    } catch {
+      toast.error("Failed to update share settings");
+    } finally {
+      setSaving(false);
+      setConfirmRegen(false);
+    }
+  }
+
+  function copyUrl() {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Share proposal</DialogTitle>
+          <DialogDescription>
+            Anyone with the link can view a read-only, branded version of this proposal. No login required.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="proposal-public-toggle"
+              checked={!!proposal.public_enabled}
+              disabled={saving}
+              onCheckedChange={(checked) => patchProposal({ public_enabled: checked === true })}
+              className="mt-0.5"
+            />
+            <Label htmlFor="proposal-public-toggle" className="text-sm font-medium cursor-pointer">
+              Public link enabled
+            </Label>
+          </div>
+
+          {proposal.public_enabled && publicUrl && (
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-muted-foreground">Public URL</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">{publicUrl}</code>
+                <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {proposal.public_enabled && (
+            <div className="border-t pt-4">
+              {!confirmRegen ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => setConfirmRegen(true)}
+                  disabled={saving}
+                >
+                  Regenerate link
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-destructive">This will break the existing URL. Are you sure?</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="destructive" disabled={saving} onClick={() => patchProposal({ regenerate_token: true })}>
+                      Yes, regenerate
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmRegen(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps) {
   const router = useRouter();
   const isAdmin = role === "owner" || role === "admin";
@@ -72,6 +189,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
   const [syncToDeal, setSyncToDeal] = useState(true);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const loadProposal = useCallback(() => {
     return fetch(`/api/v1/proposals/${proposalId}`)
@@ -339,6 +457,12 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={() => setShareOpen(true)}>
+                <Share2 className="h-4 w-4 mr-1" />
+                Share
+              </Button>
+            )}
             <Button size="sm" variant="outline" asChild>
               <Link href={`/proposals/${proposalId}/view`} target="_blank">
                 <Printer className="h-4 w-4 mr-1" />
@@ -562,6 +686,16 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
           <Loader2 className="h-3 w-3 animate-spin" />
           Saving…
         </div>
+      )}
+
+      {isAdmin && (
+        <ShareDialog
+          proposalId={proposalId}
+          proposal={proposal}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          onUpdated={(patch) => setProposal((prev) => (prev ? { ...prev, ...patch } : prev))}
+        />
       )}
 
       {/* Add custom line dialog */}
