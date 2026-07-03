@@ -68,16 +68,18 @@ export function TimesheetTable({
             <div className="border rounded-lg overflow-hidden">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/40">
-                    <TableHead className="w-8 px-3" />
-                    <TableHead className="w-20">Time</TableHead>
-                    {showMemberColumn && <TableHead className="w-28">Member</TableHead>}
-                    <TableHead>Account</TableHead>
-                    <TableHead>Project</TableHead>
-                    <TableHead>Task</TableHead>
-                    <TableHead>Notes</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="w-36">Actions</TableHead>
+                  <TableRow className="bg-gray-50">
+                    <TableHead className="w-8 px-3 text-xs font-medium text-gray-600" />
+                    <TableHead className="w-20 text-xs font-medium text-gray-600">Time</TableHead>
+                    {showMemberColumn && (
+                      <TableHead className="w-28 text-xs font-medium text-gray-600">Member</TableHead>
+                    )}
+                    <TableHead className="text-xs font-medium text-gray-600">Account</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-600">Project</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-600">Task</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-600">Notes</TableHead>
+                    <TableHead className="text-xs font-medium text-gray-600">Status</TableHead>
+                    <TableHead className="w-36 text-xs font-medium text-gray-600">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
