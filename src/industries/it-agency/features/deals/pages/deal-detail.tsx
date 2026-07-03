@@ -24,7 +24,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney } from "@/lib/travel/currency";
-import type { Deal, DealStage, UserRole } from "@/types/database";
+import { AddProposalSheet } from "@/industries/it-agency/features/proposals/components/add-proposal-sheet";
+import type { Deal, DealStage, Proposal, UserRole } from "@/types/database";
 
 interface DealDetailPageProps {
   dealId: string;
@@ -61,6 +62,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const [proposals, setProposals] = useState<Proposal[]>([]);
+  const [addProposalOpen, setAddProposalOpen] = useState(false);
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -96,6 +100,18 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
       .catch(() => toast.error("Failed to load deal"))
       .finally(() => setLoading(false));
   }, [dealId, router]);
+
+  function refetchProposals() {
+    fetch(`/api/v1/proposals?deal_id=${dealId}`)
+      .then((r) => r.json())
+      .then((j) => setProposals(j.data ?? []))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    refetchProposals();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealId]);
 
   function startEdit() {
     if (!deal) return;
@@ -410,6 +426,51 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
           <span>Updated {formatDate(deal.updated_at)}</span>
         </div>
       </div>
+
+      {/* Proposals section */}
+      <div className="bg-card border rounded-xl p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="font-semibold text-sm">Proposals ({proposals.length})</h2>
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={() => setAddProposalOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              + New Proposal
+            </button>
+          )}
+        </div>
+        {proposals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No proposals yet.</p>
+        ) : (
+          <div className="divide-y divide-border">
+            {proposals.map((p) => (
+              <div key={p.id} className="flex items-center justify-between py-2.5 text-sm">
+                <Link
+                  href={`/proposals/${p.id}`}
+                  className="font-medium hover:text-primary transition-colors truncate max-w-xs"
+                >
+                  {p.proposal_number} · {p.title}
+                </Link>
+                <div className="flex items-center gap-3 shrink-0 ml-3">
+                  <span className="text-xs text-muted-foreground capitalize">{p.status}</span>
+                  <span className="text-xs font-medium tabular-nums">{formatMoney(p.total, p.currency)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Add Proposal sheet */}
+      <AddProposalSheet
+        open={addProposalOpen}
+        onOpenChange={setAddProposalOpen}
+        prefillDealId={dealId}
+        prefillDealName={deal.name}
+        onSuccess={refetchProposals}
+      />
 
       {/* Delete dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

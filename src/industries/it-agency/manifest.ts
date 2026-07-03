@@ -6,6 +6,7 @@ import { timeTrackingMeta } from "./features/time-tracking/meta";
 import { projectBoardMeta } from "./features/project-board/meta";
 import { dealsMeta } from "./features/deals/meta";
 import { servicesMeta } from "./features/services/meta";
+import { proposalsMeta } from "./features/proposals/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -17,6 +18,7 @@ export const manifest: IndustryManifest = {
     { meta: projectBoardMeta },
     { meta: dealsMeta },
     { meta: servicesMeta },
+    { meta: proposalsMeta },
   ],
   sidebar: [
     {
@@ -42,6 +44,12 @@ export const manifest: IndustryManifest = {
       href: "/services",
       label: "Services",
       icon: "Package",
+    },
+    {
+      featureId: FEATURES.PROPOSALS,
+      href: "/proposals",
+      label: "Proposals",
+      icon: "FileSignature",
     },
     {
       kind: "group" as const,

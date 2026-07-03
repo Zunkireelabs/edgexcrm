@@ -46,6 +46,7 @@ export const FEATURES = {
   PROJECT_BOARD: "project-board",
   DEALS: "deals",
   SERVICES: "services",
+  PROPOSALS: "proposals",
   // Industry-scoped (travel_agency)
   TRIP_INQUIRY: "trip-inquiry",
   ITINERARY: "itinerary",
