@@ -6,6 +6,7 @@ import { ProposalDocument } from "@/industries/it-agency/features/proposals/comp
 import type { ProposalLineItem } from "@/types/database";
 
 export const dynamic = "force-dynamic";
+export const metadata = { robots: { index: false, follow: false } };
 
 interface PageProps {
   params: Promise<{ token: string }>;

@@ -36,6 +36,13 @@ function formatDate(dateString: string | null): string {
 
 export function ProposalDocument({ proposal, lineItems, branding, expired }: ProposalDocumentProps) {
   const accent = branding?.primary_color ?? undefined;
+  const discount =
+    proposal.discount_type === "percent"
+      ? proposal.subtotal * (proposal.discount_value / 100)
+      : proposal.discount_type === "amount"
+        ? Math.min(proposal.discount_value, proposal.subtotal)
+        : 0;
+  const taxAmount = (proposal.subtotal - discount) * (proposal.tax_percent / 100);
 
   return (
     <div className="max-w-3xl mx-auto py-10 px-6 print:py-0 print:px-0">
@@ -107,16 +114,13 @@ export function ProposalDocument({ proposal, lineItems, branding, expired }: Pro
               <span className="text-muted-foreground">
                 Discount {proposal.discount_type === "percent" ? `(${proposal.discount_value}%)` : ""}
               </span>
-              <span>
-                -{proposal.discount_type === "percent"
-                  ? formatMoney(proposal.subtotal * (proposal.discount_value / 100), proposal.currency)
-                  : formatMoney(proposal.discount_value, proposal.currency)}
-              </span>
+              <span>-{formatMoney(discount, proposal.currency)}</span>
             </div>
           )}
           {proposal.tax_percent > 0 && (
             <div className="flex justify-between">
               <span className="text-muted-foreground">Tax ({proposal.tax_percent}%)</span>
+              <span>{formatMoney(taxAmount, proposal.currency)}</span>
             </div>
           )}
           <div className="flex justify-between text-base font-bold pt-2 border-t">
