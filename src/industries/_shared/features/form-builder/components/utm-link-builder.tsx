@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CopyButton } from "@/components/ui/copy-button";
 import type { UtmLink } from "@/types/database";
+import { FORM_PUBLIC_BASE_URL } from "../lib/constants";
 
 interface FormOption {
   id: string;
@@ -21,11 +22,6 @@ interface UtmLinkBuilderProps {
   tenantSlug: string;
   forms: FormOption[];
   onSaved?: (link: UtmLink) => void;
-}
-
-function getBaseUrl(): string {
-  if (typeof window !== "undefined") return window.location.origin;
-  return process.env.NEXT_PUBLIC_APP_URL || "";
 }
 
 function buildTrackingUrl(
@@ -74,7 +70,7 @@ export function UtmLinkBuilder({ tenantSlug, forms, onSaved }: UtmLinkBuilderPro
 
   function handleSelectForm(form: FormOption) {
     setSelectedFormId(form.id);
-    setDestinationUrl(`${getBaseUrl()}/form/${tenantSlug}/${form.slug}`);
+    setDestinationUrl(`${FORM_PUBLIC_BASE_URL}/form/${tenantSlug}/${form.slug}`);
     setPickerOpen(false);
     setSearch("");
   }
