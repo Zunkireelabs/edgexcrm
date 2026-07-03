@@ -614,6 +614,21 @@ export interface Account {
   updated_at: string;
 }
 
+export interface Service {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  hours: number | null;
+  price: number | null;
+  billing_type: "fixed" | "hourly" | "retainer";
+  category: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProjectStatus = "planning" | "active" | "in_review" | "delivered" | "on_hold" | "cancelled";
 
 export interface Project {

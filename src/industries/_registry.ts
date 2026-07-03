@@ -45,6 +45,7 @@ export const FEATURES = {
   CRM_CONTACTS: "crm-contacts",
   PROJECT_BOARD: "project-board",
   DEALS: "deals",
+  SERVICES: "services",
   // Industry-scoped (travel_agency)
   TRIP_INQUIRY: "trip-inquiry",
   ITINERARY: "itinerary",
