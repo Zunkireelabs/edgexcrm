@@ -246,7 +246,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
         <button
           type="button"
           onClick={onClearFilters}
-          className="text-xs text-blue-600 hover:underline underline-offset-2"
+          className="text-xs text-gray-600 hover:text-[#0f0f10] hover:underline underline-offset-2"
         >
           Clear filters
         </button>
@@ -254,13 +254,13 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
     );
   }
 
-  const headCls = "text-xs font-semibold text-gray-500 uppercase tracking-wide cursor-pointer hover:text-gray-900 select-none";
+  const headCls = "text-xs font-medium text-gray-600 cursor-pointer hover:text-gray-900 select-none";
 
   return (
     <>
       <Table>
         <TableHeader>
-          <TableRow className="border-b border-gray-200">
+          <TableRow className="bg-gray-50 border-b border-gray-200">
             <TableHead
               className={headCls}
               onClick={() => handleSort("title")}
@@ -303,7 +303,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
             >
               <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
-            <TableHead className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Tags</TableHead>
+            <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
             <TableHead className="w-10" />
           </TableRow>
         </TableHeader>
@@ -367,10 +367,10 @@ function TaskRow({
     task.due_date < new Date().toISOString().split("T")[0];
 
   return (
-    <TableRow className="group hover:bg-gray-50/60">
+    <TableRow className="group hover:bg-gray-50">
       {/* Title */}
       <TableCell className="max-w-[220px]">
-        <span className="text-sm font-medium text-gray-900 truncate block" title={task.title}>
+        <span className="text-sm font-medium text-[#0f0f10] truncate block" title={task.title}>
           {task.title}
         </span>
         {task.projects?.accounts?.name && (
@@ -385,7 +385,7 @@ function TaskRow({
         {task.projects ? (
           <a
             href={`/time-tracking/projects/${task.projects.id}`}
-            className="text-xs text-blue-600 hover:underline truncate block"
+            className="text-xs text-[#0f0f10] hover:underline truncate block"
           >
             {task.projects.name}
           </a>
@@ -436,7 +436,7 @@ function TaskRow({
           onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
           aria-label="Due date"
           className={[
-            "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-transparent",
+            "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
             isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
           ].join(" ")}
         />
