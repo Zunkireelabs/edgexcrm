@@ -112,6 +112,16 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.discount_value !== undefined) patch.discount_value = Number(body.discount_value);
   if (body.tax_percent !== undefined) patch.tax_percent = Number(body.tax_percent);
 
+  if (body.public_enabled !== undefined) {
+    patch.public_enabled = Boolean(body.public_enabled);
+    if (patch.public_enabled && !existingRow.public_token) {
+      patch.public_token = crypto.randomUUID();
+    }
+  }
+  if (body.regenerate_token === true) {
+    patch.public_token = crypto.randomUUID();
+  }
+
   let statusChanged = false;
   if (body.status !== undefined && body.status !== existingRow.status) {
     statusChanged = true;
@@ -157,6 +167,13 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       .eq("id", updatedRow.deal_id);
   }
 
+  // Never log the raw token — treat it like a secret. Record only whether it changed.
+  const redactToken = (row: Record<string, unknown>) =>
+    "public_token" in row ? { ...row, public_token: row.public_token ? "[redacted]" : null } : row;
+  const auditOld = redactToken(existingRow);
+  const auditNew = redactToken(patch);
+  if (body.regenerate_token === true) auditNew.token_regenerated = true;
+
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -164,7 +181,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       action: "proposal.updated",
       entityType: "proposal",
       entityId: id,
-      changes: { patch: { old: existingRow, new: patch } },
+      changes: { patch: { old: auditOld, new: auditNew } },
       requestId,
     }),
     emitEvent({
@@ -173,7 +190,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       entityType: "proposal",
       entityId: id,
       requestId,
-      payload: { changed_fields: Object.keys(patch), old: existingRow, new: patch },
+      payload: { changed_fields: Object.keys(patch), old: auditOld, new: auditNew },
     }),
   ]);
 

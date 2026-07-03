@@ -12,6 +12,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for public proposal share links — no session needed
+  if (request.nextUrl.pathname.startsWith("/proposals/share")) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 

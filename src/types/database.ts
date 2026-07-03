@@ -933,6 +933,8 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  public_token: string | null;
+  public_enabled: boolean;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;
   line_items?: ProposalLineItem[];
