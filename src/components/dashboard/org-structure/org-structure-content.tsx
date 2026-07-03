@@ -63,7 +63,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-gray-900 rounded-lg">
+          <div className="p-2 bg-[#0f0f10] rounded-lg">
             <Network className="w-6 h-6 text-white" />
           </div>
           <div>
@@ -108,7 +108,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
 
       {/* Empty state (before migration is applied) */}
       {!loading && !error && realLayers.length === 0 && viewMode !== "manage" && (
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
           <Network className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">No layers yet</h3>
           <p className="text-sm text-gray-500 mb-4">
@@ -128,7 +128,7 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
                   fetchLayers();
                 } catch { /* noop */ }
               }}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gray-900 hover:bg-gray-700 rounded-lg text-sm font-medium text-white transition-colors"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-[#0f0f10] hover:bg-[#0f0f10]/90 rounded-lg text-sm font-medium text-white transition-colors"
             >
               <Plus className="w-4 h-4" />
               Add First Layer
@@ -139,14 +139,14 @@ export function OrgStructureContent({ role, tenantId, userId, industryId, maxBra
 
       {/* Loading */}
       {loading && (
-        <div className="bg-white rounded-xl border border-gray-200 p-8 text-center">
+        <div className="bg-white rounded-lg border border-gray-200 p-8 text-center">
           <p className="text-sm text-gray-500">Loading…</p>
         </div>
       )}
 
       {/* Error */}
       {error && (
-        <div className="bg-red-50 rounded-xl border border-red-200 p-6 text-center">
+        <div className="bg-red-50 rounded-lg border border-red-200 p-6 text-center">
           <p className="text-sm text-red-600">{error}</p>
         </div>
       )}
