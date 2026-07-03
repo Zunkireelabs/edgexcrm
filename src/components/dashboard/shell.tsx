@@ -45,6 +45,7 @@ import {
   GraduationCap,
   BookOpen,
   Repeat2,
+  Package,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -122,6 +123,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   GraduationCap,
   BookOpen,
   Repeat2,
+  Package,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
