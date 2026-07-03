@@ -46,6 +46,7 @@ import {
   BookOpen,
   Repeat2,
   Package,
+  FileSignature,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -124,6 +125,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   BookOpen,
   Repeat2,
   Package,
+  FileSignature,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -597,14 +599,14 @@ export function DashboardShell({
   return (
     <div className="flex h-screen bg-[#fafafa]">
       {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa]">
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa] print:hidden">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
       <div className="flex flex-col flex-1 min-w-0 h-full bg-[#fafafa]">
         {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full">
+        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -663,7 +665,7 @@ export function DashboardShell({
         <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
           <main
-            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out"
+            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
             style={{
               borderRadius: '8px',
               border: '1px solid #00001d13'
@@ -673,7 +675,9 @@ export function DashboardShell({
           </main>
 
           {/* AI Assistant Panel */}
-          <AIAssistantPanel />
+          <div className="print:hidden">
+            <AIAssistantPanel />
+          </div>
         </div>
       </div>
     </div>

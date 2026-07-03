@@ -912,6 +912,49 @@ export interface Deal {
   contacts?: { id: string; first_name: string; last_name: string } | null;
 }
 
+export interface Proposal {
+  id: string;
+  tenant_id: string;
+  deal_id: string;
+  proposal_number: string;
+  title: string;
+  status: "draft" | "sent" | "accepted" | "rejected" | "expired";
+  currency: string;
+  subtotal: number;
+  discount_type: "percent" | "amount" | null;
+  discount_value: number;
+  tax_percent: number;
+  total: number;
+  notes: string | null;
+  valid_until: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  // joined (from API)
+  deals?: { id: string; name: string; currency: string } | null;
+  line_items?: ProposalLineItem[];
+}
+
+export interface ProposalLineItem {
+  id: string;
+  tenant_id: string;
+  proposal_id: string;
+  service_id: string | null;
+  name: string;
+  description: string | null;
+  billing_type: string | null;
+  quantity: number;
+  unit_price: number;
+  hours: number | null;
+  line_total: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Dashboard {
   id: string;
   tenant_id: string;
