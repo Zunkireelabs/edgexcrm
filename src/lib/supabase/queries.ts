@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
 
 export async function getCurrentUserTenant(): Promise<{
@@ -104,7 +104,10 @@ export async function getLeads(
     // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
     // and .in("assigned_to", []) yields zero leads. Use the service client to resolve real members.
     const svc = await createServiceClient();
-    memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
+    [memberIds, sharedIds] = await Promise.all([
+      branchMemberIds(svc, tenantId, scope.branchId),
+      leadIdsForBranch(svc, tenantId, scope.branchId).then((ids) => ids.slice(0, 300)),
+    ]);
   }
 
   // Factory applied on every range page so all filters + stable sort are consistent.
@@ -135,14 +138,19 @@ export async function getLeads(
         q = q.eq("assigned_to", scope.userId);
       }
     } else if (memberIds !== null) {
-      // Include unassigned leads in this branch too (e.g. a walk-in just created via
-      // Check-In, before anyone claims it) — .in("assigned_to", memberIds) alone never
-      // matches NULL, so an unassigned branch lead would otherwise be invisible here.
+      // Build OR parts:
+      // 1. Leads assigned to any branch member
+      // 2. Unassigned leads whose origin branch is this branch (e.g. walk-ins from Check-In)
+      // 3. Leads shared INTO this branch via lead_branches (cross-branch sends)
+      const orParts: string[] = [];
       if (memberIds.length > 0) {
-        q = q.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
-      } else {
-        q = q.is("assigned_to", null).eq("branch_id", scope!.branchId as string);
+        orParts.push(`assigned_to.in.(${memberIds.join(",")})`);
       }
+      orParts.push(`and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
+      if (sharedIds && sharedIds.length > 0) {
+        orParts.push(`id.in.(${sharedIds.join(",")})`);
+      }
+      q = q.or(orParts.join(","));
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
