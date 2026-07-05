@@ -32,7 +32,7 @@ export function AttentionSummary({ openTasks, schedule, inboxSnapshot }: Attenti
     <div className="flex items-center gap-2 mb-4 text-sm">
       <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
       <span className="font-medium text-amber-700">
-        {total} {total === 1 ? "item" : "items"} need attention
+        {total} {total === 1 ? "item needs" : "items need"} attention
       </span>
       <span className="text-muted-foreground">· {parts.join(" · ")}</span>
     </div>
