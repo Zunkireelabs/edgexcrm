@@ -57,6 +57,14 @@ export default async function CheckInRoute() {
     tenantData.permissions.leadScope === "own" &&
     !!tenantData.permissions.canAssignLeads;
 
+  // "Meet with" dropdown: admins/owners see all members; branch-scoped users see only their branch.
+  const isAdminTier =
+    tenantData.permissions.baseTier === "owner" ||
+    tenantData.permissions.baseTier === "admin";
+  const branchMembers = isAdminTier || !tenantData.branchId
+    ? teamMembers
+    : teamMembers.filter((m) => m.branch_id === tenantData.branchId);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <CheckInPage
@@ -64,7 +72,7 @@ export default async function CheckInRoute() {
         pipelines={pipelines}
         stages={stages}
         teamMembers={assignableMembers}
-        allBranchMembers={teamMembers}
+        allBranchMembers={branchMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
         canAssignAny={canAssignAny}
         canAssignOwnCheckIns={canAssignOwnCheckIns}
