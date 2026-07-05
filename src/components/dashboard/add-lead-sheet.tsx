@@ -876,7 +876,7 @@ export function AddLeadSheet({
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-600">Tag</Label>
             <div className="flex gap-2">
-              {["student", "parent"].map((tag) => (
+              {["student", "parent", "other"].map((tag) => (
                 <button
                   key={tag}
                   type="button"
@@ -885,6 +885,8 @@ export function AddLeadSheet({
                     formData.tag === tag
                       ? tag === "parent"
                         ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+                        : tag === "other"
+                        ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
                         : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   }`}

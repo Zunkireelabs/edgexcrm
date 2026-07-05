@@ -1264,6 +1264,7 @@ export function LeadsTable({
                 { value: "all", label: "All Tags", description: "Show all leads" },
                 { value: "student", label: "Student", description: "Student leads only" },
                 { value: "parent", label: "Parent", description: "Parent leads only" },
+                { value: "other", label: "Other", description: "Other leads only" },
               ]}
             />
           )}
