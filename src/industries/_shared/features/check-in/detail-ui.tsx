@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,7 @@ export function CheckInDetailPage({
   assignedToEmail,
   checkInHistory,
 }: CheckInDetailPageProps) {
+  const router = useRouter();
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown";
   const initials = (lead.first_name?.[0] || lead.email?.[0] || "?").toUpperCase();
 
@@ -67,11 +69,9 @@ export function CheckInDetailPage({
     <div className="flex flex-col h-full p-6 space-y-6">
       {/* Back button */}
       <div className="shrink-0">
-        <Button variant="ghost" size="sm" asChild className="gap-1.5 -ml-2">
-          <Link href="/check-in">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Check-In
-          </Link>
+        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
+          Back to Check-In
         </Button>
       </div>
 

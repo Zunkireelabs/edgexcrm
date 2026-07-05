@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Save, Loader2, ExternalLink, ToggleLeft, ToggleRight, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -152,6 +153,7 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
 }
 
 export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps) {
+  const router = useRouter();
   const { state, dispatch, save } = useFormBuilder(formConfig);
   const [slugEditing, setSlugEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
@@ -163,11 +165,9 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
     <div className="flex flex-col h-full">
       {/* Top bar */}
       <div className="flex items-center gap-3 mb-6 flex-wrap">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/forms">
-            <ArrowLeft className="h-4 w-4 mr-1" />
-            Forms
-          </Link>
+        <Button variant="ghost" size="sm" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-1" />
+          Forms
         </Button>
 
         <div className="flex-1 min-w-0">

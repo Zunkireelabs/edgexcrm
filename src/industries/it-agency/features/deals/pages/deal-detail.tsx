@@ -201,11 +201,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   return (
     <div className="max-w-3xl mx-auto space-y-6">
       {/* Back nav */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/deals">
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
-          Deals
-        </Link>
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        Deals
       </Button>
 
       {/* Header card */}
