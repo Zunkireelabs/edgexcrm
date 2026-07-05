@@ -947,7 +947,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                 {checkIns.map((record) => {
                   const checkedInByName = memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by;
                   const noteContent = record.note?.replace(/^\[CHECK-IN\]\s*/i, "").trim();
-                  const canAssignThis = canAssignAny || (canAssignOwnCheckIns && (!record.assigned_to || record.assigned_to === currentUserId) && record.checked_in_by_id === currentUserId);
+                  const canAssignThis = canAssignAny || record.checked_in_by_id === currentUserId;
                   return (
                     <div
                       key={record.id}
