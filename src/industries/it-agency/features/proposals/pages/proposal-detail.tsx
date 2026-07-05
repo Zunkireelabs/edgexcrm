@@ -569,11 +569,9 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/proposals">
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
-          Proposals
-        </Link>
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        Proposals
       </Button>
 
       {/* Header card */}

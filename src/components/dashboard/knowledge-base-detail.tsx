@@ -187,7 +187,7 @@ export function KnowledgeBaseDetail({ id, role }: KnowledgeBaseDetailProps) {
       {/* Header */}
       <div className="flex items-start gap-4">
         <button
-          onClick={() => router.push("/knowledge-bases")}
+          onClick={() => router.back()}
           className="mt-1 p-1.5 rounded-md hover:bg-gray-100 transition-colors text-muted-foreground"
         >
           <ArrowLeft className="w-4 h-4" />

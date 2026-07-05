@@ -232,11 +232,9 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
   return (
     <div className="p-6 space-y-6 max-w-3xl">
       {/* Back nav */}
-      <Button variant="ghost" size="sm" asChild className="-ml-2">
-        <Link href="/accounts">
-          <ArrowLeft className="h-4 w-4 mr-1.5" />
-          Accounts
-        </Link>
+      <Button variant="ghost" size="sm" className="-ml-2" onClick={() => router.back()}>
+        <ArrowLeft className="h-4 w-4 mr-1.5" />
+        Accounts
       </Button>
 
       {/* Project header */}
