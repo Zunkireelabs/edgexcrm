@@ -12,6 +12,15 @@ export default async function CheckInRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
+
+  const { baseTier } = tenantData.permissions;
+  const isAllowedRole =
+    baseTier === "owner" ||
+    baseTier === "admin" ||
+    tenantData.positionSlug === "lead-executive" ||
+    tenantData.positionSlug === "branch-manager";
+  if (!isAllowedRole) redirect("/dashboard");
+
   if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
   const serviceClient = await createServiceClient();
