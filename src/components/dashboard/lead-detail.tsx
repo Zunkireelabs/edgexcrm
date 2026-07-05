@@ -47,6 +47,7 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
   canEditLeads?: boolean;
   position_name?: string | null;
 }

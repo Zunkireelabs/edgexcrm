@@ -103,7 +103,7 @@ function formatDate(dateString: string | null): string {
   return new Date(dateString).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
 }
 
-interface TeamMember { user_id: string; email: string; }
+interface TeamMember { user_id: string; email: string; name?: string | null; }
 
 export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPageProps) {
   const router = useRouter();

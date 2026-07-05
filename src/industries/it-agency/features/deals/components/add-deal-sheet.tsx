@@ -25,7 +25,7 @@ import type { DealStage, UserRole } from "@/types/database";
 
 interface AccountOption { id: string; name: string; }
 interface ContactOption { id: string; first_name: string; last_name: string; }
-interface TeamMember { user_id: string; email: string; }
+interface TeamMember { user_id: string; email: string; name?: string | null; }
 
 interface AddDealSheetProps {
   open: boolean;

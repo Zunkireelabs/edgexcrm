@@ -34,6 +34,7 @@ interface Project {
 interface TeamMember {
   user_id: string;
   email: string;
+  name?: string | null;
 }
 
 interface TimesheetFiltersProps {
