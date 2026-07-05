@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, X, Check, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, X, Check, Loader2, Trash2, Plus, Users, FolderKanban } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -23,9 +25,49 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatMoney } from "@/lib/travel/currency";
 import { AddProposalSheet } from "@/industries/it-agency/features/proposals/components/add-proposal-sheet";
+import { DealContactPicker } from "../components/deal-contact-picker";
 import type { Deal, DealStage, Proposal, UserRole } from "@/types/database";
+
+type DealContactRole = "primary" | "technical" | "billing" | "other" | null;
+
+interface ContactLink {
+  role: DealContactRole;
+  contacts: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    title: string | null;
+    status: string;
+  } | null;
+}
+
+function rolePill(role: DealContactRole) {
+  if (!role) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const cfg: Record<string, { label: string; className: string }> = {
+    primary: { label: "Primary", className: "bg-green-100 text-green-800 border-green-200" },
+    technical: { label: "Technical", className: "bg-blue-100 text-blue-800 border-blue-200" },
+    billing: { label: "Billing", className: "bg-amber-100 text-amber-800 border-amber-200" },
+    other: { label: "Other", className: "bg-muted text-muted-foreground border-border" },
+  };
+  const c = cfg[role] ?? cfg.other;
+  return (
+    <Badge variant="outline" className={`text-xs ${c.className}`}>
+      {c.label}
+    </Badge>
+  );
+}
 
 interface DealDetailPageProps {
   dealId: string;
@@ -39,6 +81,14 @@ const PRIORITIES = [
   { value: "high", label: "High" },
 ];
 const DEAL_TYPES = ["New Business", "Renewal", "Upsell", "Partnership", "Other"];
+const PROJECT_STATUSES = [
+  { value: "planning", label: "Planning" },
+  { value: "active", label: "Active" },
+  { value: "in_review", label: "In Review" },
+  { value: "delivered", label: "Delivered" },
+  { value: "on_hold", label: "On Hold" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-blue-50 text-blue-700",
@@ -65,10 +115,26 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [addProposalOpen, setAddProposalOpen] = useState(false);
 
+  // Contacts section
+  const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [removeContactTarget, setRemoveContactTarget] = useState<ContactLink | null>(null);
+  const [removingContact, setRemovingContact] = useState(false);
+  const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  // Convert to project
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [convertName, setConvertName] = useState("");
+  const [convertAccountId, setConvertAccountId] = useState("");
+  const [convertStatus, setConvertStatus] = useState("planning");
 
   // Draft state for edit
   const [draftName, setDraftName] = useState("");
@@ -80,26 +146,90 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [draftDealType, setDraftDealType] = useState("");
   const [draftPriority, setDraftPriority] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [draftProbability, setDraftProbability] = useState("");
 
   useEffect(() => {
     Promise.all([
       fetch(`/api/v1/deals/${dealId}`).then((r) => r.json()),
       fetch("/api/v1/deal-stages").then((r) => r.json()),
       fetch("/api/v1/team").then((r) => r.json()),
+      fetch(`/api/v1/deals/${dealId}/contacts`).then((r) => r.json()),
     ])
-      .then(([dealRes, stagesRes, teamRes]) => {
+      .then(([dealRes, stagesRes, teamRes, contactsRes]) => {
         if (dealRes.error) {
           toast.error("Deal not found");
           router.push("/deals");
           return;
         }
-        setDeal(dealRes.data as Deal);
+        const loadedDeal = dealRes.data as Deal;
+        setDeal(loadedDeal);
+        setLinkedProjectId(loadedDeal.projects?.[0]?.id ?? null);
         setStages(stagesRes.data ?? []);
         setTeamMembers(teamRes.data ?? []);
+        setContactLinks(contactsRes.data ?? []);
       })
       .catch(() => toast.error("Failed to load deal"))
       .finally(() => setLoading(false));
   }, [dealId, router]);
+
+  function handleContactLinked(link: {
+    role: string | null;
+    contacts: { id: string; first_name: string; last_name: string; email: string | null; title: string | null; status: string } | null;
+  }) {
+    const normalizedRole = (link.role || null) as DealContactRole;
+    setContactLinks((prev) => [
+      ...prev,
+      { role: normalizedRole, contacts: link.contacts ?? null },
+    ]);
+  }
+
+  async function handleChangeRole(contactId: string, newRole: DealContactRole) {
+    setChangingRoleFor(contactId);
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}/contacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_id: contactId, role: newRole }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json.error?.message ?? "Failed to update role";
+        toast.error(msg);
+        return;
+      }
+      setContactLinks((prev) =>
+        prev.map((cl) =>
+          cl.contacts?.id === contactId
+            ? { ...cl, role: (json.data?.role ?? newRole) as DealContactRole }
+            : cl
+        )
+      );
+      toast.success("Role updated");
+    } finally {
+      setChangingRoleFor(null);
+    }
+  }
+
+  async function handleRemoveContact() {
+    if (!removeContactTarget?.contacts) return;
+    setRemovingContact(true);
+    try {
+      const res = await fetch(
+        `/api/v1/deals/${dealId}/contacts?contact_id=${removeContactTarget.contacts.id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("Failed to remove link");
+      setContactLinks((prev) =>
+        prev.filter((cl) => cl.contacts?.id !== removeContactTarget.contacts!.id)
+      );
+      toast.success("Contact removed");
+    } catch {
+      toast.error("Failed to remove contact link");
+    } finally {
+      setRemovingContact(false);
+      setRemoveContactTarget(null);
+    }
+  }
 
   function refetchProposals() {
     fetch(`/api/v1/proposals?deal_id=${dealId}`)
@@ -124,6 +254,7 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
     setDraftDealType(deal.deal_type ?? "");
     setDraftPriority(deal.priority ?? "");
     setDraftDescription(deal.description ?? "");
+    setDraftProbability(deal.probability !== null && deal.probability !== undefined ? String(deal.probability) : "");
     setEditing(true);
   }
 
@@ -145,6 +276,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
       if (draftDealType !== (deal.deal_type ?? "")) patch.deal_type = draftDealType || null;
       if (draftPriority !== (deal.priority ?? "")) patch.priority = draftPriority || null;
       if (draftDescription !== (deal.description ?? "")) patch.description = draftDescription || null;
+      if (draftProbability !== (deal.probability !== null && deal.probability !== undefined ? String(deal.probability) : "")) {
+        patch.probability = draftProbability === "" ? null : Number(draftProbability);
+      }
 
       if (Object.keys(patch).length === 0) {
         setEditing(false);
@@ -169,6 +303,22 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
     }
   }
 
+  async function resetProbability() {
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ probability: null }),
+      });
+      if (!res.ok) throw new Error("Failed to reset");
+      const { data } = await res.json();
+      setDeal(data as Deal);
+      toast.success("Probability reset to stage default");
+    } catch {
+      toast.error("Failed to reset probability");
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -179,6 +329,55 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
     } catch {
       toast.error("Failed to delete deal");
       setDeleting(false);
+    }
+  }
+
+  function openConvertDialog() {
+    if (!deal) return;
+    setConvertName(deal.name);
+    setConvertAccountId(deal.account_id ?? "");
+    setConvertStatus("planning");
+    setConvertOpen(true);
+    if (!deal.account_id && accounts.length === 0) {
+      fetch("/api/v1/accounts")
+        .then((r) => r.json())
+        .then((j) => setAccounts(j.data ?? []))
+        .catch(() => toast.error("Failed to load accounts"));
+    }
+  }
+
+  async function handleConvert() {
+    if (!deal) return;
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}/convert-to-project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: convertName,
+          account_id: convertAccountId || undefined,
+          status: convertStatus,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        if (json.error?.code === "ALREADY_CONVERTED") {
+          setLinkedProjectId(json.error.details?.project_id ?? null);
+          toast.error("Already converted to a project");
+          setConvertOpen(false);
+          return;
+        }
+        toast.error(json.error?.message ?? "Failed to convert deal");
+        return;
+      }
+      toast.success("Project created");
+      setLinkedProjectId(json.data.id);
+      setConvertOpen(false);
+      router.push(`/time-tracking/projects/${json.data.id}`);
+    } catch {
+      toast.error("Failed to convert deal");
+    } finally {
+      setConverting(false);
     }
   }
 
@@ -247,6 +446,19 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
                 </>
               ) : (
                 <>
+                  {linkedProjectId ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/time-tracking/projects/${linkedProjectId}`}>
+                        <FolderKanban className="h-4 w-4 mr-1" />
+                        View project
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={openConvertDialog}>
+                      <FolderKanban className="h-4 w-4 mr-1" />
+                      Convert to Project
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" onClick={startEdit}>
                     <Pencil className="h-4 w-4 mr-1" />
                     Edit
@@ -291,6 +503,39 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
                   ? formatMoney(deal.amount, deal.currency)
                   : "—"}
               </p>
+            )}
+          </div>
+
+          {/* Probability */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Probability</Label>
+            {editing ? (
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={draftProbability}
+                onChange={(e) => setDraftProbability(e.target.value)}
+                placeholder={currentStage ? String(currentStage.probability) : "50"}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-sm">
+                  {deal.probability !== null
+                    ? `${deal.probability}% · override`
+                    : `${currentStage?.probability ?? 50}% · from stage`}
+                </p>
+                {isAdmin && deal.probability !== null && (
+                  <button
+                    type="button"
+                    onClick={resetProbability}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Reset to stage default
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -461,6 +706,165 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
         )}
       </div>
 
+      {/* Contacts section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            Contacts
+          </h2>
+          {isAdmin && (
+            <Button size="sm" onClick={() => setContactPickerOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Add contact
+            </Button>
+          )}
+        </div>
+
+        <Card className="border shadow-none">
+          <CardContent className="p-0">
+            {contactLinks.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                No contacts linked.
+                {isAdmin && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="ml-1 p-0 h-auto"
+                    onClick={() => setContactPickerOpen(true)}
+                  >
+                    Add the first one.
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {contactLinks.map((cl) => {
+                  if (!cl.contacts) return null;
+                  const c = cl.contacts;
+                  const fullName = `${c.first_name} ${c.last_name}`.trim();
+                  const isChanging = changingRoleFor === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 group/row"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/contacts/${c.id}`}
+                              className="text-sm font-medium hover:underline"
+                            >
+                              {fullName}
+                            </Link>
+                            {c.status === "inactive" && (
+                              <Badge variant="secondary" className="text-xs">
+                                Inactive
+                              </Badge>
+                            )}
+                          </div>
+                          {c.title && (
+                            <p className="text-xs text-muted-foreground">{c.title}</p>
+                          )}
+                        </div>
+                        {rolePill(cl.role)}
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
+                          {isChanging ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-muted-foreground"
+                                >
+                                  Change role
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {(["primary", "technical", "billing", "other"] as const).map(
+                                  (r) => (
+                                    <DropdownMenuItem
+                                      key={r}
+                                      onClick={() => handleChangeRole(c.id, r)}
+                                      className={cl.role === r ? "font-medium" : ""}
+                                    >
+                                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                                    </DropdownMenuItem>
+                                  )
+                                )}
+                                {cl.role !== null && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleChangeRole(c.id, null)}
+                                    >
+                                      Clear role
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemoveContactTarget(cl)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Contact picker dialog */}
+      <DealContactPicker
+        dealId={dealId}
+        accountId={deal.account_id}
+        open={contactPickerOpen}
+        onOpenChange={setContactPickerOpen}
+        onSuccess={handleContactLinked}
+      />
+
+      {/* Remove contact confirmation */}
+      <Dialog
+        open={Boolean(removeContactTarget)}
+        onOpenChange={(o) => !o && setRemoveContactTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Contact</DialogTitle>
+            <DialogDescription>
+              Remove{" "}
+              {removeContactTarget?.contacts &&
+                `${removeContactTarget.contacts.first_name} ${removeContactTarget.contacts.last_name}`}{" "}
+              from this deal? The contact record is not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveContactTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={removingContact} onClick={handleRemoveContact}>
+              {removingContact && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Add Proposal sheet */}
       <AddProposalSheet
         open={addProposalOpen}
@@ -469,6 +873,70 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
         prefillDealName={deal.name}
         onSuccess={refetchProposals}
       />
+
+      {/* Convert to Project dialog */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to Project</DialogTitle>
+            <DialogDescription>
+              Creates a new project from this deal. This can only be done once.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={convertName} onChange={(e) => setConvertName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Account</Label>
+              {deal.account_id ? (
+                <p className="text-sm py-2">{account?.name ?? "—"}</p>
+              ) : (
+                <Select value={convertAccountId} onValueChange={setConvertAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={convertStatus} onValueChange={setConvertStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Owner</Label>
+              <p className="text-sm py-2 text-muted-foreground">{ownerEmail ?? "Unassigned"}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConvert}
+              disabled={converting || !convertName.trim() || !(deal.account_id || convertAccountId)}
+            >
+              {converting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

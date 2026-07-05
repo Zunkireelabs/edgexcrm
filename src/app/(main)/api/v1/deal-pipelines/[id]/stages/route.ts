@@ -42,6 +42,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   });
   if (!valid) return apiValidationError(errors);
 
+  if (body.probability !== undefined && body.probability !== null) {
+    const n = Number(body.probability);
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return apiValidationError({ probability: ["Must be an integer 0–100"] });
+    }
+  }
+
   const db = await scopedClient(auth);
 
   const { data: pipeline } = await db
@@ -57,6 +64,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const isTerminal = body.is_terminal === true;
   const terminalType = isTerminal ? (body.terminal_type as string | null) : null;
   const isDefault = body.is_default === true;
+  const probability = body.probability !== undefined && body.probability !== null
+    ? Number(body.probability)
+    : terminalType === "won" ? 100 : terminalType === "lost" ? 0 : 50;
 
   const baseSlug = name
     .toLowerCase()
@@ -107,6 +117,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       is_default: isDefault,
       is_terminal: isTerminal,
       terminal_type: terminalType,
+      probability,
     })
     .select()
     .single();

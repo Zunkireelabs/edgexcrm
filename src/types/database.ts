@@ -641,6 +641,7 @@ export interface Project {
   is_billable: boolean;
   notes: string | null;
   owner_id: string | null;
+  deal_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -716,6 +717,15 @@ export interface ProjectContact {
   project_id: string;
   contact_id: string;
   role: ProjectContactRole | null;
+  created_at: string;
+}
+
+export type DealContactRole = "primary" | "technical" | "billing" | "other";
+
+export interface DealContact {
+  deal_id: string;
+  contact_id: string;
+  role: DealContactRole | null;
   created_at: string;
 }
 
@@ -882,6 +892,7 @@ export interface DealStage {
   is_default: boolean;
   is_terminal: boolean;
   terminal_type: "won" | "lost" | null;
+  probability: number;
   created_at: string;
   updated_at: string;
 }
@@ -902,6 +913,7 @@ export interface Deal {
   priority: "low" | "medium" | "high" | null;
   description: string | null;
   status: "open" | "won" | "lost";
+  probability: number | null;
   last_activity_at: string;
   created_by: string | null;
   created_at: string;
@@ -910,6 +922,7 @@ export interface Deal {
   // Joined fields (from API responses)
   accounts?: { id: string; name: string } | null;
   contacts?: { id: string; first_name: string; last_name: string } | null;
+  projects?: { id: string; name: string }[];
 }
 
 export interface Proposal {
@@ -933,6 +946,8 @@ export interface Proposal {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
+  public_token: string | null;
+  public_enabled: boolean;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;
   line_items?: ProposalLineItem[];
