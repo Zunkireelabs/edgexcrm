@@ -74,7 +74,7 @@ export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: Contac
           <div className="flex-1 flex items-center justify-center text-center p-8">
             <div>
               <p className="text-muted-foreground">No contacts yet.</p>
-              <p className="text-sm text-muted-foreground mt-1">Walk-in visitors tagged as "Other" will appear here.</p>
+              <p className="text-sm text-muted-foreground mt-1">Walk-in visitors tagged as &quot;Other&quot; will appear here.</p>
             </div>
           </div>
         ) : (
