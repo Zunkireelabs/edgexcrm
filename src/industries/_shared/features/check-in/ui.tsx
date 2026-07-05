@@ -404,7 +404,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           phone: phone || null,
           pipeline_id: pipelineId,
           stage_id: stageId,
-          assigned_to: assignedTo || null,
+          assigned_to: (leadTag === "other" ? meetWithId : assignedTo) || null,
           intake_source: referralSource || "walk_in",
           intake_campaign:
             (referralSource === "referral" || referralSource === "other") &&
@@ -453,6 +453,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setPhone("");
         setNotes("");
         setAssignedTo("");
+        setMeetWithId("");
         setDestination("");
         setStudyLevel("");
         setReferralSource("");
@@ -976,6 +977,17 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {record.email && <span>{record.email}</span>}
                         {record.phone && <span>{record.phone}</span>}
                       </div>
+                      <div className="text-xs text-muted-foreground">
+                        By: <span className="font-medium text-foreground">{memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by}</span>
+                      </div>
+                      {(() => {
+                        const noteContent = record.note?.replace(/^\[CHECK-IN\]\s*/i, "").trim();
+                        return noteContent ? (
+                          <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-[200px]" title={noteContent}>
+                            {noteContent}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                     <div
                       className="hidden sm:flex flex-1 justify-center text-xs"
