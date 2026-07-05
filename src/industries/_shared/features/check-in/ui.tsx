@@ -943,7 +943,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                 No check-ins found for this period
               </div>
             ) : (
-              <div className="flex-1 overflow-y-auto p-3 pt-2 space-y-2">
+              <div className="flex-1 overflow-y-auto p-3 pt-2 space-y-1">
                 {checkIns.map((record) => {
                   const checkedInByName = memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by;
                   const noteContent = record.note?.replace(/^\[CHECK-IN\]\s*/i, "").trim();
@@ -951,87 +951,78 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   return (
                     <div
                       key={record.id}
-                      className="p-3 rounded-lg border hover:bg-muted/30 cursor-pointer transition-colors space-y-2"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors"
                       onClick={() => { if (record.lead_id) router.push(`/check-in/${record.lead_id}`); }}
                     >
-                      {/* Row 1: avatar + name/contact + time */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-xs font-medium text-green-700 shrink-0">
-                            {(record.first_name?.[0] || record.email?.[0] || "?").toUpperCase()}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium truncate">
-                                {[record.first_name, record.last_name].filter(Boolean).join(" ") || record.email || "Unknown"}
-                              </span>
-                              {record.stage_name && (
-                                <Badge variant="secondary" className="text-[10px] shrink-0" style={{ backgroundColor: `${record.stage_color}20`, color: record.stage_color || undefined }}>
-                                  {record.stage_name}
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              {record.email && <span>{record.email}</span>}
-                              {record.phone && <span>{record.phone}</span>}
-                            </div>
-                          </div>
+                      {/* Avatar */}
+                      <div className="h-8 w-8 rounded-full bg-green-100 flex items-center justify-center text-xs font-medium text-green-700 shrink-0">
+                        {(record.first_name?.[0] || record.email?.[0] || "?").toUpperCase()}
+                      </div>
+
+                      {/* Name */}
+                      <div className="w-36 shrink-0 min-w-0">
+                        <div className="text-sm font-medium truncate">
+                          {[record.first_name, record.last_name].filter(Boolean).join(" ") || record.email || "Unknown"}
                         </div>
-                        <div className="text-right shrink-0">
+                        <div className="text-[10px] text-muted-foreground truncate">{record.phone || record.email || ""}</div>
+                      </div>
+
+                      {/* Checked in by */}
+                      <div className="w-32 shrink-0 min-w-0">
+                        <div className="text-[10px] text-muted-foreground">Checked in by</div>
+                        <div className="text-xs font-medium truncate">{checkedInByName}</div>
+                      </div>
+
+                      {/* Meet with */}
+                      <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                        <div className="text-[10px] text-muted-foreground">Meet with</div>
+                        {canAssignThis ? (
+                          <Select
+                            value={record.assigned_to ?? "__unassigned__"}
+                            onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                            disabled={assigningId === record.id}
+                          >
+                            <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                              <SelectValue placeholder="Select..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__unassigned__">Not selected</SelectItem>
+                              {allBranchMembers.map((m) => (
+                                <SelectItem key={m.user_id} value={m.user_id}>
+                                  {m.name || m.email.split("@")[0]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <div className="text-xs font-medium truncate">{record.assigned_to_name || <span className="text-muted-foreground italic">—</span>}</div>
+                        )}
+                      </div>
+
+                      {/* Notes */}
+                      <div className="flex-1 min-w-0">
+                        {noteContent && (
+                          <>
+                            <div className="text-[10px] text-muted-foreground">Notes</div>
+                            <div className="text-xs truncate text-muted-foreground">{noteContent}</div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Check Out + time */}
+                      <div className="shrink-0 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {!record.checked_out_at ? (
+                          <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={checkingOutId === record.id} onClick={() => handleCheckOut(record)}>
+                            {checkingOutId === record.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Check Out"}
+                          </Button>
+                        ) : (
+                          <span className="text-[10px] text-green-600 font-medium whitespace-nowrap">Out {formatTime(record.checked_out_at)}</span>
+                        )}
+                        <div className="text-right">
                           <div className="text-xs font-medium">{formatTime(record.checked_in_at)}</div>
                           <div className="text-[10px] text-muted-foreground">{formatDate(record.checked_in_at)}</div>
                         </div>
                       </div>
-
-                      {/* Row 2: Checked in by | Meet with | Check Out */}
-                      <div className="flex items-center gap-2 flex-wrap pl-10" onClick={(e) => e.stopPropagation()}>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          Checked in by: <span className="font-medium text-foreground">{checkedInByName}</span>
-                        </span>
-                        <span className="text-muted-foreground text-xs">·</span>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1">
-                          Meet with:
-                          {canAssignThis ? (
-                            <Select
-                              value={record.assigned_to ?? "__unassigned__"}
-                              onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
-                              disabled={assigningId === record.id}
-                            >
-                              <SelectTrigger className="h-6 w-auto gap-1 border-none bg-transparent px-1 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium text-foreground">
-                                <SelectValue placeholder="Select..." />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__unassigned__">Not selected</SelectItem>
-                                {allBranchMembers.map((m) => (
-                                  <SelectItem key={m.user_id} value={m.user_id}>
-                                    {m.name || m.email.split("@")[0]}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
-                            <span className="font-medium text-foreground ml-1">
-                              {record.assigned_to_name ?? <span className="italic text-muted-foreground">Not selected</span>}
-                            </span>
-                          )}
-                        </span>
-                        <div className="ml-auto shrink-0">
-                          {!record.checked_out_at ? (
-                            <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={checkingOutId === record.id} onClick={() => handleCheckOut(record)}>
-                              {checkingOutId === record.id ? <Loader2 className="h-3 w-3 animate-spin" /> : "Check Out"}
-                            </Button>
-                          ) : (
-                            <span className="text-[10px] text-green-600 font-medium">Out {formatTime(record.checked_out_at)}</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Row 3: Notes */}
-                      {noteContent && (
-                        <div className="pl-10 text-xs text-muted-foreground">
-                          <span className="font-medium text-foreground">Notes:</span> {noteContent}
-                        </div>
-                      )}
                     </div>
                   );
                 })}
