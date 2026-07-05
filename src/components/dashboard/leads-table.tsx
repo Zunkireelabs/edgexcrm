@@ -243,7 +243,7 @@ export function LeadsTable({
   const isAdmin = role === "admin" || role === "owner";
   // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
   // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
-  const canCreateLead = canEditLeads ?? role !== "viewer";
+  const canCreateLead = isAdmin || isTeamScoped;
   // Same position-first gate for inline row edits (stage change, list move).
   const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
