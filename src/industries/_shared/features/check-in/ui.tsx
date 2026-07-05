@@ -766,8 +766,25 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                     )}
 
-                    {/* Assign Counselor — hidden when "Other" tag is selected */}
-                    {leadTag !== "other" && (
+                    {/* Assign Counselor / Meet with */}
+                    {leadTag === "other" ? (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Meet with</Label>
+                        <Select value={meetWithId || "__none__"} onValueChange={(v) => setMeetWithId(v === "__none__" ? "" : v)}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Select person (optional)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">No one selected</SelectItem>
+                            {allBranchMembers.map((m) => (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
                       <div className="space-y-1">
                         <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assign Counselor"}</Label>
                         <Select value={assignedTo || "__none__"} onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}>
