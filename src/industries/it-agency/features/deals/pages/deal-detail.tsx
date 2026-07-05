@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, X, Check, Loader2, Trash2, Plus, Users } from "lucide-react";
+import { ArrowLeft, Pencil, X, Check, Loader2, Trash2, Plus, Users, FolderKanban } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,6 +81,14 @@ const PRIORITIES = [
   { value: "high", label: "High" },
 ];
 const DEAL_TYPES = ["New Business", "Renewal", "Upsell", "Partnership", "Other"];
+const PROJECT_STATUSES = [
+  { value: "planning", label: "Planning" },
+  { value: "active", label: "Active" },
+  { value: "in_review", label: "In Review" },
+  { value: "delivered", label: "Delivered" },
+  { value: "on_hold", label: "On Hold" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 const STATUS_STYLES: Record<string, string> = {
   open: "bg-blue-50 text-blue-700",
@@ -119,6 +127,15 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  // Convert to project
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null);
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [converting, setConverting] = useState(false);
+  const [accounts, setAccounts] = useState<{ id: string; name: string }[]>([]);
+  const [convertName, setConvertName] = useState("");
+  const [convertAccountId, setConvertAccountId] = useState("");
+  const [convertStatus, setConvertStatus] = useState("planning");
+
   // Draft state for edit
   const [draftName, setDraftName] = useState("");
   const [draftAmount, setDraftAmount] = useState("");
@@ -144,7 +161,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
           router.push("/deals");
           return;
         }
-        setDeal(dealRes.data as Deal);
+        const loadedDeal = dealRes.data as Deal;
+        setDeal(loadedDeal);
+        setLinkedProjectId(loadedDeal.projects?.[0]?.id ?? null);
         setStages(stagesRes.data ?? []);
         setTeamMembers(teamRes.data ?? []);
         setContactLinks(contactsRes.data ?? []);
@@ -313,6 +332,55 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
     }
   }
 
+  function openConvertDialog() {
+    if (!deal) return;
+    setConvertName(deal.name);
+    setConvertAccountId(deal.account_id ?? "");
+    setConvertStatus("planning");
+    setConvertOpen(true);
+    if (!deal.account_id && accounts.length === 0) {
+      fetch("/api/v1/accounts")
+        .then((r) => r.json())
+        .then((j) => setAccounts(j.data ?? []))
+        .catch(() => toast.error("Failed to load accounts"));
+    }
+  }
+
+  async function handleConvert() {
+    if (!deal) return;
+    setConverting(true);
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}/convert-to-project`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: convertName,
+          account_id: convertAccountId || undefined,
+          status: convertStatus,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        if (json.error?.code === "ALREADY_CONVERTED") {
+          setLinkedProjectId(json.error.details?.project_id ?? null);
+          toast.error("Already converted to a project");
+          setConvertOpen(false);
+          return;
+        }
+        toast.error(json.error?.message ?? "Failed to convert deal");
+        return;
+      }
+      toast.success("Project created");
+      setLinkedProjectId(json.data.id);
+      setConvertOpen(false);
+      router.push(`/time-tracking/projects/${json.data.id}`);
+    } catch {
+      toast.error("Failed to convert deal");
+    } finally {
+      setConverting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -380,6 +448,19 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
                 </>
               ) : (
                 <>
+                  {linkedProjectId ? (
+                    <Button size="sm" variant="outline" asChild>
+                      <Link href={`/time-tracking/projects/${linkedProjectId}`}>
+                        <FolderKanban className="h-4 w-4 mr-1" />
+                        View project
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="outline" onClick={openConvertDialog}>
+                      <FolderKanban className="h-4 w-4 mr-1" />
+                      Convert to Project
+                    </Button>
+                  )}
                   <Button size="sm" variant="outline" onClick={startEdit}>
                     <Pencil className="h-4 w-4 mr-1" />
                     Edit
@@ -794,6 +875,70 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
         prefillDealName={deal.name}
         onSuccess={refetchProposals}
       />
+
+      {/* Convert to Project dialog */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Convert to Project</DialogTitle>
+            <DialogDescription>
+              Creates a new project from this deal. This can only be done once.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label>Name</Label>
+              <Input value={convertName} onChange={(e) => setConvertName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Account</Label>
+              {deal.account_id ? (
+                <p className="text-sm py-2">{account?.name ?? "—"}</p>
+              ) : (
+                <Select value={convertAccountId} onValueChange={setConvertAccountId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select an account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <Select value={convertStatus} onValueChange={setConvertStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PROJECT_STATUSES.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Owner</Label>
+              <p className="text-sm py-2 text-muted-foreground">{ownerEmail ?? "Unassigned"}</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={converting}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleConvert}
+              disabled={converting || !convertName.trim() || !(deal.account_id || convertAccountId)}
+            >
+              {converting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Create Project
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete dialog */}
       <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>

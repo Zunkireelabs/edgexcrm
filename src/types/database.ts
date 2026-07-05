@@ -641,6 +641,7 @@ export interface Project {
   is_billable: boolean;
   notes: string | null;
   owner_id: string | null;
+  deal_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -921,6 +922,7 @@ export interface Deal {
   // Joined fields (from API responses)
   accounts?: { id: string; name: string } | null;
   contacts?: { id: string; first_name: string; last_name: string } | null;
+  projects?: { id: string; name: string }[];
 }
 
 export interface Proposal {

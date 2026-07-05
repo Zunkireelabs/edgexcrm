@@ -53,7 +53,7 @@ export function apiError(
   code: string,
   message: string,
   status: number,
-  details?: Record<string, string[]>
+  details?: Record<string, unknown>
 ) {
   const response = NextResponse.json(
     { error: { code, message, ...(details && { details }) } },
