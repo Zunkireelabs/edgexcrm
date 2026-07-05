@@ -1,12 +1,12 @@
 import { redirect, notFound } from "next/navigation";
-import { getCurrentUserTenant, getLeads } from "@/lib/supabase/queries";
+import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { ContactsPage } from "@/industries/education-consultancy/features/contacts/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { ContactsListPage } from "@/industries/it-agency/features/crm-contacts/pages/contacts-list";
-import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
-import type { Industry, TenantEntity } from "@/types/database";
+import { canSeeNav } from "@/lib/api/permissions";
+import type { Lead } from "@/types/database";
 
 export default async function ContactsRoutePage() {
   const tenantData = await getCurrentUserTenant();
@@ -25,78 +25,29 @@ export default async function ContactsRoutePage() {
     );
   }
 
-  // education_consultancy with lead-lists active → redirect to the Prospects list
-  if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.LEAD_LISTS)) {
-    redirect("/leads?list=prospects");
-  }
-
-  // education_consultancy → existing ProspectsView (unchanged)
+  // education_consultancy → show "other" tagged walk-in contacts (admin/owner only)
   if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.CONTACTS)) {
+    const { baseTier } = tenantData.permissions;
+    if (baseTier !== "owner" && baseTier !== "admin") redirect("/dashboard");
+
     const supabase = await createServiceClient();
 
-    const leads = await getLeads(tenantData.tenant.id, { ...leadQueryScope(tenantData.permissions, tenantData.userId), limit: 50000 });
-
-    const { data: teamData } = await supabase
-      .from("tenant_users")
-      .select("user_id, role")
-      .eq("tenant_id", tenantData.tenant.id);
-
-    const memberMap: Record<string, string> = {};
-    const teamMembers: { user_id: string; email: string; role: string; name: string }[] = [];
-
-    if (teamData) {
-      const { data: { users } } = await supabase.auth.admin.listUsers();
-      const userMap = new Map(users.map((u) => {
-        const email = u.email || "";
-        const meta = u.user_metadata as Record<string, unknown> | undefined;
-        const raw = ((meta?.name ?? meta?.full_name ?? "") as string).trim();
-        const name = (raw && raw.toLowerCase() !== email.toLowerCase()) ? raw : email.split("@")[0];
-        return [u.id, { email, name }];
-      }));
-      for (const m of teamData) {
-        const user = userMap.get(m.user_id) ?? { email: "", name: "" };
-        memberMap[m.user_id] = user.email;
-        teamMembers.push({ user_id: m.user_id, email: user.email, role: m.role, name: user.name });
-      }
-    }
-
-    const { data: stagesData } = await supabase
-      .from("pipeline_stages")
+    const { data: otherLeads } = await supabase
+      .from("leads")
       .select("*")
       .eq("tenant_id", tenantData.tenant.id)
-      .order("position");
+      .is("deleted_at", null)
+      .contains("tags", ["other"])
+      .order("created_at", { ascending: false })
+      .limit(500);
 
-    const { data: formConfigs } = await supabase
-      .from("form_configs")
-      .select("id, name")
-      .eq("tenant_id", tenantData.tenant.id);
-
-    const formMap: Record<string, string> = {};
-    (formConfigs || []).forEach((f) => { formMap[f.id] = f.name; });
-
-    const [industryResult, entitiesResult] = await Promise.all([
-      tenantData.tenant.industry_id
-        ? supabase.from("industries").select("*").eq("id", tenantData.tenant.industry_id).single()
-        : Promise.resolve({ data: null }),
-      supabase.from("tenant_entities").select("*").eq("tenant_id", tenantData.tenant.id).order("position"),
-    ]);
-
-    const industryData = industryResult.data as Industry | null;
-    const entities = (entitiesResult.data || []) as TenantEntity[];
+    const leads = (otherLeads || []) as Lead[];
 
     return (
       <ContactsPage
         leads={leads}
-        memberMap={memberMap}
-        stages={stagesData || []}
-        formMap={formMap}
         role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
         tenantId={tenantData.tenant.id}
-        teamMembers={teamMembers}
-        entities={entities}
-        entityLabel={industryData?.entity_type_label}
-        currentUserId={tenantData.userId}
-        industryId={tenantData.tenant.industry_id}
       />
     );
   }

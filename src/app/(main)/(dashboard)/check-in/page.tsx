@@ -64,6 +64,7 @@ export default async function CheckInRoute() {
         pipelines={pipelines}
         stages={stages}
         teamMembers={assignableMembers}
+        allBranchMembers={teamMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
         canAssignAny={canAssignAny}
         canAssignOwnCheckIns={canAssignOwnCheckIns}
