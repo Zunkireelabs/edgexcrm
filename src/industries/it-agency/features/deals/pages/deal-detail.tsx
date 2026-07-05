@@ -35,6 +35,7 @@ import {
 import { formatMoney } from "@/lib/travel/currency";
 import { AddProposalSheet } from "@/industries/it-agency/features/proposals/components/add-proposal-sheet";
 import { DealContactPicker } from "../components/deal-contact-picker";
+import { TaskList } from "@/components/dashboard/tasks/task-list";
 import type { Deal, DealStage, Proposal, UserRole } from "@/types/database";
 
 type DealContactRole = "primary" | "technical" | "billing" | "other" | null;
@@ -72,6 +73,7 @@ function rolePill(role: DealContactRole) {
 interface DealDetailPageProps {
   dealId: string;
   role: UserRole;
+  currentUserId: string;
 }
 
 const CURRENCIES = ["NPR", "USD", "INR", "EUR"];
@@ -103,7 +105,7 @@ function formatDate(dateString: string | null): string {
 
 interface TeamMember { user_id: string; email: string; }
 
-export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
+export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPageProps) {
   const router = useRouter();
   const isAdmin = role === "owner" || role === "admin";
 
@@ -704,6 +706,17 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Tasks section */}
+      <div className="bg-card border rounded-xl p-5">
+        <h2 className="font-semibold text-sm mb-4">Tasks</h2>
+        <TaskList
+          fetchUrl={`/api/v1/deals/${dealId}/tasks`}
+          currentUserId={currentUserId}
+          context={{ dealId }}
+          emptyLabel="No tasks for this deal yet."
+        />
       </div>
 
       {/* Contacts section */}

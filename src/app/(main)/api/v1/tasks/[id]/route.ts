@@ -14,6 +14,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
 const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -95,10 +96,16 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("tasks")
-    .select("id")
+    .select("id, title, assignee_id, project_id")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Task");
+  const existingTask = existing as unknown as {
+    id: string;
+    title: string;
+    assignee_id: string | null;
+    project_id: string | null;
+  };
 
   const patch: Record<string, unknown> = {};
   if (body.title !== undefined) patch.title = String(body.title).trim();
@@ -111,8 +118,23 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.position !== undefined) patch.position = Number(body.position);
   if (body.priority !== undefined) patch.priority = String(body.priority);
   if (body.tags !== undefined) patch.tags = body.tags as string[];
-  if ("assignee_id" in body) patch.assignee_id = body.assignee_id ? String(body.assignee_id) : null;
   if ("due_date" in body) patch.due_date = body.due_date ? String(body.due_date) : null;
+
+  let newAssigneeId: string | null = existingTask.assignee_id;
+  const reassigning = "assignee_id" in body;
+  if (reassigning) {
+    newAssigneeId = body.assignee_id ? String(body.assignee_id) : null;
+    if (newAssigneeId && newAssigneeId !== existingTask.assignee_id) {
+      const { data: member } = await db
+        .from("tenant_users")
+        .select("user_id")
+        .eq("user_id", newAssigneeId)
+        .maybeSingle();
+      if (!member) return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
+    }
+    patch.assignee_id = newAssigneeId;
+    patch.assigned_by_id = newAssigneeId && newAssigneeId !== auth.userId ? auth.userId : null;
+  }
 
   const { data: updated, error } = await db
     .from("tasks")
@@ -135,6 +157,19 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     changes: { patch: { old: existing, new: patch } },
     requestId,
   });
+
+  if (reassigning && newAssigneeId && newAssigneeId !== existingTask.assignee_id && newAssigneeId !== auth.userId) {
+    createNotificationsExcept(auth.userId, [
+      {
+        tenantId: auth.tenantId,
+        userId: newAssigneeId,
+        type: NotificationTypes.TASK_ASSIGNED,
+        title: "New task assigned",
+        message: existingTask.title,
+        link: existingTask.project_id ? `/time-tracking/projects/${existingTask.project_id}` : "/home",
+      },
+    ]);
+  }
 
   log.info({ taskId: id }, "Task updated");
   return apiSuccess(updated);

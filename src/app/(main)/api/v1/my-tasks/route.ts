@@ -10,6 +10,8 @@ import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/ap
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { resolveUserNames } from "@/lib/supabase/queries";
+import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
 import type { TaskStatus, TaskPriority } from "@/types/database";
 
 interface MyTask {
@@ -20,8 +22,10 @@ interface MyTask {
   description: string | null;
   due_date: string | null;
   assignee_id: string | null;
+  assigned_by_id: string | null;
   project_id: string | null;
   lead_id: string | null;
+  deal_id: string | null;
   tenant_id: string;
   is_billable: boolean;
   position: number;
@@ -30,6 +34,7 @@ interface MyTask {
   updated_at: string;
   projects: { id: string; name: string } | null;
   leads: { id: string; first_name: string | null; last_name: string | null } | null;
+  deals: { id: string; name: string } | null;
 }
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
@@ -54,7 +59,7 @@ export async function GET(request: NextRequest) {
 
   let query = db
     .from("tasks")
-    .select("*, projects(id, name), leads(id, first_name, last_name)")
+    .select("*, projects(id, name), leads(id, first_name, last_name), deals(id, name)")
     .eq("assignee_id", auth.userId);
 
   if (statuses.length > 0) query = query.in("status", statuses);
@@ -69,7 +74,14 @@ export async function GET(request: NextRequest) {
     return apiError("DB_ERROR", "Failed to fetch tasks", 500);
   }
 
-  const tasks = (queryResult.data ?? []) as unknown as MyTask[];
+  const rawTasks = (queryResult.data ?? []) as unknown as MyTask[];
+  const nameMap = await resolveUserNames(
+    rawTasks.map((t) => t.assigned_by_id).filter((id): id is string => !!id)
+  );
+  const tasks = rawTasks.map((t) => ({
+    ...t,
+    assigned_by_name: t.assigned_by_id ? nameMap.get(t.assigned_by_id) ?? null : null,
+  }));
   const open = tasks.filter((t) => t.status !== "done");
   const completed = tasks.filter((t) => t.status === "done").slice(0, 10);
 
@@ -112,6 +124,18 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (body.deal_id !== undefined && body.deal_id !== null) {
+    if (typeof body.deal_id !== "string" || !UUID_RE.test(body.deal_id)) {
+      validationErrors.deal_id = ["Must be a valid UUID or null"];
+    }
+  }
+
+  if (body.assignee_id !== undefined && body.assignee_id !== null) {
+    if (typeof body.assignee_id !== "string" || !UUID_RE.test(body.assignee_id)) {
+      validationErrors.assignee_id = ["Must be a valid UUID or null"];
+    }
+  }
+
   if (!valid || Object.keys(validationErrors).length > 0) {
     return apiValidationError(validationErrors);
   }
@@ -129,15 +153,41 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (body.deal_id) {
+    const { data: deal } = await db
+      .from("deals")
+      .select("id")
+      .eq("id", body.deal_id as string)
+      .maybeSingle();
+    if (!deal) {
+      return apiValidationError({ deal_id: ["Deal not found in this tenant"] });
+    }
+  }
+
+  const assigneeId = body.assignee_id ? String(body.assignee_id) : auth.userId;
+  if (assigneeId !== auth.userId) {
+    const { data: member } = await db
+      .from("tenant_users")
+      .select("user_id")
+      .eq("user_id", assigneeId)
+      .maybeSingle();
+    if (!member) {
+      return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
+    }
+  }
+  const assignedById = assigneeId !== auth.userId ? auth.userId : null;
+
   const insert = {
     title: String(body.title).trim(),
     description: body.description ? String(body.description).trim() : null,
     priority: body.priority ? String(body.priority) : "normal",
     due_date: body.due_date ? String(body.due_date) : null,
     lead_id: body.lead_id ? String(body.lead_id) : null,
+    deal_id: body.deal_id ? String(body.deal_id) : null,
     project_id: null,
     status: "todo",
-    assignee_id: auth.userId,
+    assignee_id: assigneeId,
+    assigned_by_id: assignedById,
     is_billable: false,
     position: 0,
   };
@@ -171,6 +221,24 @@ export async function POST(request: NextRequest) {
     }),
   ]);
 
-  log.info({ taskId: task.id }, "Personal task created");
+  if (assignedById) {
+    const link = task.lead_id
+      ? `/leads/${task.lead_id}`
+      : task.deal_id
+        ? `/deals/${task.deal_id}`
+        : "/home";
+    createNotificationsExcept(auth.userId, [
+      {
+        tenantId: auth.tenantId,
+        userId: assigneeId,
+        type: NotificationTypes.TASK_ASSIGNED,
+        title: "New task assigned",
+        message: task.title,
+        link,
+      },
+    ]);
+  }
+
+  log.info({ taskId: task.id, assigneeId }, "Personal task created");
   return apiSuccess(task, 201);
 }

@@ -689,14 +689,19 @@ export interface PersonalTask {
   priority: TaskPriority;
   due_date: string | null;
   assignee_id: string | null;
+  assigned_by_id: string | null;
+  assigned_by_name: string | null;
   project_id: string | null;
   lead_id: string | null;
+  deal_id: string | null;
   is_billable: boolean;
   position: number;
   tags: string[];
   created_at: string;
   updated_at: string;
   leads: { id: string; first_name: string | null; last_name: string | null } | null;
+  deals: { id: string; name: string } | null;
+  projects: { id: string; name: string } | null;
 }
 
 export interface MyTasksResult {
@@ -704,11 +709,36 @@ export interface MyTasksResult {
   done: PersonalTask[];
 }
 
+/** Batch-resolve display names for a set of user IDs (single auth.admin.listUsers() call — no N+1). */
+export async function resolveUserNames(userIds: string[]): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+
+  const supabase = await createServiceClient();
+  const TIMEOUT_MS = 7_000;
+  try {
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS));
+    const result = await Promise.race([
+      supabase.auth.admin.listUsers({ perPage: 1000 }).then((r) => r.data),
+      timeoutPromise,
+    ]);
+    for (const u of result?.users ?? []) {
+      if (!ids.includes(u.id)) continue;
+      const meta = u.user_metadata as Record<string, unknown> | undefined;
+      map.set(u.id, resolveDisplayName(u.email || "", meta));
+    }
+  } catch (err) {
+    console.error("[resolveUserNames] auth.admin.listUsers() failed", err);
+  }
+  return map;
+}
+
 export async function getMyTasks(tenantId: string, userId: string): Promise<MyTasksResult> {
   const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("tasks")
-    .select("*, leads(id, first_name, last_name)")
+    .select("*, leads(id, first_name, last_name), deals(id, name), projects(id, name)")
     .eq("tenant_id", tenantId)
     .eq("assignee_id", userId)
     .order("due_date", { ascending: true, nullsFirst: false })
@@ -716,7 +746,13 @@ export async function getMyTasks(tenantId: string, userId: string): Promise<MyTa
 
   if (error) return { open: [], done: [] };
 
-  const tasks = (data ?? []) as unknown as PersonalTask[];
+  const rawTasks = (data ?? []) as unknown as Omit<PersonalTask, "assigned_by_name">[];
+  const nameMap = await resolveUserNames(rawTasks.map((t) => t.assigned_by_id).filter((id): id is string => !!id));
+  const tasks: PersonalTask[] = rawTasks.map((t) => ({
+    ...t,
+    assigned_by_name: t.assigned_by_id ? nameMap.get(t.assigned_by_id) ?? null : null,
+  }));
+
   return {
     open: tasks.filter((t) => t.status !== "done"),
     done: tasks.filter((t) => t.status === "done").slice(0, 10),
