@@ -267,6 +267,7 @@ export function DashboardShell({
 
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
+  const isItAgency = tenant.industry_id === "it_agency";
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -465,6 +466,87 @@ export function DashboardShell({
 
                 {/* Administration */}
                 <NavSectionHeader label="Administration" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+              </>
+            );
+          })() : isItAgency ? (() => {
+            // Finds a flat industry item by href (Deals/Services/Proposals/Accounts/Contacts are flat)
+            const itItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            const pmGroup = industrySidebarItems.find(
+              (e): e is SidebarGroup => "children" in e && e.id === "project-management"
+            );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+
+                {/* Sales */}
+                <NavSectionHeader label="Sales" />
+                {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+                  <Suspense key="leads-organise-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                      <span className="w-[18px] h-[18px] shrink-0" />
+                      Leads Organise
+                    </div>
+                  }>
+                    <LeadsOrganiseNavGroup
+                      lists={stagingLists}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  </Suspense>
+                )}
+                {navAllowed("/leads") && (
+                  leadLists.length > 0 ? (
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={leadLists}
+                        onNavigate={() => setMobileOpen(false)}
+                        isAdmin={role === "owner" || role === "admin"}
+                      />
+                    </Suspense>
+                  ) : (
+                    renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                  )
+                )}
+                {archiveLists.length > 0 && (
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                )}
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+
+                {/* Revenue */}
+                <NavSectionHeader label="Revenue" />
+                {itItem("/proposals") && renderIndustryEntry(itItem("/proposals")!)}
+                {itItem("/deals") && renderIndustryEntry(itItem("/deals")!)}
+                {itItem("/services") && renderIndustryEntry(itItem("/services")!)}
+
+                {/* Clients */}
+                <NavSectionHeader label="Clients" />
+                {itItem("/accounts") && renderIndustryEntry(itItem("/accounts")!)}
+                {itItem("/contacts") && renderIndustryEntry(itItem("/contacts")!)}
+
+                {/* Delivery */}
+                <NavSectionHeader label="Delivery" />
+                {pmGroup && renderIndustryEntry(pmGroup)}
+
+                {/* Communication */}
+                <NavSectionHeader label="Communication" />
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
+
+                {/* Organization */}
+                <NavSectionHeader label="Organization" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
               </>
             );
