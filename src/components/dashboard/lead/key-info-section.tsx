@@ -203,7 +203,7 @@ export function KeyInfoSection({
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
-                {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
+                {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
               {leadLists && leadLists.length > 0 && onListChange ? (
                 <ListStepper

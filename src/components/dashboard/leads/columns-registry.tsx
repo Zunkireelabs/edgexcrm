@@ -34,6 +34,7 @@ export interface LeadColumnCtx {
   leadLists?: LeadList[];
   onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
   canEditLeads?: boolean;
+  isAdmin?: boolean;
   onStageChange?: (leadId: string, stageId: string) => Promise<void>;
   viewMode?: "trash" | "archived" | "normal";
   onRestore?: (leadId: string) => Promise<void>;
@@ -212,13 +213,13 @@ const STATIC_COLUMNS: LeadColumn[] = [
   // ── type / list (education_consultancy + travel_agency)
   {
     key: "lead_type",
-    label: "List",
+    label: "Stage",
     group: "standard",
     industries: ["education_consultancy", "travel_agency"],
     defaultVisible: true,
     renderTh: () => (
       <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[160px]">
-        List
+        Stage
       </th>
     ),
     renderTd: (lead, ctx) => {
@@ -253,7 +254,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               <MoveToListSelector
                 leadId={lead.id}
                 currentListId={lead.list_id ?? null}
-                lists={ctx.leadLists}
+                lists={ctx.isAdmin ? ctx.leadLists : ctx.leadLists.filter((l) => !l.is_staging && !l.is_archive)}
                 onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
               />
               {ctx.industryId === "education_consultancy" && isInIntake && qualifiedList && (
