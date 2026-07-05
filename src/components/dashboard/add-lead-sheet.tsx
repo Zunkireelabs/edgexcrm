@@ -29,7 +29,7 @@ import {
 import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import type { Branch, PipelineStage, TenantEntity, UserRole } from "@/types/database";
+import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
   PROSPECT_INDUSTRIES,
 } from "@/industries/it-agency/leads/prospect-industries";
@@ -56,6 +56,7 @@ interface AddLeadSheetProps {
   tenantId: string;
   pipelineId?: string;
   stages: PipelineStage[];
+  leadLists?: LeadList[];
   teamMembers: TeamMember[];
   entities?: TenantEntity[];
   entityLabel?: string;
@@ -75,6 +76,7 @@ interface FormData {
   city: string;
   country: string;
   stageId: string;
+  listId: string;
   assignedTo: string;
   entityId: string;
   branchId: string;
@@ -134,6 +136,7 @@ const initialFormData: FormData = {
   city: "",
   country: "",
   stageId: "",
+  listId: "",
   assignedTo: "",
   entityId: "",
   branchId: "",
@@ -210,6 +213,7 @@ export function AddLeadSheet({
   tenantId,
   pipelineId,
   stages,
+  leadLists = [],
   teamMembers,
   entities = [],
   entityLabel = "Entity",
@@ -294,6 +298,7 @@ export function AddLeadSheet({
         phone: formData.phone || null,
         city: formData.city || null,
         country: formData.country || null,
+        list_id: formData.listId || undefined,
         stage_id: formData.stageId || undefined,
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
@@ -446,29 +451,22 @@ export function AddLeadSheet({
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
-            Pipeline Stage
+            Stage
           </Label>
           <Select
-            value={formData.stageId}
-            onValueChange={(v) => updateField("stageId", v)}
+            value={formData.listId}
+            onValueChange={(v) => updateField("listId", v)}
             disabled={isSubmitting}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Select stage" />
             </SelectTrigger>
             <SelectContent>
-              {stages
-                .filter((s) => !s.is_terminal)
-                .sort((a, b) => a.position - b.position)
-                .map((stage) => (
-                  <SelectItem key={stage.id} value={stage.id}>
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="h-2 w-2 rounded-full"
-                        style={{ backgroundColor: stage.color }}
-                      />
-                      {stage.name}
-                    </div>
+              {leadLists
+                .filter((l) => !l.is_staging && !l.is_archive)
+                .map((list) => (
+                  <SelectItem key={list.id} value={list.id}>
+                    {list.name}
                   </SelectItem>
                 ))}
             </SelectContent>

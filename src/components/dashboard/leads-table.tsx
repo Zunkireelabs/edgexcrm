@@ -1965,6 +1965,7 @@ export function LeadsTable({
           onOpenChange={setAddLeadOpen}
           tenantId={tenantId}
           stages={stages}
+          leadLists={leadLists}
           teamMembers={assignableMembers ?? teamMembers}
           entities={entities}
           entityLabel={entityLabel}
