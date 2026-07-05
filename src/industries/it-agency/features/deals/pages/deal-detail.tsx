@@ -578,7 +578,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Unassigned</SelectItem>
-                  {teamMembers.map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.email}</SelectItem>)}
+                  {teamMembers.map((m) => <SelectItem key={m.user_id} value={m.user_id}>{m.name || m.email.split("@")[0]}</SelectItem>)}
                 </SelectContent>
               </Select>
             ) : (

@@ -389,7 +389,7 @@ export function KeyInfoSection({
               <SectionHeading>Company</SectionHeading>
               {lead.owner_id && (() => {
                 const owner = teamMembers.find((m) => m.user_id === lead.owner_id);
-                return owner ? <InfoRow label="Lead Owner" value={owner.email} /> : null;
+                return owner ? <InfoRow label="Lead Owner" value={owner.name || owner.email.split("@")[0]} /> : null;
               })()}
               {lead.salutation && (
                 <InfoRow label="Salutation" value={lead.salutation} />

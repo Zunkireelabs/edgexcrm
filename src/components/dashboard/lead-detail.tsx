@@ -413,7 +413,7 @@ export function LeadDetail({
                       .filter((m) => m.canEditLeads !== false)
                       .map((m) => (
                         <SelectItem key={m.user_id} value={m.user_id}>
-                          {m.email} ({m.position_name ?? m.role})
+                          {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
                         </SelectItem>
                       ))}
                   </SelectContent>

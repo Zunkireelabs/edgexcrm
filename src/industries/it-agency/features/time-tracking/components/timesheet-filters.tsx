@@ -167,7 +167,7 @@ export function TimesheetFilters({
                 <SelectItem value="_all">All members</SelectItem>
                 {teamMembers.map((m) => (
                   <SelectItem key={m.user_id} value={m.user_id}>
-                    {m.email}
+                    {m.name || m.email.split("@")[0]}
                   </SelectItem>
                 ))}
               </SelectContent>
