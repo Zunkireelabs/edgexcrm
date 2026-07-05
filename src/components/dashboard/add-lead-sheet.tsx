@@ -41,6 +41,8 @@ import {
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
+import { COUNTRY_CODES } from "@/lib/country-codes";
+import { parseStoredPhone } from "@/lib/phone-utils";
 
 interface TeamMember {
   user_id: string;
@@ -104,22 +106,6 @@ interface FormErrors {
   phone?: string;
   general?: string;
 }
-
-const COUNTRIES = [
-  "Nepal",
-  "India",
-  "United States",
-  "United Kingdom",
-  "Canada",
-  "Australia",
-  "Germany",
-  "France",
-  "Japan",
-  "China",
-  "Singapore",
-  "UAE",
-  "Other",
-];
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -289,6 +275,9 @@ export function AddLeadSheet({
     setErrors({});
 
     try {
+      const { dialCode } = parseStoredPhone(formData.phone || "");
+      const derivedCountry = COUNTRY_CODES.find((cc) => cc.dialCode === dialCode)?.label || null;
+
       const payload = {
         tenant_id: tenantId,
         pipeline_id: pipelineId || undefined,
@@ -297,7 +286,7 @@ export function AddLeadSheet({
         email: formData.email || null,
         phone: formData.phone || null,
         city: formData.city || null,
-        country: formData.country || null,
+        country: derivedCountry,
         list_id: formData.listId || undefined,
         stage_id: formData.stageId || undefined,
         assigned_to: formData.assignedTo || null,
@@ -407,40 +396,17 @@ export function AddLeadSheet({
   );
 
   const renderLocationRow = () => (
-    <div className="grid grid-cols-2 gap-4">
-      <div className="space-y-1.5">
-        <Label htmlFor="city" className="text-xs text-gray-600">
-          City
-        </Label>
-        <Input
-          id="city"
-          value={formData.city}
-          onChange={(e) => updateField("city", e.target.value)}
-          placeholder="Kathmandu"
-          disabled={isSubmitting}
-        />
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="country" className="text-xs text-gray-600">
-          Country
-        </Label>
-        <Select
-          value={formData.country}
-          onValueChange={(v) => updateField("country", v)}
-          disabled={isSubmitting}
-        >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="Select country" />
-          </SelectTrigger>
-          <SelectContent>
-            {COUNTRIES.map((c) => (
-              <SelectItem key={c} value={c}>
-                {c}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+    <div className="space-y-1.5">
+      <Label htmlFor="city" className="text-xs text-gray-600">
+        City
+      </Label>
+      <Input
+        id="city"
+        value={formData.city}
+        onChange={(e) => updateField("city", e.target.value)}
+        placeholder="Kathmandu"
+        disabled={isSubmitting}
+      />
     </div>
   );
 
@@ -860,29 +826,6 @@ export function AddLeadSheet({
               disabled={isSubmitting}
             />
           </div>
-        </div>
-
-        {/* Country */}
-        <div className="space-y-1.5">
-          <Label htmlFor="country" className="text-xs text-gray-600">
-            Country
-          </Label>
-          <Select
-            value={formData.country}
-            onValueChange={(v) => updateField("country", v)}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select country" />
-            </SelectTrigger>
-            <SelectContent>
-              {COUNTRIES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {c}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
         </div>
       </div>
 
