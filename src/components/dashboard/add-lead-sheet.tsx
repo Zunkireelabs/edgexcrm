@@ -228,8 +228,8 @@ export function AddLeadSheet({
         stageId: defaultStage?.id || "",
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
-        // Non-admins locked to their branch; admins default to active branch from switcher
-        branchId: (!isAdmin && userBranchId) ? userBranchId : (selectedBranchId || ""),
+        // Always seed from creator's own branch first; fall back to active branch switcher
+        branchId: userBranchId || selectedBranchId || "",
       });
       setErrors({});
       setIsDirty(false);
@@ -472,14 +472,14 @@ export function AddLeadSheet({
         <div className="space-y-1.5">
           <Label htmlFor="branchId" className="text-xs text-gray-600">
             Branch
-            {!isAdmin && userBranchId && (
+            {userBranchId && (
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
           <Select
             value={formData.branchId || "__none__"}
             onValueChange={(v) => updateField("branchId", v === "__none__" ? "" : v)}
-            disabled={isSubmitting || (!isAdmin && !!userBranchId)}
+            disabled={isSubmitting || !!userBranchId}
           >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="No branch" />
