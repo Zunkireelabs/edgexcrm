@@ -3,11 +3,13 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Pencil, X, Check, Loader2, Trash2 } from "lucide-react";
+import { ArrowLeft, Pencil, X, Check, Loader2, Trash2, Plus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -23,9 +25,49 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { formatMoney } from "@/lib/travel/currency";
 import { AddProposalSheet } from "@/industries/it-agency/features/proposals/components/add-proposal-sheet";
+import { DealContactPicker } from "../components/deal-contact-picker";
 import type { Deal, DealStage, Proposal, UserRole } from "@/types/database";
+
+type DealContactRole = "primary" | "technical" | "billing" | "other" | null;
+
+interface ContactLink {
+  role: DealContactRole;
+  contacts: {
+    id: string;
+    first_name: string;
+    last_name: string;
+    email: string | null;
+    title: string | null;
+    status: string;
+  } | null;
+}
+
+function rolePill(role: DealContactRole) {
+  if (!role) {
+    return <span className="text-xs text-muted-foreground">—</span>;
+  }
+  const cfg: Record<string, { label: string; className: string }> = {
+    primary: { label: "Primary", className: "bg-green-100 text-green-800 border-green-200" },
+    technical: { label: "Technical", className: "bg-blue-100 text-blue-800 border-blue-200" },
+    billing: { label: "Billing", className: "bg-amber-100 text-amber-800 border-amber-200" },
+    other: { label: "Other", className: "bg-muted text-muted-foreground border-border" },
+  };
+  const c = cfg[role] ?? cfg.other;
+  return (
+    <Badge variant="outline" className={`text-xs ${c.className}`}>
+      {c.label}
+    </Badge>
+  );
+}
 
 interface DealDetailPageProps {
   dealId: string;
@@ -65,6 +107,13 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [proposals, setProposals] = useState<Proposal[]>([]);
   const [addProposalOpen, setAddProposalOpen] = useState(false);
 
+  // Contacts section
+  const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [removeContactTarget, setRemoveContactTarget] = useState<ContactLink | null>(null);
+  const [removingContact, setRemovingContact] = useState(false);
+  const [changingRoleFor, setChangingRoleFor] = useState<string | null>(null);
+
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -87,8 +136,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
       fetch(`/api/v1/deals/${dealId}`).then((r) => r.json()),
       fetch("/api/v1/deal-stages").then((r) => r.json()),
       fetch("/api/v1/team").then((r) => r.json()),
+      fetch(`/api/v1/deals/${dealId}/contacts`).then((r) => r.json()),
     ])
-      .then(([dealRes, stagesRes, teamRes]) => {
+      .then(([dealRes, stagesRes, teamRes, contactsRes]) => {
         if (dealRes.error) {
           toast.error("Deal not found");
           router.push("/deals");
@@ -97,10 +147,70 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
         setDeal(dealRes.data as Deal);
         setStages(stagesRes.data ?? []);
         setTeamMembers(teamRes.data ?? []);
+        setContactLinks(contactsRes.data ?? []);
       })
       .catch(() => toast.error("Failed to load deal"))
       .finally(() => setLoading(false));
   }, [dealId, router]);
+
+  function handleContactLinked(link: {
+    role: string | null;
+    contacts: { id: string; first_name: string; last_name: string; email: string | null; title: string | null; status: string } | null;
+  }) {
+    const normalizedRole = (link.role || null) as DealContactRole;
+    setContactLinks((prev) => [
+      ...prev,
+      { role: normalizedRole, contacts: link.contacts ?? null },
+    ]);
+  }
+
+  async function handleChangeRole(contactId: string, newRole: DealContactRole) {
+    setChangingRoleFor(contactId);
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}/contacts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contact_id: contactId, role: newRole }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        const msg = json.error?.message ?? "Failed to update role";
+        toast.error(msg);
+        return;
+      }
+      setContactLinks((prev) =>
+        prev.map((cl) =>
+          cl.contacts?.id === contactId
+            ? { ...cl, role: (json.data?.role ?? newRole) as DealContactRole }
+            : cl
+        )
+      );
+      toast.success("Role updated");
+    } finally {
+      setChangingRoleFor(null);
+    }
+  }
+
+  async function handleRemoveContact() {
+    if (!removeContactTarget?.contacts) return;
+    setRemovingContact(true);
+    try {
+      const res = await fetch(
+        `/api/v1/deals/${dealId}/contacts?contact_id=${removeContactTarget.contacts.id}`,
+        { method: "DELETE" }
+      );
+      if (!res.ok) throw new Error("Failed to remove link");
+      setContactLinks((prev) =>
+        prev.filter((cl) => cl.contacts?.id !== removeContactTarget.contacts!.id)
+      );
+      toast.success("Contact removed");
+    } catch {
+      toast.error("Failed to remove contact link");
+    } finally {
+      setRemovingContact(false);
+      setRemoveContactTarget(null);
+    }
+  }
 
   function refetchProposals() {
     fetch(`/api/v1/proposals?deal_id=${dealId}`)
@@ -516,6 +626,165 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
           </div>
         )}
       </div>
+
+      {/* Contacts section */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="font-semibold flex items-center gap-2">
+            <Users className="h-4 w-4 text-muted-foreground" />
+            Contacts
+          </h2>
+          {isAdmin && (
+            <Button size="sm" onClick={() => setContactPickerOpen(true)}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Add contact
+            </Button>
+          )}
+        </div>
+
+        <Card className="border shadow-none">
+          <CardContent className="p-0">
+            {contactLinks.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground text-sm">
+                No contacts linked.
+                {isAdmin && (
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="ml-1 p-0 h-auto"
+                    onClick={() => setContactPickerOpen(true)}
+                  >
+                    Add the first one.
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {contactLinks.map((cl) => {
+                  if (!cl.contacts) return null;
+                  const c = cl.contacts;
+                  const fullName = `${c.first_name} ${c.last_name}`.trim();
+                  const isChanging = changingRoleFor === c.id;
+                  return (
+                    <div
+                      key={c.id}
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 group/row"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/contacts/${c.id}`}
+                              className="text-sm font-medium hover:underline"
+                            >
+                              {fullName}
+                            </Link>
+                            {c.status === "inactive" && (
+                              <Badge variant="secondary" className="text-xs">
+                                Inactive
+                              </Badge>
+                            )}
+                          </div>
+                          {c.title && (
+                            <p className="text-xs text-muted-foreground">{c.title}</p>
+                          )}
+                        </div>
+                        {rolePill(cl.role)}
+                      </div>
+                      {isAdmin && (
+                        <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
+                          {isChanging ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                          ) : (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2 text-xs text-muted-foreground"
+                                >
+                                  Change role
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                {(["primary", "technical", "billing", "other"] as const).map(
+                                  (r) => (
+                                    <DropdownMenuItem
+                                      key={r}
+                                      onClick={() => handleChangeRole(c.id, r)}
+                                      className={cl.role === r ? "font-medium" : ""}
+                                    >
+                                      {r.charAt(0).toUpperCase() + r.slice(1)}
+                                    </DropdownMenuItem>
+                                  )
+                                )}
+                                {cl.role !== null && (
+                                  <>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem
+                                      onClick={() => handleChangeRole(c.id, null)}
+                                    >
+                                      Clear role
+                                    </DropdownMenuItem>
+                                  </>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 px-2 text-xs text-muted-foreground hover:text-destructive"
+                            onClick={() => setRemoveContactTarget(cl)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Contact picker dialog */}
+      <DealContactPicker
+        dealId={dealId}
+        accountId={deal.account_id}
+        open={contactPickerOpen}
+        onOpenChange={setContactPickerOpen}
+        onSuccess={handleContactLinked}
+      />
+
+      {/* Remove contact confirmation */}
+      <Dialog
+        open={Boolean(removeContactTarget)}
+        onOpenChange={(o) => !o && setRemoveContactTarget(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Remove Contact</DialogTitle>
+            <DialogDescription>
+              Remove{" "}
+              {removeContactTarget?.contacts &&
+                `${removeContactTarget.contacts.first_name} ${removeContactTarget.contacts.last_name}`}{" "}
+              from this deal? The contact record is not affected.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRemoveContactTarget(null)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={removingContact} onClick={handleRemoveContact}>
+              {removingContact && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Remove
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Add Proposal sheet */}
       <AddProposalSheet
