@@ -882,6 +882,7 @@ export interface DealStage {
   is_default: boolean;
   is_terminal: boolean;
   terminal_type: "won" | "lost" | null;
+  probability: number;
   created_at: string;
   updated_at: string;
 }
@@ -902,6 +903,7 @@ export interface Deal {
   priority: "low" | "medium" | "high" | null;
   description: string | null;
   status: "open" | "won" | "lost";
+  probability: number | null;
   last_activity_at: string;
   created_by: string | null;
   created_at: string;

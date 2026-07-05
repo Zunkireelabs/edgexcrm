@@ -43,6 +43,13 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   });
   if (!valid) return apiValidationError(errors);
 
+  if (body.probability !== undefined && body.probability !== null) {
+    const n = Number(body.probability);
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return apiValidationError({ probability: ["Must be an integer 0–100"] });
+    }
+  }
+
   const db = await scopedClient(auth);
 
   const { data: existing } = await db
@@ -58,6 +65,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   if (body.name !== undefined) updatePayload.name = body.name;
   if (body.color !== undefined) updatePayload.color = body.color;
+  if (body.probability !== undefined) updatePayload.probability = Number(body.probability);
 
   if (body.is_terminal !== undefined) {
     updatePayload.is_terminal = body.is_terminal;

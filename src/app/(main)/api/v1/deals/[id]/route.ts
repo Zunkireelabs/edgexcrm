@@ -6,6 +6,7 @@ import {
   apiForbidden,
   apiNotFound,
   apiError,
+  apiValidationError,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -79,8 +80,15 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     if (!member) return apiError("NOT_FOUND", "Owner not found in this tenant", 404);
   }
 
+  if (body.probability !== undefined && body.probability !== null) {
+    const n = Number(body.probability);
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return apiValidationError({ probability: ["Must be an integer 0–100"] });
+    }
+  }
+
   const patch: Record<string, unknown> = {};
-  const updatable = ["name", "amount", "currency", "close_date", "owner_id", "account_id", "primary_contact_id", "deal_type", "priority", "description"];
+  const updatable = ["name", "amount", "currency", "close_date", "owner_id", "account_id", "primary_contact_id", "deal_type", "priority", "description", "probability"];
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
   }

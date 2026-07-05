@@ -80,6 +80,7 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
   const [draftDealType, setDraftDealType] = useState("");
   const [draftPriority, setDraftPriority] = useState("");
   const [draftDescription, setDraftDescription] = useState("");
+  const [draftProbability, setDraftProbability] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -124,6 +125,7 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
     setDraftDealType(deal.deal_type ?? "");
     setDraftPriority(deal.priority ?? "");
     setDraftDescription(deal.description ?? "");
+    setDraftProbability(deal.probability !== null && deal.probability !== undefined ? String(deal.probability) : "");
     setEditing(true);
   }
 
@@ -145,6 +147,9 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
       if (draftDealType !== (deal.deal_type ?? "")) patch.deal_type = draftDealType || null;
       if (draftPriority !== (deal.priority ?? "")) patch.priority = draftPriority || null;
       if (draftDescription !== (deal.description ?? "")) patch.description = draftDescription || null;
+      if (draftProbability !== (deal.probability !== null && deal.probability !== undefined ? String(deal.probability) : "")) {
+        patch.probability = draftProbability === "" ? null : Number(draftProbability);
+      }
 
       if (Object.keys(patch).length === 0) {
         setEditing(false);
@@ -166,6 +171,22 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
       toast.error("Failed to save deal");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function resetProbability() {
+    try {
+      const res = await fetch(`/api/v1/deals/${dealId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ probability: null }),
+      });
+      if (!res.ok) throw new Error("Failed to reset");
+      const { data } = await res.json();
+      setDeal(data as Deal);
+      toast.success("Probability reset to stage default");
+    } catch {
+      toast.error("Failed to reset probability");
     }
   }
 
@@ -293,6 +314,39 @@ export function DealDetailPage({ dealId, role }: DealDetailPageProps) {
                   ? formatMoney(deal.amount, deal.currency)
                   : "—"}
               </p>
+            )}
+          </div>
+
+          {/* Probability */}
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wide">Probability</Label>
+            {editing ? (
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="1"
+                value={draftProbability}
+                onChange={(e) => setDraftProbability(e.target.value)}
+                placeholder={currentStage ? String(currentStage.probability) : "50"}
+              />
+            ) : (
+              <div className="flex items-center gap-2">
+                <p className="text-sm">
+                  {deal.probability !== null
+                    ? `${deal.probability}% · override`
+                    : `${currentStage?.probability ?? 50}% · from stage`}
+                </p>
+                {isAdmin && deal.probability !== null && (
+                  <button
+                    type="button"
+                    onClick={resetProbability}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Reset to stage default
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
