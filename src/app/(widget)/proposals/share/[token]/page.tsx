@@ -49,6 +49,7 @@ export default async function PublicProposalPage({ params }: PageProps) {
 
   const row = data as unknown as {
     tenant_id: string;
+    id: string;
     proposal_number: string;
     title: string;
     status: string;
@@ -63,6 +64,20 @@ export default async function PublicProposalPage({ params }: PageProps) {
     deals: { name: string } | null;
     proposal_line_items: ProposalLineItem[];
   };
+
+  // Fire-and-forget — must never block or fail the render. Counts every load,
+  // including bots/crawlers/prefetch and the owner's own preview (v1 caveat, refined in a later phase).
+  void svc
+    .from("proposal_views")
+    .insert({
+      tenant_id: row.tenant_id,
+      proposal_id: row.id,
+      ip,
+      user_agent: h.get("user-agent") || null,
+    })
+    .then(({ error }) => {
+      if (error) console.error("proposal view insert failed", error);
+    });
 
   const { data: tenantData } = await svc
     .from("tenants")

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check, GripVertical } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check, GripVertical, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -274,6 +274,7 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
   const [deleting, setDeleting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [duplicating, setDuplicating] = useState(false);
+  const [viewStats, setViewStats] = useState<{ count: number; first_viewed_at: string | null; last_viewed_at: string | null } | null>(null);
 
   const lineItemSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -311,6 +312,13 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
       .then(({ data }) => setServices(data ?? []))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    fetch(`/api/v1/proposals/${proposalId}/views`)
+      .then((r) => r.json())
+      .then(({ data }) => setViewStats(data ?? null))
+      .catch(() => {});
+  }, [proposalId]);
 
   const previewTotals = useMemo(() => {
     const type = draftDiscountType === "none" ? null : draftDiscountType;
@@ -578,6 +586,14 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
                 {proposal.status}
               </span>
             </div>
+            {isAdmin && viewStats && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <Eye className="h-3 w-3" />
+                {viewStats.count > 0
+                  ? `Viewed ${viewStats.count}× · first ${new Date(viewStats.first_viewed_at!).toLocaleDateString()} · last ${new Date(viewStats.last_viewed_at!).toLocaleDateString()}`
+                  : "Not viewed yet"}
+              </p>
+            )}
             {isAdmin ? (
               <Input
                 value={draftTitle}
