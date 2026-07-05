@@ -719,6 +719,15 @@ export interface ProjectContact {
   created_at: string;
 }
 
+export type DealContactRole = "primary" | "technical" | "billing" | "other";
+
+export interface DealContact {
+  deal_id: string;
+  contact_id: string;
+  role: DealContactRole | null;
+  created_at: string;
+}
+
 export interface Position {
   id: string;
   tenant_id: string;
