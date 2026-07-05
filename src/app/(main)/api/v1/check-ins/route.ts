@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("lead_notes")
     .select(`
-      id, user_id, content, created_at, user_email,
+      id, user_id, content, created_at, user_email, checked_out_at,
       leads!inner(id, first_name, last_name, email, phone, assigned_to, tenant_id, deleted_at,
         pipeline_stages(name, color),
         pipelines(name)
@@ -40,22 +40,25 @@ export async function GET(request: NextRequest) {
     .order("created_at", { ascending: false })
     .limit(50);
 
-  // Scope the history by lead-visibility level, keyed on who performed the check-in
-  // (lead_notes.user_id):
-  //   all  → every tenant check-in (owner/admin)
-  //   team → check-ins by the manager's branch roster (§4.1: no branch ⇒ own-only)
-  //   own  → only the caller's own check-ins (lead-executive, counselor, etc.)
+  // Scope check-in history by role/position:
+  //   owner/admin (leadScope "all")     → every tenant check-in across all branches
+  //   branch-manager (leadScope "team") → branch members' check-ins; §4.1: no branch ⇒ own-only
+  //   lead-executive (leadScope "own")  → branch members' check-ins (elevated same as branch-manager);
+  //                                       §4.1: no branch ⇒ own-only
+  //   any other "own"                   → only the caller's own check-ins
   const scope = auth.permissions.leadScope;
-  if (scope === "own") {
-    query = query.eq("user_id", auth.userId);
-  } else if (scope === "team") {
+  const isLeadExecutive = auth.positionSlug === "lead-executive";
+
+  if (scope === "team" || (scope === "own" && isLeadExecutive)) {
     if (auth.branchId) {
       const performerIds = Array.from(new Set([auth.userId, ...auth.branchMemberIds]));
       query = query.in("user_id", performerIds);
     } else {
-      // §4.1 guard: team-scope with no branch must never see all — fall back to own-only
+      // §4.1 guard: no branch ⇒ fall back to own-only
       query = query.eq("user_id", auth.userId);
     }
+  } else if (scope === "own") {
+    query = query.eq("user_id", auth.userId);
   }
   // scope === "all" → no additional filter (owner/admin see everything)
 
@@ -97,6 +100,7 @@ export async function GET(request: NextRequest) {
       stage_color: lead?.pipeline_stages?.color || null,
       pipeline_name: lead?.pipelines?.name || null,
       checked_in_at: note.created_at,
+      checked_out_at: (note as unknown as Record<string, unknown>).checked_out_at as string | null ?? null,
       checked_in_by: note.user_email,
       checked_in_by_id: note.user_id,
       note: note.content,

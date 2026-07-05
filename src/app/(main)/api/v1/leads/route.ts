@@ -132,6 +132,9 @@ export async function GET(request: NextRequest) {
     query = query.is("converted_at", null);
   }
 
+  // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
+  query = query.not("tags", "cs", '{"other"}');
+
   // Apply list filter
   if (resolvedListId) {
     query = query.eq("list_id", resolvedListId);
