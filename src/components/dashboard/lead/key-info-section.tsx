@@ -160,12 +160,9 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* ── STATUS ─────────────────────────────────────────────────── */}
-          <SectionHeading>Status</SectionHeading>
-
-          {/* Stage */}
+          {/* Status (pipeline stage) */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || canEdit) ? (
               <Select value={stageId || ""} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
