@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Loader2, Trash2, Plus, X, Printer, Share2, Copy, Check, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,6 +26,21 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { formatMoney } from "@/lib/travel/currency";
 import { computeProposalTotals } from "../lib/totals";
 import type { Proposal, ProposalLineItem, Service, UserRole } from "@/types/database";
@@ -161,6 +176,74 @@ function ShareDialog({
   );
 }
 
+function SortableLineItem({
+  line,
+  currency,
+  onUpdate,
+  onRemove,
+}: {
+  line: ProposalLineItem;
+  currency: string;
+  onUpdate: (lineId: string, patch: Record<string, unknown>) => void;
+  onRemove: (lineId: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: line.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className="grid grid-cols-[1.5rem_1fr_5rem_7rem_7rem_2.5rem] items-center gap-2 px-3 py-2 text-sm bg-card"
+    >
+      <button
+        className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground shrink-0 touch-none"
+        {...attributes}
+        {...listeners}
+        aria-label="Drag to reorder"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+      <div className="min-w-0">
+        <p className="font-medium truncate">{line.name}</p>
+        {line.description && <p className="text-xs text-muted-foreground truncate">{line.description}</p>}
+      </div>
+      <Input
+        type="number"
+        min="0"
+        step="0.5"
+        defaultValue={line.quantity}
+        className="h-8 text-right w-20 ml-auto"
+        onBlur={(e) => {
+          const v = Number(e.target.value);
+          if (Number.isFinite(v) && v >= 0 && v !== line.quantity) onUpdate(line.id, { quantity: v });
+        }}
+      />
+      <Input
+        type="number"
+        min="0"
+        step="0.01"
+        defaultValue={line.unit_price}
+        className="h-8 text-right w-24 ml-auto"
+        onBlur={(e) => {
+          const v = Number(e.target.value);
+          if (Number.isFinite(v) && v >= 0 && v !== line.unit_price) onUpdate(line.id, { unit_price: v });
+        }}
+      />
+      <p className="text-right font-medium tabular-nums">{formatMoney(line.line_total, currency)}</p>
+      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 justify-self-end" onClick={() => onRemove(line.id)}>
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps) {
   const router = useRouter();
   const isAdmin = role === "owner" || role === "admin";
@@ -190,6 +273,11 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [duplicating, setDuplicating] = useState(false);
+
+  const lineItemSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   const loadProposal = useCallback(() => {
     return fetch(`/api/v1/proposals/${proposalId}`)
@@ -391,6 +479,57 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
     }
   }
 
+  async function persistLineOrder(changed: { id: string; newIndex: number }[]) {
+    if (changed.length === 0) return;
+    try {
+      const results = await Promise.all(
+        changed.map(({ id, newIndex }) =>
+          fetch(`/api/v1/proposals/${proposalId}/line-items/${id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sort_order: newIndex }),
+          })
+        )
+      );
+      if (results.some((r) => !r.ok)) throw new Error("Failed to save order");
+    } catch {
+      toast.error("Failed to save order — reloading");
+      await loadProposal();
+    }
+  }
+
+  function handleLineDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setLineItems((prev) => {
+      const oldIdx = prev.findIndex((l) => l.id === active.id);
+      const newIdx = prev.findIndex((l) => l.id === over.id);
+      if (oldIdx < 0 || newIdx < 0) return prev;
+      // Compare each line's pre-drop sort_order to its new index before relabeling —
+      // arrayMove only reorders references, so `moved[i].sort_order` is still stale here.
+      const moved = arrayMove(prev, oldIdx, newIdx);
+      const changed = moved
+        .map((line, index) => ({ id: line.id, newIndex: index, changed: line.sort_order !== index }))
+        .filter((x) => x.changed);
+      void persistLineOrder(changed);
+      return moved.map((line, index) => ({ ...line, sort_order: index }));
+    });
+  }
+
+  async function handleDuplicate() {
+    setDuplicating(true);
+    try {
+      const res = await fetch(`/api/v1/proposals/${proposalId}/duplicate`, { method: "POST" });
+      if (!res.ok) throw new Error("Failed to duplicate");
+      const { data } = await res.json();
+      toast.success("Proposal duplicated");
+      router.push(`/proposals/${data.id}`);
+    } catch {
+      toast.error("Failed to duplicate proposal");
+      setDuplicating(false);
+    }
+  }
+
   async function handleDelete() {
     setDeleting(true);
     try {
@@ -463,6 +602,16 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
                 Share
               </Button>
             )}
+            {isAdmin && (
+              <Button size="sm" variant="outline" onClick={handleDuplicate} disabled={duplicating}>
+                {duplicating ? (
+                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                ) : (
+                  <Copy className="h-4 w-4 mr-1" />
+                )}
+                Duplicate
+              </Button>
+            )}
             <Button size="sm" variant="outline" asChild>
               <Link href={`/proposals/${proposalId}/view`} target="_blank">
                 <Printer className="h-4 w-4 mr-1" />
@@ -528,73 +677,53 @@ export function ProposalDetailPage({ proposalId, role }: ProposalDetailPageProps
 
         {lineItems.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4 text-center">No line items yet.</p>
+        ) : isAdmin ? (
+          <div className="rounded-lg border overflow-hidden">
+            <div className="grid grid-cols-[1.5rem_1fr_5rem_7rem_7rem_2.5rem] items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground uppercase tracking-wide">
+              <span />
+              <span>Name</span>
+              <span className="text-right">Qty</span>
+              <span className="text-right">Unit Price</span>
+              <span className="text-right">Line Total</span>
+              <span />
+            </div>
+            <DndContext sensors={lineItemSensors} collisionDetection={closestCenter} onDragEnd={handleLineDragEnd}>
+              <SortableContext items={lineItems.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                <div className="divide-y divide-border">
+                  {lineItems.map((line) => (
+                    <SortableLineItem
+                      key={line.id}
+                      line={line}
+                      currency={proposal.currency}
+                      onUpdate={updateLine}
+                      onRemove={removeLine}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          </div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">
-                  <th className="px-3 py-2 text-left font-medium">Name</th>
-                  <th className="px-3 py-2 text-right font-medium w-24">Qty</th>
-                  <th className="px-3 py-2 text-right font-medium w-32">Unit Price</th>
-                  <th className="px-3 py-2 text-right font-medium w-32">Line Total</th>
-                  {isAdmin && <th className="px-3 py-2 w-10" />}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {lineItems.map((line) => (
-                  <tr key={line.id}>
-                    <td className="px-3 py-2">
-                      <p className="font-medium">{line.name}</p>
-                      {line.description && <p className="text-xs text-muted-foreground">{line.description}</p>}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {isAdmin ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.5"
-                          defaultValue={line.quantity}
-                          className="h-8 text-right w-20 ml-auto"
-                          onBlur={(e) => {
-                            const v = Number(e.target.value);
-                            if (Number.isFinite(v) && v >= 0 && v !== line.quantity) updateLine(line.id, { quantity: v });
-                          }}
-                        />
-                      ) : (
-                        line.quantity
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {isAdmin ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          defaultValue={line.unit_price}
-                          className="h-8 text-right w-28 ml-auto"
-                          onBlur={(e) => {
-                            const v = Number(e.target.value);
-                            if (Number.isFinite(v) && v >= 0 && v !== line.unit_price) updateLine(line.id, { unit_price: v });
-                          }}
-                        />
-                      ) : (
-                        formatMoney(line.unit_price, proposal.currency)
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium tabular-nums">
-                      {formatMoney(line.line_total, proposal.currency)}
-                    </td>
-                    {isAdmin && (
-                      <td className="px-3 py-2 text-right">
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => removeLine(line.id)}>
-                          <X className="h-3.5 w-3.5" />
-                        </Button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="rounded-lg border overflow-hidden">
+            <div className="grid grid-cols-[1fr_5rem_7rem_7rem] items-center gap-2 border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground uppercase tracking-wide">
+              <span>Name</span>
+              <span className="text-right">Qty</span>
+              <span className="text-right">Unit Price</span>
+              <span className="text-right">Line Total</span>
+            </div>
+            <div className="divide-y divide-border">
+              {lineItems.map((line) => (
+                <div key={line.id} className="grid grid-cols-[1fr_5rem_7rem_7rem] items-center gap-2 px-3 py-2 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium truncate">{line.name}</p>
+                    {line.description && <p className="text-xs text-muted-foreground truncate">{line.description}</p>}
+                  </div>
+                  <p className="text-right">{line.quantity}</p>
+                  <p className="text-right">{formatMoney(line.unit_price, proposal.currency)}</p>
+                  <p className="text-right font-medium tabular-nums">{formatMoney(line.line_total, proposal.currency)}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
