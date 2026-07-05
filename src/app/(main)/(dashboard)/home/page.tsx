@@ -38,6 +38,7 @@ export default async function HomePage() {
 
   return (
     <HomeContent
+      userId={userId}
       userName={userName}
       schedule={schedule}
       tasks={tasks}

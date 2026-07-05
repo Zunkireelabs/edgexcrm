@@ -661,6 +661,9 @@ export interface Task {
   is_billable: boolean;
   position: number;
   assignee_id: string | null;
+  assigned_by_id: string | null;
+  lead_id: string | null;
+  deal_id: string | null;
   due_date: string | null;
   priority: TaskPriority;
   tags: string[];

@@ -9,9 +9,10 @@ import { MyLeadsCard } from "./my-leads-card";
 import { InboxSnapshotCard } from "./inbox-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem } from "@/lib/supabase/queries";
-import type { Lead, TaskPriority, TaskStatus } from "@/types/database";
+import type { Lead, TaskStatus } from "@/types/database";
 
 interface HomeContentProps {
+  userId: string;
   userName: string;
   schedule: ScheduleActivity[];
   tasks: MyTasksResult;
@@ -22,6 +23,7 @@ interface HomeContentProps {
 }
 
 export function HomeContent({
+  userId,
   userName,
   schedule,
   tasks,
@@ -58,18 +60,14 @@ export function HomeContent({
     }
   }, [router]);
 
-  const handleAdd = useCallback(async (newTask: { title: string; due_date: string | null; priority: TaskPriority }) => {
-    const res = await fetch("/api/v1/my-tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newTask),
-    });
-    if (res.ok) {
-      const { data } = await res.json();
-      setOpenTasks((prev) => [data as PersonalTask, ...prev]);
-      router.refresh();
+  const handleCreated = useCallback((task: Record<string, unknown>) => {
+    // Only surface it here if it's actually assigned to me — assigning a task to
+    // someone else from Home shouldn't add it to MY open-tasks list.
+    if (task.assignee_id === userId) {
+      setOpenTasks((prev) => [task as unknown as PersonalTask, ...prev]);
     }
-  }, [router]);
+    router.refresh();
+  }, [router, userId]);
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-6">
@@ -80,9 +78,10 @@ export function HomeContent({
         <TasksCard
           initialOpen={openTasks}
           initialDone={doneTasks}
+          currentUserId={userId}
           onComplete={handleComplete}
           onDelete={handleDelete}
-          onAdd={handleAdd}
+          onCreated={handleCreated}
         />
         <MyLeadsCard leads={myLeads} />
         <InboxSnapshotCard snapshot={inboxSnapshot} />

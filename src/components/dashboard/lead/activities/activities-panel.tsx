@@ -24,6 +24,7 @@ import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
 import { NotesTab, type NotesTabRef } from "../notes-tab";
 import { ChecklistCard } from "../management-panel";
+import { TaskList } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
@@ -391,15 +392,32 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         />
       )}
 
-      {/* Tasks tab — same checklist as the right-rail panel, in sync via shared state */}
+      {/* Tasks tab — assignable Tasks (real `tasks` table) + the lightweight checklist below,
+          in sync with the right-rail panel via shared state. */}
       {activeTab === "tasks" && (
-        <ChecklistCard
-          leadId={leadId}
-          checklists={checklists}
-          isAdmin={isAdmin}
-          canEdit={canEdit}
-          onChecklistsChange={onChecklistsChange}
-        />
+        <div className="space-y-4">
+          <Card className="shadow-none rounded-lg">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Assigned Tasks
+              </p>
+              <TaskList
+                fetchUrl={`/api/v1/leads/${leadId}/tasks`}
+                currentUserId={currentUserId}
+                context={{ leadId }}
+                emptyLabel="No tasks assigned for this lead yet."
+              />
+            </CardContent>
+          </Card>
+
+          <ChecklistCard
+            leadId={leadId}
+            checklists={checklists}
+            isAdmin={isAdmin}
+            canEdit={canEdit}
+            onChecklistsChange={onChecklistsChange}
+          />
+        </div>
       )}
 
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}

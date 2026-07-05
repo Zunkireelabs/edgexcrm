@@ -1,29 +1,29 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import { X, CheckCircle2, Circle, ClipboardList } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { PRIORITY_CONFIG } from "@/industries/it-agency/features/project-board/components/priority-pill";
 import { NewTaskRow } from "./new-task-row";
+import { TaskRow } from "@/components/dashboard/tasks/task-row";
 import type { PersonalTask } from "@/lib/supabase/queries";
-import type { TaskPriority } from "@/types/database";
 import { toLocalDateString } from "@/lib/date";
 
 interface TasksCardProps {
   initialOpen: PersonalTask[];
   initialDone: PersonalTask[];
+  currentUserId: string;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onAdd: (task: { title: string; due_date: string | null; priority: TaskPriority }) => Promise<void>;
+  onCreated: (task: Record<string, unknown>) => void;
 }
 
 export function TasksCard({
   initialOpen,
   initialDone,
+  currentUserId,
   onComplete,
   onDelete,
-  onAdd,
+  onCreated,
 }: TasksCardProps) {
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -86,91 +86,9 @@ export function TasksCard({
         )}
 
         <div className="pt-2">
-          <NewTaskRow onAdd={onAdd} />
+          <NewTaskRow onCreated={onCreated} currentUserId={currentUserId} />
         </div>
       </CardContent>
     </Card>
-  );
-}
-
-function TaskRow({
-  task,
-  today,
-  completed = false,
-  onComplete,
-  onDelete,
-}: {
-  task: PersonalTask;
-  today: string;
-  completed?: boolean;
-  onComplete: (id: string) => Promise<void>;
-  onDelete: (id: string) => Promise<void>;
-}) {
-  const [acting, setActing] = useState(false);
-  const isOverdue = !completed && task.due_date && task.due_date < today;
-  const priorityCfg = PRIORITY_CONFIG[task.priority as TaskPriority] ?? PRIORITY_CONFIG.normal;
-  const leadName = task.leads
-    ? [task.leads.first_name, task.leads.last_name].filter(Boolean).join(" ")
-    : null;
-
-  async function handleComplete() {
-    setActing(true);
-    try { await onComplete(task.id); } finally { setActing(false); }
-  }
-
-  async function handleDelete() {
-    setActing(true);
-    try { await onDelete(task.id); } finally { setActing(false); }
-  }
-
-  return (
-    <div className="group flex items-start gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors">
-      <button
-        type="button"
-        onClick={completed ? undefined : handleComplete}
-        disabled={acting || completed}
-        className="mt-0.5 shrink-0 text-muted-foreground hover:text-green-600 transition-colors disabled:opacity-50"
-        title={completed ? "Completed" : "Mark done"}
-      >
-        {completed ? (
-          <CheckCircle2 className="h-4 w-4 text-green-500" />
-        ) : (
-          <Circle className="h-4 w-4" />
-        )}
-      </button>
-
-      <div className="flex-1 min-w-0">
-        <p className={`text-sm font-medium truncate ${completed ? "line-through text-muted-foreground" : "text-gray-900"}`}>
-          {task.title}
-        </p>
-        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-          {task.due_date && (
-            <span className={`text-xs ${isOverdue ? "text-red-600 font-medium" : "text-muted-foreground"}`}>
-              {isOverdue ? "⚠ " : ""}{task.due_date === today ? "Today" : task.due_date}
-            </span>
-          )}
-          <span
-            className={`inline-flex items-center px-2 py-0 rounded-full text-[11px] font-medium border ${priorityCfg.cls}`}
-          >
-            {priorityCfg.label}
-          </span>
-          {leadName && task.leads && (
-            <Link href={`/leads/${task.leads.id}`} className="text-xs text-blue-600 hover:underline truncate">
-              {leadName}
-            </Link>
-          )}
-        </div>
-      </div>
-
-      <button
-        type="button"
-        onClick={handleDelete}
-        disabled={acting}
-        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 text-muted-foreground hover:text-red-500 mt-0.5"
-        title="Delete task"
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-    </div>
   );
 }
