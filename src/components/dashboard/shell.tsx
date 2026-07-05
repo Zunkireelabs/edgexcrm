@@ -214,6 +214,7 @@ interface DashboardShellProps {
   tenant: Tenant;
   role: string;
   positionName?: string | null;
+  positionSlug?: string | null;
   formConfigs?: FormSummary[];
   industrySidebarItems?: readonly SidebarEntry[];
   allowedNavKeys?: string[] | null;
@@ -233,6 +234,7 @@ export function DashboardShell({
   tenant,
   role,
   positionName,
+  positionSlug,
   industrySidebarItems = [],
   allowedNavKeys = null,
   branches = [],
@@ -348,6 +350,11 @@ export function DashboardShell({
     }
     if (entry.hideForBroadScope && (role === "owner" || role === "admin" || leadScope === "team")) {
       return null;
+    }
+    if (entry.allowedPositions && entry.allowedPositions.length > 0) {
+      const isAdminTier = role === "owner" || role === "admin";
+      const hasPosition = positionSlug != null && entry.allowedPositions.includes(positionSlug);
+      if (!isAdminTier && !hasPosition) return null;
     }
     return renderNavItem({
       href: entry.href,

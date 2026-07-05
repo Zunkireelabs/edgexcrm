@@ -104,6 +104,7 @@ export default async function DashboardLayout({
             tenant={tenantData.tenant}
             role={tenantData.role}
             positionName={tenantData.positionName}
+            positionSlug={tenantData.positionSlug}
             formConfigs={formConfigs.map((f) => ({ name: f.name, slug: f.slug }))}
             industrySidebarItems={industrySidebarItems}
             allowedNavKeys={allowedNavKeys}
