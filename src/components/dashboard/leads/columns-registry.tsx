@@ -88,22 +88,9 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
   );
 }
 
-const TAG_CYCLE = ["student", "parent", "other"] as const;
-type LeadTag = typeof TAG_CYCLE[number];
-
-const TAG_STYLE: Record<LeadTag, string> = {
-  student: "bg-blue-100 text-blue-700 hover:bg-blue-200",
-  parent: "bg-green-100 text-green-700 hover:bg-green-200",
-  other: "bg-purple-100 text-purple-700 hover:bg-purple-200",
-};
-
 function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
-  const currentTag: LeadTag = lead.tags?.includes("parent")
-    ? "parent"
-    : lead.tags?.includes("other")
-    ? "other"
-    : "student";
-  const nextTag = TAG_CYCLE[(TAG_CYCLE.indexOf(currentTag) + 1) % TAG_CYCLE.length];
+  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
+  const nextTag = currentTag === "student" ? "parent" : "student";
 
   async function toggle() {
     const newTags = [nextTag];
@@ -123,10 +110,14 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${TAG_STYLE[currentTag]}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+        currentTag === "parent"
+          ? "bg-green-100 text-green-700 hover:bg-green-200"
+          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+      }`}
       title={`Click to change to ${nextTag}`}
     >
-      {currentTag.charAt(0).toUpperCase() + currentTag.slice(1)}
+      {currentTag === "parent" ? "Parent" : "Student"}
     </button>
   );
 }

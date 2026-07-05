@@ -458,7 +458,7 @@ function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: str
 
   return (
     <div className="flex gap-1.5">
-      {["student", "parent", "other"].map((tag) => (
+      {["student", "parent"].map((tag) => (
         <button
           key={tag}
           disabled={updating}
@@ -467,8 +467,6 @@ function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: str
             tags.includes(tag)
               ? tag === "parent"
                 ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                : tag === "other"
-                ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
                 : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
               : "bg-gray-100 text-gray-400 hover:bg-gray-200"
           }`}
