@@ -70,7 +70,7 @@ export function HomeContent({
   }, [router, userId]);
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-6">
+    <div className="px-4 py-6">
       <GreetingHeader userName={userName} />
 
       <div className="space-y-4">
