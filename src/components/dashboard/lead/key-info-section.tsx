@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
+import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
@@ -283,6 +284,9 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+
+          {/* Lead Collaborators — admin/owner only */}
+          {isAdmin && <CollaboratorsBlock leadId={lead.id} />}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
