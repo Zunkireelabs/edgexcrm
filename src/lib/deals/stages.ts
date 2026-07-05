@@ -3,12 +3,12 @@ import { scopedClient } from "@/lib/supabase/scoped";
 type ScopedClient = Awaited<ReturnType<typeof scopedClient>>;
 
 export const DEFAULT_DEAL_STAGES = [
-  { name: "Qualification",  slug: "qualification",  position: 0, color: "#3b82f6", is_default: true,  is_terminal: false, terminal_type: null },
-  { name: "Needs Analysis", slug: "needs-analysis", position: 1, color: "#8b5cf6", is_default: false, is_terminal: false, terminal_type: null },
-  { name: "Proposal",       slug: "proposal",       position: 2, color: "#f59e0b", is_default: false, is_terminal: false, terminal_type: null },
-  { name: "Negotiation",    slug: "negotiation",    position: 3, color: "#f97316", is_default: false, is_terminal: false, terminal_type: null },
-  { name: "Closed Won",     slug: "closed-won",     position: 4, color: "#22c55e", is_default: false, is_terminal: true,  terminal_type: "won" as const },
-  { name: "Closed Lost",    slug: "closed-lost",    position: 5, color: "#ef4444", is_default: false, is_terminal: true,  terminal_type: "lost" as const },
+  { name: "Qualification",  slug: "qualification",  position: 0, color: "#3b82f6", is_default: true,  is_terminal: false, terminal_type: null, probability: 10 },
+  { name: "Needs Analysis", slug: "needs-analysis", position: 1, color: "#8b5cf6", is_default: false, is_terminal: false, terminal_type: null, probability: 30 },
+  { name: "Proposal",       slug: "proposal",       position: 2, color: "#f59e0b", is_default: false, is_terminal: false, terminal_type: null, probability: 50 },
+  { name: "Negotiation",    slug: "negotiation",    position: 3, color: "#f97316", is_default: false, is_terminal: false, terminal_type: null, probability: 70 },
+  { name: "Closed Won",     slug: "closed-won",     position: 4, color: "#22c55e", is_default: false, is_terminal: true,  terminal_type: "won" as const, probability: 100 },
+  { name: "Closed Lost",    slug: "closed-lost",    position: 5, color: "#ef4444", is_default: false, is_terminal: true,  terminal_type: "lost" as const, probability: 0 },
 ] as const;
 
 /**
