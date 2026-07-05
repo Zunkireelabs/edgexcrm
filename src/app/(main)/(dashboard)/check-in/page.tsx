@@ -45,6 +45,7 @@ export default async function CheckInRoute() {
     branchId: tenantData.branchId,
     positionSlug: tenantData.positionSlug,
     industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
   });
 
   const canAssignAny =

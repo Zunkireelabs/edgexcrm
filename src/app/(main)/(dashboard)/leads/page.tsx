@@ -180,6 +180,7 @@ export default async function LeadsPage({
     branchId: tenantData.branchId,
     positionSlug: tenantData.positionSlug,
     industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
   });
 
   // Render kanban board when requested and list has a pipeline
