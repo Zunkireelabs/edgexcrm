@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { GreetingHeader } from "./greeting-header";
+import { AttentionSummary } from "./attention-summary";
 import { ScheduleCard } from "./schedule-card";
 import { TasksCard } from "./tasks-card";
 import { MyLeadsCard } from "./my-leads-card";
@@ -72,6 +73,8 @@ export function HomeContent({
   return (
     <div className="px-4 py-6">
       <GreetingHeader userName={userName} />
+
+      <AttentionSummary openTasks={openTasks} schedule={schedule} inboxSnapshot={inboxSnapshot} />
 
       <div className="space-y-4">
         <ScheduleCard schedule={schedule} />
