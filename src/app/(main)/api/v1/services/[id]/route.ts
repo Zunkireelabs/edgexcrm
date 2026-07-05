@@ -64,9 +64,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   });
   if (!valid) return apiValidationError(errors);
 
+  if (body.name !== undefined && String(body.name).trim() === "") {
+    return apiValidationError({ name: ["Name cannot be empty"] });
+  }
+
   if (
     body.billing_type !== undefined &&
-    body.billing_type !== null &&
     !BILLING_TYPES.includes(body.billing_type as (typeof BILLING_TYPES)[number])
   ) {
     return apiValidationError({ billing_type: [`Must be one of: ${BILLING_TYPES.join(", ")}`] });
@@ -77,6 +80,13 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     const num = Number(body[field]);
     if (!Number.isFinite(num) || num < 0) {
       return apiValidationError({ [field]: ["Must be a non-negative number"] });
+    }
+  }
+
+  if (body.sort_order !== undefined) {
+    const so = Number(body.sort_order);
+    if (!Number.isInteger(so) || so < 0) {
+      return apiValidationError({ sort_order: ["Must be a non-negative integer"] });
     }
   }
 
@@ -136,7 +146,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   return apiSuccess(updated);
 }
 
-// TODO(SOW): guard delete once services are referenced by proposals
+// Hard delete is safe: proposal line items snapshot service fields at creation time,
+// and services.id is referenced with ON DELETE SET NULL.
 export async function DELETE(_request: NextRequest, { params }: Props) {
   const { id } = await params;
   const requestId = crypto.randomUUID();
