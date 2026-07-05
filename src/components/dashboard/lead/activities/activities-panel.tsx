@@ -153,7 +153,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       if (res.ok) {
         const json = await res.json();
         const apps = (json.data ?? []) as { id: string; notes: string | null; created_at: string; updated_at: string | null; institution_name: string | null }[];
-        setAppNotes(apps.filter((a) => a.notes && a.notes.trim()));
+        setAppNotes(apps.filter((a): a is typeof apps[number] & { notes: string } => Boolean(a.notes && a.notes.trim())));
       }
     } catch {
       // silent — non-critical
