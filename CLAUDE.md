@@ -399,6 +399,7 @@ These bypass RLS internally since `tenant_users` policies can't reference `tenan
 - **Soft deletes** on leads — `deleted_at` column; all queries must filter `WHERE deleted_at IS NULL`
 - **Idempotency** — `idempotency_key` on leads + `integration_idempotency` table
 - **Multi-pipeline** — tenants can have multiple pipelines with custom stages
+- **Lead Lists = "Stage" in UI** — the `lead_lists` table / `list_id` field is called "Stage" in the UI (renamed from "List" as of 2026-07-05). The pipeline stages Pre-qualified, Qualified, Prospects, Applications are the user-facing "Stages". Admin-only lists (Migration QC, Existing Leads edgeX, New Leads, NEB-10k-remaining) are hidden from non-admin/owner users in stage dropdowns. Always use the label "Stage" in any new UI that references `lead_lists`.
 
 ### Migrations
 

@@ -132,6 +132,9 @@ export async function GET(request: NextRequest) {
     query = query.is("converted_at", null);
   }
 
+  // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
+  query = query.not("tags", "cs", '{"other"}');
+
   // Apply list filter
   if (resolvedListId) {
     query = query.eq("list_id", resolvedListId);
@@ -165,7 +168,20 @@ export async function GET(request: NextRequest) {
     }
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
-    query = query.in("assigned_to", auth.branchMemberIds);
+    // Include leads assigned to branch members AND leads shared into this branch via lead_branches
+    const { data: sharedRows } = await supabase
+      .from("lead_branches")
+      .select("lead_id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("branch_id", scope.branchId);
+    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
+    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
+      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
+    } else if (sharedLeadIds.length > 0) {
+      query = query.in("id", sharedLeadIds);
+    } else {
+      query = query.in("assigned_to", auth.branchMemberIds);
+    }
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;

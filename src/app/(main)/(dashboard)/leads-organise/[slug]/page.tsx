@@ -141,6 +141,7 @@ export default async function LeadsOrganiseCockpitPage({
     branchId: tenantData.branchId,
     positionSlug: tenantData.positionSlug,
     industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
   });
 
   return (

@@ -123,7 +123,7 @@ export function DealsWorkspace({
   const ownerOptions = useMemo(() => [
     { value: "all", label: "All owners" },
     { value: "unassigned", label: "Unassigned" },
-    ...teamMembers.map((m) => ({ value: m.user_id, label: m.email })),
+    ...teamMembers.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
   ], [teamMembers]);
 
   const typeOptions = useMemo(() => {

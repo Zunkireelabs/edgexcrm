@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
 
 export async function getCurrentUserTenant(): Promise<{
@@ -104,7 +104,10 @@ export async function getLeads(
     // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
     // and .in("assigned_to", []) yields zero leads. Use the service client to resolve real members.
     const svc = await createServiceClient();
-    memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
+    [memberIds, sharedIds] = await Promise.all([
+      branchMemberIds(svc, tenantId, scope.branchId),
+      leadIdsForBranch(svc, tenantId, scope.branchId).then((ids) => ids.slice(0, 300)),
+    ]);
   }
 
   // Factory applied on every range page so all filters + stable sort are consistent.
@@ -135,14 +138,19 @@ export async function getLeads(
         q = q.eq("assigned_to", scope.userId);
       }
     } else if (memberIds !== null) {
-      // Include unassigned leads in this branch too (e.g. a walk-in just created via
-      // Check-In, before anyone claims it) — .in("assigned_to", memberIds) alone never
-      // matches NULL, so an unassigned branch lead would otherwise be invisible here.
+      // Build OR parts:
+      // 1. Leads assigned to any branch member
+      // 2. Unassigned leads whose origin branch is this branch (e.g. walk-ins from Check-In)
+      // 3. Leads shared INTO this branch via lead_branches (cross-branch sends)
+      const orParts: string[] = [];
       if (memberIds.length > 0) {
-        q = q.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
-      } else {
-        q = q.is("assigned_to", null).eq("branch_id", scope!.branchId as string);
+        orParts.push(`assigned_to.in.(${memberIds.join(",")})`);
       }
+      orParts.push(`and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
+      if (sharedIds && sharedIds.length > 0) {
+        orParts.push(`id.in.(${sharedIds.join(",")})`);
+      }
+      q = q.or(orParts.join(","));
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
@@ -689,14 +697,19 @@ export interface PersonalTask {
   priority: TaskPriority;
   due_date: string | null;
   assignee_id: string | null;
+  assigned_by_id: string | null;
+  assigned_by_name: string | null;
   project_id: string | null;
   lead_id: string | null;
+  deal_id: string | null;
   is_billable: boolean;
   position: number;
   tags: string[];
   created_at: string;
   updated_at: string;
   leads: { id: string; first_name: string | null; last_name: string | null } | null;
+  deals: { id: string; name: string } | null;
+  projects: { id: string; name: string } | null;
 }
 
 export interface MyTasksResult {
@@ -704,11 +717,36 @@ export interface MyTasksResult {
   done: PersonalTask[];
 }
 
+/** Batch-resolve display names for a set of user IDs (single auth.admin.listUsers() call — no N+1). */
+export async function resolveUserNames(userIds: string[]): Promise<Map<string, string>> {
+  const ids = Array.from(new Set(userIds.filter(Boolean)));
+  const map = new Map<string, string>();
+  if (ids.length === 0) return map;
+
+  const supabase = await createServiceClient();
+  const TIMEOUT_MS = 7_000;
+  try {
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), TIMEOUT_MS));
+    const result = await Promise.race([
+      supabase.auth.admin.listUsers({ perPage: 1000 }).then((r) => r.data),
+      timeoutPromise,
+    ]);
+    for (const u of result?.users ?? []) {
+      if (!ids.includes(u.id)) continue;
+      const meta = u.user_metadata as Record<string, unknown> | undefined;
+      map.set(u.id, resolveDisplayName(u.email || "", meta));
+    }
+  } catch (err) {
+    console.error("[resolveUserNames] auth.admin.listUsers() failed", err);
+  }
+  return map;
+}
+
 export async function getMyTasks(tenantId: string, userId: string): Promise<MyTasksResult> {
   const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("tasks")
-    .select("*, leads(id, first_name, last_name)")
+    .select("*, leads(id, first_name, last_name), deals(id, name), projects(id, name)")
     .eq("tenant_id", tenantId)
     .eq("assignee_id", userId)
     .order("due_date", { ascending: true, nullsFirst: false })
@@ -716,7 +754,13 @@ export async function getMyTasks(tenantId: string, userId: string): Promise<MyTa
 
   if (error) return { open: [], done: [] };
 
-  const tasks = (data ?? []) as unknown as PersonalTask[];
+  const rawTasks = (data ?? []) as unknown as Omit<PersonalTask, "assigned_by_name">[];
+  const nameMap = await resolveUserNames(rawTasks.map((t) => t.assigned_by_id).filter((id): id is string => !!id));
+  const tasks: PersonalTask[] = rawTasks.map((t) => ({
+    ...t,
+    assigned_by_name: t.assigned_by_id ? nameMap.get(t.assigned_by_id) ?? null : null,
+  }));
+
   return {
     open: tasks.filter((t) => t.status !== "done"),
     done: tasks.filter((t) => t.status === "done").slice(0, 10),

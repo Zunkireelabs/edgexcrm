@@ -27,7 +27,7 @@ export function filterAssignableMembers<T extends { branch_id?: string | null }>
  * Non-chain positions fall back to the original branch filter.
  */
 export function filterAssignableMembersByChain<
-  T extends { branch_id?: string | null; position_slug?: string | null }
+  T extends { branch_id?: string | null; position_slug?: string | null; user_id?: string }
 >(
   members: T[],
   opts: {
@@ -36,11 +36,16 @@ export function filterAssignableMembersByChain<
     branchId: string | null;
     positionSlug: string | null;
     industryId: string | null;
+    selfUserId?: string | null;
   },
 ): T[] {
   if (opts.baseTier === "owner" || opts.baseTier === "admin") return members;
   const sameBranch = (m: T) => (m.branch_id ?? null) === (opts.branchId ?? null);
-  if (opts.leadScope === "team") return members.filter(sameBranch); // branch manager
+  if (opts.leadScope === "team") {
+    // Branch managers route leads — exclude themselves from the assignable list
+    const branchMembers = members.filter(sameBranch);
+    return opts.selfUserId ? branchMembers.filter((m) => m.user_id !== opts.selfUserId) : branchMembers;
+  }
   const isChain =
     opts.industryId === "education_consultancy" &&
     opts.positionSlug != null &&

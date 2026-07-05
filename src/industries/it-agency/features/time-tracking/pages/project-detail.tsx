@@ -36,6 +36,8 @@ import {
 import { ProjectStatusBadge } from "../components/status-badge";
 import { ProjectForm } from "../../accounts/components/project-form";
 import { TaskRow } from "../components/task-row";
+import { AssigneePicker } from "../../project-board/components/assignee-picker";
+import type { TeamMember } from "../../project-board/hooks/use-projects";
 import { ProjectContactPicker } from "../../crm-contacts/components/project-contact-picker";
 import { calculateBillableMinutes, calculateBillableAmount } from "../lib/totals";
 import { formatMinutes } from "../hooks/use-time-entries";
@@ -85,6 +87,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
 
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [approvedEntries, setApprovedEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [editProjectOpen, setEditProjectOpen] = useState(false);
@@ -92,6 +95,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
   // Inline new-task form
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string | null>(null);
   const [savingTask, setSavingTask] = useState(false);
 
   // Contacts section
@@ -107,8 +111,9 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
       fetch(`/api/v1/projects/${projectId}/tasks`).then((r) => r.json()),
       fetch(`/api/v1/projects/${projectId}/contacts`).then((r) => r.json()),
       fetch(`/api/v1/time-entries?project_id=${projectId}&approval_status=approved`).then((r) => r.json()),
+      fetch("/api/v1/team").then((r) => r.json()),
     ])
-      .then(([projRes, tasksRes, contactsRes, entriesRes]) => {
+      .then(([projRes, tasksRes, contactsRes, entriesRes, teamRes]) => {
         if (projRes.error) {
           toast.error("Project not found");
           router.push("/accounts");
@@ -118,6 +123,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
         setTasks(tasksRes.data ?? []);
         setContactLinks(contactsRes.data ?? []);
         setApprovedEntries(entriesRes.data ?? []);
+        setTeam(teamRes.data ?? []);
       })
       .catch(() => toast.error("Failed to load project"))
       .finally(() => setLoading(false));
@@ -131,13 +137,14 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
       const res = await fetch(`/api/v1/projects/${projectId}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTaskTitle.trim() }),
+        body: JSON.stringify({ title: newTaskTitle.trim(), assignee_id: newTaskAssigneeId }),
       });
       if (!res.ok) throw new Error("Failed to create task");
       const { data } = await res.json();
       toast.success("Task added");
       setTasks((prev) => [...prev, data as Task]);
       setNewTaskTitle("");
+      setNewTaskAssigneeId(null);
       setAddingTask(false);
     } catch {
       toast.error("Failed to create task");
@@ -453,6 +460,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
                     key={task.id}
                     task={task}
                     isAdmin={isAdmin}
+                    team={team}
                     onUpdate={handleTaskUpdated}
                     onDelete={handleTaskDeleted}
                   />
@@ -473,6 +481,11 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
                         required
                       />
                     </div>
+                    <AssigneePicker
+                      assigneeId={newTaskAssigneeId}
+                      team={team}
+                      onChange={setNewTaskAssigneeId}
+                    />
                     <Button type="submit" size="sm" disabled={savingTask || !newTaskTitle.trim()}>
                       {savingTask && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                       Add
@@ -484,6 +497,7 @@ export function ProjectDetailPage({ role, projectId }: ProjectDetailPageProps) {
                       onClick={() => {
                         setAddingTask(false);
                         setNewTaskTitle("");
+                        setNewTaskAssigneeId(null);
                       }}
                     >
                       Cancel

@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
+import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
@@ -160,12 +161,9 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* ── STATUS ─────────────────────────────────────────────────── */}
-          <SectionHeading>Status</SectionHeading>
-
-          {/* Stage */}
+          {/* Status (pipeline stage) */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || canEdit) ? (
               <Select value={stageId || ""} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
@@ -203,7 +201,7 @@ export function KeyInfoSection({
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
-                {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
+                {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
               {leadLists && leadLists.length > 0 && onListChange ? (
                 <ListStepper
@@ -286,6 +284,9 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+
+          {/* Lead Collaborators — admin/owner only */}
+          {isAdmin && <CollaboratorsBlock leadId={lead.id} />}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
@@ -389,7 +390,7 @@ export function KeyInfoSection({
               <SectionHeading>Company</SectionHeading>
               {lead.owner_id && (() => {
                 const owner = teamMembers.find((m) => m.user_id === lead.owner_id);
-                return owner ? <InfoRow label="Lead Owner" value={owner.email} /> : null;
+                return owner ? <InfoRow label="Lead Owner" value={owner.name || owner.email.split("@")[0]} /> : null;
               })()}
               {lead.salutation && (
                 <InfoRow label="Salutation" value={lead.salutation} />

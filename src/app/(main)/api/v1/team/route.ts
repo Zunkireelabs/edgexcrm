@@ -14,7 +14,7 @@ import {
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
-export async function GET() {
+export async function GET(request: Request) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({
     requestId,
@@ -24,10 +24,17 @@ export async function GET() {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+
+  // Flat task-assignment model: any tenant member may resolve the roster to pick a
+  // task assignee, regardless of lead-assignment permissions. `minimal=1` returns
+  // only {user_id, name} — no role/position/hourly-rate — so it's safe to skip the
+  // canSeeNav/canAssignLeads gate below for this reduced projection.
+  const minimal = new URL(request.url).searchParams.get("minimal") === "1";
+
   // The Org Structure page needs /team nav; the lead assignee dropdowns ALSO read this
   // roster, so a member who can assign leads may fetch it even without the /team nav item
   // (e.g. a Lead TeleCaller whose nav omits /team but has canAssignLeads).
-  if (!canSeeNav(auth.permissions, "/team") && !auth.permissions.canAssignLeads) {
+  if (!minimal && !canSeeNav(auth.permissions, "/team") && !auth.permissions.canAssignLeads) {
     return apiForbidden();
   }
 
@@ -67,6 +74,14 @@ export async function GET() {
     userMap.set(u.id, u.email || "");
     const meta = u.user_metadata as Record<string, unknown> | undefined;
     nameMap.set(u.id, (meta?.name ?? meta?.full_name ?? null) as string | null);
+  }
+
+  if (minimal) {
+    const roster = members.map((m) => ({
+      user_id: m.user_id,
+      name: nameMap.get(m.user_id) || userMap.get(m.user_id) || "Unknown",
+    }));
+    return apiSuccess(roster);
   }
 
   const enriched = members.map((m) => {

@@ -121,12 +121,12 @@ export function WorkspaceHeader({
 
   const ownerOptions: FilterOption[] = [
     { value: ALL_SENTINEL, label: "All owners" },
-    ...team.map((m) => ({ value: m.user_id, label: m.email })),
+    ...team.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
   ];
 
   const assigneeOptions: FilterOption[] = [
     { value: ALL_SENTINEL, label: "All assignees" },
-    ...team.map((m) => ({ value: m.user_id, label: m.email })),
+    ...team.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
   ];
 
   const availableChips = filters.showCancelled

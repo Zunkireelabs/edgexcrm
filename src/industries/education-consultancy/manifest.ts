@@ -32,8 +32,7 @@ export const manifest: IndustryManifest = {
     // Operations section
     { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },
     { featureId: FEATURES.CLASSES, href: "/classes", label: "Classes", icon: "BookOpen" },
-    // Contacts sidebar item removed — /contacts redirects to /leads?list=prospects now that lead-lists is active.
-    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck" },
+    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck", allowedPositions: ["lead-executive", "branch-manager"] },
     { featureId: FEATURES.FOLLOW_UPS, href: "/follow-ups", label: "Follow-ups", icon: "Repeat2", hideForBroadScope: true },
     // Marketing section
     { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },

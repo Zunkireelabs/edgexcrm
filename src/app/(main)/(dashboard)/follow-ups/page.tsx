@@ -109,6 +109,7 @@ export default async function FollowUpsPage() {
     branchId: tenantData.branchId,
     positionSlug: tenantData.positionSlug,
     industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
   });
 
   const accessibleLists = (leadListsRaw as LeadList[]).filter((l) =>

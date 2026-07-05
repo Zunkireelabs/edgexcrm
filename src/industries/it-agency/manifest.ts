@@ -7,6 +7,7 @@ import { projectBoardMeta } from "./features/project-board/meta";
 import { dealsMeta } from "./features/deals/meta";
 import { servicesMeta } from "./features/services/meta";
 import { proposalsMeta } from "./features/proposals/meta";
+import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -19,6 +20,7 @@ export const manifest: IndustryManifest = {
     { meta: dealsMeta },
     { meta: servicesMeta },
     { meta: proposalsMeta },
+    { meta: leadListsMeta },
   ],
   sidebar: [
     {

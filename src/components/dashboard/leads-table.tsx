@@ -243,7 +243,7 @@ export function LeadsTable({
   const isAdmin = role === "admin" || role === "owner";
   // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
   // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
-  const canCreateLead = canEditLeads ?? role !== "viewer";
+  const canCreateLead = isAdmin || isTeamScoped;
   // Same position-first gate for inline row edits (stage change, list move).
   const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
@@ -994,6 +994,7 @@ export function LeadsTable({
         ),
       leadLists: leadLists.length > 0 ? leadLists : undefined,
       canEditLeads: canEditRows,
+      isAdmin,
       // Inline stage change from the table (normal view only). Optimistic + revert,
       // mirroring onListMove. stage_id is editable by non-admins server-side.
       onStageChange:
@@ -1810,10 +1811,10 @@ export function LeadsTable({
             <DialogTitle>
               {moveTargetIsArchive
                 ? `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`
-                : `Move ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to list`}
+                : `Move ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to stage`}
             </DialogTitle>
             <DialogDescription>
-              Select a target list. Leads will be moved out of their current list.
+              Select a target stage. Leads will be moved out of their current stage.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
@@ -1823,9 +1824,10 @@ export function LeadsTable({
               </SelectTrigger>
               <SelectContent>
                 {(() => {
-                  const pipeline = leadLists.filter((l) => !l.is_staging && !l.is_archive);
-                  const staging  = leadLists.filter((l) => l.is_staging);
-                  const archived = leadLists.filter((l) => l.is_archive);
+                  const visibleLists = isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const pipeline = visibleLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const staging  = visibleLists.filter((l) => l.is_staging);
+                  const archived = visibleLists.filter((l) => l.is_archive);
                   return (
                     <>
                       {pipeline.length > 0 && (
@@ -1963,6 +1965,7 @@ export function LeadsTable({
           onOpenChange={setAddLeadOpen}
           tenantId={tenantId}
           stages={stages}
+          leadLists={leadLists}
           teamMembers={assignableMembers ?? teamMembers}
           entities={entities}
           entityLabel={entityLabel}

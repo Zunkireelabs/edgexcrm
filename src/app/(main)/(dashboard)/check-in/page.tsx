@@ -12,6 +12,15 @@ export default async function CheckInRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
+
+  const { baseTier } = tenantData.permissions;
+  const isAllowedRole =
+    baseTier === "owner" ||
+    baseTier === "admin" ||
+    tenantData.positionSlug === "lead-executive" ||
+    tenantData.positionSlug === "branch-manager";
+  if (!isAllowedRole) redirect("/dashboard");
+
   if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
   const serviceClient = await createServiceClient();
@@ -36,6 +45,7 @@ export default async function CheckInRoute() {
     branchId: tenantData.branchId,
     positionSlug: tenantData.positionSlug,
     industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
   });
 
   const canAssignAny =
@@ -48,6 +58,14 @@ export default async function CheckInRoute() {
     tenantData.permissions.leadScope === "own" &&
     !!tenantData.permissions.canAssignLeads;
 
+  // "Meet with" dropdown: admins/owners see all members; branch-scoped users see only their branch.
+  const isAdminTier =
+    tenantData.permissions.baseTier === "owner" ||
+    tenantData.permissions.baseTier === "admin";
+  const branchMembers = isAdminTier || !tenantData.branchId
+    ? teamMembers
+    : teamMembers.filter((m) => m.branch_id === tenantData.branchId);
+
   return (
     <div className="flex flex-col h-full min-h-0">
       <CheckInPage
@@ -55,6 +73,7 @@ export default async function CheckInRoute() {
         pipelines={pipelines}
         stages={stages}
         teamMembers={assignableMembers}
+        allBranchMembers={branchMembers}
         industryId={tenantData.tenant.industry_id ?? ""}
         canAssignAny={canAssignAny}
         canAssignOwnCheckIns={canAssignOwnCheckIns}
