@@ -435,7 +435,11 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
       const newLeadId = json.data?.id;
       if (newLeadId) {
-        const checkInRes = await fetch(`/api/v1/leads/${newLeadId}/check-in`, { method: "POST" });
+        const checkInRes = await fetch(`/api/v1/leads/${newLeadId}/check-in`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ reason: notes.trim() || undefined }),
+        });
         if (checkInRes.ok) {
           toast.success("Lead added and checked in");
         } else {
@@ -946,8 +950,15 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
               <div className="flex-1 overflow-y-auto p-3 pt-2 space-y-1">
                 {checkIns.map((record) => {
                   const checkedInByName = memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by;
-                  const noteContent = record.note?.replace(/^\[CHECK-IN\]\s*/i, "").trim();
+                  const noteContent = (() => {
+                    const raw = record.note || "";
+                    const dashIdx = raw.indexOf(" — ");
+                    return dashIdx !== -1 ? raw.slice(dashIdx + 3).trim() : "";
+                  })();
                   const canAssignThis = canAssignAny || record.checked_in_by_id === currentUserId;
+                  // Don't show checked-in-by person as "Meet with" — treat as unset
+                  const meetWithId = record.assigned_to && record.assigned_to !== record.checked_in_by_id ? record.assigned_to : null;
+                  const meetWithName = meetWithId ? (record.assigned_to_name || memberNameById.get(meetWithId) || null) : null;
                   return (
                     <div
                       key={record.id}
@@ -978,7 +989,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-[10px] text-muted-foreground">Meet with</div>
                         {canAssignThis ? (
                           <Select
-                            value={record.assigned_to ?? "__unassigned__"}
+                            value={meetWithId ?? "__unassigned__"}
                             onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
                             disabled={assigningId === record.id}
                           >
@@ -995,7 +1006,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                             </SelectContent>
                           </Select>
                         ) : (
-                          <div className="text-xs font-medium truncate">{record.assigned_to_name || <span className="text-muted-foreground italic">—</span>}</div>
+                          <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
                         )}
                       </div>
 
