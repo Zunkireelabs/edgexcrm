@@ -37,7 +37,7 @@ export async function GET() {
   let query = db
     .from("tenant_users")
     .select(
-      "id, user_id, role, position_id, branch_id, employee_profiles(*, departments(id, name))"
+      "id, user_id, role, position_id, branch_id, employee_profiles!employee_profiles_tenant_user_id_fkey(*, departments(id, name))"
     );
 
   if (!hasManageHR) {
@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
   // Only canManageHR may set employment status/type/billability/manager/department,
   // even at profile-creation time — self-service covers personal-info fields only.
   // (Mirrors the same restriction on PATCH /api/v1/employees/[id].)
-  const hrOnlyFields = ["employment_type", "employment_status", "billable", "weekly_capacity_hours", "department_id", "manager_tenant_user_id"];
+  const hrOnlyFields = ["employment_type", "employment_status", "billable", "weekly_capacity_hours", "department_id", "manager_tenant_user_id", "job_title", "hire_date"];
   if (!hasManageHR) {
     for (const key of hrOnlyFields) {
       if (body[key] !== undefined) return apiForbidden();

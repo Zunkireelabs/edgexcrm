@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   // Only canManageHR may change employment status/type/billability/manager/department —
   // self-service covers personal-info fields only.
-  const hrOnlyFields = ["employment_type", "employment_status", "billable", "weekly_capacity_hours", "department_id", "manager_tenant_user_id"];
+  const hrOnlyFields = ["employment_type", "employment_status", "billable", "weekly_capacity_hours", "department_id", "manager_tenant_user_id", "job_title", "hire_date"];
   if (!hasManageHR) {
     for (const key of hrOnlyFields) {
       if (body[key] !== undefined) return apiForbidden();

@@ -28,7 +28,7 @@ export async function GET() {
 
   let membersQuery = db
     .from("tenant_users")
-    .select("id, user_id, employee_profiles(weekly_capacity_hours)");
+    .select("id, user_id, employee_profiles!employee_profiles_tenant_user_id_fkey(weekly_capacity_hours)");
 
   if (!hasManageHR) {
     const directReportIds = selfId ? await getDirectReportIds(db, selfId) : [];
