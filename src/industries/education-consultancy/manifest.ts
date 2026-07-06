@@ -10,6 +10,7 @@ import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
 import { followUpsMeta } from "./features/follow-ups/meta";
+import { affiliatesMeta } from "./features/affiliates/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -25,6 +26,7 @@ export const manifest: IndustryManifest = {
     { meta: leadListsMeta },
     { meta: classesMeta },
     { meta: followUpsMeta },
+    { meta: affiliatesMeta },
   ],
   sidebar: [
     // Intelligence section
