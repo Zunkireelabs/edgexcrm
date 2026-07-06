@@ -9,7 +9,7 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, required, isUUID, isIn } from "@/lib/api/validation";
+import { validate, required, isUUID } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
       requestId,
       payload: { tenant_user_id: targetTenantUserId, leave_type_id: String(body.leave_type_id), total_days: totalDays },
     }),
-    notifyApproverOrHR(db, auth, approverTenantUserId, createdId),
+    notifyApproverOrHR(db, auth, approverTenantUserId),
   ]);
 
   log.info({ leaveRequestId: createdId, totalDays }, "Leave request created");
@@ -181,7 +181,6 @@ async function notifyApproverOrHR(
   db: Awaited<ReturnType<typeof scopedClient>>,
   auth: AuthContext,
   approverTenantUserId: string | null,
-  _leaveRequestId: string,
 ) {
   let recipientUserIds: string[] = [];
   if (approverTenantUserId) {

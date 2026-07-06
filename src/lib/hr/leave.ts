@@ -57,7 +57,7 @@ export async function getHolidaySet(
   fromISO: string,
   toISO: string,
 ): Promise<Set<string>> {
-  let query = db
+  const query = db
     .from("holidays")
     .select("holiday_date, branch_id")
     .gte("holiday_date", fromISO)
