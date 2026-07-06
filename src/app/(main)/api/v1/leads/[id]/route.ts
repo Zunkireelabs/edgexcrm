@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp, resolvePositionSlug } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborator, isLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
@@ -577,6 +577,69 @@ export async function PATCH(
       await addLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
     } catch (err) {
       log.error({ err }, "addLeadCollaborator (checker) on self check-in assign failed");
+    }
+  }
+
+  // Auto-promote to Prospects when assigned_to changes to a counselor and the lead
+  // is in a pre-Prospects stage (mirrors check-in route promotion logic).
+  // Best-effort: failure must not fail the PATCH response.
+  if (
+    auth.industryId === "education_consultancy" &&
+    updatePayload.assigned_to !== undefined &&
+    updatePayload.assigned_to !== null &&
+    updatePayload.list_id === undefined // don't double-move if list is already being set
+  ) {
+    try {
+      const newAssigneeSlug = await resolvePositionSlug(supabase, auth.tenantId, updatePayload.assigned_to as string);
+      if (newAssigneeSlug === "counselor") {
+        const { data: prospectsList } = await supabase
+          .from("lead_lists")
+          .select("id, sort_order, pipeline_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("slug", "prospects")
+          .maybeSingle();
+        if (prospectsList) {
+          const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+          let currentSortOrder: number | null = null;
+          let currentIsStaging = false;
+          if (currentListId) {
+            const { data: currentList } = await supabase
+              .from("lead_lists")
+              .select("sort_order, is_staging")
+              .eq("id", currentListId)
+              .maybeSingle();
+            currentSortOrder = currentList?.sort_order ?? null;
+            currentIsStaging = currentList?.is_staging ?? false;
+          }
+          if (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order) {
+            const promotePayload: Record<string, unknown> = {
+              list_id: prospectsList.id,
+              lead_type: "prospect",
+              updated_at: new Date().toISOString(),
+            };
+            if (prospectsList.pipeline_id) {
+              const { data: defaultStage } = await supabase
+                .from("pipeline_stages")
+                .select("id, slug")
+                .eq("pipeline_id", prospectsList.pipeline_id)
+                .eq("is_default", true)
+                .maybeSingle();
+              if (defaultStage) {
+                promotePayload.pipeline_id = prospectsList.pipeline_id;
+                promotePayload.stage_id = defaultStage.id;
+                promotePayload.status = defaultStage.slug;
+              }
+            }
+            await supabase
+              .from("leads")
+              .update(promotePayload)
+              .eq("id", id)
+              .eq("tenant_id", auth.tenantId);
+          }
+        }
+      }
+    } catch (err) {
+      log.error({ err }, "Auto-promote to Prospects on counselor assign failed");
     }
   }
 
