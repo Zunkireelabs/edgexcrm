@@ -15,7 +15,6 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { normalizeEmail } from "@/lib/leads/dedup";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { createRequestLogger } from "@/lib/logger";
 import {
@@ -508,11 +507,6 @@ export async function PATCH(
         }
       }
     }
-  }
-
-  // Recompute normalized_email when email changes to keep dedup keying accurate
-  if (body.email !== undefined) {
-    updatePayload.normalized_email = normalizeEmail(body.email as string | null | undefined);
   }
 
   // Pre-Application fee normalization (migration 084)
