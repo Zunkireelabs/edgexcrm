@@ -70,6 +70,7 @@ interface KeyInfoSectionProps {
   teamMembers: TeamMember[];
   /** Pre-filtered assignable subset for the dropdown; falls back to teamMembers.filter(canEditLeads) if absent. */
   assignableMembers?: TeamMember[];
+  userId?: string;
   isAdmin: boolean;
   canEdit?: boolean;            // member with canEditLeads: can change stage even when not admin
   canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
@@ -104,6 +105,7 @@ export function KeyInfoSection({
   assignedTo,
   teamMembers,
   assignableMembers,
+  userId,
   isAdmin,
   canEdit = false,
   canAssign = false,
@@ -166,7 +168,7 @@ export function KeyInfoSection({
           {/* Status (pipeline stage) */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
-            {(isAdmin || canEdit) ? (
+            {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
               <Select value={stageId || ""} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
