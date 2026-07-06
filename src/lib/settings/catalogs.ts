@@ -22,6 +22,7 @@ const UNIVERSAL_NAV: NavCatalogItem[] = [
   { key: "/pipeline", label: "Pipeline" },
   { key: "/knowledge-bases", label: "Knowledge Bases" },
   { key: "/team", label: "Team" },
+  { key: "/leave", label: "Leave" },
   { key: "/settings", label: "Settings" },
 ];
 

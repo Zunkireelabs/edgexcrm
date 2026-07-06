@@ -872,6 +872,57 @@ export async function getMyInboxSnapshot(tenantId: string, userId: string): Prom
   return { items, unreadCount };
 }
 
+// ---- Home: leave attention counts ----
+
+export interface LeaveHomeSummary {
+  pendingLeaveApprovals: number;
+  myPendingLeave: number;
+}
+
+/**
+ * Pending-leave counts for the Home attention summary: requests waiting on
+ * *my* approval (all pending requests for canManageHR, else only ones
+ * resolved to me as approver) and my own pending requests.
+ */
+export async function getLeaveForHome(
+  tenantId: string,
+  userId: string,
+  hasManageHR: boolean,
+): Promise<LeaveHomeSummary> {
+  const supabase = await createServiceClient();
+
+  const { data: membership } = await supabase
+    .from("tenant_users")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  const selfTenantUserId = (membership as { id: string } | null)?.id ?? null;
+  if (!selfTenantUserId) return { pendingLeaveApprovals: 0, myPendingLeave: 0 };
+
+  let approvalsQuery = supabase
+    .from("leave_requests")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("approval_status", "pending");
+  if (!hasManageHR) approvalsQuery = approvalsQuery.eq("approver_tenant_user_id", selfTenantUserId);
+
+  const [approvalsRes, mineRes] = await Promise.all([
+    approvalsQuery,
+    supabase
+      .from("leave_requests")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("tenant_user_id", selfTenantUserId)
+      .eq("approval_status", "pending"),
+  ]);
+
+  return {
+    pendingLeaveApprovals: approvalsRes.count ?? 0,
+    myPendingLeave: mineRes.count ?? 0,
+  };
+}
+
 // ---- Home: my own recent actions (Recent Activity widget) ----
 
 export interface RecentActivityItem {

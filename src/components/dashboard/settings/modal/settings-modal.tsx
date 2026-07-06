@@ -15,6 +15,7 @@ const AiOrcaPanel = dynamic(() => import("./panels/ai-orca-panel").then((m) => m
 const OrganizationPanel = dynamic(() => import("./panels/organization-panel").then((m) => m.OrganizationPanel));
 const TeamRolesPanel = dynamic(() => import("./panels/team-roles-panel").then((m) => m.TeamRolesPanel));
 const LeadManagementPanel = dynamic(() => import("./panels/lead-management-panel").then((m) => m.LeadManagementPanel));
+const LeavePanel = dynamic(() => import("./panels/leave-panel").then((m) => m.LeavePanel));
 const AcademicOperationsPanel = dynamic(() => import("./panels/academic-operations-panel").then((m) => m.AcademicOperationsPanel));
 const CommunicationsPanel = dynamic(() => import("./panels/communications-panel").then((m) => m.CommunicationsPanel));
 const IntegrationsPanel = dynamic(() => import("./panels/integrations-panel").then((m) => m.IntegrationsPanel));
@@ -26,6 +27,7 @@ const PANEL_MAP: Record<string, React.ComponentType> = {
   "organization": OrganizationPanel,
   "team-roles": TeamRolesPanel,
   "lead-management": LeadManagementPanel,
+  "leave": LeavePanel,
   "academic-operations": AcademicOperationsPanel,
   "communications": CommunicationsPanel,
   "integrations": IntegrationsPanel,

@@ -19,12 +19,13 @@ export async function GET() {
       : Promise.resolve({ data: null }),
     supabase
       .from("tenants")
-      .select("plan, entitlement_overrides")
+      .select("plan, entitlement_overrides, timezone, weekend_days")
       .eq("id", auth.tenantId)
       .single(),
   ]);
 
   const entitlements = resolveEntitlements(tenantResult.data ?? {});
+  const tenantRow = tenantResult.data as { timezone?: string; weekend_days?: number[] } | null;
 
   return NextResponse.json({
     data: {
@@ -32,6 +33,8 @@ export async function GET() {
       navCatalog: buildNavCatalog(auth.industryId),
       widgetCatalog: WIDGET_CATALOG,
       maxBranches: entitlements.maxBranches,
+      timezone: tenantRow?.timezone ?? "Asia/Kathmandu",
+      weekendDays: tenantRow?.weekend_days ?? [6],
     },
   });
 }
