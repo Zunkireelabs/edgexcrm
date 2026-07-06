@@ -128,5 +128,5 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  return apiSuccess(result);
+  return apiSuccess({ today: todayISO, members: result });
 }
