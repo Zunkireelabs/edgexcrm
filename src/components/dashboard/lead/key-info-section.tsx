@@ -848,6 +848,8 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
           <InfoRow label="Source Channel" value={lead.intake_medium || "—"} />
           <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
           <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
+          {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
+          {lead.ref_code && <InfoRow label="Ref Code" value={lead.ref_code} />}
         </div>
       )}
     </>
