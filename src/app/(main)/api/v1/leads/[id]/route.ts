@@ -266,7 +266,7 @@ export async function PATCH(
   if (body.assigned_to !== undefined && body.assigned_to !== null) {
     const { data: memberCheck } = await supabase
       .from("tenant_users")
-      .select("user_id, branch_id, positions(slug)")
+      .select("user_id, branch_id, role, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to as string)
       .single();
@@ -292,9 +292,12 @@ export async function PATCH(
         ? ((memberCheck as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
         : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
       const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+      // Fall back to role when no position is configured (e.g. role="counselor" with no positions row)
+      const targetRole = (memberCheck as unknown as { role?: string }).role ?? null;
+      const effectiveSlug = targetSlug ?? targetRole;
       const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
       const okBranch = auth.branchId == null || ((memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null) === auth.branchId;
-      if (!targetSlug || !allowed.has(targetSlug) || !okBranch) {
+      if (!effectiveSlug || !allowed.has(effectiveSlug) || !okBranch) {
         return apiForbidden();
       }
     }

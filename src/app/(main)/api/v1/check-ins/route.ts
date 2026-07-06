@@ -62,6 +62,11 @@ export async function GET(request: NextRequest) {
   }
   // scope === "all" → no additional filter (owner/admin see everything)
 
+  const tag = searchParams.get("tag");
+  if (tag) {
+    query = query.contains("leads.tags", [tag]);
+  }
+
   if (from) {
     query = query.gte("created_at", from);
   }
