@@ -196,7 +196,7 @@ export function KeyInfoSection({
                     : undefined
                 }
               >
-                {currentStage?.name || "Unknown"}
+                {currentStage?.name || "—"}
               </Badge>
             )}
           </div>
