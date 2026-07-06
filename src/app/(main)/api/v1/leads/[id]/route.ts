@@ -262,6 +262,7 @@ export async function PATCH(
   }
 
   // Validate assigned_to: must be a tenant member
+  let newAssigneeBranchId: string | null | undefined = undefined;
   if (body.assigned_to !== undefined && body.assigned_to !== null) {
     const { data: memberCheck } = await supabase
       .from("tenant_users")
@@ -275,6 +276,8 @@ export async function PATCH(
         assigned_to: ["Assigned user is not a member of this tenant"],
       });
     }
+
+    newAssigneeBranchId = (memberCheck as unknown as { branch_id: string | null }).branch_id ?? null;
 
     // Chain check: education chain-position callers (non-admin, non-team-scope) may
     // only assign to their allowed chain targets.
@@ -443,6 +446,41 @@ export async function PATCH(
       .eq("id", (existingLead as Record<string, unknown>).list_id as string)
       .maybeSingle();
     if (oldList) oldListName = oldList.name;
+  }
+
+  // Cross-branch reassignment: reset status to the current list's default stage.
+  // When a lead moves to a new team the new member starts from first status,
+  // not inheriting mid-stream progress from the previous team.
+  // Only fires when: assignee changes, new assignee is in a different branch,
+  // and no list_id change is already in the payload (list moves handle it above).
+  if (
+    body.assigned_to !== undefined &&
+    body.assigned_to !== null &&
+    newAssigneeBranchId !== undefined &&
+    newAssigneeBranchId !== ((existingLead as Record<string, unknown>).branch_id ?? null) &&
+    updatePayload.list_id === undefined
+  ) {
+    const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+    if (currentListId) {
+      const { data: crossBranchList } = await supabase
+        .from("lead_lists")
+        .select("pipeline_id")
+        .eq("id", currentListId)
+        .maybeSingle();
+      if (crossBranchList?.pipeline_id) {
+        const { data: firstStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", crossBranchList.pipeline_id)
+          .eq("is_default", true)
+          .single();
+        if (firstStage) {
+          updatePayload.pipeline_id = crossBranchList.pipeline_id;
+          updatePayload.stage_id = firstStage.id;
+          updatePayload.status = firstStage.slug;
+        }
+      }
+    }
   }
 
   // Recompute normalized_email when email changes to keep dedup keying accurate
