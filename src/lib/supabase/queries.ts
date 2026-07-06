@@ -81,6 +81,7 @@ export async function getLeads(
     listId?: string | null;
     excludeListIds?: string[];
     onlyDeleted?: boolean;
+    excludeOtherType?: boolean;
   }
 ): Promise<Lead[]> {
   const supabase = await createClient();
@@ -154,6 +155,9 @@ export async function getLeads(
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+
+    // Exclude "other" type contacts from funnel views — they're walk-in visitors only
+    if (scope?.excludeOtherType) q = q.not("tags", "cs", '{"other"}');
 
     // List filters don't apply to the recycle bin (it spans all lists).
     if (!scope?.onlyDeleted) {
