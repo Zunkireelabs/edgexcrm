@@ -451,33 +451,52 @@ export async function PATCH(
   // Cross-branch reassignment: reset status to the current list's default stage.
   // When a lead moves to a new team the new member starts from first status,
   // not inheriting mid-stream progress from the previous team.
-  // Only fires when: assignee changes, new assignee is in a different branch,
-  // and no list_id change is already in the payload (list moves handle it above).
+  // Only fires when: assignee actually changes to a different user, new assignee is in a
+  // genuinely different branch than the PREVIOUS assignee (not the lead's origin branch),
+  // no list_id change is already in the payload (list moves handle it above),
+  // and the caller did NOT explicitly set status or stage_id.
   if (
     body.assigned_to !== undefined &&
     body.assigned_to !== null &&
+    (body.assigned_to as string) !== (existingLead.assigned_to as string | null) &&
     newAssigneeBranchId !== undefined &&
-    newAssigneeBranchId !== ((existingLead as Record<string, unknown>).branch_id ?? null) &&
-    updatePayload.list_id === undefined
+    updatePayload.list_id === undefined &&
+    body.status === undefined &&
+    body.stage_id === undefined
   ) {
     const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
     if (currentListId) {
-      const { data: crossBranchList } = await supabase
-        .from("lead_lists")
-        .select("pipeline_id")
-        .eq("id", currentListId)
-        .maybeSingle();
-      if (crossBranchList?.pipeline_id) {
-        const { data: firstStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", crossBranchList.pipeline_id)
-          .eq("is_default", true)
-          .single();
-        if (firstStage) {
-          updatePayload.pipeline_id = crossBranchList.pipeline_id;
-          updatePayload.stage_id = firstStage.id;
-          updatePayload.status = firstStage.slug;
+      // Fetch previous assignee's branch to detect actual cross-branch move
+      let prevAssigneeBranchId: string | null = null;
+      const prevAssigneeId = existingLead.assigned_to as string | null;
+      if (prevAssigneeId) {
+        const { data: prevMember } = await supabase
+          .from("tenant_users")
+          .select("branch_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("user_id", prevAssigneeId)
+          .maybeSingle();
+        prevAssigneeBranchId = (prevMember as { branch_id: string | null } | null)?.branch_id ?? null;
+      }
+      // Only reset if new assignee is in a genuinely different branch
+      if (newAssigneeBranchId !== prevAssigneeBranchId) {
+        const { data: crossBranchList } = await supabase
+          .from("lead_lists")
+          .select("pipeline_id")
+          .eq("id", currentListId)
+          .maybeSingle();
+        if (crossBranchList?.pipeline_id) {
+          const { data: firstStage } = await supabase
+            .from("pipeline_stages")
+            .select("id, slug")
+            .eq("pipeline_id", crossBranchList.pipeline_id)
+            .eq("is_default", true)
+            .single();
+          if (firstStage) {
+            updatePayload.pipeline_id = crossBranchList.pipeline_id;
+            updatePayload.stage_id = firstStage.id;
+            updatePayload.status = firstStage.slug;
+          }
         }
       }
     }
@@ -588,7 +607,7 @@ export async function PATCH(
 
   log.info({ leadId: id, changes }, "Lead updated");
 
-  const statusChanged = body.status && body.status !== existingLead.status;
+  const statusChanged = updated.status !== existingLead.status;
   const assignedChanged =
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to !== updated.assigned_to;
@@ -616,7 +635,7 @@ export async function PATCH(
             entityId: id,
             payload: {
               old_status: existingLead.status,
-              new_status: body.status,
+              new_status: updated.status,
             },
             requestId,
           }),
