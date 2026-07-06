@@ -2,6 +2,14 @@
 -- Additive only. No writes to tenant_users or any existing table.
 -- Employee identity stays tenant_users; employee_profiles is a 1:1 extension.
 -- Not applied by Sonnet — Opus applies to stage after review (see CLAUDE.md migration workflow).
+--
+-- MANUAL SETUP REQUIRED (not done by this migration — storage buckets are
+-- created in Supabase directly, per the 029_knowledge_bases.sql convention):
+--   INSERT INTO storage.buckets (id, name, public)
+--   VALUES ('employee-photos', 'employee-photos', false);
+--   -- private bucket, small file_size_limit (e.g. 5 MiB), NO anon policies.
+--   -- Access is exclusively via service-role signed URLs from
+--   -- /api/v1/employees/[id]/photo-upload-url and /photo (self/manager-read/HR-gated).
 
 BEGIN;
 
