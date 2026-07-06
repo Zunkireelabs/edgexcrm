@@ -52,6 +52,8 @@ export const FEATURES = {
   ITINERARY: "itinerary",
   // Industry-scoped (education_consultancy)
   FOLLOW_UPS: "follow-ups",
+  // Industry-scoped (it_agency) — HRMS Phase 1 Resourcing edge
+  RESOURCING: "resourcing",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];
