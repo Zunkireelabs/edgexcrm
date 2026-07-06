@@ -514,12 +514,25 @@ async function handlePost(request: NextRequest) {
       const targetSlug = body.assigned_to ? "prospects" : "qualified";
       const { data: targetList } = await supabase
         .from("lead_lists")
-        .select("id")
+        .select("id, pipeline_id")
         .eq("tenant_id", tenantId)
         .eq("slug", targetSlug)
         .limit(1)
         .maybeSingle();
       leadPayload.list_id = targetList?.id ?? null;
+      if (targetList?.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", targetList.pipeline_id)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (defaultStage) {
+          leadPayload.pipeline_id = targetList.pipeline_id;
+          leadPayload.stage_id = defaultStage.id;
+          leadPayload.status = defaultStage.slug;
+        }
+      }
 
       if (!body.assigned_to) {
         if (dashAuth?.positionSlug === "lead-executive") {
