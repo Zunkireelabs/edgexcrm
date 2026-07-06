@@ -137,6 +137,15 @@ export function KeyInfoSection({
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
 
   const assignedMember = teamMembers.find((m) => m.user_id === assignedTo);
+
+  // Ensure the currently-assigned member always appears in the dropdown,
+  // even if they fall outside the caller's normal assignable chain scope
+  // (e.g. a counselor assigned via check-in, viewed by a lead-executive).
+  const baseAssignable = assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false);
+  const resolvedAssignable =
+    !assignedTo || baseAssignable.some((m) => m.user_id === assignedTo)
+      ? baseAssignable
+      : [...baseAssignable, ...teamMembers.filter((m) => m.user_id === assignedTo)];
   const entityLabel = industry?.entity_type_singular || "Entity";
 
   // Custom fields
@@ -254,8 +263,7 @@ export function KeyInfoSection({
                   <SelectItem value="unassigned">
                     <span className="text-muted-foreground">Unassigned</span>
                   </SelectItem>
-                  {(assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false))
-                    .map((m) => (
+                  {resolvedAssignable.map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
                         <div className="flex items-center gap-2">
                           <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
