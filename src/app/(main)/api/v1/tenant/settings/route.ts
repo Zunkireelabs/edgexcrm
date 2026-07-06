@@ -49,7 +49,11 @@ export async function PATCH(request: NextRequest) {
     ) {
       return apiValidationError({ weekend_days: ["Must be an array of integers 0-6 (0=Sun … 6=Sat)"] });
     }
-    patch.weekend_days = Array.from(new Set(body.weekend_days as number[])).sort();
+    const dedupedWeekendDays = Array.from(new Set(body.weekend_days as number[])).sort();
+    if (dedupedWeekendDays.length < 1 || dedupedWeekendDays.length > 6) {
+      return apiValidationError({ weekend_days: ["Must leave at least one working day"] });
+    }
+    patch.weekend_days = dedupedWeekendDays;
   }
 
   if (Object.keys(patch).length === 0) {

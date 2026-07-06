@@ -4,6 +4,7 @@ import { canManageHR } from "@/lib/api/permissions";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiError, apiValidationError } from "@/lib/api/response";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getSelfTenantUserId, canReadEmployee } from "@/lib/api/hr-scope";
+import { todayInTz } from "@/lib/hr/dates";
 
 interface LeaveTypeRow {
   id: string;
@@ -28,7 +29,14 @@ export async function GET(request: NextRequest) {
   if (!targetTenantUserId) return apiError("NOT_FOUND", "No tenant membership found for the current user", 404);
 
   const yearParam = searchParams.get("year");
-  const year = yearParam ? Number(yearParam) : new Date().getUTCFullYear();
+  let year: number;
+  if (yearParam) {
+    year = Number(yearParam);
+  } else {
+    const { data: tenantRow } = await db.raw().from("tenants").select("timezone").eq("id", auth.tenantId).single();
+    const tenantTimezone = (tenantRow as unknown as { timezone: string } | null)?.timezone ?? "UTC";
+    year = Number(todayInTz(tenantTimezone).slice(0, 4));
+  }
   if (!Number.isInteger(year)) return apiValidationError({ year: ["Must be an integer year"] });
 
   const hasManageHR = canManageHR(auth.permissions);
