@@ -164,6 +164,24 @@ export function NotificationsDropdown() {
             <span className="text-base">✉️</span>
           </div>
         );
+      case "leave.requested":
+        return (
+          <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center">
+            <span className="text-base">🌴</span>
+          </div>
+        );
+      case "leave.approved":
+        return (
+          <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center">
+            <span className="text-base">✅</span>
+          </div>
+        );
+      case "leave.rejected":
+        return (
+          <div className="w-9 h-9 rounded-full bg-red-100 flex items-center justify-center">
+            <span className="text-base">🚫</span>
+          </div>
+        );
       default:
         return (
           <div className="w-9 h-9 rounded-full bg-gray-100 flex items-center justify-center">

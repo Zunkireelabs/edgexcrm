@@ -9,7 +9,7 @@ import { TasksCard } from "./tasks-card";
 import { MyLeadsCard } from "./my-leads-card";
 import { InboxSnapshotCard } from "./inbox-snapshot-card";
 import { RecentActivityCard } from "./recent-activity-card";
-import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem } from "@/lib/supabase/queries";
+import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem, LeaveHomeSummary } from "@/lib/supabase/queries";
 import type { Lead, TaskStatus } from "@/types/database";
 
 interface HomeContentProps {
@@ -21,6 +21,7 @@ interface HomeContentProps {
   recentActivity: RecentActivityItem[];
   inboxSnapshot: InboxSnapshot;
   isEducation: boolean;
+  leaveSummary: LeaveHomeSummary;
 }
 
 export function HomeContent({
@@ -31,6 +32,7 @@ export function HomeContent({
   myLeads,
   recentActivity,
   inboxSnapshot,
+  leaveSummary,
 }: HomeContentProps) {
   const router = useRouter();
   const [openTasks, setOpenTasks] = useState<PersonalTask[]>(tasks.open);
@@ -74,7 +76,12 @@ export function HomeContent({
     <div className="px-4 py-6">
       <GreetingHeader userName={userName} />
 
-      <AttentionSummary openTasks={openTasks} schedule={schedule} inboxSnapshot={inboxSnapshot} />
+      <AttentionSummary
+        openTasks={openTasks}
+        schedule={schedule}
+        inboxSnapshot={inboxSnapshot}
+        leaveSummary={leaveSummary}
+      />
 
       <div className="space-y-4">
         <ScheduleCard schedule={schedule} />
