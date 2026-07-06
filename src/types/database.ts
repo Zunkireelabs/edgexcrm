@@ -54,6 +54,8 @@ export interface Tenant {
   industry_id: IndustryId | null;
   plan: string;
   entitlement_overrides: Record<string, unknown>;
+  timezone: string;
+  weekend_days: number[];
   created_at: string;
   updated_at: string;
 }

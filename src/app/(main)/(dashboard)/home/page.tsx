@@ -7,7 +7,9 @@ import {
   getMyTasks,
   getMyInboxSnapshot,
   getMyRecentActivity,
+  getLeaveForHome,
 } from "@/lib/supabase/queries";
+import { canManageHR } from "@/lib/api/permissions";
 import { HomeContent } from "@/components/dashboard/home/home-content";
 
 export default async function HomePage() {
@@ -20,15 +22,16 @@ export default async function HomePage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  const { tenant, userId } = tenantData;
+  const { tenant, userId, permissions } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
 
-  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot] = await Promise.all([
+  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary] = await Promise.all([
     getMySchedule(tenant.id, userId),
     getMyTasks(tenant.id, userId),
     getLeads(tenant.id, { restrictToSelf: true, userId, limit: 50 }),
     getMyRecentActivity(tenant.id, userId),
     getMyInboxSnapshot(tenant.id, userId),
+    getLeaveForHome(tenant.id, userId, canManageHR(permissions)),
   ]);
 
   const userName =
@@ -46,6 +49,7 @@ export default async function HomePage() {
       recentActivity={recentActivity}
       inboxSnapshot={inboxSnapshot}
       isEducation={isEducation}
+      leaveSummary={leaveSummary}
     />
   );
 }

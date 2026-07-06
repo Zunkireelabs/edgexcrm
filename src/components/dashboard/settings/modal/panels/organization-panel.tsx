@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { PanelContent } from "../panel-shell";
 import { IndustryEntitiesManager } from "@/components/dashboard/settings/industry-entities-manager";
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
+import { TenantLocaleManager } from "@/components/dashboard/settings/tenant-locale-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import type { TenantEntity } from "@/types/database";
 
@@ -38,6 +39,10 @@ export function OrganizationPanel() {
             <IndustryEntitiesManager industry={industry} initialEntities={entities} />
           )}
           <BranchesManager maxBranches={maxBranches} />
+          <TenantLocaleManager
+            timezone={bootstrapData?.timezone ?? "Asia/Kathmandu"}
+            weekendDays={bootstrapData?.weekendDays ?? [6]}
+          />
         </>
       )}
     </PanelContent>
