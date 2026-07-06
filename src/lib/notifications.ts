@@ -88,6 +88,9 @@ export const NotificationTypes = {
   NOTE_MENTION: "note.mention",
   TASK_REMINDER: "task.reminder",
   TASK_ASSIGNED: "task.assigned",
+  LEAVE_REQUESTED: "leave.requested",
+  LEAVE_APPROVED: "leave.approved",
+  LEAVE_REJECTED: "leave.rejected",
 } as const;
 
 /**
