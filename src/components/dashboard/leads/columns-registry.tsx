@@ -437,6 +437,56 @@ const STATIC_COLUMNS: LeadColumn[] = [
     },
   },
 
+  // ── ref_code (affiliate code — education_consultancy only)
+  {
+    key: "ref_code",
+    label: "Ref Code",
+    group: "standard",
+    defaultVisible: true,
+    industries: ["education_consultancy"],
+    renderTh: () => (
+      <th key="ref_code" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[100px]">
+        Ref Code
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="ref_code" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+        {lead.ref_code ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium whitespace-nowrap">
+            {lead.ref_code}
+          </span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </td>
+    ),
+  },
+
+  // ── form_source (which page lead came from — education_consultancy only)
+  {
+    key: "form_source",
+    label: "Form Source",
+    group: "standard",
+    defaultVisible: true,
+    industries: ["education_consultancy"],
+    renderTh: () => (
+      <th key="form_source" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[110px]">
+        Form Source
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+        {lead.form_source ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+            {lead.form_source}
+          </span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </td>
+    ),
+  },
+
   // ── medium (intake_medium)
   {
     key: "medium",

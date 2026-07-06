@@ -63,6 +63,14 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     if (typeof window === "undefined") return null;
     return new URLSearchParams(window.location.search).get("utm_campaign");
   });
+  const [formSource] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("form_source");
+  });
+  const [refCode] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("ref_code");
+  });
 
   // Auto-select the first option for country fields linked to a phone field,
   // so the displayed dial code matches the actual form state.
@@ -258,6 +266,8 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         intake_source: utmSource || formConfig.attribution?.default_source || "form",
         intake_medium: utmMedium || formConfig.attribution?.default_medium || null,
         intake_campaign: utmCampaign || formConfig.attribution?.default_campaign || null,
+        ...(formSource && { form_source: formSource }),
+        ...(refCode && { ref_code: refCode }),
       }),
     };
 
@@ -366,6 +376,8 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
           intake_source: utmSource || "form",
           intake_medium: utmMedium || null,
           intake_campaign: utmCampaign || null,
+          ...(formSource && { form_source: formSource }),
+          ...(refCode && { ref_code: refCode }),
         }),
       };
 
