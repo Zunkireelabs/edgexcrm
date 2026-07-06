@@ -22,8 +22,8 @@ export async function GET(_request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  // Verify lead belongs to this tenant
-  const { data: lead } = await db.from("leads").select("id").eq("id", leadId).maybeSingle();
+  // Verify lead belongs to this tenant and is not soft-deleted
+  const { data: lead } = await db.from("leads").select("id").eq("id", leadId).is("deleted_at", null).maybeSingle();
   if (!lead) return apiNotFound("Lead");
 
   const { data: tasks, error } = await db
