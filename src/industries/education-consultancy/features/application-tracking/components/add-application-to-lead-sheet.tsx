@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, ChevronsUpDown, Check } from "lucide-react";
+import { Loader2, ChevronsUpDown, Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -73,14 +73,19 @@ interface AutocompleteInputProps {
   suggestions: string[];
   placeholder?: string;
   id?: string;
+  onCreateNew?: (val: string) => Promise<void>;
 }
 
-function AutocompleteInput({ value, onChange, suggestions, placeholder, id }: AutocompleteInputProps) {
+function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew }: AutocompleteInputProps) {
   const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
 
+  const trimmed = value.trim();
   const filtered = suggestions.filter((s) =>
-    s.toLowerCase().includes(value.toLowerCase())
+    s.toLowerCase().includes(trimmed.toLowerCase())
   );
+  const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+  const showCreate = onCreateNew && trimmed.length > 0 && !exactMatch;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -93,7 +98,7 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, id }: Au
               onChange(e.target.value);
               if (!open && e.target.value) setOpen(true);
             }}
-            onFocus={() => { if (filtered.length > 0) setOpen(true); }}
+            onFocus={() => { if (filtered.length > 0 || showCreate) setOpen(true); }}
             placeholder={placeholder}
             className="pr-8"
             autoComplete="off"
@@ -101,7 +106,7 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, id }: Au
           <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
         </div>
       </PopoverTrigger>
-      {filtered.length > 0 && (
+      {(filtered.length > 0 || showCreate) && (
         <PopoverContent
           className="p-0 w-[--radix-popover-trigger-width]"
           align="start"
@@ -109,22 +114,34 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, id }: Au
         >
           <Command shouldFilter={false}>
             <CommandList>
-              <CommandEmpty>No suggestions</CommandEmpty>
+              <CommandEmpty>No matches</CommandEmpty>
               {filtered.slice(0, 20).map((s) => (
                 <CommandItem
                   key={s}
                   value={s}
-                  onSelect={() => {
-                    onChange(s);
-                    setOpen(false);
-                  }}
+                  onSelect={() => { onChange(s); setOpen(false); }}
                 >
-                  <Check
-                    className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")}
-                  />
+                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
                   {s}
                 </CommandItem>
               ))}
+              {showCreate && (
+                <CommandItem
+                  value={`__create__${trimmed}`}
+                  disabled={creating}
+                  onSelect={async () => {
+                    if (!onCreateNew) return;
+                    setCreating(true);
+                    await onCreateNew(trimmed);
+                    setCreating(false);
+                    setOpen(false);
+                  }}
+                  className="text-primary font-medium border-t mt-1"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {creating ? "Adding…" : `Create "${trimmed}"`}
+                </CommandItem>
+              )}
             </CommandList>
           </Command>
         </PopoverContent>
@@ -151,7 +168,7 @@ export function AddApplicationToLeadSheet({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
-  const [universitySuggestions, setUniversitySuggestions] = useState<string[]>([]);
+  const [partnerColleges, setPartnerColleges] = useState<string[]>([]);
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
 
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
@@ -176,16 +193,36 @@ export function AddApplicationToLeadSheet({
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setAgents(j.data); })
       .catch(() => {});
-    fetch("/api/v1/applications/suggestions")
+    fetch("/api/v1/partner-colleges")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => {
-        if (j?.data) {
-          setUniversitySuggestions(j.data.universities ?? []);
-          setProgramSuggestions(j.data.programs ?? []);
-        }
+        if (j?.data) setPartnerColleges((j.data as { name: string }[]).map((c) => c.name));
       })
       .catch(() => {});
+    fetch("/api/v1/applications/suggestions")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setProgramSuggestions(j.data.programs ?? []); })
+      .catch(() => {});
   }, [open]);
+
+  async function handleCreateCollege(name: string) {
+    try {
+      const res = await fetch("/api/v1/partner-colleges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message ?? "Failed to create college");
+      }
+      setPartnerColleges((prev) => [...prev, name].sort());
+      setUniversityName(name);
+      toast.success(`"${name}" added to partner colleges`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create college");
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -244,8 +281,9 @@ export function AddApplicationToLeadSheet({
               id="app-university"
               value={universityName}
               onChange={setUniversityName}
-              suggestions={universitySuggestions}
+              suggestions={partnerColleges}
               placeholder="e.g. University of Melbourne"
+              onCreateNew={handleCreateCollege}
             />
           </div>
 
