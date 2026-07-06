@@ -791,7 +791,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                     ) : (
                       <div className="space-y-1">
-                        <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assign Counselor"}</Label>
+                        <Label className="text-xs">{industryId === "travel_agency" ? "Assign Team Member" : "Assigned To"}</Label>
                         <Select value={assignedTo || "__none__"} onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}>
                           <SelectTrigger className="h-9">
                             <SelectValue placeholder={industryId === "travel_agency" ? "Select team member (optional)" : "Select counselor (optional)"} />
