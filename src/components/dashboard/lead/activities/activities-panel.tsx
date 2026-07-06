@@ -911,6 +911,7 @@ function getSystemActivityIcon(activity: LeadActivity): LucideIcon {
   }
   if (activity.action === "lead.merged") return GitMerge;
   if (activity.action === "lead.note_added") return FileText;
+  if (activity.action === "lead.note_edited") return Pencil;
   if (activity.action === "lead.branch_revoked") return UserMinus;
   if (activity.action === "lead.branch_shared" || activity.action === "lead.branch_assigned") return Users;
 
@@ -1007,6 +1008,10 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.note_added") {
     return "Added a note";
+  }
+
+  if (activity.action === "lead.note_edited") {
+    return "Note edited";
   }
 
   if (activity.action === "lead.branch_shared") {
