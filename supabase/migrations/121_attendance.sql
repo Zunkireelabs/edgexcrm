@@ -1,4 +1,6 @@
--- Migration 119: HRMS Phase 2b — Basic Attendance schema
+-- Migration 121: HRMS Phase 2b — Basic Attendance schema
+-- (Renumbered from 119 to deconflict with 119_affiliates.sql, which shipped to
+--  prod on 2026-07-06. Applied to the stage DB under its original 119 name.)
 -- Additive only. Not applied by Sonnet — Opus applies to stage after review
 -- (see docs/HRMS-PHASE-2B-ATTENDANCE-BRIEF.md).
 --
