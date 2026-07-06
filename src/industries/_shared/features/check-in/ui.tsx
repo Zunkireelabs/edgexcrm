@@ -313,19 +313,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const handleCheckIn = async (leadId: string) => {
     setCheckingIn(leadId);
     try {
+      // Assign first so the check-in promotion logic sees the counselor assignee.
+      if (meetWithId) {
+        const assignRes = await fetch(`/api/v1/leads/${leadId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assigned_to: meetWithId }),
+        });
+        if (!assignRes.ok) {
+          toast.error("Failed to assign lead");
+          setCheckingIn(null);
+          return;
+        }
+      }
       const res = await fetch(`/api/v1/leads/${leadId}/check-in`, { method: "POST" });
       if (!res.ok) {
         toast.error("Failed to check in");
         setCheckingIn(null);
         return;
-      }
-      // If "Meet with" was selected, update the lead's assigned_to
-      if (meetWithId) {
-        await fetch(`/api/v1/leads/${leadId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assigned_to: meetWithId }),
-        });
       }
       toast.success("Check-in recorded");
       fetchHistory();

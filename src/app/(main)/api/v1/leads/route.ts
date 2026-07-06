@@ -510,7 +510,8 @@ async function handlePost(request: NextRequest) {
   // All other leads go to the intake list. Falls back to null if no matching list exists.
   if (!body.list_id) {
     const isCheckIn = body.intake_medium === "check_in";
-    if (isCheckIn) {
+    const isContactOnly = isCheckIn && Array.isArray(body.tags) && (body.tags as string[]).includes("other");
+    if (isCheckIn && !isContactOnly) {
       const targetSlug = body.assigned_to ? "prospects" : "qualified";
       const { data: targetList } = await supabase
         .from("lead_lists")
@@ -541,7 +542,7 @@ async function handlePost(request: NextRequest) {
           leadPayload.assigned_to = null;
         }
       }
-    } else {
+    } else if (!isContactOnly) {
       const { data: intakeList } = await supabase
         .from("lead_lists")
         .select("id")
@@ -551,6 +552,7 @@ async function handlePost(request: NextRequest) {
         .maybeSingle();
       leadPayload.list_id = intakeList?.id ?? null;
     }
+    // isContactOnly → list_id stays null (no pipeline placement)
   } else {
     const explicitListId = (body.list_id as string) ?? null;
     if (explicitListId) {

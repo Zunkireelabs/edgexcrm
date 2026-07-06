@@ -113,6 +113,19 @@ A lead can skip Pre-qualified and Qualified entirely:
 
 - Lead executive / branch manager does check-in and selects a counselor → lead lands directly in **Prospects** at status `Prospect Ready`, assigned to that counselor.
 - Lead executive does check-in, no counselor selected → lead lands in **Qualified** at status `New Lead`, assigned to that lead-executive.
+- Lead executive can assign a counselor later from the Check-in History panel — the lead then auto-promotes to **Prospects**.
+
+**Important:** The counselor assignment must be set **before or at** check-in time for the auto-promotion to fire. If assigned via the history panel after the fact, promotion still triggers on the next check-in or reassignment.
+
+---
+
+## Contacts (Walk-in Visitors — "Other" Tag)
+
+Walk-in visitors tagged as **"other"** (non-student, non-parent) are **not placed in the lead pipeline**. They do not appear in Pre-qualified, Qualified, Prospects, or Applications.
+
+- Stored as leads in the DB but with no `list_id` / stage assignment.
+- Visible only in the **Contacts page** (`/contacts`), accessible to **admin and owner only**.
+- Check-in history is recorded normally; notes can be added from the Contacts detail view.
 
 ---
 
