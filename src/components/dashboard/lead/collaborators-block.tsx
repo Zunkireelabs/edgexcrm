@@ -27,9 +27,10 @@ interface TeamMember {
 interface CollaboratorsBlockProps {
   leadId: string;
   teamMembers?: TeamMember[];
+  canManage?: boolean;
 }
 
-export function CollaboratorsBlock({ leadId, teamMembers = [] }: CollaboratorsBlockProps) {
+export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false }: CollaboratorsBlockProps) {
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [loading, setLoading] = useState(true);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -109,7 +110,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [] }: CollaboratorsBl
               key={c.user_id}
               className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 bg-muted/30"
             >
-              {confirmId === c.user_id ? (
+              {canManage && confirmId === c.user_id ? (
                 <>
                   <span className="text-xs text-muted-foreground flex-1">
                     Remove <span className="font-medium text-foreground">{c.name}</span>?
@@ -130,14 +131,16 @@ export function CollaboratorsBlock({ leadId, teamMembers = [] }: CollaboratorsBl
                 </>
               ) : (
                 <>
-                  <button
-                    onClick={() => setConfirmId(c.user_id)}
-                    disabled={!!removingId}
-                    className="flex-shrink-0 rounded-full p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
-                    aria-label={`Remove ${c.name}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                  {canManage && (
+                    <button
+                      onClick={() => setConfirmId(c.user_id)}
+                      disabled={!!removingId}
+                      className="flex-shrink-0 rounded-full p-0.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-40"
+                      aria-label={`Remove ${c.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                       <span className="text-[10px] font-medium text-primary">
@@ -153,8 +156,8 @@ export function CollaboratorsBlock({ leadId, teamMembers = [] }: CollaboratorsBl
         </div>
       )}
 
-      {/* Add collaborator */}
-      {addableMembers.length > 0 && (
+      {/* Add collaborator — admin/owner only */}
+      {canManage && addableMembers.length > 0 && (
         <div className="flex gap-1.5 items-center">
           <Select value={selectedUserId} onValueChange={setSelectedUserId}>
             <SelectTrigger className="h-7 text-xs flex-1">
@@ -187,8 +190,11 @@ export function CollaboratorsBlock({ leadId, teamMembers = [] }: CollaboratorsBl
         </div>
       )}
 
-      {collaborators.length === 0 && addableMembers.length === 0 && (
+      {collaborators.length === 0 && canManage && addableMembers.length === 0 && (
         <p className="text-xs text-muted-foreground italic">No team members to add.</p>
+      )}
+      {collaborators.length === 0 && !canManage && (
+        <p className="text-xs text-muted-foreground italic">No collaborators yet.</p>
       )}
     </div>
   );

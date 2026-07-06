@@ -557,6 +557,16 @@ export async function PATCH(
     }
   }
 
+  // Previous assignee also retains lifecycle visibility after handoff.
+  const prevAssigneeId = existingLead.assigned_to as string | null;
+  if (updatePayload.assigned_to !== undefined && prevAssigneeId && prevAssigneeId !== ((updated as Lead).assigned_to ?? null)) {
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, prevAssigneeId);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator (prev assignee) on handoff failed");
+    }
+  }
+
   // Two-step check-in assign: the lead-exec who did the initial walk-in retains lifecycle
   // visibility after handing the lead off to a counselor.
   if (isSelfCheckInAssign) {
