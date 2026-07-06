@@ -92,7 +92,7 @@ export default async function LeadsOrganiseCockpitPage({
     entitiesResult,
     branches,
   ] = await Promise.all([
-    getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
+    getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
     getTeamMembers(tenantData.tenant.id),
     getTeamMembersWithPositions(tenantData.tenant.id),
     getImportSourceReconciliation(tenantData.tenant.id, stagingList.id),
