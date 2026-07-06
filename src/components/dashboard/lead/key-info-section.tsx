@@ -83,7 +83,8 @@ interface KeyInfoSectionProps {
   editErrors?: { email?: string; phone?: string; general?: string };
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   onLeadTypeChange?: (newType: string) => void;
-  onListChange?: (listId: string, archiveReason?: string) => Promise<void>;
+  onListChange?: (listId: string, archiveReason?: string, assignToUserId?: string | null) => Promise<void>;
+  nextPositionMembers?: { user_id: string; email: string; name?: string | null }[];
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -125,6 +126,7 @@ export function KeyInfoSection({
   maxBranches,
   userBranchId,
   leadScope,
+  nextPositionMembers,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -209,8 +211,9 @@ export function KeyInfoSection({
                   activeLists={activeLeadLists ?? leadLists}
                   accessibleLists={leadLists}
                   industryId={industryId}
-                  onMove={(listId) => onListChange(listId)}
+                  onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
                   onQualify={onQualify}
+                  nextPositionMembers={nextPositionMembers}
                 />
               ) : (
                 <div className="flex gap-1.5">
@@ -286,7 +289,7 @@ export function KeyInfoSection({
           </div>
 
           {/* Lead Collaborators — admin/owner only */}
-          {isAdmin && <CollaboratorsBlock leadId={lead.id} />}
+          {isAdmin && <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} />}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (

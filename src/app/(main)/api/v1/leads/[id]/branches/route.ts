@@ -131,6 +131,15 @@ export async function POST(
     return apiServiceUnavailable("Failed to share lead");
   }
 
+  // Auto-add sharer (and assignee if set) as lead collaborators
+  const collaboratorIds = [auth.userId, ...(assignedTo ? [assignedTo] : [])];
+  await supabase
+    .from("lead_collaborators")
+    .upsert(
+      collaboratorIds.map((uid) => ({ tenant_id: auth.tenantId, lead_id: id, user_id: uid })),
+      { onConflict: "lead_id,user_id" },
+    );
+
   log.info({ leadId: id, branches: newBranchIds, assignedTo }, "Lead shared into branches");
 
   const leadName = `${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "A lead";

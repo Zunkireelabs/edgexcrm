@@ -15,6 +15,7 @@ import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
+import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -168,6 +169,22 @@ export default async function LeadDetailPage({
     selfUserId: tenantData.userId,
   });
 
+  // Next-position members for "Send to next" assignment picker
+  // Only computed for chain-position members in education_consultancy
+  const isChainMember =
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    tenantData.positionSlug != null &&
+    ASSIGN_CHAIN_POSITIONS.has(tenantData.positionSlug) &&
+    tenantData.permissions.baseTier === "member";
+  const nextSlug = isChainMember ? nextPositionSlug(tenantData.positionSlug) : null;
+  const nextPositionMembers = nextSlug
+    ? roster.filter(
+        (m) =>
+          m.position_slug === nextSlug &&
+          (tenantData.branchId == null || m.branch_id === tenantData.branchId),
+      )
+    : [];
+
   return (
     <LeadDetailV2
       lead={lead}
@@ -186,6 +203,7 @@ export default async function LeadDetailPage({
       canAssign={tenantData.permissions.canAssignLeads}
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}
+      nextPositionMembers={nextPositionMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}

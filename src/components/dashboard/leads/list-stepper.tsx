@@ -16,10 +16,23 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { LeadList } from "@/types/database";
 import { moveConfirmMessage } from "@/components/dashboard/leads/move-to-list-selector";
+
+interface NextPositionMember {
+  user_id: string;
+  email: string;
+  name?: string | null;
+}
 
 interface ListStepperProps {
   /** The lead's current list id. */
@@ -29,10 +42,12 @@ interface ListStepperProps {
   /** Lists the caller's position is allowed to move into (gates each direction). */
   accessibleLists: LeadList[];
   industryId?: string | null;
-  /** Move the lead to a list. Reuses the page's existing list-change handler. */
-  onMove: (listId: string) => Promise<void>;
+  /** Move the lead to a list, optionally with an assignee. */
+  onMove: (listId: string, assignToUserId?: string | null) => Promise<void>;
   /** Opens the dedicated Qualify dialog for the intake → Qualified step (education only). */
   onQualify?: () => void;
+  /** Next-position members to assign when sending to next stage. Empty = no picker shown. */
+  nextPositionMembers?: NextPositionMember[];
 }
 
 /**
@@ -50,8 +65,11 @@ export function ListStepper({
   industryId,
   onMove,
   onQualify,
+  nextPositionMembers = [],
 }: ListStepperProps) {
   const [confirmList, setConfirmList] = useState<LeadList | null>(null);
+  const [isNextDirection, setIsNextDirection] = useState(false);
+  const [selectedAssignee, setSelectedAssignee] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   const chain = [...activeLists].sort((a, b) => a.sort_order - b.sort_order);
@@ -83,11 +101,15 @@ export function ListStepper({
       onQualify?.();
       return;
     }
+    setIsNextDirection(true);
+    setSelectedAssignee("");
     setConfirmList(nextList);
   }
 
   function handlePrev() {
     if (!prevList || !canPrev) return;
+    setIsNextDirection(false);
+    setSelectedAssignee("");
     setConfirmList(prevList);
   }
 
@@ -95,8 +117,12 @@ export function ListStepper({
     if (!confirmList) return;
     setSaving(true);
     try {
-      await onMove(confirmList.id);
+      const assignTo = isNextDirection && nextPositionMembers.length > 0
+        ? (selectedAssignee || null)
+        : undefined;
+      await onMove(confirmList.id, assignTo);
       setConfirmList(null);
+      setSelectedAssignee("");
     } finally {
       setSaving(false);
     }
@@ -168,11 +194,11 @@ export function ListStepper({
         </div>
       </TooltipProvider>
 
-      {/* Confirm dialog — mirrors the previous dropdown's move confirmation. */}
+      {/* Confirm dialog */}
       <Dialog
         open={!!confirmList}
         onOpenChange={(v) => {
-          if (!v && !saving) setConfirmList(null);
+          if (!v && !saving) { setConfirmList(null); setSelectedAssignee(""); }
         }}
       >
         <DialogContent
@@ -191,8 +217,35 @@ export function ListStepper({
               <span className="font-medium text-foreground">{confirmList?.name}</span> list.
             </DialogDescription>
           </DialogHeader>
+
+          {/* Assignee picker — only shown when sending forward and next-position members exist */}
+          {isNextDirection && nextPositionMembers.length > 0 && (
+            <div className="py-2">
+              <p className="text-xs text-muted-foreground mb-1.5">Assign to</p>
+              <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Select assignee (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {nextPositionMembers.map((m) => (
+                    <SelectItem key={m.user_id} value={m.user_id}>
+                      <div className="flex items-center gap-2">
+                        <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                          <span className="text-[9px] font-medium text-primary">
+                            {(m.name || m.email)[0]?.toUpperCase() ?? "?"}
+                          </span>
+                        </div>
+                        <span>{m.name || m.email.split("@")[0]}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <DialogFooter>
-            <Button variant="outline" disabled={saving} onClick={() => setConfirmList(null)}>
+            <Button variant="outline" disabled={saving} onClick={() => { setConfirmList(null); setSelectedAssignee(""); }}>
               Cancel
             </Button>
             <Button disabled={saving} onClick={confirmMove}>
