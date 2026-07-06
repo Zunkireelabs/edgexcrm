@@ -29,7 +29,7 @@ export async function POST(_request: NextRequest) {
     .eq("tenant_user_id", selfId)
     .eq("work_date", today)
     .maybeSingle();
-  const existingRow = existing as { id: string; clock_in_at: string | null } | null;
+  const existingRow = existing as { id: string; clock_in_at: string | null; source: string } | null;
 
   // Idempotent: already clocked in today.
   if (existingRow?.clock_in_at) {
@@ -37,10 +37,16 @@ export async function POST(_request: NextRequest) {
   }
 
   const now = new Date().toISOString();
+  // A manual HR-set record (e.g. remote/half_day/absent) must not be
+  // silently overwritten by a self clock-in — only stamp clock_in_at.
   const result = existingRow
     ? await db
         .from("attendance_records")
-        .update({ clock_in_at: now, status: "present", source: "self_clock" })
+        .update(
+          existingRow.source === "manual"
+            ? { clock_in_at: now }
+            : { clock_in_at: now, status: "present", source: "self_clock" },
+        )
         .eq("id", existingRow.id)
         .select()
         .single()
@@ -58,6 +64,18 @@ export async function POST(_request: NextRequest) {
         .single();
 
   if (result.error) {
+    // Concurrent clock-in: two requests both saw "no row" and both INSERTed;
+    // the loser hits UNIQUE(tenant_id, tenant_user_id, work_date). Treat as
+    // "already clocked in" rather than a hard failure.
+    if (!existingRow && result.error.code === "23505") {
+      const { data: reRead } = await db
+        .from("attendance_records")
+        .select("*")
+        .eq("tenant_user_id", selfId)
+        .eq("work_date", today)
+        .maybeSingle();
+      if (reRead) return apiSuccess(reRead, 200);
+    }
     log.error({ error: result.error }, "Failed to clock in");
     return apiError("DB_ERROR", "Failed to clock in", 500);
   }
