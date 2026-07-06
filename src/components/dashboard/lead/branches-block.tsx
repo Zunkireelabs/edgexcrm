@@ -34,12 +34,6 @@ interface Branch {
   name: string;
 }
 
-interface TeamMember {
-  user_id: string;
-  email: string;
-  branch_id: string | null;
-}
-
 interface BranchesBlockProps {
   leadId: string;
   isAdmin: boolean;
@@ -50,7 +44,6 @@ interface BranchesBlockProps {
 export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: BranchesBlockProps) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("");
@@ -60,10 +53,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   const isBranchManager = leadScope === "team" && !!userBranchId;
   const canSend = isAdmin || isBranchManager;
 
-  function canEditRow(r: Membership) {
-    return isAdmin || (isBranchManager && r.branch_id === userBranchId);
-  }
-
   function canRevoke(r: Membership) {
     return isAdmin && !r.is_origin;
   }
@@ -71,10 +60,9 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [membRes, branchRes, teamRes] = await Promise.all([
+      const [membRes, branchRes] = await Promise.all([
         fetch(`/api/v1/leads/${leadId}/branches`),
         fetch("/api/v1/branches"),
-        fetch("/api/v1/team"),
       ]);
       if (membRes.ok) {
         const json = await membRes.json();
@@ -83,10 +71,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
       if (branchRes.ok) {
         const json = await branchRes.json();
         setAllBranches((json.data ?? []) as Branch[]);
-      }
-      if (teamRes.ok) {
-        const json = await teamRes.json();
-        setTeamMembers((json.data ?? []) as TeamMember[]);
       }
     } catch {
       // silent — block is non-critical
@@ -124,25 +108,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
     }
   }
 
-  async function handleAssigneeChange(branchId: string, userId: string | null) {
-    setSavingRow(branchId);
-    try {
-      const res = await fetch(`/api/v1/leads/${leadId}/branches/${branchId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: userId }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error?.message || "Failed to update assignee");
-      toast.success("Assignee updated");
-      await fetchData();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to update assignee");
-    } finally {
-      setSavingRow(null);
-    }
-  }
-
   async function handleRevoke(branchId: string, branchName: string) {
     if (!confirm(`Remove lead from "${branchName}"?`)) return;
     setSavingRow(branchId);
@@ -159,10 +124,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
     } finally {
       setSavingRow(null);
     }
-  }
-
-  function membersForBranch(branchId: string): TeamMember[] {
-    return teamMembers.filter((m) => m.branch_id === branchId);
   }
 
   if (loading) return null;
@@ -190,7 +151,6 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
         ) : (
           <div className="space-y-2">
             {memberships.map((m) => {
-              const branchMembers = membersForBranch(m.branch_id);
               const isSaving = savingRow === m.branch_id;
 
               return (
@@ -205,31 +165,9 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                       )}
                     </div>
 
-                    {canEditRow(m) ? (
-                      <Select
-                        value={m.assigned_to ?? "__unassigned__"}
-                        onValueChange={(v) =>
-                          handleAssigneeChange(m.branch_id, v === "__unassigned__" ? null : v)
-                        }
-                        disabled={isSaving}
-                      >
-                        <SelectTrigger className="h-7 text-xs mt-1">
-                          <SelectValue placeholder="Unassigned" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__unassigned__">
-                            <span className="text-muted-foreground">Unassigned</span>
-                          </SelectItem>
-                          {branchMembers.map((tm) => (
-                            <SelectItem key={tm.user_id} value={tm.user_id}>
-                              {tm.email}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
+                    {m.assigned_to_email && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.assigned_to_email ?? "Unassigned"}
+                        {m.assigned_to_email}
                       </p>
                     )}
                   </div>

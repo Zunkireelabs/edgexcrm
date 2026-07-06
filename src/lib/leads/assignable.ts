@@ -1,4 +1,4 @@
-import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
+import { ASSIGN_CHAIN_POSITIONS, peerSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 
 /**
  * Branch-scoping for "assign a user" dropdowns.
@@ -51,9 +51,11 @@ export function filterAssignableMembersByChain<
     opts.positionSlug != null &&
     ASSIGN_CHAIN_POSITIONS.has(opts.positionSlug);
   if (isChain) {
-    const targets = new Set(assignableTargetSlugs(opts.positionSlug));
-    const byPos = members.filter((m) => targets.has(m.position_slug ?? ""));
-    return opts.branchId == null ? byPos : byPos.filter(sameBranch); // no-branch ⇒ org-wide
+    // Only show same-position peers in the Assigned To dropdown.
+    // Next-position users appear only in the "Send to next" assignment picker.
+    const peers = new Set(peerSlugs(opts.positionSlug));
+    const byPos = members.filter((m) => peers.has(m.position_slug ?? ""));
+    return opts.branchId == null ? byPos : byPos.filter(sameBranch);
   }
   return filterAssignableMembers(members, opts.leadScope, opts.branchId); // non-chain fallback
 }
