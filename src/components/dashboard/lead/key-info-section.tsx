@@ -298,8 +298,8 @@ export function KeyInfoSection({
             )}
           </div>
 
-          {/* Lead Collaborators — admin/owner only */}
-          {isAdmin && <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} />}
+          {/* Lead Collaborators — visible to all, editable by admin/owner only */}
+          <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
