@@ -7,6 +7,7 @@ import { projectBoardMeta } from "./features/project-board/meta";
 import { dealsMeta } from "./features/deals/meta";
 import { servicesMeta } from "./features/services/meta";
 import { proposalsMeta } from "./features/proposals/meta";
+import { resourcingMeta } from "./features/resourcing/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { aiConfig } from "./ai/agent";
 
@@ -20,6 +21,7 @@ export const manifest: IndustryManifest = {
     { meta: dealsMeta },
     { meta: servicesMeta },
     { meta: proposalsMeta },
+    { meta: resourcingMeta },
     { meta: leadListsMeta },
   ],
   sidebar: [
@@ -52,6 +54,18 @@ export const manifest: IndustryManifest = {
       href: "/proposals",
       label: "Proposals",
       icon: "FileSignature",
+    },
+    {
+      featureId: FEATURES.RESOURCING,
+      href: "/resourcing",
+      label: "Resourcing",
+      icon: "Users",
+    },
+    {
+      featureId: FEATURES.RESOURCING,
+      href: "/resourcing/utilization",
+      label: "Utilization",
+      icon: "Gauge",
     },
     {
       kind: "group" as const,

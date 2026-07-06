@@ -62,6 +62,7 @@ interface CheckInRecord {
   phone: string | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
+  tags: string[];
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
@@ -984,31 +985,38 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-xs font-medium truncate">{checkedInByName}</div>
                       </div>
 
-                      {/* Meet with */}
-                      <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
-                        <div className="text-[10px] text-muted-foreground">Meet with</div>
-                        {canAssignThis ? (
-                          <Select
-                            value={meetWithId ?? "__unassigned__"}
-                            onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
-                            disabled={assigningId === record.id}
-                          >
-                            <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
-                              <SelectValue placeholder="Select..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__unassigned__">Not selected</SelectItem>
-                              {allBranchMembers.map((m) => (
-                                <SelectItem key={m.user_id} value={m.user_id}>
-                                  {m.name || m.email.split("@")[0]}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
-                        )}
-                      </div>
+                      {/* Assigned To / Meet with — depends on lead tag */}
+                      {(() => {
+                        const isStudentOrParent = (record.tags ?? []).some((t) => t === "student" || t === "parent");
+                        const colLabel = isStudentOrParent ? "Assigned To" : "Meet with";
+                        const colMembers = isStudentOrParent ? counselorMembers : allBranchMembers;
+                        return (
+                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">{colLabel}</div>
+                            {canAssignThis ? (
+                              <Select
+                                value={meetWithId ?? "__unassigned__"}
+                                onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                disabled={assigningId === record.id}
+                              >
+                                <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                  {colMembers.map((m) => (
+                                    <SelectItem key={m.user_id} value={m.user_id}>
+                                      {m.name || m.email.split("@")[0]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                            )}
+                          </div>
+                        );
+                      })()}
 
                       {/* Notes */}
                       <div className="flex-1 min-w-0">

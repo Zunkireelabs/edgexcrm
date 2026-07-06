@@ -47,6 +47,7 @@ import {
   Repeat2,
   Package,
   FileSignature,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -126,6 +127,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Repeat2,
   Package,
   FileSignature,
+  Gauge,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -556,6 +558,9 @@ export function DashboardShell({
                 {/* Organization */}
                 <NavSectionHeader label="Organization" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/people") && renderNavItem({ href: "/people", label: "People", icon: UsersRound })}
+                {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
+                {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
               </>
             );
           })() : (
