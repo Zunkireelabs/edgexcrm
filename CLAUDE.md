@@ -310,13 +310,18 @@ gh pr view <num> --json baseRefName  # Must be "stage"
 git fetch origin && git switch -c feature/<name> origin/stage
 git fetch origin && git rebase origin/stage   # again right before merge
 
-# Deploy staging (merge a PR to stage, or:)
-git push origin stage
+# main + stage are BRANCH-PROTECTED — no direct pushes. Everything is a PR.
+# (If GitHub says the PR is out-of-date, click "Update branch" — required to merge.)
+
+# Deploy staging: open + squash-merge a PR to stage (CI must be green, 0 approvals)
+gh pr create --base stage --title "..." --body "..."
+gh pr merge <num> --squash --delete-branch
 
 # Promote to production — MIGRATIONS FIRST, THEN CODE
 #   1) apply pending migrations to the PROD db (per-action approval) + verify
-#   2) then merge code:
-git checkout main && git fetch origin && git merge --ff-only origin/stage && git push origin main
+#   2) then promote code via a stage→main PR (1 approval; merge commit, not squash):
+gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
+# ...get 1 approval, then merge it (merge commit) → auto-deploys prod.
 
 # Monitor
 gh run list --limit 5

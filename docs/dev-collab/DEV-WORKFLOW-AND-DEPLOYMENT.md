@@ -23,6 +23,23 @@ If you're an AI session: you may apply migrations to **stage** and verify. You m
 
 ---
 
+## ⚡ What changed — this is now ENFORCED, not just asked (2026-07-06)
+
+**`main` and `stage` are branch-protected on GitHub.** The rules above used to rely on everyone remembering them; now GitHub blocks the dangerous actions. This is why work stops "reverting." **Read this — your day-to-day changed:**
+
+- **You can't push to `stage` or `main` directly anymore.** Everything is a Pull Request. `git push origin stage` / `git push origin main` will be **rejected**.
+- **Your PR must be up to date with its base before it can merge.** If someone merged to `stage` after you branched, GitHub shows **"This branch is out-of-date"** — click **"Update branch"** (or `git fetch && git rebase origin/stage && git push --force-with-lease`) before merging. *This is the single rule that stops your PR from silently reverting a teammate's work.*
+- **CI must be green** (Lint, Type Check, Build). Red PRs can't merge. (Vercel check is noise — ignore it.)
+- **Feature PRs into `stage` merge by SQUASH** (one clean commit per feature). The merge button says **"Squash and merge."**
+- **You can't force-push or delete `stage`/`main`.** History is safe.
+- **CODEOWNERS auto-requests reviewers** (@sthasadin / @ani-shh) when you touch hot shared files (`shell.tsx`, `queries.ts`, leads routes, manifests, migrations, CI). Wait for / ping them.
+- **`main` needs 1 approval; `stage` needs 0** (you can self-merge to stage once CI is green + up to date).
+- Rules apply to admins too — nobody bypasses. In a genuine emergency an admin can toggle protection off in repo Settings → Branches, then restore it.
+
+**For your Claude/AI session:** same rules. It branches from the latest `origin/stage`, opens a PR to `stage`, waits for green CI, squash-merges; it never pushes to `stage`/`main` directly, never merges to `main` without a stage→main PR + approval, and never touches prod without an explicit per-action "go." If your Claude proposes `git push origin stage/main`, a merge-commit into stage, or skipping "Update branch," it's wrong — stop it.
+
+---
+
 ## 1. Why this doc exists (the failure modes it prevents)
 
 | Symptom | Root cause | Rule that prevents it |
@@ -53,20 +70,21 @@ If you're an AI session: you may apply migrations to **stage** and verify. You m
 
 ```
 git fetch origin
-git switch -c feature/<short-name> origin/stage      # 1. branch from LATEST stage
+git switch -c feature/<short-name> origin/stage       # 1. branch from LATEST stage
 # ... build. Commit in logical chunks. ...
-git fetch origin && git rebase origin/stage           # 2. rebase before you open/refresh the PR
-npm run build && npx eslint --max-warnings 50         # 3. gates green locally
+git fetch origin && git rebase origin/stage            # 2. rebase before you open/refresh the PR
+npm run build && npx eslint --max-warnings 50          # 3. gates green locally
 gh pr create --base stage --title "..." --body "..."   # 4. PR ALWAYS targets stage
 # 5. CI green (Build / Lint / Type Check). Vercel check is noise — ignore it.
-# 6. Squash/merge to stage → auto-deploys to dev-lead-crm. Smoke it there.
+# 6. If GitHub says "out-of-date", click "Update branch" (or rebase again). REQUIRED to merge.
+gh pr merge <n> --squash --delete-branch               # 7. Squash-merge to stage → deploys to dev-lead-crm. Smoke it.
 ```
 
 **Rules of the path:**
-- **Step 1 & 2 are the ones people skip and regret.** If your branch is a day old, someone has touched `stage`. Rebase.
-- **Verify the base before merging:** `gh pr view <n> --json baseRefName` must say `"stage"`. Never `main`.
+- **Step 1, 2 & 6 are the ones people skip and regret.** If your branch is a day old, someone has touched `stage`. Rebase / Update branch — GitHub now *requires* it before merge.
+- **You can't push to `stage` directly** — the PR is the only way in. Base must be `stage`, never `main`.
+- **Feature PRs merge by SQUASH** (one commit per feature). `--delete-branch` keeps the branch list clean so nothing gets re-merged by accident.
 - **Keep PRs small and single-purpose.** A 1-file PR rarely conflicts; a 30-file PR touching `shell.tsx` will.
-- **Delete the branch after merge.** Stale branches get re-merged by accident and reintroduce old code.
 
 ---
 
@@ -133,15 +151,17 @@ Do this deliberately, not casually. **Sequence (never reorder):**
    (pirhnklvtjjpuvbvibxf) — transaction, before/after counts — with per-action approval.
    Include any manual steps (e.g. creating a private storage bucket).
 3. Verify prod DB: tables/policies/counts as expected.
-4. THEN promote code:
-      git checkout main && git fetch origin && git merge --ff-only origin/stage
-      git push origin main            # this auto-builds + deploys prod
-   (or merge the stage→main PR). Watch `gh run list`.
+4. THEN promote code via a PR (you can NOT push to `main` directly — it's protected):
+      gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
+   Wait for CI green + **1 approval** (from another admin), then merge it (use a **merge commit** —
+   main keeps stage's individual commits; do not squash the whole promotion). The push to `main`
+   auto-builds + deploys prod. Watch `gh run list`.
 5. Post-deploy: hit prod, confirm the feature + no 500s. Check `docker logs leads-crm`.
 6. Update docs/SESSION-LOG.md: what shipped, which migs are now on prod.
 ```
 
 - **Coupled changes** (code needs schema): step 2 **before** step 4, always.
+- **`main` is protected**: promotion is always a `stage → main` PR with 1 approval — no `git push origin main`, no `git merge && push`. Merge it as a **merge commit** (not squash) so each feature stays visible on `main`.
 - Never run a bare `docker compose` in the prod dir — there's a stray dev `docker-compose.yml` there that clobbers prod. The workflows use `-f docker-compose.prod.yml`; you should too if you ever touch the box.
 
 ### 6c. Hotfix straight to prod
