@@ -43,14 +43,35 @@ esac
 
 DIR="$(cd "$(dirname "$0")/../supabase/migrations" && pwd)"
 FILES="$(mktemp)"; APPLIED="$(mktemp)"; PENDING="$(mktemp)"; SESSION_SQL="$(mktemp)"
-trap 'rm -f "$FILES" "$APPLIED" "$PENDING" "$SESSION_SQL"' EXIT
+CONN_ERR="$(mktemp)"; LEDGER_ERR="$(mktemp)"
+trap 'rm -f "$FILES" "$APPLIED" "$PENDING" "$SESSION_SQL" "$CONN_ERR" "$LEDGER_ERR"' EXIT
 
 # Real, numbered migration files (excludes _TEMPLATE.sql), sorted.
 ls "$DIR" | grep -E '^[0-9]{3}_.*\.sql$' | sort > "$FILES"
 
-# Applied set from the ledger (empty if the ledger table doesn't exist yet).
-psql "$DB" -tAc "SELECT version FROM public.schema_migrations ORDER BY version;" 2>/dev/null \
-  | sed '/^$/d' | sort > "$APPLIED" || true
+# FAIL-CLOSED: prove we can reach the DB before reading the ledger. A connection
+# or auth error must NOT be silently treated as "0 applied" — that would mark
+# every migration pending and try to re-apply all of them. Only a genuinely
+# empty/absent ledger is a legitimate "0 applied".
+if ! psql "$DB" -tAc "SELECT 1;" >/dev/null 2>"$CONN_ERR"; then
+  echo "ERROR: cannot reach the $ENV database — refusing to run (NOT assuming an empty ledger)." >&2
+  cat "$CONN_ERR" >&2
+  exit 1
+fi
+
+# Applied set from the ledger. A missing ledger table (fresh DB, mig 123 not yet
+# applied) is a legitimate 0-applied; any OTHER error aborts.
+if psql "$DB" -tAc "SELECT version FROM public.schema_migrations ORDER BY version;" 2>"$LEDGER_ERR" \
+     | sed '/^$/d' | sort > "$APPLIED"; then
+  :
+elif grep -qiE 'relation .*schema_migrations.* does not exist|does not exist' "$LEDGER_ERR"; then
+  : > "$APPLIED"   # fresh DB — ledger table not created yet → 0 applied (legit)
+  echo "note: schema_migrations not found on $ENV — treating as fresh DB (0 applied)."
+else
+  echo "ERROR: could not read the migration ledger on $ENV — aborting." >&2
+  cat "$LEDGER_ERR" >&2
+  exit 1
+fi
 
 comm -23 "$FILES" "$APPLIED" > "$PENDING" || true
 
