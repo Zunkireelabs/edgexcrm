@@ -118,6 +118,16 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  // Only canManageHR may set employment status/type/billability/manager/department,
+  // even at profile-creation time — self-service covers personal-info fields only.
+  // (Mirrors the same restriction on PATCH /api/v1/employees/[id].)
+  const hrOnlyFields = ["employment_type", "employment_status", "billable", "weekly_capacity_hours", "department_id", "manager_tenant_user_id"];
+  if (!hasManageHR) {
+    for (const key of hrOnlyFields) {
+      if (body[key] !== undefined) return apiForbidden();
+    }
+  }
+
   const { data: existing } = await db
     .from("employee_profiles")
     .select("id")

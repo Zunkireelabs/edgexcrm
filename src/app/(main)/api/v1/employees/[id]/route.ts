@@ -126,6 +126,17 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     if (!managerCheck) return apiError("NOT_FOUND", "manager_tenant_user_id not found", 404);
   }
 
+  // photo_url must point into this employee's own signed-upload folder
+  // (see photo-upload-url/route.ts) — otherwise a caller could set it to an
+  // arbitrary storage path and read a coworker's photo via GET /photo, which
+  // only re-checks access against THIS profile, not the path's true owner.
+  if (body.photo_url !== undefined && body.photo_url !== null) {
+    const expectedPrefix = `${auth.tenantId}/${id}/photo.`;
+    if (!String(body.photo_url).startsWith(expectedPrefix)) {
+      return apiValidationError({ photo_url: ["Must be a path returned by /photo-upload-url for this employee"] });
+    }
+  }
+
   const { data: existing } = await db
     .from("employee_profiles")
     .select("id")
