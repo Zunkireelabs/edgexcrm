@@ -754,6 +754,18 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
   const [draftMedium, setDraftMedium] = useState(lead.intake_medium ?? "");
   const [draftAccount, setDraftAccount] = useState(lead.intake_account ?? "");
   const [draftCampaign, setDraftCampaign] = useState(lead.intake_campaign ?? "");
+  const [affiliateName, setAffiliateName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!lead.ref_code) return;
+    fetch("/api/v1/affiliates")
+      .then((r) => r.json())
+      .then((json) => {
+        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === lead.ref_code);
+        if (match) setAffiliateName(match.name);
+      })
+      .catch(() => null);
+  }, [lead.ref_code]);
 
   function openEdit() {
     setDraftSource(lead.intake_source ?? "");
@@ -857,7 +869,12 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
           <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
           <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
           {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
-          {lead.ref_code && <InfoRow label="Ref Code" value={lead.ref_code} />}
+          {lead.ref_code && (
+            <InfoRow
+              label="Ref Code"
+              value={affiliateName ? `${lead.ref_code} · ${affiliateName}` : lead.ref_code}
+            />
+          )}
         </div>
       )}
     </>

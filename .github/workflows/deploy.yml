@@ -74,9 +74,31 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  migrate:
+    name: Apply Pending Migrations
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: production
+    # TODO(Pillar 2 prod cutover): disabled until the prod schema_migrations
+    # ledger is backfilled at the consolidated promotion — without that, this
+    # would try to apply ~122 historical held migrations in one deploy. Flipping
+    # this to enabled is a deliberate Opus/Sadin step, not part of this PR.
+    # See docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md § 5 (Migration protocol).
+    if: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply pending migrations
+        env:
+          PROD_DB_URL: ${{ secrets.PROD_DB_URL }}
+        run: scripts/migrate-apply.sh prod
+
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    # Not wired to `migrate` (unlike staging) while that job is disabled —
+    # enabling it at cutover means adding `migrate` here too.
     needs: build-push
     environment: production
     steps:

@@ -57,10 +57,24 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  migrate:
+    name: Apply Pending Migrations
+    runs-on: ubuntu-latest
+    needs: build-push
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install postgresql-client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply pending migrations
+        env:
+          STAGE_DB_URL: ${{ secrets.STAGE_DB_URL }}
+        run: scripts/migrate-apply.sh stage
+
   deploy:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: build-push
+    needs: [build-push, migrate]
     environment: staging
     steps:
       - name: Deploy via SSH
