@@ -115,6 +115,8 @@ export function ListStepper({
 
   async function confirmMove() {
     if (!confirmList) return;
+    // require assignee when moving forward with available next-position members
+    if (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee) return;
     setSaving(true);
     try {
       const assignTo = isNextDirection && nextPositionMembers.length > 0
@@ -241,6 +243,9 @@ export function ListStepper({
                   ))}
                 </SelectContent>
               </Select>
+              {!selectedAssignee && (
+                <p className="text-xs text-muted-foreground mt-1">Select an assignee to continue.</p>
+              )}
             </div>
           )}
 
@@ -248,7 +253,10 @@ export function ListStepper({
             <Button variant="outline" disabled={saving} onClick={() => { setConfirmList(null); setSelectedAssignee(""); }}>
               Cancel
             </Button>
-            <Button disabled={saving} onClick={confirmMove}>
+            <Button
+              disabled={saving || (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee)}
+              onClick={confirmMove}
+            >
               {saving ? "Moving…" : "Confirm"}
             </Button>
           </DialogFooter>

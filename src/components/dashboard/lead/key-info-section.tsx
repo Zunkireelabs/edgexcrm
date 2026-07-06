@@ -216,7 +216,7 @@ export function KeyInfoSection({
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
-              {leadLists && leadLists.length > 0 && onListChange ? (
+              {leadLists && leadLists.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
                 <ListStepper
                   currentListId={(lead as { list_id?: string | null }).list_id ?? null}
                   activeLists={activeLeadLists ?? leadLists}
