@@ -184,6 +184,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 
 ## Read first, every session
 
+0. **`docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md` — how code & DB changes move to prod safely (branch/PR discipline, migration-before-code ordering, promotion & rollback runbooks, shared-file conflict rules). Non-negotiable process. Read before any branch/PR/migration/deploy. This is what keeps features from "reverting" on prod.**
 1. `docs/SESSION-LOG.md` — current state of the project. The "🟢 NEXT SESSION — RESUME HERE" block at the top tells you exactly where to pick up.
 2. `docs/STATUS-BOARD.md` — live status of open user-side actions and questions.
 3. `docs/FEATURE-ROADMAP.md` — forward-looking pipeline of features by state (ideas → approved → planned → in-progress). Where new feature ideas are logged and where we pick the next thing to build.
@@ -278,33 +279,54 @@ No test runner is configured. Path alias: `@/*` maps to `./src/*`.
 
 ## CI/CD & Branching
 
+**📖 The full process is `docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md` (index: `docs/dev-collab/README.md`) — READ IT before any branch/PR/migration/deploy work. Every human and every Claude session on this repo follows it. The rules below are the summary; that doc is authoritative.**
+
 **ALL feature branches and PRs MUST merge to `stage` first. NEVER merge directly to `main`.**
 
 ```
 feature/* ──► stage (staging) ──► main (production)
 ```
 
+### The rules that keep prod from breaking (learned from real incidents)
+
+1. **Branch from — and rebase onto — the LATEST `origin/stage`** right before you merge. A stale base is the #1 cause of a merge silently reverting someone else's work on a shared file (`shell.tsx`, `leads/queries.ts`, `leads/route.ts`, …). Resolve conflicts on those files **hunk-by-hunk**, never "keep my whole file."
+2. **`main` auto-deploys on every push, with NO migration step.** So a coupled DB change must be **applied to the PROD database BEFORE the code merges to `main`** — else prod runs new code on an old schema → 500s (split-brain). Order is always: *apply migration to prod → verify → merge stage→main.*
+3. **One migration number = one file, globally unique.** `ls supabase/migrations/ | sort` → take the next number; never reuse (we already have a duplicate `110_*` — don't add more). Transactional, additive, with a rollback line + before/after counts.
+4. **Two separate Supabase DBs** (stage `dymeudcddasqpomfpjvt`, prod `pirhnklvtjjpuvbvibxf`). A migration on one is NOT on the other. "Applied" is meaningless without saying which DB. A migration is not on prod until you have personally run it on prod.
+5. **Rollback (`rollback.yml`) is a fire alarm:** it reverts CODE only (not the DB), un-deploys everything after the target SHA, and detaches HEAD on the box. Announce before running; prefer a roll-*forward* revert PR.
+
 | Trigger | Result |
 |---------|--------|
 | PR to `main` or `stage` | CI checks (lint, typecheck, build) |
 | Push to `stage` | Auto-deploy to `dev-lead-crm.zunkireelabs.com` |
-| Push to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` |
-| Manual dispatch | Rollback (specific commit) |
+| Push to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` (⚠️ no migration step) |
+| Manual dispatch | Rollback (code only — see rule 5) |
 
 ```bash
 # Before merging ANY PR, verify base branch
 gh pr view <num> --json baseRefName  # Must be "stage"
 
-# Deploy staging
-git push origin stage
+# Start work: always from the latest stage
+git fetch origin && git switch -c feature/<name> origin/stage
+git fetch origin && git rebase origin/stage   # again right before merge
 
-# Deploy production (only after staging verified)
-git checkout main && git merge stage && git push origin main
+# main + stage are BRANCH-PROTECTED — no direct pushes. Everything is a PR.
+# (If GitHub says the PR is out-of-date, click "Update branch" — required to merge.)
+
+# Deploy staging: open + squash-merge a PR to stage (CI must be green, 0 approvals)
+gh pr create --base stage --title "..." --body "..."
+gh pr merge <num> --squash --delete-branch
+
+# Promote to production — MIGRATIONS FIRST, THEN CODE
+#   1) apply pending migrations to the PROD db (per-action approval) + verify
+#   2) then promote code via a stage→main PR (1 approval; merge commit, not squash):
+gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
+# ...get 1 approval, then merge it (merge commit) → auto-deploys prod.
 
 # Monitor
 gh run list --limit 5
 
-# Rollback
+# Rollback (reverts CODE only — not the DB; announce first)
 gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="description"
 ```
 

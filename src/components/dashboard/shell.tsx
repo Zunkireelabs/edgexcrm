@@ -49,6 +49,7 @@ import {
   FileSignature,
   Gauge,
   CalendarClock,
+  CalendarCheck,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -87,6 +88,7 @@ const UNIVERSAL_NAV_MIDDLE = [
 const UNIVERSAL_NAV_BOTTOM = [
   { href: "/team", label: "Org Structure", icon: Network },
   { href: "/leave", label: "Leave", icon: CalendarClock },
+  { href: "/attendance", label: "Attendance", icon: CalendarCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -480,6 +482,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Administration" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
                 {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
+                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
               </>
             );
           })() : isItAgency ? (() => {
@@ -563,6 +566,7 @@ export function DashboardShell({
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
                 {navAllowed("/people") && renderNavItem({ href: "/people", label: "People", icon: UsersRound })}
                 {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
+                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
                 {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
                 {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
               </>

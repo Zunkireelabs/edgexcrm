@@ -28,7 +28,7 @@ export function isWorkingDay(
   return true;
 }
 
-function addDays(dateISO: string, n: number): string {
+export function addDays(dateISO: string, n: number): string {
   const d = new Date(`${dateISO}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);

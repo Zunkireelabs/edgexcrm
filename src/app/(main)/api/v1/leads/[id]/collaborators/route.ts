@@ -19,9 +19,6 @@ export async function GET(
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (auth.permissions.baseTier !== "owner" && auth.permissions.baseTier !== "admin") {
-    return apiForbidden();
-  }
 
   const supabase = await createServiceClient();
 
