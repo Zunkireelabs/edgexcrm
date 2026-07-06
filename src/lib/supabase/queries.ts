@@ -474,12 +474,18 @@ export async function getLeadsForPipeline(
   } else if (options?.branchId) {
     // Service client: tenant_users RLS hides other users' rows from the RLS client.
     const svc = await createServiceClient();
-    const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
-    // Include unassigned leads in this branch too — see getLeads() above for why.
-    if (memberIds.length > 0) {
-      query = query.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
-    } else {
-      query = query.is("assigned_to", null).eq("branch_id", options.branchId);
+    const [memberIds, sharedIds] = await Promise.all([
+      branchMemberIds(svc, tenantId, options.branchId),
+      leadIdsForBranch(svc, tenantId, options.branchId).then((ids) => ids.slice(0, 300)),
+    ]);
+    // Include: leads assigned to branch members, unassigned leads in branch,
+    // and leads shared into this branch via lead_branches (sent from this branch to another).
+    const parts: string[] = [];
+    if (memberIds.length > 0) parts.push(`assigned_to.in.(${memberIds.join(",")})`);
+    parts.push(`and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
+    if (sharedIds.length > 0) parts.push(`id.in.(${sharedIds.join(",")})`);
+    if (parts.length > 0) {
+      query = query.or(parts.join(","));
     }
   }
 
