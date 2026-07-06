@@ -24,6 +24,7 @@ import { ActivityCard } from "./activity-card";
 import { LogActivityModal } from "./log-activity-modal";
 import { NotesTab, type NotesTabRef } from "../notes-tab";
 import { ChecklistCard } from "../management-panel";
+import { TaskList } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 
@@ -54,6 +55,8 @@ interface ActivitiesPanelProps {
   teamMemberEmails: Record<string, string>;
   teamMemberNames: Record<string, string>;
   isAdmin: boolean;
+  canEdit?: boolean;
+  canManageNotes?: boolean;
   onNotesChange: (notes: LeadNote[]) => void;
   checklists: LeadChecklist[];
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
@@ -89,6 +92,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   teamMemberEmails,
   teamMemberNames,
   isAdmin,
+  canEdit,
+  canManageNotes,
   onNotesChange,
   checklists,
   onChecklistsChange,
@@ -118,6 +123,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const [modalType, setModalType] = useState<ActivityType>("call");
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
+  const [appNotes, setAppNotes] = useState<{ id: string; notes: string; created_at: string; updated_at: string | null; institution_name: string | null }[]>([]);
 
   const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
 
@@ -139,9 +145,25 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
     }
   }, [leadId]);
 
+  // Fetch application notes (education industry only)
+  const fetchAppNotes = useCallback(async () => {
+    if (industryId !== "education_consultancy") return;
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/applications`);
+      if (res.ok) {
+        const json = await res.json();
+        const apps = (json.data ?? []) as { id: string; notes: string | null; created_at: string; updated_at: string | null; institution_name: string | null }[];
+        setAppNotes(apps.filter((a): a is typeof apps[number] & { notes: string } => Boolean(a.notes && a.notes.trim())));
+      }
+    } catch {
+      // silent — non-critical
+    }
+  }, [leadId, industryId]);
+
   useEffect(() => {
     fetchActivities();
-  }, [fetchActivities]);
+    fetchAppNotes();
+  }, [fetchActivities, fetchAppNotes]);
 
   const handleLogActivity = (type: ActivityType) => {
     setModalType(type);
@@ -383,17 +405,36 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           teamMemberNames={teamMemberNames}
           teamMemberEmails={teamMemberEmails}
           currentUserId={currentUserId}
+          canManageNotes={canManageNotes}
         />
       )}
 
-      {/* Tasks tab — same checklist as the right-rail panel, in sync via shared state */}
+      {/* Tasks tab — assignable Tasks (real `tasks` table) + the lightweight checklist below,
+          in sync with the right-rail panel via shared state. */}
       {activeTab === "tasks" && (
-        <ChecklistCard
-          leadId={leadId}
-          checklists={checklists}
-          isAdmin={isAdmin}
-          onChecklistsChange={onChecklistsChange}
-        />
+        <div className="space-y-4">
+          <Card className="shadow-none rounded-lg">
+            <CardContent className="p-4">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                Assigned Tasks
+              </p>
+              <TaskList
+                fetchUrl={`/api/v1/leads/${leadId}/tasks`}
+                currentUserId={currentUserId}
+                context={{ leadId }}
+                emptyLabel="No tasks assigned for this lead yet."
+              />
+            </CardContent>
+          </Card>
+
+          <ChecklistCard
+            leadId={leadId}
+            checklists={checklists}
+            isAdmin={isAdmin}
+            canEdit={canEdit}
+            onChecklistsChange={onChecklistsChange}
+          />
+        </div>
       )}
 
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
@@ -458,8 +499,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         </>
       )}
 
-      {/* Activity list (all, calls, meetings) */}
-      {(activeTab === "all" || activeTab === "calls" || activeTab === "meetings") && (
+      {/* Activity list (calls, meetings only — "all" tab uses unified timeline below) */}
+      {(activeTab === "calls" || activeTab === "meetings") && (
         <>
           {isLoading ? (
             <Card className="shadow-none rounded-lg py-0">
@@ -495,41 +536,180 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               ))}
             </div>
           )}
+        </>
+      )}
 
-          {/* System activities on "all" tab */}
-          {activeTab === "all" && systemActivities.length > 0 && (
-            <div className="mt-6 pt-4 border-t">
-              <h3 className="text-sm font-medium text-muted-foreground mb-4">System Activity</h3>
-              {(() => {
-                const submissions = systemActivities.filter((a) => a.action === "lead.submission");
-                const others = systemActivities.filter((a) => a.action !== "lead.submission").slice(0, 10);
-                const sorted = [...submissions, ...others].sort(
-                  (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                );
-                const groups = groupByDay(sorted);
-                return groups.map((group, gi) => (
+      {/* Unified timeline on "all" tab — system events + notes + calls/meetings + app notes */}
+      {activeTab === "all" && isLoading && (
+        <Card className="shadow-none rounded-lg py-0">
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground">Loading activities...</p>
+          </CardContent>
+        </Card>
+      )}
+      {activeTab === "all" && !isLoading && (() => {
+            type UnifiedItem =
+              | { kind: "system"; id: string; at: string; event: LeadActivity }
+              | { kind: "note"; id: string; at: string; note: LeadNote }
+              | { kind: "activity"; id: string; at: string; record: LeadActivityRecord }
+              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null };
+
+            // Audit events (skip note_added — replaced by actual note items below)
+            const sysItems: UnifiedItem[] = systemActivities
+              .filter((a) => a.action !== "lead.note_added")
+              .map((a) => ({ kind: "system", id: a.id, at: a.created_at, event: a }));
+
+            // Notes with full content
+            const noteItems: UnifiedItem[] = notes.map((n) => ({
+              kind: "note", id: `note-${n.id}`, at: n.created_at, note: n,
+            }));
+
+            // Call & meeting logs
+            const activityItems: UnifiedItem[] = loggedActivities
+              .filter((a) => a.activity_type === "call" || a.activity_type === "meeting")
+              .map((a) => ({ kind: "activity", id: `act-${a.id}`, at: a.created_at, record: a }));
+
+            // Application notes
+            const appNoteItems: UnifiedItem[] = appNotes.map((a) => ({
+              kind: "app_note", id: `appnote-${a.id}`, at: a.updated_at ?? a.created_at,
+              content: a.notes, institution: a.institution_name,
+            }));
+
+            const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems]
+              .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+            if (all.length === 0) return (
+              <Card className="shadow-none rounded-lg py-0">
+                <CardContent className="p-8 text-center">
+                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">{getEmptyMessage()}</p>
+                </CardContent>
+              </Card>
+            );
+
+            // Group by day
+            const dayGroups: { dayKey: string; label: string; items: UnifiedItem[] }[] = [];
+            const seen = new Map<string, number>();
+            for (const item of all) {
+              const d = new Date(item.at);
+              const dayKey = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+              const idx = seen.get(dayKey);
+              if (idx !== undefined) {
+                dayGroups[idx].items.push(item);
+              } else {
+                seen.set(dayKey, dayGroups.length);
+                dayGroups.push({ dayKey, label: formatDayLabel(d), items: [item] });
+              }
+            }
+
+            return (
+              <div className="mt-6 pt-4 border-t">
+                <h3 className="text-sm font-medium text-muted-foreground mb-4">System Activity</h3>
+                {dayGroups.map((group, gi) => (
                   <div key={group.dayKey}>
                     <p className={`text-xs font-medium text-muted-foreground mb-2${gi > 0 ? " mt-4" : ""}`}>
                       {group.label}
                     </p>
-                    {group.items.map((activity, idx) => (
-                      <SystemActivityItem
-                        key={activity.id}
-                        activity={activity}
-                        teamMemberEmails={teamMemberEmails}
-                        teamMemberNames={teamMemberNames}
-                        currentUserId={currentUserId}
-                        leadId={leadId}
-                        isLast={idx === group.items.length - 1}
-                      />
-                    ))}
+                    {group.items.map((item, idx) => {
+                      const isLast = idx === group.items.length - 1;
+                      if (item.kind === "system") {
+                        return (
+                          <SystemActivityItem
+                            key={item.id}
+                            activity={item.event}
+                            teamMemberEmails={teamMemberEmails}
+                            teamMemberNames={teamMemberNames}
+                            currentUserId={currentUserId}
+                            leadId={leadId}
+                            isLast={isLast}
+                          />
+                        );
+                      }
+                      if (item.kind === "note") {
+                        const actor = resolveActorLabel(item.note.user_id, currentUserId, teamMemberNames, teamMemberEmails);
+                        const plain = item.note.content.replace(/<[^>]+>/g, "").trim();
+                        return (
+                          <div key={item.id} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+                            </div>
+                            <div className="min-w-0 pb-3 flex-1">
+                              <p className="text-sm text-foreground">Note added</p>
+                              {plain && (
+                                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
+                                  {plain}
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {[formatTimeOnly(item.note.created_at), actor].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (item.kind === "activity") {
+                        const a = item.record;
+                        const actor = resolveActorLabel(a.user_id, currentUserId, teamMemberNames, teamMemberEmails);
+                        const Icon = a.activity_type === "call" ? Phone : Calendar;
+                        const label = a.activity_type === "call"
+                          ? `Call${a.call_outcome ? ` · ${a.call_outcome.replace(/_/g, " ")}` : ""}${a.duration_minutes ? ` · ${a.duration_minutes}m` : ""}`
+                          : `Meeting${a.subject ? ` · ${a.subject}` : ""}`;
+                        const notes = a.description?.replace(/<[^>]+>/g, "").trim();
+                        return (
+                          <div key={item.id} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+                                <Icon className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+                            </div>
+                            <div className="min-w-0 pb-3 flex-1">
+                              <p className="text-sm text-foreground">{label}</p>
+                              {notes && (
+                                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
+                                  {notes}
+                                </p>
+                              )}
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {[formatTimeOnly(a.created_at), actor].filter(Boolean).join(" · ")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (item.kind === "app_note") {
+                        return (
+                          <div key={item.id} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+                            </div>
+                            <div className="min-w-0 pb-3 flex-1">
+                              <p className="text-sm text-foreground">
+                                Application note{item.institution ? ` · ${item.institution}` : ""}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 break-words">
+                                {item.content}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {formatTimeOnly(item.at)}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
                   </div>
-                ));
-              })()}
-            </div>
-          )}
-        </>
-      )}
+                ))}
+              </div>
+            );
+      })()}
 
       {/* Log Activity Modal */}
       <LogActivityModal
@@ -576,7 +756,7 @@ function SystemActivityItem({
 }) {
   const time = formatTimeOnly(activity.created_at);
   const actor = resolveActorLabel(activity.user_id, currentUserId, teamMemberNames, teamMemberEmails);
-  const description = getSystemActivityDescription(activity, teamMemberEmails);
+  const description = getSystemActivityDescription(activity, teamMemberEmails, teamMemberNames);
   const isSubmission = activity.action === "lead.submission";
   const Icon = getSystemActivityIcon(activity);
   const subline = [time, actor].filter(Boolean).join(" · ");
@@ -805,9 +985,12 @@ function groupByDay(
 
 function getSystemActivityDescription(
   activity: LeadActivity,
-  teamMemberEmails: Record<string, string>
+  teamMemberEmails: Record<string, string>,
+  teamMemberNames: Record<string, string> = {}
 ): string {
   const changes = activity.changes || {};
+  const nameOf = (id: unknown): string | null =>
+    id ? teamMemberNames[String(id)] || teamMemberEmails[String(id)] || null : null;
 
   // Submission (dedup-aware)
   if (activity.action === "lead.submission") {
@@ -828,9 +1011,8 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.branch_shared") {
     const branch = changes.branch?.new as string | null;
-    const a = changes.assigned_to?.new;
-    const email = a ? teamMemberEmails[String(a)] : null;
-    return `Shared to ${branch || "a branch"}${email ? ` · assigned to ${email}` : ""}`;
+    const name = nameOf(changes.assigned_to?.new);
+    return `Shared to ${branch || "a branch"}${name ? ` · assigned to ${name}` : ""}`;
   }
 
   if (activity.action === "lead.branch_revoked") {
@@ -840,10 +1022,9 @@ function getSystemActivityDescription(
 
   if (activity.action === "lead.branch_assigned") {
     const branch = changes.branch?.new as string | null;
-    const a = changes.assigned_to?.new;
-    const email = a ? teamMemberEmails[String(a)] : null;
-    return email
-      ? `Assigned ${email} in ${branch || "a branch"}`
+    const name = nameOf(changes.assigned_to?.new);
+    return name
+      ? `Assigned ${name} in ${branch || "a branch"}`
       : `Unassigned in ${branch || "a branch"}`;
   }
 
@@ -862,9 +1043,8 @@ function getSystemActivityDescription(
 
   if (changes.assigned_to) {
     const newAssignee = changes.assigned_to.new;
-    const assigneeEmail = newAssignee ? teamMemberEmails[String(newAssignee)] : null;
     if (newAssignee) {
-      return `Assigned to ${assigneeEmail || "a team member"}`;
+      return `Assigned to ${nameOf(newAssignee) || "a team member"}`;
     }
     return "Unassigned";
   }

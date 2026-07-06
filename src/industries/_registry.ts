@@ -45,9 +45,15 @@ export const FEATURES = {
   CRM_CONTACTS: "crm-contacts",
   PROJECT_BOARD: "project-board",
   DEALS: "deals",
+  SERVICES: "services",
+  PROPOSALS: "proposals",
   // Industry-scoped (travel_agency)
   TRIP_INQUIRY: "trip-inquiry",
   ITINERARY: "itinerary",
+  // Industry-scoped (education_consultancy)
+  FOLLOW_UPS: "follow-ups",
+  // Industry-scoped (it_agency) — HRMS Phase 1 Resourcing edge
+  RESOURCING: "resourcing",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

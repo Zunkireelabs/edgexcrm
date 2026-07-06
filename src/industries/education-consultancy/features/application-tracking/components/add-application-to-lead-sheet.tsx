@@ -55,6 +55,8 @@ export function AddApplicationToLeadSheet({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
+  const [universitySuggestions, setUniversitySuggestions] = useState<string[]>([]);
+  const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
 
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
@@ -77,6 +79,15 @@ export function AddApplicationToLeadSheet({
     fetch("/api/v1/agents")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setAgents(j.data); })
+      .catch(() => {});
+    fetch("/api/v1/applications/suggestions")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (j?.data) {
+          setUniversitySuggestions(j.data.universities ?? []);
+          setProgramSuggestions(j.data.programs ?? []);
+        }
+      })
       .catch(() => {});
   }, [open]);
 
@@ -129,12 +140,20 @@ export function AddApplicationToLeadSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+          <datalist id="university-suggestions">
+            {universitySuggestions.map((u) => <option key={u} value={u} />)}
+          </datalist>
+          <datalist id="program-suggestions">
+            {programSuggestions.map((p) => <option key={p} value={p} />)}
+          </datalist>
+
           <div className="space-y-1.5">
             <Label htmlFor="app-university" className="text-xs text-gray-600">
               University <span className="text-destructive">*</span>
             </Label>
             <Input
               id="app-university"
+              list="university-suggestions"
               value={universityName}
               onChange={(e) => setUniversityName(e.target.value)}
               placeholder="e.g. University of Melbourne"
@@ -148,6 +167,7 @@ export function AddApplicationToLeadSheet({
             </Label>
             <Input
               id="app-program"
+              list="program-suggestions"
               value={programName}
               onChange={(e) => setProgramName(e.target.value)}
               placeholder="e.g. Master of Computer Science"
@@ -177,10 +197,10 @@ export function AddApplicationToLeadSheet({
           </div>
 
           <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Stage</Label>
+            <Label className="text-xs text-gray-600">Status</Label>
             <Select value={stageId} onValueChange={setStageId}>
               <SelectTrigger>
-                <SelectValue placeholder="Select stage" />
+                <SelectValue placeholder="Select status" />
               </SelectTrigger>
               <SelectContent>
                 {stages.map((s) => (

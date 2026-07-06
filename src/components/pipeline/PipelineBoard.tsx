@@ -65,6 +65,9 @@ interface PipelineBoardProps {
   entities?: TenantEntity[];
   entityLabel?: string;
   industryId?: string | null;
+  /** Position-derived permissions (source of truth). Fall back to legacy `role` if omitted. */
+  canEditLeads?: boolean;
+  restrictToSelf?: boolean;
 }
 
 interface TeamMember {
@@ -143,6 +146,8 @@ export function PipelineBoard({
   entities = [],
   entityLabel,
   industryId,
+  canEditLeads,
+  restrictToSelf,
 }: PipelineBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() =>
@@ -162,10 +167,13 @@ export function PipelineBoard({
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
 
-  const isViewer = role === "viewer";
-  const isCounselor = role === "counselor";
   const isAdmin = role === "admin" || role === "owner";
-  const canCreateLead = role !== "viewer";
+  // Position is the source of truth: gate on resolved permissions, not the legacy `role`
+  // string (a Branch Manager carries role="viewer" but canEditLeads=true). Fall back to
+  // role only when the permission props aren't supplied.
+  const canEdit = canEditLeads ?? role !== "viewer";
+  const restrictSelf = restrictToSelf ?? role === "counselor";
+  const canCreateLead = canEdit;
 
   // Fix hydration mismatch: DnD-kit and Radix Select generate random IDs
   useEffect(() => {
@@ -398,11 +406,11 @@ export function PipelineBoard({
 
   const canDragLead = useCallback(
     (lead: PipelineLead): boolean => {
-      if (isViewer) return false;
-      if (isCounselor && lead.assigned_to !== userId) return false;
+      if (!canEdit) return false;
+      if (restrictSelf && lead.assigned_to !== userId) return false;
       return true;
     },
-    [isViewer, isCounselor, userId]
+    [canEdit, restrictSelf, userId]
   );
 
   const activeLead =
@@ -641,15 +649,17 @@ export function PipelineBoard({
             </PopoverContent>
           </Popover>
 
-          {/* Export */}
-          <button
-            type="button"
-            onClick={handleExport}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
-          >
-            <Download className="h-3 w-3 shrink-0" />
-            Export
-          </button>
+          {/* Export — admin/owner only */}
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={handleExport}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Download className="h-3 w-3 shrink-0" />
+              Export
+            </button>
+          )}
 
           {/* Add Lead Button */}
           {canCreateLead && (

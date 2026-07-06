@@ -19,6 +19,7 @@ export default async function DealDetailRoute({ params }: Props) {
     <DealDetailPage
       dealId={id}
       role={tenantData.role as UserRole}
+      currentUserId={tenantData.userId}
     />
   );
 }

@@ -25,7 +25,7 @@ import type { DealStage, UserRole } from "@/types/database";
 
 interface AccountOption { id: string; name: string; }
 interface ContactOption { id: string; first_name: string; last_name: string; }
-interface TeamMember { user_id: string; email: string; }
+interface TeamMember { user_id: string; email: string; name?: string | null; }
 
 interface AddDealSheetProps {
   open: boolean;
@@ -291,7 +291,7 @@ export function AddDealSheet({
               <SelectContent>
                 <SelectItem value="__none__">Unassigned</SelectItem>
                 {teamMembers.map((m) => (
-                  <SelectItem key={m.user_id} value={m.user_id}>{m.email}</SelectItem>
+                  <SelectItem key={m.user_id} value={m.user_id}>{m.name || m.email.split("@")[0]}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

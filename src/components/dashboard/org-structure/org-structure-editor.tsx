@@ -219,7 +219,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
             <div className="absolute left-1/2 -top-4 w-px h-4 bg-gray-300" />
           )}
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
             {/* Layer header */}
             <div className="flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center gap-3">
@@ -229,7 +229,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                     <input
                       value={editState.name}
                       onChange={(e) => setEditState({ ...editState, name: e.target.value })}
-                      className="border rounded px-2 py-0.5 text-sm font-semibold text-gray-900 w-36"
+                      className="border rounded px-2 py-0.5 text-sm font-semibold text-[#0f0f10] w-36"
                       autoFocus
                     />
                     <input
@@ -244,7 +244,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
                     <p className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Layer {layerIndex + 1}
                     </p>
-                    <h3 className="text-sm font-semibold text-gray-900">{layer.name}</h3>
+                    <h3 className="text-sm font-semibold text-[#0f0f10]">{layer.name}</h3>
                     {layer.description && (
                       <p className="text-xs text-gray-500">{layer.description}</p>
                     )}
@@ -403,7 +403,7 @@ export function OrgStructureEditor({ layers, isAdmin, onRefetch, unassignedMembe
 
       {/* Unassigned bucket — no edit/move/delete chrome */}
       {unassignedLayer && unassignedLayer.positions.length > 0 && (
-        <div className="bg-white rounded-xl border border-dashed border-gray-300 overflow-hidden">
+        <div className="bg-white rounded-lg border border-dashed border-gray-300 overflow-hidden">
           <div className="px-5 py-3 bg-gray-50 border-b border-gray-200">
             <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Unassigned</p>
           </div>

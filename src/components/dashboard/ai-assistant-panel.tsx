@@ -11,7 +11,7 @@ interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
-  timestamp: Date;
+  timestamp: Date | null;
 }
 
 const WELCOME_CONTENT =
@@ -22,7 +22,9 @@ function createWelcomeMessage(): Message {
     id: "welcome",
     role: "assistant",
     content: WELCOME_CONTENT,
-    timestamp: new Date(),
+    // No timestamp yet — set client-side after mount (see effect below) so
+    // server and client render identical markup on the initial pass.
+    timestamp: null,
   };
 }
 
@@ -32,6 +34,13 @@ export function AIAssistantPanel() {
   const [isTyping, setIsTyping] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Backfill the welcome message's timestamp once mounted on the client.
+  useEffect(() => {
+    setMessages((prev) =>
+      prev.map((m) => (m.id === "welcome" && m.timestamp === null ? { ...m, timestamp: new Date() } : m))
+    );
+  }, []);
 
   // Scroll to bottom when new messages arrive
   useEffect(() => {
@@ -150,7 +159,7 @@ export function AIAssistantPanel() {
                 key={message.id}
                 role={message.role}
                 content={message.content}
-                timestamp={message.timestamp}
+                timestamp={message.timestamp ?? undefined}
               />
             ))}
             {isTyping && <TypingIndicator />}

@@ -22,6 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TaskStatusBadge } from "./status-badge";
+import { AssigneePicker } from "../../project-board/components/assignee-picker";
+import type { TeamMember } from "../../project-board/hooks/use-projects";
 import type { Task, TaskStatus } from "@/types/database";
 
 const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
@@ -33,11 +35,12 @@ const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
 interface TaskRowProps {
   task: Task;
   isAdmin: boolean;
+  team?: TeamMember[];
   onUpdate: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskRow({ task, isAdmin, onUpdate, onDelete }: TaskRowProps) {
+export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRowProps) {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -105,6 +108,21 @@ export function TaskRow({ task, isAdmin, onUpdate, onDelete }: TaskRowProps) {
       ? `${Math.floor(task.estimated_minutes / 60)}h ${task.estimated_minutes % 60}m`
       : null;
 
+  async function handleAssigneeChange(userId: string | null) {
+    try {
+      const res = await fetch(`/api/v1/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignee_id: userId }),
+      });
+      if (!res.ok) throw new Error("Failed to update assignee");
+      const { data } = await res.json();
+      onUpdate(data as Task);
+    } catch {
+      toast.error("Failed to update assignee");
+    }
+  }
+
   return (
     <>
       <div className="flex items-center gap-3 py-3 px-4 hover:bg-muted/40 rounded-lg group">
@@ -127,6 +145,12 @@ export function TaskRow({ task, isAdmin, onUpdate, onDelete }: TaskRowProps) {
             </div>
           )}
         </div>
+        <AssigneePicker
+          assigneeId={task.assignee_id}
+          team={team}
+          onChange={handleAssigneeChange}
+          disabled={!isAdmin}
+        />
         {isAdmin && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button

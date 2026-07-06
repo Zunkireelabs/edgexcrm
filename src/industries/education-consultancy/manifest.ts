@@ -9,6 +9,7 @@ import { campaignsMeta } from "./features/campaigns/meta";
 import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
+import { followUpsMeta } from "./features/follow-ups/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -23,6 +24,7 @@ export const manifest: IndustryManifest = {
     { meta: applicationTrackingMeta },
     { meta: leadListsMeta },
     { meta: classesMeta },
+    { meta: followUpsMeta },
   ],
   sidebar: [
     // Intelligence section
@@ -30,8 +32,8 @@ export const manifest: IndustryManifest = {
     // Operations section
     { featureId: FEATURES.APPLICATION_TRACKING, href: "/applications", label: "Applications", icon: "GraduationCap" },
     { featureId: FEATURES.CLASSES, href: "/classes", label: "Classes", icon: "BookOpen" },
-    // Contacts sidebar item removed — /contacts redirects to /leads?list=prospects now that lead-lists is active.
-    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck" },
+    { featureId: FEATURES.CHECK_IN, href: "/check-in", label: "Check-In", icon: "UserCheck", allowedPositions: ["lead-executive", "branch-manager"] },
+    { featureId: FEATURES.FOLLOW_UPS, href: "/follow-ups", label: "Follow-ups", icon: "Repeat2", hideForBroadScope: true },
     // Marketing section
     { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
     { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },

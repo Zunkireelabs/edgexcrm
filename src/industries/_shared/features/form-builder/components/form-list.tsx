@@ -94,7 +94,7 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
     }
   }
 
-  const publicFormUrl = (slug: string) =>
+  const publicFormPreviewUrl = (slug: string) =>
     `${window.location.origin}/form/${tenantSlug}/${slug}`;
 
   return (
@@ -177,7 +177,7 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(publicFormUrl(form.slug), "_blank")}
+                          onClick={() => window.open(publicFormPreviewUrl(form.slug), "_blank")}
                         >
                           <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
                           Preview

@@ -8,6 +8,7 @@ export interface TeamMember {
   id: string;
   user_id: string;
   email: string;
+  name?: string | null;
   role: string;
   default_hourly_rate: number | null;
 }

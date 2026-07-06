@@ -7,10 +7,15 @@ import {
   getLeadActivity,
   getPipelineStages,
   getLeadListsByTenant,
+  getListPipeline,
+  getTeamMembers,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
-import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
+import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -32,11 +37,15 @@ export default async function LeadDetailPage({
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
   const hasClasses = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES);
+  const checkInActive = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN);
 
-  const [notes, checklists, activities, stages, entityResult, industryResult, allLists] = await Promise.all([
+  const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
+  const [notes, checklists, activities, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
+    // Load this lead's list-pipeline stages (preferred); fallback to all tenant stages
+    leadListId ? getListPipeline(leadListId, tenantData.tenant.id) : Promise.resolve(null),
     getPipelineStages(tenantData.tenant.id),
     // Fetch entity if lead has one
     lead.entity_id
@@ -60,6 +69,8 @@ export default async function LeadDetailPage({
 
   const entity = entityResult.data as TenantEntity | null;
   const industry = industryResult.data as Industry | null;
+  // Use list-scoped stages when available; fall back to all tenant stages for leads without a list
+  const stages = listPipelineResult?.stages ?? fallbackStages;
 
   const accessibleLists = hasLeadLists
     ? (allLists as LeadList[]).filter((l) =>
@@ -67,12 +78,23 @@ export default async function LeadDetailPage({
           tenantData.permissions,
           l.access as { mode: string; positionIds?: string[] },
           tenantData.positionId,
+          l.id,
         )
       )
     : [];
 
+  // Full active funnel (excludes archive + staging lists) so the list stepper
+  // can compute true neighbours and show their names even when a step is
+  // outside the caller's accessible lists.
+  const activeLeadLists = hasLeadLists
+    ? (allLists as LeadList[]).filter(
+        (l) =>
+          !isOffFunnelLeadList(l) &&
+          !(l as unknown as { is_staging?: boolean }).is_staging
+      )
+    : [];
+
   // Compute list-position gates for Classes and Applications cards (education only)
-  const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
   const allListsTyped = allLists as LeadList[];
   const qualifiedList = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "qualified");
   const prospectsListItem = allListsTyped.find((l) => (l as unknown as { slug: string }).slug === "prospects");
@@ -131,9 +153,42 @@ export default async function LeadDetailPage({
     consentSigned = !!signedRes.data;
   }
 
+  // Full-roster user_id → display name map for the activity feed. Resolved
+  // server-side so it works for non-admins (who can't call /api/v1/team).
+  const roster = await getTeamMembers(tenantData.tenant.id);
+  const memberNames = roster.reduce<Record<string, string>>((acc, m) => {
+    acc[m.user_id] = m.name || m.email?.split("@")[0] || "Unknown";
+    return acc;
+  }, {});
+  const assignableMembers = filterAssignableMembersByChain(roster, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
+  });
+
+  // Next-position members for "Send to next" assignment picker
+  // Only computed for chain-position members in education_consultancy
+  const isChainMember =
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    tenantData.positionSlug != null &&
+    ASSIGN_CHAIN_POSITIONS.has(tenantData.positionSlug) &&
+    tenantData.permissions.baseTier === "member";
+  const nextSlug = isChainMember ? nextPositionSlug(tenantData.positionSlug) : null;
+  const nextPositionMembers = nextSlug
+    ? roster.filter(
+        (m) =>
+          m.position_slug === nextSlug &&
+          (tenantData.branchId == null || m.branch_id === tenantData.branchId),
+      )
+    : [];
+
   return (
     <LeadDetailV2
       lead={lead}
+      memberNames={memberNames}
       notes={notes}
       checklists={checklists}
       activities={activities}
@@ -145,11 +200,17 @@ export default async function LeadDetailPage({
       industry={industry}
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
+      canAssign={tenantData.permissions.canAssignLeads}
+      canEditLeads={tenantData.permissions.canEditLeads}
+      assignableMembers={assignableMembers}
+      nextPositionMembers={nextPositionMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
-      canManageClasses={tenantData.permissions.canManageClasses}
+      canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}
+      activeLeadLists={activeLeadLists}
       classesActive={classesActive}
       applicationsActive={applicationsActive}
+      checkInActive={checkInActive}
       consentEnabled={consentEnabled}
       consentSigned={consentSigned}
     />

@@ -1,17 +1,97 @@
 "use client";
 
 import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import { CheckSquare, Square, Plus, Trash2, FileDown, ExternalLink } from "lucide-react";
+import { CheckSquare, Square, Plus, Trash2, FileDown, ExternalLink, AlarmClock, X } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import type { Lead, LeadChecklist } from "@/types/database";
+
+// Reminder presets → ISO timestamp (computed at click time).
+function reminderPresets(): { label: string; iso: string }[] {
+  const now = new Date();
+  const plus = (h: number) => new Date(now.getTime() + h * 3600 * 1000).toISOString();
+  const at9 = (days: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(9, 0, 0, 0);
+    return d.toISOString();
+  };
+  return [
+    { label: "In 1 hour", iso: plus(1) },
+    { label: "In 3 hours", iso: plus(3) },
+    { label: "Tomorrow 9 AM", iso: at9(1) },
+    { label: "Next week", iso: at9(7) },
+  ];
+}
+
+function formatRemind(iso: string): string {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function ReminderButton({
+  value,
+  onPick,
+  onClear,
+  onCustom,
+}: {
+  value: string | null;
+  onPick: (iso: string) => void;
+  onClear: () => void;
+  onCustom?: () => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="icon"
+          variant="outline"
+          className="h-8 w-8 shrink-0"
+          title={value ? `Reminder: ${formatRemind(value)}` : "Set reminder"}
+        >
+          <AlarmClock className={`h-4 w-4 ${value ? "text-primary" : ""}`} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {reminderPresets().map((p) => (
+          <DropdownMenuItem key={p.label} onClick={() => onPick(p.iso)}>
+            {p.label}
+          </DropdownMenuItem>
+        ))}
+        {onCustom && (
+          <DropdownMenuItem onClick={onCustom}>Custom…</DropdownMenuItem>
+        )}
+        {value && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onClear} className="text-destructive">
+              Clear reminder
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 interface ManagementPanelProps {
   lead: Lead;
   checklists: LeadChecklist[];
   isAdmin: boolean;
+  canEdit?: boolean;
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
@@ -25,6 +105,7 @@ export const ManagementPanel = forwardRef<ManagementPanelRef, ManagementPanelPro
       lead,
       checklists,
       isAdmin,
+      canEdit,
       onChecklistsChange,
     },
     ref
@@ -48,6 +129,7 @@ export const ManagementPanel = forwardRef<ManagementPanelRef, ManagementPanelPro
           leadId={lead.id}
           checklists={checklists}
           isAdmin={isAdmin}
+          canEdit={canEdit}
           onChecklistsChange={onChecklistsChange}
         />
 
@@ -76,13 +158,18 @@ interface ChecklistCardProps {
   leadId: string;
   checklists: LeadChecklist[];
   isAdmin: boolean;
+  canEdit?: boolean;
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
 }
 
 export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
-  function ChecklistCard({ leadId, checklists, isAdmin, onChecklistsChange }, ref) {
+  function ChecklistCard({ leadId, checklists, isAdmin, canEdit = false, onChecklistsChange }, ref) {
+    // Admins, plus members whose position grants canEditLeads, can add/manage tasks.
+    const canManageTasks = isAdmin || canEdit;
     const [newTitle, setNewTitle] = useState("");
     const [adding, setAdding] = useState(false);
+    const [remindAt, setRemindAt] = useState<string | null>(null);
+    const [showCustom, setShowCustom] = useState(false);
 
     const completedCount = checklists.filter((c) => c.is_completed).length;
 
@@ -94,17 +181,40 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
         const res = await fetch(`/api/v1/leads/${leadId}/checklists`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title: newTitle.trim() }),
+          body: JSON.stringify({ title: newTitle.trim(), remind_at: remindAt }),
         });
         if (!res.ok) throw new Error();
         const json = await res.json();
         onChecklistsChange([...checklists, json.data as LeadChecklist]);
         setNewTitle("");
-        toast.success("Task added");
+        setRemindAt(null);
+        setShowCustom(false);
+        toast.success(remindAt ? "Task added with reminder" : "Task added");
       } catch {
         toast.error("Failed to add task");
       } finally {
         setAdding(false);
+      }
+    };
+
+    const handleSetReminder = async (item: LeadChecklist, iso: string | null) => {
+      const prev = item.remind_at;
+      onChecklistsChange(
+        checklists.map((c) => (c.id === item.id ? { ...c, remind_at: iso } : c))
+      );
+      try {
+        const res = await fetch(`/api/v1/leads/${leadId}/checklists/${item.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ remind_at: iso }),
+        });
+        if (!res.ok) throw new Error();
+        toast.success(iso ? "Reminder set" : "Reminder cleared");
+      } catch {
+        onChecklistsChange(
+          checklists.map((c) => (c.id === item.id ? { ...c, remind_at: prev } : c))
+        );
+        toast.error("Failed to update reminder");
       }
     };
 
@@ -198,16 +308,34 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
                   {item.title}
                 </span>
               </button>
-              {isAdmin && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive shrink-0"
-                  onClick={() => handleDelete(item.id)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
-              )}
+              <div className="flex items-center gap-1 shrink-0">
+                {item.remind_at && !item.is_completed && (
+                  <span
+                    className="flex items-center gap-1 text-[11px] text-primary whitespace-nowrap"
+                    title={`Reminder: ${formatRemind(item.remind_at)}`}
+                  >
+                    <AlarmClock className="h-3 w-3" />
+                    {formatRemind(item.remind_at)}
+                  </span>
+                )}
+                {canManageTasks && (
+                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100">
+                    <ReminderButton
+                      value={item.remind_at}
+                      onPick={(iso) => handleSetReminder(item, iso)}
+                      onClear={() => handleSetReminder(item, null)}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => handleDelete(item.id)}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
 
@@ -217,25 +345,58 @@ export const ChecklistCard = forwardRef<HTMLInputElement, ChecklistCardProps>(
             </p>
           )}
 
-          {isAdmin && (
-            <div className="flex gap-2 pt-2">
-              <Input
-                ref={ref}
-                placeholder="Add task..."
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleAdd()}
-                className="text-sm h-8"
-              />
-              <Button
-                size="icon"
-                variant="outline"
-                className="h-8 w-8 shrink-0"
-                onClick={handleAdd}
-                disabled={adding || !newTitle.trim()}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+          {canManageTasks && (
+            <div className="space-y-2 pt-2">
+              <div className="flex gap-2">
+                <Input
+                  ref={ref}
+                  placeholder="Add task..."
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleAdd()}
+                  className="text-sm h-8"
+                />
+                <ReminderButton
+                  value={remindAt}
+                  onPick={(iso) => { setRemindAt(iso); setShowCustom(false); }}
+                  onClear={() => setRemindAt(null)}
+                  onCustom={() => setShowCustom(true)}
+                />
+                <Button
+                  size="icon"
+                  variant="outline"
+                  className="h-8 w-8 shrink-0"
+                  onClick={handleAdd}
+                  disabled={adding || !newTitle.trim()}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {showCustom && (
+                <input
+                  type="datetime-local"
+                  className="text-xs border rounded px-2 py-1 w-full"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      setRemindAt(new Date(e.target.value).toISOString());
+                      setShowCustom(false);
+                    }
+                  }}
+                />
+              )}
+              {remindAt && (
+                <div className="flex items-center gap-1 text-xs text-primary">
+                  <AlarmClock className="h-3 w-3" />
+                  Reminder: {formatRemind(remindAt)}
+                  <button
+                    type="button"
+                    onClick={() => setRemindAt(null)}
+                    className="ml-1 text-muted-foreground hover:text-destructive"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>

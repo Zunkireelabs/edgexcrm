@@ -29,7 +29,8 @@ export default async function InsightsDashboardsPage() {
   const visibleDashboards = isAdmin
     ? allDashboards
     : allDashboards.filter((d) =>
-        positionId !== null && d.granted_position_ids.includes(positionId)
+        positionId !== null &&
+        (Array.isArray(d.granted_position_ids) ? d.granted_position_ids : []).includes(positionId)
       );
 
   if (visibleDashboards.length > 0) {

@@ -42,6 +42,8 @@ interface PipelineSettingsModalProps {
   open: boolean;
   onClose: () => void;
   pipeline: PipelineWithCounts;
+  /** When true, hides pipeline-level controls; only shows stage add/edit/reorder/delete. */
+  listStageMode?: boolean;
 }
 
 interface SortableStageItemProps {
@@ -144,6 +146,7 @@ export function PipelineSettingsModal({
   open,
   onClose,
   pipeline,
+  listStageMode = false,
 }: PipelineSettingsModalProps) {
   const [name, setName] = useState(pipeline.name);
   const [isDefault, setIsDefault] = useState(pipeline.is_default);
@@ -360,7 +363,7 @@ export function PipelineSettingsModal({
       <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>Pipeline Settings</DialogTitle>
+            <DialogTitle>{listStageMode ? "Manage Stages" : "Pipeline Settings"}</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto space-y-6 py-4">
@@ -370,27 +373,31 @@ export function PipelineSettingsModal({
               </div>
             ) : (
               <>
-                {/* Pipeline Name */}
-                <div className="space-y-2">
-                  <Label htmlFor="pipeline-settings-name">Pipeline Name</Label>
-                  <Input
-                    id="pipeline-settings-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                  />
-                </div>
+                {/* Pipeline Name — hidden in list-stage mode */}
+                {!listStageMode && (
+                  <div className="space-y-2">
+                    <Label htmlFor="pipeline-settings-name">Pipeline Name</Label>
+                    <Input
+                      id="pipeline-settings-name"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                    />
+                  </div>
+                )}
 
-                {/* Default Pipeline Checkbox */}
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="is-default"
-                    checked={isDefault}
-                    onCheckedChange={(checked) => setIsDefault(!!checked)}
-                  />
-                  <Label htmlFor="is-default" className="font-normal cursor-pointer">
-                    Set as default pipeline
-                  </Label>
-                </div>
+                {/* Default Pipeline Checkbox — hidden in list-stage mode */}
+                {!listStageMode && (
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="is-default"
+                      checked={isDefault}
+                      onCheckedChange={(checked) => setIsDefault(!!checked)}
+                    />
+                    <Label htmlFor="is-default" className="font-normal cursor-pointer">
+                      Set as default pipeline
+                    </Label>
+                  </div>
+                )}
 
                 {/* Stages Section */}
                 <div className="space-y-3">
@@ -407,8 +414,8 @@ export function PipelineSettingsModal({
                     </Button>
                   </div>
 
-                  {/* Validation Warning */}
-                  {!hasRequiredTerminals && (
+                  {/* Validation Warning — hidden in list-stage mode (won/lost not required) */}
+                  {!listStageMode && !hasRequiredTerminals && (
                     <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                       <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
                       <span>
@@ -451,15 +458,17 @@ export function PipelineSettingsModal({
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 border-t pt-4">
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDeletePipeline}
-              disabled={pipeline.is_default || pipeline.lead_count > 0}
-              className="sm:mr-auto"
-            >
-              Delete Pipeline
-            </Button>
+            {!listStageMode && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDeletePipeline}
+                disabled={pipeline.is_default || pipeline.lead_count > 0}
+                className="sm:mr-auto"
+              >
+                Delete Pipeline
+              </Button>
+            )}
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>

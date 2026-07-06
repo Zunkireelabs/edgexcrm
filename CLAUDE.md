@@ -233,6 +233,7 @@ When the user gives ANY development request (build, create, implement, fix, upda
 |-------|--------|
 | `/project-pm` | Orchestrator for all dev tasks |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
+| `/hr-expert` | HR/HRMS domain — org/positions, onboarding, leave/attendance, payroll, performance, ESS/MSS; plans people features, reuses existing team/positions spine, routes to dev skills |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
 | `/frontend-dev` | Pages, components, forms, React/shadcn/Tailwind |
 | `/api-dev` | API routes, auth, validation, rate limiting |
@@ -399,6 +400,7 @@ These bypass RLS internally since `tenant_users` policies can't reference `tenan
 - **Soft deletes** on leads — `deleted_at` column; all queries must filter `WHERE deleted_at IS NULL`
 - **Idempotency** — `idempotency_key` on leads + `integration_idempotency` table
 - **Multi-pipeline** — tenants can have multiple pipelines with custom stages
+- **Lead Lists = "Stage" in UI** — the `lead_lists` table / `list_id` field is called "Stage" in the UI (renamed from "List" as of 2026-07-05). The pipeline stages Pre-qualified, Qualified, Prospects, Applications are the user-facing "Stages". Admin-only lists (Migration QC, Existing Leads edgeX, New Leads, NEB-10k-remaining) are hidden from non-admin/owner users in stage dropdowns. Always use the label "Stage" in any new UI that references `lead_lists`.
 
 ### Migrations
 
@@ -435,6 +437,20 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 ### Migration workflow (dev-first)
 
 Apply new migrations to **stage** (`dymeudcddasqpomfpjvt`) first → verify on dev/local → then apply to **prod** (`pirhnklvtjjpuvbvibxf`) at promotion time. (Historically migrations hit one shared DB; that's no longer true — a migration is not on prod until you run it on prod.) Apply in a txn with before/after counts, additive-only.
+
+### Production DB changes — per-action approval
+
+The session MAY apply changes (migrations, admin SQL) to the production DB
+(`pirhnklvtjjpuvbvibxf`), but only under all of these conditions:
+- Brief first: state the exact SQL and expected before/after row counts before running.
+- Explicit per-action approval: run only after I say go for that specific change. Never
+  standing/blanket approval; never batch multiple prod changes off one go-ahead.
+- Additive + reversible: additive-only schema changes, wrapped in a transaction, with
+  before/after counts logged. Have a rollback ready.
+- Stage first: apply to stage (`dymeudcddasqpomfpjvt`) and verify before touching prod.
+
+This overrides the "prod only at promotion" default: prod changes are allowed mid-work, but
+always gated behind an explicit, per-action approval — not run unsupervised.
 
 ### Server
 - **The ONLY Zunkiree Labs VPS is `root@94.136.189.213`.** There is no other zunkireelabs server.

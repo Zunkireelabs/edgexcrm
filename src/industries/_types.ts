@@ -48,6 +48,17 @@ export interface SidebarItem {
    * roles in the tenant.
    */
   minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor")[];
+  /**
+   * If present, only show to users whose positionSlug is in the list OR
+   * whose baseTier is "owner" or "admin" (admins always pass). Absent = no
+   * position restriction.
+   */
+  allowedPositions?: readonly string[];
+  /**
+   * Hide from users who already see all leads: owner/admin (role) and
+   * branch managers (leadScope "team"). All other positions still see it.
+   */
+  hideForBroadScope?: boolean;
 }
 
 /**

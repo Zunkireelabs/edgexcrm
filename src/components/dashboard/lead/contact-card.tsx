@@ -1,6 +1,7 @@
 "use client";
 
-import { Mail, Phone, MessageSquare, CheckSquare, MoreHorizontal, MessageCircle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Mail, Phone, MessageSquare, CheckSquare, MoreHorizontal, MessageCircle, ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,12 +11,98 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatPhoneForTel, formatPhoneForWhatsApp } from "@/lib/phone-utils";
 import { nationalityFromPhone } from "@/lib/leads/nationality";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
+
+interface LeadTypeOption {
+  id: string;
+  slug: string;
+  label: string;
+  is_default: boolean;
+}
+
+function LeadTypeBadge({ leadId, tags }: { leadId: string; tags: string[] }) {
+  const [options, setOptions] = useState<LeadTypeOption[]>([]);
+  const [currentTags, setCurrentTags] = useState(tags);
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/v1/lead-types")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (json?.data) setOptions(json.data); })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => { setCurrentTags(tags); }, [tags]);
+
+  const currentSlug = currentTags[0] ?? options.find((o) => o.is_default)?.slug ?? null;
+  const currentLabel = options.find((o) => o.slug === currentSlug)?.label ?? currentSlug ?? "Student";
+
+  async function select(slug: string) {
+    if (slug === currentSlug || saving) return;
+    setSaving(true);
+    const prev = currentTags;
+    // Preserve tail (e.g. campaign tags at index ≥1); only replace the type slot.
+    const nextTags = [slug, ...currentTags.slice(1)];
+    setCurrentTags(nextTags);
+    setOpen(false);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: nextTags }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`Set to ${options.find((o) => o.slug === slug)?.label ?? slug}`);
+    } catch {
+      setCurrentTags(prev);
+      toast.error("Failed to update lead type");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (options.length === 0) return null;
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          disabled={saving}
+          className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors disabled:opacity-50"
+        >
+          {currentLabel}
+          <ChevronDown className="h-3 w-3 opacity-60" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" className="w-40 p-1">
+        {options.map((opt) => (
+          <button
+            key={opt.slug}
+            type="button"
+            onClick={() => select(opt.slug)}
+            className={`w-full text-left px-3 py-1.5 text-xs rounded hover:bg-gray-100 transition-colors ${
+              opt.slug === currentSlug ? "font-semibold text-blue-700" : "text-gray-700"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface LeadDraftSubset {
   first_name: string;
@@ -35,6 +122,7 @@ interface ContactCardProps {
   draft?: LeadDraftSubset;
   editErrors?: { email?: string; phone?: string };
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
+  industryId?: string | null;
 }
 
 interface QuickActionButtonProps {
@@ -71,6 +159,7 @@ export function ContactCard({
   draft,
   editErrors = {},
   onDraftChange,
+  industryId,
 }: ContactCardProps) {
   const fullName = isEditing && draft
     ? [draft.first_name, draft.last_name].filter(Boolean).join(" ") || "—"
@@ -190,18 +279,22 @@ export function ContactCard({
           ) : (
             <>
               <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
-              {currentStage && (
-                <Badge
-                  variant="secondary"
-                  className="mt-2"
-                  style={{
-                    backgroundColor: `${stageColor}20`,
-                    color: stageColor,
-                  }}
-                >
-                  {currentStage.name}
-                </Badge>
-              )}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
+                {currentStage && (
+                  <Badge
+                    variant="secondary"
+                    style={{
+                      backgroundColor: `${stageColor}20`,
+                      color: stageColor,
+                    }}
+                  >
+                    {currentStage.name}
+                  </Badge>
+                )}
+                {industryId === "education_consultancy" && (
+                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} />
+                )}
+              </div>
             </>
           )}
         </div>

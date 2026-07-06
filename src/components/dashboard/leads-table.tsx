@@ -49,6 +49,9 @@ import {
   Pencil,
   Building2,
   ArrowRightLeft,
+  Archive,
+  RotateCcw,
+  Columns4,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -71,6 +74,7 @@ import {
 } from "@/components/dashboard/leads/columns-registry";
 import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
+import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -80,6 +84,7 @@ interface TeamMember {
   email: string;
   role: string;
   name: string;
+  canEditLeads?: boolean;
 }
 
 interface LeadsTableProps {
@@ -101,9 +106,27 @@ interface LeadsTableProps {
   userBranchId?: string | null;
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
+  positionSlugMap?: Record<string, string | null>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
+  viewMode?: "trash" | "archived" | "normal";
+  intakeListId?: string | null;
+  canExport?: boolean;
+  /** Current user's position-derived edit capability; gates the Add Lead button. */
+  canEditLeads?: boolean;
+  /** Pre-filtered assignable members for the Assigned-To dropdowns. Full teamMembers used for display. */
+  assignableMembers?: TeamMember[];
+  memberBranchMap?: Record<string, string>;
+  /** Slug of the currently active list; enables the Kanban toggle. */
+  activeListSlug?: string | null;
+  /** When true the active list has its own pipeline and can show kanban. */
+  hasListPipeline?: boolean;
+  /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
+  isTeamScoped?: boolean;
 }
+
+// Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
+const POSITION_ROUTE_MAP = POSITION_ROUTE_MAP_WITH_ADMIN;
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const first = firstName?.charAt(0)?.toUpperCase() || "";
@@ -130,8 +153,18 @@ export function LeadsTable({
   userBranchId = null,
   leadLists = [],
   roleMap,
+  positionSlugMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
+  viewMode = "normal",
+  intakeListId = null,
+  canExport = false,
+  canEditLeads,
+  assignableMembers,
+  memberBranchMap = {},
+  activeListSlug = null,
+  hasListPipeline = false,
+  isTeamScoped = false,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -144,6 +177,12 @@ export function LeadsTable({
   }, [leads]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  // Reset status filter when switching lists so a stale status doesn't hide all rows.
+  useEffect(() => {
+    setStatusFilter("all");
+  }, [activeListSlug]);
+
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
@@ -202,7 +241,11 @@ export function LeadsTable({
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
 
   const isAdmin = role === "admin" || role === "owner";
-  const canCreateLead = role !== "viewer";
+  // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
+  // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
+  const canCreateLead = isAdmin || isTeamScoped;
+  // Same position-first gate for inline row edits (stage change, list move).
+  const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
   const showBranches = maxBranches > 1;
 
@@ -295,6 +338,7 @@ export function LeadsTable({
     });
     return Array.from(c.entries());
   }, [memberMap]);
+
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -447,9 +491,41 @@ export function LeadsTable({
 
   const filteredIds = useMemo(() => new Set(paginatedLeads.map((l) => l.id)), [paginatedLeads]);
 
+  const statusFilterOptions = useMemo(() => {
+    const activeList = leadLists.find((l) => l.slug === activeListSlug);
+    const pid = activeList?.pipeline_id ?? null;
+    const listStages = pid
+      ? stages.filter((s) => s.pipeline_id === pid).sort((a, b) => a.position - b.position)
+      : [];
+    // Lists without a pipeline (master "All Leads" view, staging lists) keep the legacy global statuses.
+    if (listStages.length === 0) {
+      return [
+        { value: "all", label: "All Status", description: "Show all leads" },
+        { value: "new", label: "New", description: "Fresh submissions" },
+        { value: "partial", label: "Partial", description: "Incomplete forms" },
+        { value: "contacted", label: "Contacted", description: "In communication" },
+        { value: "enrolled", label: "Enrolled", description: "Successfully converted" },
+        { value: "rejected", label: "Rejected", description: "Not moving forward" },
+      ];
+    }
+    return [
+      { value: "all", label: "All Status", description: "Show all leads" },
+      ...listStages.map((s) => ({ value: s.slug, label: s.name })),
+    ];
+  }, [leadLists, activeListSlug, stages]);
+
   const selectedCount = selectedIds.size;
   const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
   const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
+  const allResultsSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+
+  // For isStagingView: the list a lead should auto-move to when assigned (based on assignee's position).
+  const assignAutoListId = useMemo(() => {
+    if (!isStagingView || !assignTo || assignTo === "unassign") return null;
+    const posSlug = positionSlugMap?.[assignTo] ?? null;
+    const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+    return listSlug ? (leadLists.find((l) => l.slug === listSlug)?.id ?? null) : null;
+  }, [isStagingView, assignTo, positionSlugMap, leadLists]);
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -528,6 +604,7 @@ export function LeadsTable({
         body: JSON.stringify({
           ids: idsToAssign,
           assigned_to: assignTo === "unassign" ? null : assignTo,
+          ...(isStagingView && assignAutoListId ? { list_id: assignAutoListId } : {}),
         }),
       });
 
@@ -586,8 +663,43 @@ export function LeadsTable({
 
   const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
   const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
+  // The "Archived" list, used by the bulk Archive shortcut (opens the move dialog pre-targeted here).
+  const archivedList = leadLists.find((l) => l.slug === "archived") ?? leadLists.find((l) => l.is_archive) ?? null;
 
   const CHUNK_SIZE = 100;
+
+  // Restore from the recycle bin (Delete view → clears deleted_at) or un-archive
+  // (Archived view → moves back into the intake/Pre-qualified list).
+  async function restoreLeads(ids: string[]) {
+    const validIds = ids.filter((id) => filteredIds.has(id));
+    if (validIds.length === 0) return;
+    try {
+      let res: Response;
+      if (viewMode === "archived") {
+        if (!intakeListId) {
+          toast.error("No list to restore into");
+          return;
+        }
+        res = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: validIds, list_id: intakeListId }),
+        });
+      } else {
+        res = await fetch("/api/v1/leads/bulk/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: validIds }),
+        });
+      }
+      if (!res.ok) throw new Error("restore failed");
+      toast.success(`Restored ${validIds.length} lead${validIds.length !== 1 ? "s" : ""}`);
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch {
+      toast.error("Failed to restore");
+    }
+  }
 
   async function handleBulkMove() {
     const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
@@ -853,6 +965,7 @@ export function LeadsTable({
       formMap,
       entityMap,
       branchMap,
+      memberBranchMap,
       roleMap,
       stages,
       industryId,
@@ -880,7 +993,33 @@ export function LeadsTable({
           prev.map((l) => (l.id === leadId ? { ...l, lead_type: type } : l)),
         ),
       leadLists: leadLists.length > 0 ? leadLists : undefined,
-      onListMove: leadLists.length > 0
+      canEditLeads: canEditRows,
+      isAdmin,
+      // Inline stage change from the table (normal view only). Optimistic + revert,
+      // mirroring onListMove. stage_id is editable by non-admins server-side.
+      onStageChange:
+        canEditRows && viewMode === "normal"
+          ? async (leadId: string, stageId: string) => {
+              setLocalLeads((prev) =>
+                prev.map((l) => (l.id === leadId ? { ...l, stage_id: stageId } : l)),
+              );
+              try {
+                const res = await fetch(`/api/v1/leads/${leadId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ stage_id: stageId }),
+                });
+                if (!res.ok) throw new Error("Failed to change stage");
+              } catch {
+                setLocalLeads((prev) =>
+                  prev.map((l) =>
+                    l.id === leadId ? { ...(leads.find((orig) => orig.id === leadId) ?? l) } : l,
+                  ),
+                );
+              }
+            }
+          : undefined,
+      onListMove: leadLists.length > 0 && canEditRows
         ? async (leadId: string, listId: string, archiveReason?: string) => {
             // Optimistic update
             const targetList = leadLists.find((l) => l.id === listId);
@@ -915,9 +1054,14 @@ export function LeadsTable({
             }
           }
         : undefined,
+      viewMode,
+      onRestore:
+        viewMode === "trash" || viewMode === "archived"
+          ? async (leadId: string) => { await restoreLeads([leadId]); }
+          : undefined,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -958,6 +1102,18 @@ export function LeadsTable({
             <Columns3 className="h-3 w-3 shrink-0" />
             <span>Edit columns</span>
           </button>
+
+          {/* Kanban toggle — only when the active list has its own pipeline */}
+          {hasListPipeline && activeListSlug && (
+            <button
+              type="button"
+              onClick={() => router.push(`/leads?list=${activeListSlug}&view=kanban`)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Columns4 className="h-3 w-3 shrink-0" />
+              <span>Kanban view</span>
+            </button>
+          )}
 
           <div className="flex-1" />
 
@@ -1019,15 +1175,17 @@ export function LeadsTable({
             </PopoverContent>
           </Popover>
 
-          {/* Export */}
-          <button
-            type="button"
-            onClick={exportCSV}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
-          >
-            <Download className="h-3 w-3 shrink-0" />
-            Export
-          </button>
+          {/* Export — owner/admin always; members only if their position grants it */}
+          {canExport && (
+            <button
+              type="button"
+              onClick={exportCSV}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            >
+              <Download className="h-3 w-3 shrink-0" />
+              Export
+            </button>
+          )}
 
           {/* Add Lead Button */}
           {canCreateLead && tenantId && (
@@ -1066,8 +1224,8 @@ export function LeadsTable({
             />
           )}
 
-          {/* Counselor Filter (Admin only) */}
-          {isAdmin && counselors.length > 0 && (
+          {/* Counselor Filter (Admin + Branch Manager) */}
+          {(isAdmin || isTeamScoped) && counselors.length > 0 && (
             <FilterDropdown
               label="All Counselors"
               multiple
@@ -1159,14 +1317,7 @@ export function LeadsTable({
               setCurrentPage(1);
             }}
             searchable={false}
-            options={[
-              { value: "all", label: "All Status", description: "Show all leads" },
-              { value: "new", label: "New", description: "Fresh submissions" },
-              { value: "partial", label: "Partial", description: "Incomplete forms" },
-              { value: "contacted", label: "Contacted", description: "In communication" },
-              { value: "enrolled", label: "Enrolled", description: "Successfully converted" },
-              { value: "rejected", label: "Rejected", description: "Not moving forward" },
-            ]}
+            options={statusFilterOptions}
           />
 
           {/* Form Filter (if multiple forms) */}
@@ -1222,6 +1373,37 @@ export function LeadsTable({
             {selectedCount} lead{selectedCount !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-1">
+            {viewMode !== "normal" ? (
+              <>
+                {isAdmin && (
+                  <button
+                    onClick={() => restoreLeads(Array.from(selectedIds))}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded transition-colors"
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    Restore
+                  </button>
+                )}
+                {viewMode === "archived" && (
+                  <button
+                    onClick={() => setDeleteDialogOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                )}
+                <div className="w-px h-4 bg-gray-200 mx-1" />
+                <button
+                  onClick={() => setSelectedIds(new Set())}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+                  aria-label="Deselect all"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </>
+            ) : (
+            <>
             {isAdmin && teamMembers.length > 0 && (
               <button
                 onClick={() => setAssignDialogOpen(true)}
@@ -1249,6 +1431,20 @@ export function LeadsTable({
                 Move to list
               </button>
             )}
+            {isAdmin && archivedList && (
+              <button
+                onClick={() => {
+                  setMoveArchiveReason("");
+                  setMoveAssignTo("keep");
+                  setMoveListId(archivedList.id);
+                  setMoveListDialogOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-amber-600 hover:bg-amber-50 rounded transition-colors"
+              >
+                <Archive className="h-4 w-4" />
+                Archive
+              </button>
+            )}
             {isAdmin && !isStagingView && selectedCount === 2 && (
               <button
                 onClick={() => setMergeDialogOpen(true)}
@@ -1258,13 +1454,15 @@ export function LeadsTable({
                 Merge
               </button>
             )}
-            <button
-              onClick={() => setDeleteDialogOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-            >
-              <Trash2 className="h-4 w-4" />
-              Delete
-            </button>
+            {isAdmin && (
+              <button
+                onClick={() => setDeleteDialogOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+              >
+                <Trash2 className="h-4 w-4" />
+                Delete
+              </button>
+            )}
             <div className="w-px h-4 bg-gray-200 mx-1" />
             <button
               onClick={() => setSelectedIds(new Set())}
@@ -1273,9 +1471,38 @@ export function LeadsTable({
             >
               <X className="h-4 w-4" />
             </button>
+            </>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Select-all-results banner: shown when current page is fully selected but more leads exist */}
+      {allSelected && filtered.length > paginatedLeads.length && (
+        <div className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
+          {allResultsSelected ? (
+            <>
+              <span>All <strong>{filtered.length}</strong> leads are selected.</span>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="underline font-medium hover:text-blue-900"
+              >
+                Clear selection
+              </button>
+            </>
+          ) : (
+            <>
+              <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected.</span>
+              <button
+                onClick={() => setSelectedIds(new Set(filtered.map((l) => l.id)))}
+                className="underline font-medium hover:text-blue-900"
+              >
+                Select all {filtered.length} leads
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Table - Compact style with sticky header and horizontal scroll */}
       <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
@@ -1489,18 +1716,22 @@ export function LeadsTable({
                 <SelectItem value="unassign">
                   <span className="text-muted-foreground">Unassign (remove assignment)</span>
                 </SelectItem>
-                {teamMembers
-                  .filter((m) => m.role !== "viewer")
+                {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
                   .map((member) => (
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
                         <span>{member.name}</span>
-                        <span className="text-xs text-muted-foreground">({member.role})</span>
+                        <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
                       </div>
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
+            {isStagingView && assignAutoListId && (
+              <p className="mt-2 text-xs text-blue-600 font-medium">
+                → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button
@@ -1577,9 +1808,13 @@ export function LeadsTable({
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Move {selectedCount} lead{selectedCount !== 1 ? "s" : ""} to list</DialogTitle>
+            <DialogTitle>
+              {moveTargetIsArchive
+                ? `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`
+                : `Move ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to stage`}
+            </DialogTitle>
             <DialogDescription>
-              Select a target list. Leads will be moved out of their current list.
+              Select a target stage. Leads will be moved out of their current stage.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
@@ -1589,9 +1824,10 @@ export function LeadsTable({
               </SelectTrigger>
               <SelectContent>
                 {(() => {
-                  const pipeline = leadLists.filter((l) => !l.is_staging && !l.is_archive);
-                  const staging  = leadLists.filter((l) => l.is_staging);
-                  const archived = leadLists.filter((l) => l.is_archive);
+                  const visibleLists = isAdmin ? leadLists : leadLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const pipeline = visibleLists.filter((l) => !l.is_staging && !l.is_archive);
+                  const staging  = visibleLists.filter((l) => l.is_staging);
+                  const archived = visibleLists.filter((l) => l.is_archive);
                   return (
                     <>
                       {pipeline.length > 0 && (
@@ -1645,7 +1881,18 @@ export function LeadsTable({
                 )}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
-                  <Select value={moveAssignTo} onValueChange={setMoveAssignTo}>
+                  <Select
+                    value={moveAssignTo}
+                    onValueChange={(v) => {
+                      setMoveAssignTo(v);
+                      if (v !== "keep" && v !== "unassign" && positionSlugMap) {
+                        const posSlug = positionSlugMap[v] ?? null;
+                        const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
+                        const autoList = listSlug ? leadLists.find((l) => l.slug === listSlug) : null;
+                        if (autoList) setMoveListId(autoList.id);
+                      }
+                    }}
+                  >
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Keep current assignee" />
                     </SelectTrigger>
@@ -1656,13 +1903,12 @@ export function LeadsTable({
                       <SelectItem value="unassign">
                         <span className="text-muted-foreground">Unassign</span>
                       </SelectItem>
-                      {teamMembers
-                        .filter((m) => m.role !== "viewer")
+                      {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
                         .map((member) => (
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">
                               <span>{member.name}</span>
-                              <span className="text-xs text-muted-foreground">({member.role})</span>
+                              <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
                             </div>
                           </SelectItem>
                         ))}
@@ -1684,7 +1930,9 @@ export function LeadsTable({
               onClick={handleBulkMove}
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
             >
-              {isMoveList ? "Moving…" : "Move"}
+              {isMoveList
+                ? (moveTargetIsArchive ? "Archiving…" : "Moving…")
+                : (moveTargetIsArchive ? "Archive" : "Move")}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1717,7 +1965,8 @@ export function LeadsTable({
           onOpenChange={setAddLeadOpen}
           tenantId={tenantId}
           stages={stages}
-          teamMembers={teamMembers}
+          leadLists={leadLists}
+          teamMembers={assignableMembers ?? teamMembers}
           entities={entities}
           entityLabel={entityLabel}
           role={role}

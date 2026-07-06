@@ -27,6 +27,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 | Skill | Domain | When to Delegate |
 |-------|--------|------------------|
 | `/crm-expert` | CRM Domain | Lead workflows, pipeline design, Salesforce/HubSpot patterns, CRM best practices |
+| `/hr-expert` | HR / HRMS Domain | People & employee-lifecycle features — org/positions, onboarding, attendance & leave, payroll/comp, performance, ESS/MSS; reuses tenant_users/positions/branches spine; advises & routes |
 | `/db-engineer` | Database | Schema changes, migrations, SQL queries, data validation, tenant isolation |
 | `/frontend-dev` | Frontend | Pages, components, forms, layouts, styling, React/shadcn/Tailwind |
 | `/api-dev` | API Routes | API endpoints, auth, validation, rate limiting, audit logging |

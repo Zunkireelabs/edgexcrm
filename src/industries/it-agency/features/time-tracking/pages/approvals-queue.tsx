@@ -167,32 +167,30 @@ function ApprovalEntryRow({
       )}
 
       {/* Actions */}
-      <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
         <Button
+          variant="ghost"
           size="sm"
-          variant="outline"
-          className="h-7 px-2.5 text-xs text-green-700 border-green-200 hover:bg-green-50"
+          className="h-7 w-7 p-0"
           onClick={() => onApprove(entry.id)}
           disabled={processing}
+          title="Approve"
         >
           {processing ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <>
-              <ThumbsUp className="h-3.5 w-3.5 mr-1" />
-              Approve
-            </>
+            <ThumbsUp className="h-3.5 w-3.5 text-emerald-600" />
           )}
         </Button>
         <Button
+          variant="ghost"
           size="sm"
-          variant="outline"
-          className="h-7 px-2.5 text-xs text-red-700 border-red-200 hover:bg-red-50"
+          className="h-7 w-7 p-0"
           onClick={() => onRejectClick(entry.id)}
           disabled={processing}
+          title="Reject"
         >
-          <ThumbsDown className="h-3.5 w-3.5 mr-1" />
-          Reject
+          <ThumbsDown className="h-3.5 w-3.5 text-red-600" />
         </Button>
       </div>
     </div>
@@ -387,7 +385,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
 
   if (!isAdmin) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-64 text-center">
+      <div className="flex flex-col items-center justify-center min-h-64 text-center">
         <CheckSquare className="h-10 w-10 text-muted-foreground mb-3" />
         <p className="font-medium">You don&apos;t have permission to access approvals</p>
         <p className="text-sm text-muted-foreground mt-1">
@@ -401,7 +399,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
 
   if (loading) {
     return (
-      <div className="p-6 flex items-center justify-center min-h-64">
+      <div className="flex items-center justify-center min-h-64">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
       </div>
     );
@@ -409,7 +407,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
 
   if (error) {
     return (
-      <div className="p-6 text-sm text-destructive">
+      <div className="text-sm text-destructive">
         Failed to load pending entries: {error}
       </div>
     );
@@ -418,11 +416,11 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
   // ── Queue ──────────────────────────────────────────────────────
 
   return (
-    <div className="p-6 max-w-4xl mx-auto space-y-5">
+    <div className="max-w-4xl mx-auto space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Approvals Queue</h1>
+          <h1 className="text-lg font-bold">Approvals Queue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Review and approve your team&apos;s pending time entries.
           </p>
@@ -438,7 +436,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
           <span className="text-sm font-medium">{selected.size} selected</span>
           <Button
             size="sm"
-            className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700 text-white"
+            className="h-7 px-3 text-xs bg-[#0f0f10] hover:bg-[#0f0f10]/90 text-white"
             onClick={handleBulkApprove}
             disabled={bulkApproving}
           >
@@ -452,7 +450,7 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
           <Button
             size="sm"
             variant="outline"
-            className="h-7 px-3 text-xs text-red-700 border-red-200 hover:bg-red-50"
+            className="h-7 px-3 text-xs text-gray-600 border-gray-300 hover:bg-red-50 hover:text-red-600"
             onClick={() => {
               setBulkRejectOpen(true);
               setBulkRejectReason("");

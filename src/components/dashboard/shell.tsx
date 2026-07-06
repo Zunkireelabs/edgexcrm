@@ -44,6 +44,10 @@ import {
   Megaphone,
   GraduationCap,
   BookOpen,
+  Repeat2,
+  Package,
+  FileSignature,
+  Gauge,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -61,6 +65,7 @@ import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
+import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -119,6 +124,10 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Megaphone,
   GraduationCap,
   BookOpen,
+  Repeat2,
+  Package,
+  FileSignature,
+  Gauge,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -207,6 +216,7 @@ interface DashboardShellProps {
   tenant: Tenant;
   role: string;
   positionName?: string | null;
+  positionSlug?: string | null;
   formConfigs?: FormSummary[];
   industrySidebarItems?: readonly SidebarEntry[];
   allowedNavKeys?: string[] | null;
@@ -217,6 +227,7 @@ interface DashboardShellProps {
   selectedBranchId?: string | null;
   leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
+  archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
 }
 
@@ -225,6 +236,7 @@ export function DashboardShell({
   tenant,
   role,
   positionName,
+  positionSlug,
   industrySidebarItems = [],
   allowedNavKeys = null,
   branches = [],
@@ -234,6 +246,7 @@ export function DashboardShell({
   selectedBranchId = null,
   leadLists = [],
   stagingLists = [],
+  archiveLists = [],
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -248,8 +261,17 @@ export function DashboardShell({
   const { open: openSearch, shortcutLabel } = useGlobalSearch();
   const { counts } = useBadgeCounts();
 
+  // Logged-in user's display name (so the account footer shows whose account it is).
+  const userMeta = user.user_metadata as { name?: string; full_name?: string } | undefined;
+  const userName =
+    userMeta?.name?.trim() ||
+    userMeta?.full_name?.trim() ||
+    user.email?.split("@")[0] ||
+    "User";
+
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
+  const isItAgency = tenant.industry_id === "it_agency";
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -327,6 +349,14 @@ export function DashboardShell({
           onNavigate={() => setMobileOpen(false)}
         />
       );
+    }
+    if (entry.hideForBroadScope && (role === "owner" || role === "admin" || leadScope === "team")) {
+      return null;
+    }
+    if (entry.allowedPositions && entry.allowedPositions.length > 0) {
+      const isAdminTier = role === "owner" || role === "admin";
+      const hasPosition = positionSlug != null && entry.allowedPositions.includes(positionSlug);
+      if (!isAdminTier && !hasPosition) return null;
     }
     return renderNavItem({
       href: entry.href,
@@ -425,7 +455,12 @@ export function DashboardShell({
                     isAdmin={role === "owner" || role === "admin"}
                   />
                 </Suspense>
+                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+                {(role === "owner" || role === "admin") && navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
+                {archiveLists.length > 0 && (
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                )}
 
                 {/* Operations */}
                 <NavSectionHeader label="Operations" />
@@ -442,6 +477,90 @@ export function DashboardShell({
                 {/* Administration */}
                 <NavSectionHeader label="Administration" />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+              </>
+            );
+          })() : isItAgency ? (() => {
+            // Finds a flat industry item by href (Deals/Services/Proposals/Accounts/Contacts are flat)
+            const itItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            const pmGroup = industrySidebarItems.find(
+              (e): e is SidebarGroup => "children" in e && e.id === "project-management"
+            );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+
+                {/* Sales */}
+                <NavSectionHeader label="Sales" />
+                {stagingLists.length > 0 && navAllowed("/leads-organise") && (
+                  <Suspense key="leads-organise-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                      <span className="w-[18px] h-[18px] shrink-0" />
+                      Leads Organise
+                    </div>
+                  }>
+                    <LeadsOrganiseNavGroup
+                      lists={stagingLists}
+                      onNavigate={() => setMobileOpen(false)}
+                    />
+                  </Suspense>
+                )}
+                {navAllowed("/leads") && (
+                  leadLists.length > 0 ? (
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={leadLists}
+                        onNavigate={() => setMobileOpen(false)}
+                        isAdmin={role === "owner" || role === "admin"}
+                      />
+                    </Suspense>
+                  ) : (
+                    renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                  )
+                )}
+                {archiveLists.length > 0 && (
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                )}
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+
+                {/* Revenue */}
+                <NavSectionHeader label="Revenue" />
+                {itItem("/proposals") && renderIndustryEntry(itItem("/proposals")!)}
+                {itItem("/deals") && renderIndustryEntry(itItem("/deals")!)}
+                {itItem("/services") && renderIndustryEntry(itItem("/services")!)}
+
+                {/* Clients */}
+                <NavSectionHeader label="Clients" />
+                {itItem("/accounts") && renderIndustryEntry(itItem("/accounts")!)}
+                {itItem("/contacts") && renderIndustryEntry(itItem("/contacts")!)}
+
+                {/* Delivery */}
+                <NavSectionHeader label="Delivery" />
+                {pmGroup && renderIndustryEntry(pmGroup)}
+
+                {/* Communication */}
+                <NavSectionHeader label="Communication" />
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
+
+                {/* Organization */}
+                <NavSectionHeader label="Organization" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/people") && renderNavItem({ href: "/people", label: "People", icon: UsersRound })}
+                {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
+                {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
               </>
             );
           })() : (
@@ -491,6 +610,9 @@ export function DashboardShell({
               })}
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
+            {archiveLists.length > 0 && (
+              <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+            )}
             {industryAfter.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_BOTTOM.filter(
               (i) => navAllowed(i.href) && i.href !== "/settings",
@@ -517,7 +639,7 @@ export function DashboardShell({
             {tenant.name.charAt(0)}
           </div>
           <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-gray-900 truncate">{tenant.name}</p>
+            <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
             <p className="text-xs text-gray-500 truncate">{user.email}</p>
           </div>
           <ChevronDown className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
@@ -530,7 +652,7 @@ export function DashboardShell({
               {/* User info */}
               <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-900 truncate">
-                  {user.email?.split("@")[0] || "User"}
+                  {userName}
                 </p>
                 <p className="text-xs text-gray-500 truncate">{user.email}</p>
                 <span className="inline-block mt-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium capitalize">
@@ -572,14 +694,14 @@ export function DashboardShell({
   return (
     <div className="flex h-screen bg-[#fafafa]">
       {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa]">
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa] print:hidden">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
       <div className="flex flex-col flex-1 min-w-0 h-full bg-[#fafafa]">
         {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full">
+        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -638,7 +760,7 @@ export function DashboardShell({
         <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
           <main
-            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out"
+            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
             style={{
               borderRadius: '8px',
               border: '1px solid #00001d13'
@@ -648,7 +770,9 @@ export function DashboardShell({
           </main>
 
           {/* AI Assistant Panel */}
-          <AIAssistantPanel />
+          <div className="print:hidden">
+            <AIAssistantPanel />
+          </div>
         </div>
       </div>
     </div>

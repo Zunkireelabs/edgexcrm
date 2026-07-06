@@ -33,6 +33,8 @@ interface LeadTabsProps {
   checklists: LeadChecklist[];
   onChecklistsChange: (checklists: LeadChecklist[]) => void;
   isAdmin: boolean;
+  canEdit?: boolean;
+  canManageNotes?: boolean;
   currentUserId: string;
   industryId?: string | null;
   tenantName?: string;
@@ -46,7 +48,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -179,6 +181,8 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             teamMemberEmails={teamMemberEmails}
             teamMemberNames={teamMemberNames}
             isAdmin={isAdmin}
+            canEdit={canEdit}
+            canManageNotes={canManageNotes}
             onNotesChange={onNotesChange}
             checklists={checklists}
             onChecklistsChange={onChecklistsChange}

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building, ArrowRight } from "lucide-react";
+import { ChevronDown, UserCircle, Building } from "lucide-react";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
@@ -26,7 +26,8 @@ import {
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
-import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { CollaboratorsBlock } from "./collaborators-block";
+import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -45,6 +46,8 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
+  canEditLeads?: boolean;
 }
 
 interface LeadDraftSubset {
@@ -65,7 +68,12 @@ interface KeyInfoSectionProps {
   stageId: string | null;
   assignedTo: string;
   teamMembers: TeamMember[];
+  /** Pre-filtered assignable subset for the dropdown; falls back to teamMembers.filter(canEditLeads) if absent. */
+  assignableMembers?: TeamMember[];
+  userId?: string;
   isAdmin: boolean;
+  canEdit?: boolean;            // member with canEditLeads: can change stage even when not admin
+  canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
   onStageChange: (stageId: string) => void;
   onAssignmentChange: (userId: string) => void;
   entity?: TenantEntity | null;
@@ -76,8 +84,10 @@ interface KeyInfoSectionProps {
   editErrors?: { email?: string; phone?: string; general?: string };
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   onLeadTypeChange?: (newType: string) => void;
-  onListChange?: (listId: string, archiveReason?: string) => Promise<void>;
+  onListChange?: (listId: string, archiveReason?: string, assignToUserId?: string | null) => Promise<void>;
+  nextPositionMembers?: { user_id: string; email: string; name?: string | null }[];
   leadLists?: LeadList[];
+  activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveStudyFields?: (fields: Record<string, unknown>) => Promise<void>;
   onSaveSourceFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -94,7 +104,11 @@ export function KeyInfoSection({
   stageId,
   assignedTo,
   teamMembers,
+  assignableMembers,
+  userId,
   isAdmin,
+  canEdit = false,
+  canAssign = false,
   onStageChange,
   onAssignmentChange,
   entity,
@@ -106,6 +120,7 @@ export function KeyInfoSection({
   onLeadTypeChange,
   onListChange,
   leadLists,
+  activeLeadLists,
   onSaveTripFields,
   onSaveStudyFields,
   onSaveSourceFields,
@@ -113,6 +128,7 @@ export function KeyInfoSection({
   maxBranches,
   userBranchId,
   leadScope,
+  nextPositionMembers,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -149,68 +165,10 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* ── STATUS ─────────────────────────────────────────────────── */}
-          <SectionHeading>Status</SectionHeading>
-
-          {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
-          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">
-                {leadLists && leadLists.length > 0 ? "List" : "Lead Type"}
-              </p>
-              {leadLists && leadLists.length > 0 && onListChange ? (
-                <div className="flex items-center gap-2 flex-wrap">
-                  <MoveToListSelector
-                    leadId={lead.id}
-                    currentListId={(lead as { list_id?: string | null }).list_id ?? null}
-                    lists={leadLists}
-                    onMove={onListChange}
-                  />
-                  {/* Qualify CTA — only when lead is in the intake (Pre-qualified) list */}
-                  {(() => {
-                    const intakeList = leadLists.find((l) => l.is_intake);
-                    const leadWithList = lead as { list_id?: string | null };
-                    if (industryId === "education_consultancy" && intakeList && leadWithList.list_id === intakeList.id && onQualify) {
-                      return (
-                        <button
-                          type="button"
-                          onClick={onQualify}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
-                        >
-                          Qualify
-                          <ArrowRight className="w-3 h-3" />
-                        </button>
-                      );
-                    }
-                    return null;
-                  })()}
-                </div>
-              ) : (
-                <div className="flex gap-1.5">
-                  {["lead", "prospect"].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => { setLeadType(t); onLeadTypeChange?.(t); }}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
-                        leadType === t
-                          ? t === "prospect"
-                            ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
-                            : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
-                          : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-                      }`}
-                    >
-                      {t.charAt(0).toUpperCase() + t.slice(1)}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Stage */}
+          {/* Status (pipeline stage) */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Stage</p>
-            {isAdmin ? (
+            <p className="text-xs text-muted-foreground mb-1.5">Status</p>
+            {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
               <Select value={stageId || ""} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
@@ -243,10 +201,48 @@ export function KeyInfoSection({
             )}
           </div>
 
+          {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
+          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
+              </p>
+              {leadLists && leadLists.length > 0 && onListChange ? (
+                <ListStepper
+                  currentListId={(lead as { list_id?: string | null }).list_id ?? null}
+                  activeLists={activeLeadLists ?? leadLists}
+                  accessibleLists={leadLists}
+                  industryId={industryId}
+                  onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
+                  onQualify={onQualify}
+                  nextPositionMembers={nextPositionMembers}
+                />
+              ) : (
+                <div className="flex gap-1.5">
+                  {["lead", "prospect"].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => { setLeadType(t); onLeadTypeChange?.(t); }}
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                        leadType === t
+                          ? t === "prospect"
+                            ? "bg-purple-100 text-purple-700 ring-2 ring-purple-300"
+                            : "bg-gray-200 text-gray-700 ring-2 ring-gray-300"
+                          : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+                      }`}
+                    >
+                      {t.charAt(0).toUpperCase() + t.slice(1)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Assigned To */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin ? (
+            {isAdmin || canAssign ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -258,8 +254,7 @@ export function KeyInfoSection({
                   <SelectItem value="unassigned">
                     <span className="text-muted-foreground">Unassigned</span>
                   </SelectItem>
-                  {teamMembers
-                    .filter((m) => m.role !== "viewer")
+                  {(assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false))
                     .map((m) => (
                       <SelectItem key={m.user_id} value={m.user_id}>
                         <div className="flex items-center gap-2">
@@ -268,7 +263,7 @@ export function KeyInfoSection({
                               {getInitials(m.email)}
                             </span>
                           </div>
-                          <span className="truncate">{m.email}</span>
+                          <span className="truncate">{m.name || m.email.split("@")[0]}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -283,7 +278,7 @@ export function KeyInfoSection({
                         {getInitials(assignedMember.email)}
                       </span>
                     </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.email}</span>
+                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.email.split("@")[0]}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -294,6 +289,9 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+
+          {/* Lead Collaborators — admin/owner only */}
+          {isAdmin && <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} />}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
@@ -397,7 +395,7 @@ export function KeyInfoSection({
               <SectionHeading>Company</SectionHeading>
               {lead.owner_id && (() => {
                 const owner = teamMembers.find((m) => m.user_id === lead.owner_id);
-                return owner ? <InfoRow label="Lead Owner" value={owner.email} /> : null;
+                return owner ? <InfoRow label="Lead Owner" value={owner.name || owner.email.split("@")[0]} /> : null;
               })()}
               {lead.salutation && (
                 <InfoRow label="Salutation" value={lead.salutation} />

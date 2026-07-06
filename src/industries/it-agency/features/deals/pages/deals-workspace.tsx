@@ -9,6 +9,8 @@ import { DealBoard } from "../components/deal-board";
 import { DealsTable } from "../components/deals-table";
 import { AddDealSheet } from "../components/add-deal-sheet";
 import { DealPipelineSelector } from "../components/deal-pipeline-selector";
+import { weightedTotal } from "../components/deal-column";
+import { formatMoney } from "@/lib/travel/currency";
 import type { Deal, DealStage, DealPipelineWithCounts, UserRole } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
 
@@ -121,7 +123,7 @@ export function DealsWorkspace({
   const ownerOptions = useMemo(() => [
     { value: "all", label: "All owners" },
     { value: "unassigned", label: "Unassigned" },
-    ...teamMembers.map((m) => ({ value: m.user_id, label: m.email })),
+    ...teamMembers.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
   ], [teamMembers]);
 
   const typeOptions = useMemo(() => {
@@ -184,6 +186,22 @@ export function DealsWorkspace({
     return result;
   }, [deals, search, ownerFilter, typeFilter, priorityFilter, dateFilter, sortField, sortDir]);
 
+  const weightedPipeline = useMemo(() => {
+    const stageMap = new Map(stages.map((s) => [s.id, s]));
+    const byStage = new Map<string, Deal[]>();
+    for (const d of filteredDeals) {
+      const arr = byStage.get(d.stage_id) ?? [];
+      arr.push(d);
+      byStage.set(d.stage_id, arr);
+    }
+    let sum = 0;
+    for (const [stageId, stageDeals] of byStage) {
+      const stage = stageMap.get(stageId);
+      if (stage) sum += weightedTotal(stageDeals, stage.probability);
+    }
+    return sum;
+  }, [filteredDeals, stages]);
+
   const activeFilterCount = [
     search ? 1 : 0,
     ownerFilter !== "all" ? 1 : 0,
@@ -214,7 +232,14 @@ export function DealsWorkspace({
       <div className="flex items-center justify-between gap-3 shrink-0">
         <div>
           <h1 className="text-xl font-bold">Deals</h1>
-          <p className="text-sm text-muted-foreground">{deals.length} deal{deals.length !== 1 ? "s" : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            {deals.length} deal{deals.length !== 1 ? "s" : ""}
+            {filteredDeals.length > 0 && (
+              <span className="ml-2">
+                · Weighted pipeline: <span className="font-medium text-foreground">{formatMoney(weightedPipeline, filteredDeals[0]?.currency ?? "NPR")}</span>
+              </span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <DealPipelineSelector

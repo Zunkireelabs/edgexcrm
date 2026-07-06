@@ -5,6 +5,7 @@ import { resolvePermissions, type ResolvedPermissions, type PositionPermissions 
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
 import type { LeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds as fetchBranchMemberIds } from "@/lib/leads/branch-membership";
 
 export interface AuthContext {
   userId: string;
@@ -13,7 +14,9 @@ export interface AuthContext {
   role: UserRole;
   industryId: string | null;
   positionId: string | null;
+  positionSlug: string | null;
   branchId: string | null;
+  branchMemberIds: string[];
   permissions: ResolvedPermissions;
   plan: string;
   entitlements: Entitlements;
@@ -31,8 +34,15 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
           getAll() {
             return cookieStore.getAll();
           },
-          setAll() {
-            // API routes don't need to set cookies
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Called from a read-only context (e.g. Server Component); safe to ignore —
+              // middleware has already refreshed the session and written the new tokens.
+            }
           },
         },
       }
@@ -48,24 +58,20 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const serviceClient = await createServiceClient();
     const { data: membership } = await serviceClient
       .from("tenant_users")
-      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions)")
+      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)")
       .eq("user_id", user.id)
       .single<{
         tenant_id: string;
         role: string;
         position_id: string | null;
         branch_id: string | null;
-        // PostgREST returns embedded FK relations as an object for
-        // many-to-one (the case here: tenant_users.tenant_id ->
-        // tenants.id), but may return an array if the schema cache is
-        // stale or a second FK gets introduced. Accept both shapes.
         tenants:
           | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
           | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
           | null;
         positions:
-          | { permissions: PositionPermissions }
-          | { permissions: PositionPermissions }[]
+          | { permissions: PositionPermissions; slug: string }
+          | { permissions: PositionPermissions; slug: string }[]
           | null;
       }>();
 
@@ -79,6 +85,14 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       ? membership.positions[0] ?? null
       : membership.positions;
     const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
+    const positionSlug = positionEmbed?.slug ?? null;
+    const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
+    const resolvedBranchId = membership.branch_id ?? null;
+
+    const memberIds =
+      permissions.leadScope === "team" && resolvedBranchId
+        ? await fetchBranchMemberIds(serviceClient, membership.tenant_id, resolvedBranchId)
+        : [];
 
     return {
       userId: user.id,
@@ -87,15 +101,18 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
       role: membership.role as UserRole,
       industryId: tenantsEmbed?.industry_id ?? null,
       positionId: membership.position_id ?? null,
-      branchId: membership.branch_id ?? null,
-      permissions: resolvePermissions(membership.role as UserRole, positionPermissions),
+      positionSlug,
+      branchId: resolvedBranchId,
+      branchMemberIds: memberIds,
+      permissions,
       plan: tenantsEmbed?.plan ?? "starter",
       entitlements: resolveEntitlements({
         plan: tenantsEmbed?.plan,
         entitlement_overrides: tenantsEmbed?.entitlement_overrides,
       }),
     };
-  } catch {
+  } catch (e) {
+    console.error("[authenticateRequest] unexpected error", e);
     return null;
   }
 }
@@ -111,7 +128,10 @@ export function requireLeadBranchAccess(
 ): boolean {
   if (auth.permissions.leadScope !== "team") return true;
   if (!auth.branchId) return membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId; // §4.1
-  return membership.some((m) => m.branch_id === auth.branchId);
+  // Unassigned lead (e.g. just created via walk-in Check-In): fall back to a
+  // branch match, since there's no assignee yet to check against.
+  if (lead.assigned_to === null) return lead.branch_id === auth.branchId;
+  return auth.branchMemberIds.includes(lead.assigned_to);
 }
 
 export interface UserContext {
@@ -131,7 +151,15 @@ export async function authenticateUser(): Promise<UserContext | null> {
           getAll() {
             return cookieStore.getAll();
           },
-          setAll() {},
+          setAll(cookiesToSet) {
+            try {
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
+            } catch {
+              // Called from a read-only context; safe to ignore.
+            }
+          },
         },
       }
     );
@@ -146,7 +174,8 @@ export async function authenticateUser(): Promise<UserContext | null> {
       userId: user.id,
       email: user.email || "",
     };
-  } catch {
+  } catch (e) {
+    console.error("[authenticateUser] unexpected error", e);
     return null;
   }
 }
@@ -163,13 +192,36 @@ export function requireLeadAccess(
   if (p.leadScope === "own") return isAssignee;
   if (p.leadScope === "team") {
     if (!auth.branchId) return isAssignee; // §4.1 NULL-branch fallback
-    return membership.some((m) => m.branch_id === auth.branchId);
+    // Mirror getLeads branch scope: lead is editable if it's in the manager's branch
+    // (via lead_branches roster or direct branch_id), not just if assigned to a branch member.
+    return (
+      membership.some((m) => m.branch_id === auth.branchId) ||
+      lead.branch_id === auth.branchId ||
+      (lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to))
+    );
   }
   return true;
 }
 
 export function isCounselorOrAbove(auth: AuthContext): boolean {
   return auth.role === "owner" || auth.role === "admin" || auth.role === "counselor";
+}
+
+export async function resolvePositionSlug(
+  supabase: Awaited<ReturnType<typeof createServiceClient>>,
+  tenantId: string,
+  userId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from("tenant_users")
+    .select("positions(slug)")
+    .eq("user_id", userId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ positions: { slug: string } | { slug: string }[] | null }>();
+
+  if (!data) return null;
+  const positionEmbed = Array.isArray(data.positions) ? data.positions[0] ?? null : data.positions;
+  return positionEmbed?.slug ?? null;
 }
 
 export function getClientIp(request: Request): string {

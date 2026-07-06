@@ -240,10 +240,8 @@ export function ContactDetailPage({ role, contactId }: ContactDetailPageProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Button variant="ghost" size="icon" asChild>
-          <Link href="/contacts">
-            <ArrowLeft className="h-4 w-4" />
-          </Link>
+        <Button variant="ghost" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <h1 className="text-2xl font-semibold" style={{ color: "#0f0f10" }}>
           {fullName}

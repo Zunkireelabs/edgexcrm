@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, requireLeadAccess, getClientIp } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborator, isLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList, leadQueryScope } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -22,6 +23,7 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
+import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import type { Lead } from "@/types/database";
@@ -105,10 +107,16 @@ export async function GET(
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
   if (scope.restrictToSelf &&
       !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
-    return apiNotFound("Lead");
+    // Collaborators (anyone ever assigned) keep VIEW access even after reassignment.
+    const isCollab = await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
+    if (!isCollab) return apiNotFound("Lead");
   }
-  if (scope.branchId && !membership.some((m) => m.branch_id === scope.branchId)) {
-    return apiNotFound("Lead");
+  if (scope.branchId) {
+    const inBranch =
+      membership.some((m) => m.branch_id === auth.branchId) ||
+      lead.branch_id === auth.branchId ||
+      (lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to));
+    if (!inBranch) return apiNotFound("Lead");
   }
 
   // Pipeline-access enforcement (dormant until Phase 3)
@@ -163,14 +171,41 @@ export async function PATCH(
 
   // Access check: admin or counselor with assignment
   const patchMembership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (!requireLeadAccess(auth, existingLead, patchMembership)) {
+
+  // Narrow exception: own-scope education chain member who checked in this unassigned lead
+  // may assign it (e.g. lead-executive assigning a counselor to a walk-in they checked in).
+  let isSelfCheckInAssign = false;
+  if (
+    auth.industryId === "education_consultancy" &&
+    auth.positionSlug != null &&
+    ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+    auth.permissions.leadScope === "own" &&
+    auth.permissions.canAssignLeads &&
+    existingLead.assigned_to == null &&
+    Object.keys(body).length === 1 &&
+    body.assigned_to !== undefined
+  ) {
+    const { count } = await supabase
+      .from("lead_notes")
+      .select("id", { count: "exact", head: true })
+      .eq("lead_id", id)
+      .eq("user_id", auth.userId)
+      .like("content", "[CHECK-IN]%");
+    isSelfCheckInAssign = (count ?? 0) > 0;
+  }
+
+  if (!isSelfCheckInAssign && !requireLeadAccess(auth, existingLead, patchMembership)) {
     return apiForbidden();
   }
 
-  // Plain counselors/viewers cannot update admin-only fields.
+  // Plain counselors cannot update admin-only fields.
   // Team-scoped branch managers CAN (subject to the §4.2 guard that follows).
   if (auth.permissions.baseTier === "member" && auth.permissions.leadScope !== "team") {
-    for (const field of ADMIN_ONLY_FIELDS) {
+    // canAssignLeads lets a member set the assignee (assigned_to); branch/owner stay admin-only.
+    const blockedFields = auth.permissions.canAssignLeads
+      ? ADMIN_ONLY_FIELDS.filter((f) => f !== "assigned_to")
+      : ADMIN_ONLY_FIELDS;
+    for (const field of blockedFields) {
       if (body[field] !== undefined) {
         return apiForbidden();
       }
@@ -201,17 +236,25 @@ export async function PATCH(
 
     body.stage_id = stage.id;
   } else if (body.stage_id && typeof body.stage_id === "string") {
-    // Resolve status slug from stage_id
-    const { data: stage } = await supabase
+    // Resolve status slug from stage_id; when the lead is in a list, validate
+    // the stage belongs to that list's pipeline.
+    let stageQuery = supabase
       .from("pipeline_stages")
-      .select("slug")
+      .select("slug, pipeline_id")
       .eq("id", body.stage_id)
-      .eq("tenant_id", auth.tenantId)
-      .single();
+      .eq("tenant_id", auth.tenantId);
+
+    // If the lead currently belongs to a list, scope to that list's pipeline
+    const currentPipelineId = (existingLead as Record<string, unknown>).pipeline_id as string | null;
+    if (currentPipelineId) {
+      stageQuery = stageQuery.eq("pipeline_id", currentPipelineId);
+    }
+
+    const { data: stage } = await stageQuery.single();
 
     if (!stage) {
       return apiValidationError({
-        stage_id: ["Invalid stage_id. No matching pipeline stage found."],
+        stage_id: ["Invalid stage_id. Stage does not belong to this lead's pipeline."],
       });
     }
 
@@ -219,10 +262,11 @@ export async function PATCH(
   }
 
   // Validate assigned_to: must be a tenant member
+  let newAssigneeBranchId: string | null | undefined = undefined;
   if (body.assigned_to !== undefined && body.assigned_to !== null) {
     const { data: memberCheck } = await supabase
       .from("tenant_users")
-      .select("user_id")
+      .select("user_id, branch_id, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to as string)
       .single();
@@ -231,6 +275,28 @@ export async function PATCH(
       return apiValidationError({
         assigned_to: ["Assigned user is not a member of this tenant"],
       });
+    }
+
+    newAssigneeBranchId = (memberCheck as unknown as { branch_id: string | null }).branch_id ?? null;
+
+    // Chain check: education chain-position callers (non-admin, non-team-scope) may
+    // only assign to their allowed chain targets.
+    if (
+      auth.industryId === "education_consultancy" &&
+      auth.positionSlug != null &&
+      ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+      auth.permissions.baseTier === "member" &&
+      auth.permissions.leadScope !== "team"
+    ) {
+      const posEmbed = Array.isArray((memberCheck as unknown as { positions: unknown }).positions)
+        ? ((memberCheck as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+        : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
+      const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+      const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
+      const okBranch = auth.branchId == null || ((memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null) === auth.branchId;
+      if (!targetSlug || !allowed.has(targetSlug) || !okBranch) {
+        return apiForbidden();
+      }
     }
   }
 
@@ -289,7 +355,10 @@ export async function PATCH(
     const touchingBranchFields =
       body.assigned_to !== undefined || body.branch_id !== undefined;
     if (touchingBranchFields) {
-      if (!auth.branchId || existingLead.branch_id !== auth.branchId) {
+      const leadInManagerBranch =
+        existingLead.branch_id === auth.branchId ||
+        patchMembership.some((m) => m.branch_id === auth.branchId);
+      if (!auth.branchId || !leadInManagerBranch) {
         return apiForbidden();
       }
       if (body.assigned_to !== undefined && body.assigned_to !== null) {
@@ -328,6 +397,7 @@ export async function PATCH(
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
+      listCheck.id,
     );
     if (!accessible) return apiForbidden();
   }
@@ -347,12 +417,26 @@ export async function PATCH(
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")
-      .select("id, slug, name")
+      .select("id, slug, name, pipeline_id")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
+      // Reset stage to the destination list's default stage on list move
+      if (targetList.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", targetList.pipeline_id)
+          .eq("is_default", true)
+          .single();
+        if (defaultStage) {
+          updatePayload.pipeline_id = targetList.pipeline_id;
+          updatePayload.stage_id = defaultStage.id;
+          updatePayload.status = defaultStage.slug;
+        }
+      }
     }
   }
   if ((existingLead as Record<string, unknown>).list_id) {
@@ -362,6 +446,60 @@ export async function PATCH(
       .eq("id", (existingLead as Record<string, unknown>).list_id as string)
       .maybeSingle();
     if (oldList) oldListName = oldList.name;
+  }
+
+  // Cross-branch reassignment: reset status to the current list's default stage.
+  // When a lead moves to a new team the new member starts from first status,
+  // not inheriting mid-stream progress from the previous team.
+  // Only fires when: assignee actually changes to a different user, new assignee is in a
+  // genuinely different branch than the PREVIOUS assignee (not the lead's origin branch),
+  // no list_id change is already in the payload (list moves handle it above),
+  // and the caller did NOT explicitly set status or stage_id.
+  if (
+    body.assigned_to !== undefined &&
+    body.assigned_to !== null &&
+    (body.assigned_to as string) !== (existingLead.assigned_to as string | null) &&
+    newAssigneeBranchId !== undefined &&
+    updatePayload.list_id === undefined &&
+    body.status === undefined &&
+    body.stage_id === undefined
+  ) {
+    const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+    if (currentListId) {
+      // Fetch previous assignee's branch to detect actual cross-branch move
+      let prevAssigneeBranchId: string | null = null;
+      const prevAssigneeId = existingLead.assigned_to as string | null;
+      if (prevAssigneeId) {
+        const { data: prevMember } = await supabase
+          .from("tenant_users")
+          .select("branch_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("user_id", prevAssigneeId)
+          .maybeSingle();
+        prevAssigneeBranchId = (prevMember as { branch_id: string | null } | null)?.branch_id ?? null;
+      }
+      // Only reset if new assignee is in a genuinely different branch
+      if (newAssigneeBranchId !== prevAssigneeBranchId) {
+        const { data: crossBranchList } = await supabase
+          .from("lead_lists")
+          .select("pipeline_id")
+          .eq("id", currentListId)
+          .maybeSingle();
+        if (crossBranchList?.pipeline_id) {
+          const { data: firstStage } = await supabase
+            .from("pipeline_stages")
+            .select("id, slug")
+            .eq("pipeline_id", crossBranchList.pipeline_id)
+            .eq("is_default", true)
+            .single();
+          if (firstStage) {
+            updatePayload.pipeline_id = crossBranchList.pipeline_id;
+            updatePayload.stage_id = firstStage.id;
+            updatePayload.status = firstStage.slug;
+          }
+        }
+      }
+    }
   }
 
   // Recompute normalized_email when email changes to keep dedup keying accurate
@@ -403,6 +541,25 @@ export async function PATCH(
   // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
+  }
+
+  // New assignee becomes a permanent collaborator (engaged-user visibility).
+  if (updatePayload.assigned_to !== undefined && (updated as Lead).assigned_to) {
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, (updated as Lead).assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator on assign failed");
+    }
+  }
+
+  // Two-step check-in assign: the lead-exec who did the initial walk-in retains lifecycle
+  // visibility after handing the lead off to a counselor.
+  if (isSelfCheckInAssign) {
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator (checker) on self check-in assign failed");
+    }
   }
 
   // Assign display ID to education leads moving out of staging (best-effort).
@@ -450,7 +607,7 @@ export async function PATCH(
 
   log.info({ leadId: id, changes }, "Lead updated");
 
-  const statusChanged = body.status && body.status !== existingLead.status;
+  const statusChanged = updated.status !== existingLead.status;
   const assignedChanged =
     updatePayload.assigned_to !== undefined &&
     existingLead.assigned_to !== updated.assigned_to;
@@ -478,7 +635,7 @@ export async function PATCH(
             entityId: id,
             payload: {
               old_status: existingLead.status,
-              new_status: body.status,
+              new_status: updated.status,
             },
             requestId,
           }),
@@ -497,6 +654,31 @@ export async function PATCH(
             },
             requestId,
           }),
+        ]
+      : []),
+    // Lead assignment history: only true user→user handoffs (both ends non-null),
+    // snapshotting each user's position at the moment of the handoff.
+    ...(assignedChanged && existingLead.assigned_to && updated.assigned_to
+      ? [
+          (async () => {
+            const { data: members } = await supabase
+              .from("tenant_users")
+              .select("user_id, position_id")
+              .eq("tenant_id", auth.tenantId)
+              .in("user_id", [existingLead.assigned_to, updated.assigned_to]);
+            const byUser = new Map<string, string | null>(
+              (members ?? []).map((m) => [m.user_id as string, (m.position_id as string | null) ?? null])
+            );
+            await supabase.from("lead_assignment_history").insert({
+              tenant_id: auth.tenantId,
+              lead_id: id,
+              from_user_id: existingLead.assigned_to,
+              to_user_id: updated.assigned_to,
+              from_position_id: byUser.get(existingLead.assigned_to) ?? null,
+              to_position_id: byUser.get(updated.assigned_to) ?? null,
+              changed_by: auth.userId,
+            });
+          })(),
         ]
       : []),
     ...(listChanged

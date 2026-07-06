@@ -2,10 +2,11 @@
 
 import React from "react";
 import Link from "next/link";
-import { Eye } from "lucide-react";
+import { Eye, RotateCcw } from "lucide-react";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-industries";
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
+import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
@@ -20,6 +21,7 @@ export interface LeadColumnCtx {
   formMap: Record<string, string>;
   entityMap: Record<string, string>;
   branchMap: Record<string, string>;
+  memberBranchMap: Record<string, string>;
   roleMap?: Record<string, string>;
   stages: PipelineStage[];
   industryId: string | null | undefined;
@@ -31,6 +33,11 @@ export interface LeadColumnCtx {
   onTypeUpdate: (leadId: string, type: string) => void;
   leadLists?: LeadList[];
   onListMove?: (leadId: string, listId: string, archiveReason?: string) => Promise<void>;
+  canEditLeads?: boolean;
+  isAdmin?: boolean;
+  onStageChange?: (leadId: string, stageId: string) => Promise<void>;
+  viewMode?: "trash" | "archived" | "normal";
+  onRestore?: (leadId: string) => Promise<void>;
 }
 
 export interface LeadColumn {
@@ -206,16 +213,37 @@ const STATIC_COLUMNS: LeadColumn[] = [
   // ── type / list (education_consultancy + travel_agency)
   {
     key: "lead_type",
-    label: "List",
+    label: "Stage",
     group: "standard",
     industries: ["education_consultancy", "travel_agency"],
     defaultVisible: true,
     renderTh: () => (
       <th key="lead_type" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell w-[160px]">
-        List
+        Stage
       </th>
     ),
     renderTd: (lead, ctx) => {
+      // Recycle-bin views (Delete / Archived) replace the move control with Restore.
+      if (ctx.viewMode === "trash" || ctx.viewMode === "archived") {
+        return (
+          <td key="lead_type" className="px-3 py-1.5 hidden md:table-cell" onClick={(e) => e.stopPropagation()}>
+            {ctx.onRestore ? (
+              <button
+                type="button"
+                onClick={() => ctx.onRestore!(lead.id)}
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3" />
+                Restore
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">
+                {ctx.viewMode === "trash" ? "Deleted" : "Archived"}
+              </span>
+            )}
+          </td>
+        );
+      }
       const intakeList = ctx.leadLists?.find((l) => l.is_intake);
       const qualifiedList = ctx.leadLists?.find((l) => l.slug === "qualified");
       const isInIntake = intakeList && lead.list_id === intakeList.id;
@@ -226,7 +254,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               <MoveToListSelector
                 leadId={lead.id}
                 currentListId={lead.list_id ?? null}
-                lists={ctx.leadLists}
+                lists={ctx.isAdmin ? ctx.leadLists : ctx.leadLists.filter((l) => !l.is_staging && !l.is_archive)}
                 onMove={(listId, archiveReason) => ctx.onListMove!(lead.id, listId, archiveReason)}
               />
               {ctx.industryId === "education_consultancy" && isInIntake && qualifiedList && (
@@ -343,7 +371,14 @@ const STATIC_COLUMNS: LeadColumn[] = [
       </th>
     ),
     renderTd: (lead, ctx) => {
-      const stage = ctx.stages.find((s) => s.id === lead.stage_id);
+      // Stages of THIS lead's pipeline (ctx.stages spans all pipelines).
+      const leadStages = ctx.stages.filter((s) => s.pipeline_id === lead.pipeline_id);
+      const stage =
+        leadStages.find((s) => s.id === lead.stage_id) ??
+        ctx.stages.find((s) => s.id === lead.stage_id);
+      // Editable inline when the user can edit leads and the lead's pipeline stages
+      // are available. Trash/archive views pass no onStageChange ⇒ read-only badge.
+      const editable = !!ctx.canEditLeads && !!ctx.onStageChange && leadStages.length > 0;
       const badgeColors: Record<string, string> = {
         new: "bg-blue-100 text-blue-800",
         contacted: "bg-yellow-100 text-yellow-800",
@@ -351,15 +386,23 @@ const STATIC_COLUMNS: LeadColumn[] = [
         rejected: "bg-red-100 text-red-800",
       };
       return (
-        <td key="status" className="px-3 py-1.5">
-          <span
-            className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
-              stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
-            }`}
-            style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
-          >
-            {stage?.name || lead.status}
-          </span>
+        <td key="status" className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
+          {editable ? (
+            <StageSelector
+              currentStageId={lead.stage_id}
+              stages={leadStages}
+              onChange={(stageId) => ctx.onStageChange!(lead.id, stageId)}
+            />
+          ) : (
+            <span
+              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+                stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
+              }`}
+              style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
+            >
+              {stage?.name || lead.status}
+            </span>
+          )}
         </td>
       );
     },
@@ -392,6 +435,56 @@ const STATIC_COLUMNS: LeadColumn[] = [
         </td>
       );
     },
+  },
+
+  // ── ref_code (affiliate code — education_consultancy only)
+  {
+    key: "ref_code",
+    label: "Ref Code",
+    group: "standard",
+    defaultVisible: true,
+    industries: ["education_consultancy"],
+    renderTh: () => (
+      <th key="ref_code" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[100px]">
+        Ref Code
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="ref_code" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+        {lead.ref_code ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium whitespace-nowrap">
+            {lead.ref_code}
+          </span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </td>
+    ),
+  },
+
+  // ── form_source (which page lead came from — education_consultancy only)
+  {
+    key: "form_source",
+    label: "Form Source",
+    group: "standard",
+    defaultVisible: true,
+    industries: ["education_consultancy"],
+    renderTh: () => (
+      <th key="form_source" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[110px]">
+        Form Source
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+        {lead.form_source ? (
+          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+            {lead.form_source}
+          </span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </td>
+    ),
   },
 
   // ── medium (intake_medium)
@@ -551,7 +644,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => (
       <td key="branch" className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-        {lead.branch_id ? (ctx.branchMap[lead.branch_id] ?? "—") : <span className="text-gray-400">—</span>}
+        {(() => {
+          const bid = lead.branch_id ?? ctx.memberBranchMap[lead.assigned_to ?? ""] ?? null;
+          return bid ? (ctx.branchMap[bid] ?? "—") : <span className="text-gray-400">—</span>;
+        })()}
       </td>
     ),
   },

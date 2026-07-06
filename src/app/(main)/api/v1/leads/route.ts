@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { leadQueryScope, canSeeNav, canAccessList } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import {
@@ -28,7 +28,8 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { leadIdsForBranch, leadIdsVisibleToAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborator, collaboratorLeadIdsForUser } from "@/lib/leads/collaborators";
 import {
   normalizeEmail,
   normalizePhone,
@@ -113,6 +114,7 @@ export async function GET(request: NextRequest) {
           auth.permissions,
           targetList.access as { mode: string; positionIds?: string[] },
           auth.positionId,
+          targetList.id,
         );
         if (!accessible) return apiForbidden();
         resolvedListId = targetList.id;
@@ -130,6 +132,9 @@ export async function GET(request: NextRequest) {
     query = query.is("converted_at", null);
   }
 
+  // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
+  query = query.not("tags", "cs", '{"other"}');
+
   // Apply list filter
   if (resolvedListId) {
     query = query.eq("list_id", resolvedListId);
@@ -140,21 +145,51 @@ export async function GET(request: NextRequest) {
 
   // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (scope.restrictToSelf) {
-    const ids = await leadIdsVisibleToAssignee(supabase, auth.tenantId, auth.userId);
-    query = query.in("id", ids);
+  if (auth.branchId && isSharedPoolList(auth.permissions, resolvedListId)) {
+    // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
+    // not just their own. auth.branchMemberIds is empty for own-scope, so resolve explicitly.
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId);
+    query = query.in("assigned_to", memberIds);
+    assignedTo = null;
+  } else if (scope.restrictToSelf) {
+    // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
+    // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
+    const [sharedIds, collabIds] = await Promise.all([
+      sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
+      collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
+    ]);
+    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
+    const rawExtra = [...new Set([...sharedIds, ...collabIds])];
+    const extraIds = rawExtra.slice(0, 300);
+    if (extraIds.length > 0) {
+      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);
+    } else {
+      query = query.eq("assigned_to", auth.userId);
+    }
     assignedTo = null; // self-scoped users: ignore any client assignedTo param
   } else if (scope.branchId) {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, scope.branchId);
-    query = query.in("id", ids);
+    // Include leads assigned to branch members AND leads shared into this branch via lead_branches
+    const { data: sharedRows } = await supabase
+      .from("lead_branches")
+      .select("lead_id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("branch_id", scope.branchId);
+    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
+    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
+      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
+    } else if (sharedLeadIds.length > 0) {
+      query = query.in("id", sharedLeadIds);
+    } else {
+      query = query.in("assigned_to", auth.branchMemberIds);
+    }
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    const ids = await leadIdsForBranch(supabase, auth.tenantId, adminBranchFilter);
-    query = query.in("id", ids);
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
+    query = query.in("assigned_to", memberIds);
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
@@ -448,6 +483,8 @@ async function handlePost(request: NextRequest) {
     intake_source: body.intake_source || null,
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
+    ref_code: (body.ref_code as string | null | undefined) || null,
+    form_source: (body.form_source as string | null | undefined) || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
     assigned_to: body.assigned_to || null,
@@ -464,20 +501,61 @@ async function handlePost(request: NextRequest) {
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
-  // For tenants with lead-lists: assign new leads to the intake list when list_id not supplied.
+  // For tenants with lead-lists: assign new leads to the correct list when list_id not supplied.
   // Only applies to brand-new inserts — the update path strips list_id from its payload.
-  // Falls back to null silently if no intake list exists (edge tenant, older setup).
+  // Check-in routing:
+  //   counselor assigned → Prospects   (walk-in is handed off immediately)
+  //   no counselor, lead-exec checker → Qualified (lead-exec owns it)
+  //   no counselor, owner/admin/branch-mgr → Qualified (shared pool, assigned_to = null)
+  // All other leads go to the intake list. Falls back to null if no matching list exists.
   if (!body.list_id) {
-    const { data: intakeList } = await supabase
-      .from("lead_lists")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_intake", true)
-      .limit(1)
-      .maybeSingle();
-    leadPayload.list_id = intakeList?.id ?? null;
+    const isCheckIn = body.intake_medium === "check_in";
+    if (isCheckIn) {
+      const targetSlug = body.assigned_to ? "prospects" : "qualified";
+      const { data: targetList } = await supabase
+        .from("lead_lists")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("slug", targetSlug)
+        .limit(1)
+        .maybeSingle();
+      leadPayload.list_id = targetList?.id ?? null;
+
+      if (!body.assigned_to) {
+        if (dashAuth?.positionSlug === "lead-executive") {
+          leadPayload.assigned_to = dashAuth.userId;
+        } else {
+          leadPayload.assigned_to = null;
+        }
+      }
+    } else {
+      const { data: intakeList } = await supabase
+        .from("lead_lists")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("is_intake", true)
+        .limit(1)
+        .maybeSingle();
+      leadPayload.list_id = intakeList?.id ?? null;
+    }
   } else {
-    leadPayload.list_id = (body.list_id as string | null) ?? null;
+    const explicitListId = (body.list_id as string) ?? null;
+    if (explicitListId) {
+      const { data: listCheck } = await supabase
+        .from("lead_lists")
+        .select("id, is_archive")
+        .eq("tenant_id", tenantId)
+        .eq("id", explicitListId)
+        .maybeSingle();
+      if (!listCheck) {
+        return apiValidationError({ list_id: ["List not found in this tenant"] });
+      }
+      if (listCheck.is_archive && !body.archive_reason) {
+        return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
+      }
+    }
+    leadPayload.list_id = explicitListId;
+    if (body.archive_reason) leadPayload.archive_reason = body.archive_reason as string;
   }
 
   // Set branch on insert path only; stripped from the update destructure below.
@@ -891,6 +969,30 @@ async function handlePost(request: NextRequest) {
 
   log.info({ leadId: lead.id }, "Lead created");
 
+  // Register the initial assignee as a collaborator (engaged-user visibility).
+  if ((lead as Lead).assigned_to) {
+    try {
+      await addLeadCollaborator(supabase, tenantId, lead.id, (lead as Lead).assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator on create failed");
+    }
+  }
+
+  // Lead-exec who checked in retains lifecycle visibility even after a counselor owns it.
+  // Guard: skip when lead-exec is already the assignee (prevents duplicate; UNIQUE constraint
+  // makes it idempotent anyway, but avoids the extra round-trip).
+  if (
+    body.intake_medium === "check_in" &&
+    dashAuth?.userId &&
+    dashAuth.userId !== (lead as Lead).assigned_to
+  ) {
+    try {
+      await addLeadCollaborator(supabase, tenantId, lead.id, dashAuth.userId);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborator (checker) on check-in create failed");
+    }
+  }
+
   // Assign display ID for education leads (best-effort; null list_id → live → assigns).
   // Re-select display_id so the response includes the freshly-assigned ID.
   if (tenant.industry_id === "education_consultancy") {
@@ -1052,6 +1154,20 @@ async function handlePost(request: NextRequest) {
         lead as Lead,
         { isResubmission: false, tenant: { name: tenant.name } }
       ).catch(() => {});
+    }
+
+    // Record affiliate conversion when ref_code is present (Admizz affiliate leads)
+    const leadRefCode = (lead as Lead).ref_code ?? null;
+    if (leadRefCode && tenant.industry_id === "education_consultancy") {
+      void supabase
+        .rpc("record_affiliate_conversion", {
+          p_lead_id: lead.id,
+          p_ref_code: leadRefCode,
+          p_form_source: (lead as Lead).form_source ?? null,
+        })
+        .then(({ error: rpcErr }) => {
+          if (rpcErr) log.error({ err: rpcErr, leadId: lead.id }, "record_affiliate_conversion failed");
+        });
     }
   }
 

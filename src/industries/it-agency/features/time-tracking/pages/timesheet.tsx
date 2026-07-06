@@ -169,11 +169,11 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Time Tracking</h1>
+          <h1 className="text-lg font-bold">Time Tracking</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {isAdmin ? "Team timesheet" : "Your timesheet"}
           </p>

@@ -154,6 +154,8 @@ export interface Lead {
   intake_source: string | null;
   intake_medium: string | null;
   intake_campaign: string | null;
+  ref_code: string | null;
+  form_source: string | null;
   preferred_contact_method: string | null;
   tags: string[];
   lead_type: string;
@@ -209,6 +211,7 @@ export interface LeadList {
   is_staging?: boolean;
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
+  pipeline_id: string | null;
   created_at: string;
   updated_at: string;
   count?: number;
@@ -299,6 +302,7 @@ export interface LeadNote {
   user_email: string;
   content: string;
   created_at: string;
+  edited_at: string | null;
 }
 
 export interface FormAttribution {
@@ -438,6 +442,8 @@ export interface Pipeline {
   is_default: boolean;
   position: number;
   is_active: boolean;
+  /** Non-null when this pipeline is owned by a specific lead list. */
+  list_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -492,6 +498,8 @@ export interface LeadChecklist {
   completed_at: string | null;
   completed_by: string | null;
   position: number;
+  remind_at: string | null;
+  reminded_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -608,6 +616,21 @@ export interface Account {
   updated_at: string;
 }
 
+export interface Service {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description: string | null;
+  hours: number | null;
+  price: number | null;
+  billing_type: "fixed" | "hourly" | "retainer";
+  category: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
 export type ProjectStatus = "planning" | "active" | "in_review" | "delivered" | "on_hold" | "cancelled";
 
 export interface Project {
@@ -620,6 +643,7 @@ export interface Project {
   is_billable: boolean;
   notes: string | null;
   owner_id: string | null;
+  deal_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -639,6 +663,9 @@ export interface Task {
   is_billable: boolean;
   position: number;
   assignee_id: string | null;
+  assigned_by_id: string | null;
+  lead_id: string | null;
+  deal_id: string | null;
   due_date: string | null;
   priority: TaskPriority;
   tags: string[];
@@ -695,6 +722,15 @@ export interface ProjectContact {
   project_id: string;
   contact_id: string;
   role: ProjectContactRole | null;
+  created_at: string;
+}
+
+export type DealContactRole = "primary" | "technical" | "billing" | "other";
+
+export interface DealContact {
+  deal_id: string;
+  contact_id: string;
+  role: DealContactRole | null;
   created_at: string;
 }
 
@@ -861,6 +897,7 @@ export interface DealStage {
   is_default: boolean;
   is_terminal: boolean;
   terminal_type: "won" | "lost" | null;
+  probability: number;
   created_at: string;
   updated_at: string;
 }
@@ -881,6 +918,7 @@ export interface Deal {
   priority: "low" | "medium" | "high" | null;
   description: string | null;
   status: "open" | "won" | "lost";
+  probability: number | null;
   last_activity_at: string;
   created_by: string | null;
   created_at: string;
@@ -889,6 +927,52 @@ export interface Deal {
   // Joined fields (from API responses)
   accounts?: { id: string; name: string } | null;
   contacts?: { id: string; first_name: string; last_name: string } | null;
+  projects?: { id: string; name: string }[];
+}
+
+export interface Proposal {
+  id: string;
+  tenant_id: string;
+  deal_id: string;
+  proposal_number: string;
+  title: string;
+  status: "draft" | "sent" | "accepted" | "rejected" | "expired";
+  currency: string;
+  subtotal: number;
+  discount_type: "percent" | "amount" | null;
+  discount_value: number;
+  tax_percent: number;
+  total: number;
+  notes: string | null;
+  valid_until: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+  public_token: string | null;
+  public_enabled: boolean;
+  // joined (from API)
+  deals?: { id: string; name: string; currency: string } | null;
+  line_items?: ProposalLineItem[];
+}
+
+export interface ProposalLineItem {
+  id: string;
+  tenant_id: string;
+  proposal_id: string;
+  service_id: string | null;
+  name: string;
+  description: string | null;
+  billing_type: string | null;
+  quantity: number;
+  unit_price: number;
+  hours: number | null;
+  line_total: number;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Dashboard {

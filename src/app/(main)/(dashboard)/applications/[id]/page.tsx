@@ -3,8 +3,8 @@ import { getCurrentUserTenant, getApplicationActivity } from "@/lib/supabase/que
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
-import { shouldRestrictToSelf } from "@/lib/api/permissions";
-import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { shouldRestrictToSelf, canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
+import { getLeadMembership, branchMemberIds } from "@/lib/leads/branch-membership";
 import { ApplicationDetailPage } from "@/industries/education-consultancy/features/application-tracking/pages/application-detail";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 
@@ -67,8 +67,13 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       ) {
         notFound();
       }
-    } else if (!membership.some((m) => m.branch_id === branchId)) {
-      notFound();
+    } else {
+      // Mirror requireLeadBranchAccess (auth.ts) + the applications LIST scope:
+      // a team-scoped manager may view a lead assigned to a member of their branch.
+      const branchMembers = await branchMemberIds(supabase, tenantData.tenant.id, branchId);
+      if (!(parentLead.assigned_to !== null && branchMembers.includes(parentLead.assigned_to))) {
+        notFound();
+      }
     }
   }
 
@@ -99,7 +104,8 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       stages={stages}
       fullLead={fullLead}
       activityTimeline={activityTimeline}
-      canManageApplications={tenantData.permissions.canManageApplications}
+      canEdit={canEditApplication(tenantData.permissions, tenantData.positionSlug)}
+      canDelete={canDeleteApplication(tenantData.permissions)}
     />
   );
 }

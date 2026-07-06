@@ -15,6 +15,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
 import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -57,6 +58,7 @@ export default async function LeadsOrganiseCockpitPage({
     tenantData.permissions,
     stagingList.access as { mode: string; positionIds?: string[] },
     tenantData.positionId,
+    stagingList.id,
   );
   if (!accessible) notFound();
 
@@ -75,6 +77,7 @@ export default async function LeadsOrganiseCockpitPage({
         tenantData.permissions,
         l.access as { mode: string; positionIds?: string[] },
         tenantData.positionId,
+        l.id,
       )
   );
 
@@ -89,7 +92,7 @@ export default async function LeadsOrganiseCockpitPage({
     entitiesResult,
     branches,
   ] = await Promise.all([
-    getLeads(tenantData.tenant.id, { ...scope, limit: 50000 }),
+    getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
     getTeamMembers(tenantData.tenant.id),
     getTeamMembersWithPositions(tenantData.tenant.id),
     getImportSourceReconciliation(tenantData.tenant.id, stagingList.id),
@@ -115,6 +118,9 @@ export default async function LeadsOrganiseCockpitPage({
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
+  const memberBranchMap = Object.fromEntries(
+    teamMembers.filter((m) => m.branch_id).map((m) => [m.user_id, m.branch_id as string])
+  );
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
   const roleMap = Object.fromEntries(
     teamMembersWithPositions.map((m) => [
@@ -122,9 +128,21 @@ export default async function LeadsOrganiseCockpitPage({
       m.position_name ? `${m.display} (${m.position_name})` : m.display,
     ]),
   );
+  const positionSlugMap = Object.fromEntries(
+    teamMembersWithPositions.map((m) => [m.user_id, m.position_slug])
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
+
+  const assignableMembers = filterAssignableMembersByChain(teamMembers, {
+    baseTier: tenantData.permissions.baseTier,
+    leadScope: tenantData.permissions.leadScope,
+    branchId: tenantData.branchId,
+    positionSlug: tenantData.positionSlug,
+    industryId: tenantData.tenant.industry_id,
+    selfUserId: tenantData.userId,
+  });
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -149,8 +167,13 @@ export default async function LeadsOrganiseCockpitPage({
         userBranchId={tenantData.branchId}
         leadLists={pipelineLists}
         roleMap={roleMap}
+        positionSlugMap={positionSlugMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
+        canExport={tenantData.permissions.canExport}
+        canEditLeads={tenantData.permissions.canEditLeads}
+        assignableMembers={assignableMembers}
+        memberBranchMap={memberBranchMap}
       />
     </div>
   );

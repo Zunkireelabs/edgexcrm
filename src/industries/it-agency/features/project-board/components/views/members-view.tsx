@@ -177,7 +177,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
         <button
           type="button"
           onClick={onClearFilters}
-          className="text-xs text-blue-600 hover:underline underline-offset-2"
+          className="text-xs text-gray-600 hover:text-[#0f0f10] hover:underline underline-offset-2"
         >
           Clear filters
         </button>
@@ -207,10 +207,10 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
               ) : (
                 <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
               )}
-              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-100 text-blue-700 text-xs font-bold shrink-0">
+              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border border-gray-300 text-gray-500 text-xs font-medium shrink-0">
                 {initials(member.email)}
               </span>
-              <span className="text-sm font-medium text-gray-900 truncate flex-1">
+              <span className="text-sm font-medium text-[#0f0f10] truncate flex-1">
                 {member.email}
               </span>
               <span className="text-xs text-muted-foreground ml-2 shrink-0 whitespace-nowrap">
@@ -224,7 +224,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                 {/* Projects sub-section */}
                 {ownedProjects.length > 0 && (
                   <div className="px-4 py-3">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Projects ({ownedProjects.length}) — owner
                     </p>
                     <div className="flex flex-col gap-1">
@@ -232,7 +232,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                         <div key={p.id} className="flex items-center gap-3 py-1 min-w-0">
                           <a
                             href={`/time-tracking/projects/${p.id}`}
-                            className="text-sm text-blue-600 hover:underline font-medium truncate flex-1 min-w-0"
+                            className="text-sm text-[#0f0f10] hover:underline font-medium truncate flex-1 min-w-0"
                           >
                             {p.name}
                           </a>
@@ -249,7 +249,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                 {/* Tasks sub-section */}
                 {openTasks.length > 0 && (
                   <div className="px-4 py-3">
-                    <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide mb-2">
+                    <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2">
                       Tasks ({openTasks.length}) — open
                     </p>
                     <div className="flex flex-col gap-1">
@@ -271,7 +271,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                                     ? `/time-tracking/projects/${t.projects.id}`
                                     : "#"
                                 }
-                                className="text-sm text-gray-900 hover:text-blue-600 hover:underline font-medium truncate flex-1 min-w-0"
+                                className="text-sm text-[#0f0f10] hover:underline font-medium truncate flex-1 min-w-0"
                                 title={t.title}
                               >
                                 {t.title}

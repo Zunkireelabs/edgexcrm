@@ -41,6 +41,7 @@ import { getLeadFullName } from "./lead-name";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
+import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
   id: string;
@@ -52,6 +53,7 @@ interface TeamMember {
 
 interface LeadDetailV2Props {
   lead: Lead;
+  memberNames?: Record<string, string>;
   notes: LeadNote[];
   checklists: LeadChecklist[];
   activities: LeadActivity[];
@@ -63,11 +65,19 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
+  canAssign?: boolean;
+  canEditLeads?: boolean;
+  /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
+  assignableMembers?: TeamMember[];
+  /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
+  nextPositionMembers?: TeamMember[];
   canManageApplications?: boolean;
-  canManageClasses?: boolean;
+  canEnroll?: boolean;
   leadLists?: LeadList[];
+  activeLeadLists?: LeadList[];
   classesActive?: boolean;
   applicationsActive?: boolean;
+  checkInActive?: boolean;
   consentEnabled?: boolean;
   consentSigned?: boolean;
 }
@@ -115,6 +125,7 @@ function makeDraft(lead: Lead): LeadDraft {
 
 export function LeadDetailV2({
   lead,
+  memberNames = {},
   notes: initialNotes,
   checklists: initialChecklists,
   activities,
@@ -126,11 +137,17 @@ export function LeadDetailV2({
   industry,
   userBranchId,
   leadScope,
+  canAssign = false,
+  canEditLeads = false,
+  assignableMembers,
+  nextPositionMembers,
   canManageApplications,
-  canManageClasses,
+  canEnroll,
   leadLists,
+  activeLeadLists,
   classesActive,
   applicationsActive,
+  checkInActive,
   consentEnabled = false,
   consentSigned = false,
 }: LeadDetailV2Props) {
@@ -173,6 +190,12 @@ export function LeadDetailV2({
   const isItAgency = tenant.industry_id === "it_agency";
 
   const isAdmin = role === "owner" || role === "admin";
+  // Position-derived edit capability: admins always, plus members whose position grants
+  // canEditLeads. Gates the same lead working-data controls (stage, tasks) that isAdmin did.
+  const canEdit = isAdmin || canEditLeads;
+  // Note-editing gate: owner/admin, branch-manager, or the lead's own-scope assignee.
+  // Author-of-the-note is a separate, per-note check made in NoteCard itself.
+  const canManageNotes = isAdmin || leadScope === "team" || userId === currentLead.assigned_to;
   const maxBranches = resolveEntitlements({
     plan: tenant.plan,
     entitlement_overrides: tenant.entitlement_overrides,
@@ -188,12 +211,14 @@ export function LeadDetailV2({
     {}
   );
 
+  // Seed with the server-resolved full roster (works for non-admins, who can't
+  // call /api/v1/team), then overlay any client-fetched names.
   const teamMemberNames = teamMembers.reduce<Record<string, string>>(
     (acc, member) => {
       if (member.name) acc[member.user_id] = member.name;
       return acc;
     },
-    {}
+    { ...memberNames }
   );
 
   // Fetch team members for assignment
@@ -210,10 +235,10 @@ export function LeadDetailV2({
   }, []);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin || canAssign) {
       fetchTeamMembers();
     }
-  }, [isAdmin, fetchTeamMembers]);
+  }, [isAdmin, canAssign, fetchTeamMembers]);
 
   useEffect(() => {
     if (!lead.converted_contact_id || !isItAgency) return;
@@ -355,7 +380,7 @@ export function LeadDetailV2({
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStage.slug }),
+        body: JSON.stringify({ stage_id: newStageId }),
       });
       if (!res.ok) throw new Error("Failed to update stage");
       toast.success("Stage updated");
@@ -476,11 +501,9 @@ export function LeadDetailV2({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/leads">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-bold">
@@ -581,6 +604,7 @@ export function LeadDetailV2({
             draft={draft}
             editErrors={editErrors}
             onDraftChange={updateDraft}
+            industryId={tenant.industry_id}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
@@ -591,7 +615,11 @@ export function LeadDetailV2({
             stageId={stageId}
             assignedTo={assignedTo}
             teamMembers={teamMembers}
+            assignableMembers={assignableMembers}
+            userId={userId}
             isAdmin={isAdmin}
+            canEdit={canEdit}
+            canAssign={canAssign}
             onStageChange={handleStageChange}
             onAssignmentChange={handleAssignmentChange}
             entity={entity}
@@ -617,8 +645,11 @@ export function LeadDetailV2({
               }
             }}
             leadLists={leadLists}
-            onListChange={async (listId, archiveReason) => {
+            activeLeadLists={activeLeadLists}
+            nextPositionMembers={nextPositionMembers}
+            onListChange={async (listId, archiveReason, assignToUserId) => {
               const prevLead = currentLead;
+              const prevStageId = stageId;
               const targetList = leadLists?.find((l) => l.id === listId);
               const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
               setCurrentLead((prev) => ({
@@ -626,17 +657,30 @@ export function LeadDetailV2({
                 list_id: listId,
                 lead_type: newLeadType,
                 archive_reason: archiveReason ?? null,
+                ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
               } as Lead));
+              if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
               try {
+                const body: Record<string, unknown> = { list_id: listId, archive_reason: archiveReason ?? null };
+                if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
                 const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ list_id: listId, archive_reason: archiveReason ?? null }),
+                  body: JSON.stringify(body),
                 });
                 if (!res.ok) throw new Error("Failed to move lead");
+                const json = await res.json();
+                const updated = json.data as Lead;
+                // Sync stage_id — server auto-resets it to the default for the new list's pipeline
+                if (updated.stage_id && updated.stage_id !== stageId) {
+                  setStageId(updated.stage_id);
+                  setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
+                }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
               } catch {
                 setCurrentLead(prevLead);
+                setStageId(prevStageId);
+                if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
                 toast.error("Failed to move lead");
               }
             }}
@@ -696,6 +740,8 @@ export function LeadDetailV2({
             checklists={checklists}
             onChecklistsChange={handleChecklistsChange}
             isAdmin={isAdmin}
+            canEdit={canEdit}
+            canManageNotes={canManageNotes}
             currentUserId={userId}
             industryId={tenant.industry_id}
             tenantName={tenant.name}
@@ -746,15 +792,17 @@ export function LeadDetailV2({
                   lead={currentLead}
                   checklists={checklists}
                   isAdmin={isAdmin}
+                  canEdit={canEdit}
                   onChecklistsChange={handleChecklistsChange}
                 />
               )}
               {classesActive && (
                 <ClassesCard
                   leadId={currentLead.id}
-                  canManage={canManageClasses ?? isAdmin}
+                  canManage={canEnroll ?? isAdmin}
                 />
               )}
+              {checkInActive && <CheckInHistoryCard leadId={currentLead.id} />}
             </div>
           ) : (
             <ManagementPanel
@@ -762,6 +810,7 @@ export function LeadDetailV2({
               lead={currentLead}
               checklists={checklists}
               isAdmin={isAdmin}
+              canEdit={canEdit}
               onChecklistsChange={handleChecklistsChange}
             />
           )}

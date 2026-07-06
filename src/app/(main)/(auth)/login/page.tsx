@@ -5,8 +5,50 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Image from 'next/image';
 import Link from 'next/link';
+import { Eye, EyeOff } from 'lucide-react';
 
 type AuthMode = 'signin' | 'signup';
+
+function sleep(ms: number) {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+// True only for transient network/edge failures — NOT for real auth/validation errors.
+function isTransientNetworkError(err: unknown): boolean {
+  if (err instanceof TypeError) return true; // fetch failed / NetworkError
+  const e = err as { status?: number; name?: string; message?: string } | null;
+  if (!e) return false;
+  return (
+    e.status === 0 ||
+    e.name === 'AuthRetryableFetchError' ||
+    /network ?error|failed to fetch|fetch resource/i.test(e.message ?? '')
+  );
+}
+
+// Runs a Supabase call (which may THROW a network error or RETURN { error }),
+// retrying with backoff on transient failures only. Real errors (or success) pass through.
+async function withRetry<T extends { error: unknown }>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  baseDelayMs = 400,
+): Promise<T> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fn();
+      if (res.error && isTransientNetworkError(res.error) && i < attempts - 1) {
+        last = res.error;
+      } else {
+        return res; // success, or a real (non-transient) error → return as-is
+      }
+    } catch (err) {
+      if (!isTransientNetworkError(err) || i === attempts - 1) throw err;
+      last = err;
+    }
+    await sleep(baseDelayMs * 2 ** i); // 400ms, 800ms, 1600ms
+  }
+  throw last;
+}
 
 export default function LoginPage() {
   return (
@@ -28,6 +70,7 @@ function LoginPageSkeleton() {
 function LoginPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
@@ -54,7 +97,9 @@ function LoginPageContent() {
 
     const checkConnection = async () => {
       try {
-        const { error } = await supabase.from('tenants').select('count', { count: 'exact', head: true });
+        const { error } = await withRetry(async () =>
+          await supabase.from('tenants').select('count', { count: 'exact', head: true })
+        );
         setDbStatus(error ? 'offline' : 'online');
       } catch {
         setDbStatus('offline');
@@ -166,10 +211,9 @@ function LoginPageContent() {
         if (error) throw error;
         setMessage('Check your email for the confirmation link!');
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+        const { error } = await withRetry(() =>
+          supabase.auth.signInWithPassword({ email, password })
+        );
         if (error) throw error;
 
         // If there's an invite token, accept it — only redirect on success
@@ -308,15 +352,39 @@ function LoginPageContent() {
               />
             </div>
             <div className="form-group">
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter your password"
-                required
-                minLength={6}
-                disabled={loading}
-              />
+              <div style={{ position: 'relative' }}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  required
+                  minLength={6}
+                  disabled={loading}
+                  style={{ paddingRight: 42 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((v) => !v)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                  tabIndex={-1}
+                  style={{
+                    position: 'absolute',
+                    right: 12,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    cursor: 'pointer',
+                    color: '#6b7280',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+              </div>
             </div>
             <button type="submit" className="login-btn" disabled={loading}>
               {loading ? 'Loading...' : mode === 'signin' ? 'Sign In' : 'Sign Up'}

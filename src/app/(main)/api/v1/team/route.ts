@@ -1,6 +1,7 @@
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { canSeeNav, deriveRole } from "@/lib/api/permissions";
+import { canSeeNav, deriveRole, resolvePermissions, positionPermissionsFromEmbed } from "@/lib/api/permissions";
 import type { PositionPermissions } from "@/lib/api/permissions";
+import type { UserRole } from "@/types/database";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
@@ -13,7 +14,7 @@ import {
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 
-export async function GET() {
+export async function GET(request: Request) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({
     requestId,
@@ -23,7 +24,19 @@ export async function GET() {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!canSeeNav(auth.permissions, "/team")) return apiForbidden();
+
+  // Flat task-assignment model: any tenant member may resolve the roster to pick a
+  // task assignee, regardless of lead-assignment permissions. `minimal=1` returns
+  // only {user_id, name} — no role/position/hourly-rate — so it's safe to skip the
+  // canSeeNav/canAssignLeads gate below for this reduced projection.
+  const minimal = new URL(request.url).searchParams.get("minimal") === "1";
+
+  // The Org Structure page needs /team nav; the lead assignee dropdowns ALSO read this
+  // roster, so a member who can assign leads may fetch it even without the /team nav item
+  // (e.g. a Lead TeleCaller whose nav omits /team but has canAssignLeads).
+  if (!minimal && !canSeeNav(auth.permissions, "/team") && !auth.permissions.canAssignLeads) {
+    return apiForbidden();
+  }
 
   // Migrated to scopedClient — auto-injects `.eq("tenant_id", auth.tenantId)`.
   // See CLAUDE.md § Hardening discipline.
@@ -31,7 +44,7 @@ export async function GET() {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at, positions(permissions)")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -48,6 +61,7 @@ export async function GET() {
     branch_id: string | null;
     default_hourly_rate: number | null;
     created_at: string;
+    positions: { permissions: PositionPermissions | null } | { permissions: PositionPermissions | null }[] | null;
   }>;
 
   // Fetch user emails + names from auth.users — uses raw() escape hatch since
@@ -62,17 +76,30 @@ export async function GET() {
     nameMap.set(u.id, (meta?.name ?? meta?.full_name ?? null) as string | null);
   }
 
-  const enriched = members.map((m) => ({
-    id: m.id,
-    user_id: m.user_id,
-    role: m.role,
-    position_id: m.position_id,
-    branch_id: m.branch_id,
-    name: nameMap.get(m.user_id) ?? null,
-    email: userMap.get(m.user_id) || "Unknown",
-    default_hourly_rate: m.default_hourly_rate,
-    created_at: m.created_at,
-  }));
+  if (minimal) {
+    const roster = members.map((m) => ({
+      user_id: m.user_id,
+      name: nameMap.get(m.user_id) || userMap.get(m.user_id) || "Unknown",
+    }));
+    return apiSuccess(roster);
+  }
+
+  const enriched = members.map((m) => {
+    // Position is the source of truth for assignability — resolve it, don't read legacy `role`.
+    const { canEditLeads } = resolvePermissions(m.role as UserRole, positionPermissionsFromEmbed(m.positions));
+    return {
+      id: m.id,
+      user_id: m.user_id,
+      role: m.role,
+      position_id: m.position_id,
+      branch_id: m.branch_id,
+      name: nameMap.get(m.user_id) ?? null,
+      email: userMap.get(m.user_id) || "Unknown",
+      default_hourly_rate: m.default_hourly_rate,
+      created_at: m.created_at,
+      canEditLeads,
+    };
+  });
 
   return apiSuccess(enriched);
 }

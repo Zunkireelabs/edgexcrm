@@ -30,6 +30,7 @@ interface TeamMember {
   role: string;
   email: string;
   name?: string | null;
+  canEditLeads?: boolean;
 }
 
 interface ContactPanelProps {
@@ -259,7 +260,7 @@ export function ContactPanel({ conversation, tenantId, userRole, onConversationU
                   <span className="text-muted-foreground">Unassigned</span>
                 </SelectItem>
                 {teamMembers
-                  .filter((m) => m.role !== "viewer")
+                  .filter((m) => m.canEditLeads !== false)
                   .map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       <div className="flex items-center gap-2">

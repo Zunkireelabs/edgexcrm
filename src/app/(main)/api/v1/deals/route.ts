@@ -90,6 +90,13 @@ export async function POST(request: NextRequest) {
   });
   if (!valid) return apiValidationError(errors);
 
+  if (body.probability !== undefined && body.probability !== null) {
+    const n = Number(body.probability);
+    if (!Number.isInteger(n) || n < 0 || n > 100) {
+      return apiValidationError({ probability: ["Must be an integer 0–100"] });
+    }
+  }
+
   const db = await scopedClient(auth);
   const defaultPipelineId = await ensureDealPipeline(db, auth.tenantId);
 
@@ -161,6 +168,9 @@ export async function POST(request: NextRequest) {
   if (body.deal_type) insert.deal_type = String(body.deal_type);
   if (body.priority) insert.priority = String(body.priority);
   if (body.description) insert.description = String(body.description);
+  insert.probability = body.probability !== undefined && body.probability !== null
+    ? Number(body.probability)
+    : null;
 
   const { data: created, error } = await db
     .from("deals")

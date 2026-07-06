@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -14,6 +14,9 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -57,7 +60,6 @@ export async function POST(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -70,7 +72,15 @@ export async function POST(request: NextRequest, { params }: Props) {
     title: [required("title"), maxLength(255)],
     description: [optionalMaxLength(2000)],
   });
-  if (!valid) return apiValidationError(errors);
+  const validationErrors: Record<string, string[]> = { ...errors };
+
+  if (body.assignee_id !== undefined && body.assignee_id !== null) {
+    if (typeof body.assignee_id !== "string" || !UUID_RE.test(body.assignee_id)) {
+      validationErrors.assignee_id = ["Must be a valid UUID or null"];
+    }
+  }
+
+  if (!valid || Object.keys(validationErrors).length > 0) return apiValidationError(validationErrors);
 
   const db = await scopedClient(auth);
 
@@ -81,6 +91,17 @@ export async function POST(request: NextRequest, { params }: Props) {
     .eq("id", projectId)
     .maybeSingle();
   if (!project) return apiNotFound("Project");
+
+  const assigneeId = body.assignee_id ? String(body.assignee_id) : null;
+  if (assigneeId && assigneeId !== auth.userId) {
+    const { data: member } = await db
+      .from("tenant_users")
+      .select("user_id")
+      .eq("user_id", assigneeId)
+      .maybeSingle();
+    if (!member) return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
+  }
+  const assignedById = assigneeId && assigneeId !== auth.userId ? auth.userId : null;
 
   // Get next position
   const { data: posResult } = await db
@@ -105,6 +126,8 @@ export async function POST(request: NextRequest, { params }: Props) {
         body.estimated_minutes != null ? Number(body.estimated_minutes) : null,
       is_billable: body.is_billable !== false,
       position: nextPosition,
+      assignee_id: assigneeId,
+      assigned_by_id: assignedById,
     })
     .select()
     .single();
@@ -132,6 +155,19 @@ export async function POST(request: NextRequest, { params }: Props) {
     }),
   ]);
 
-  log.info({ taskId: created.id }, "Task created");
+  if (assignedById) {
+    createNotificationsExcept(auth.userId, [
+      {
+        tenantId: auth.tenantId,
+        userId: assigneeId!,
+        type: NotificationTypes.TASK_ASSIGNED,
+        title: "New task assigned",
+        message: created.title,
+        link: `/time-tracking/projects/${projectId}`,
+      },
+    ]);
+  }
+
+  log.info({ taskId: created.id, assigneeId }, "Task created");
   return apiSuccess(created, 201);
 }

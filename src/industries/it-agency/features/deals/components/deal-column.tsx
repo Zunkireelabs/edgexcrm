@@ -17,10 +17,18 @@ function columnTotal(deals: Deal[]): number {
   return deals.reduce((sum, d) => sum + (d.amount ?? 0), 0);
 }
 
+export function weightedTotal(deals: Deal[], stageProbability: number): number {
+  return deals.reduce(
+    (sum, d) => sum + (d.amount ?? 0) * ((d.probability ?? stageProbability) / 100),
+    0
+  );
+}
+
 export function DealColumn({ stage, deals, canDrag }: DealColumnProps) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
 
   const total = columnTotal(deals);
+  const weighted = weightedTotal(deals, stage.probability);
   const currency = deals[0]?.currency ?? "NPR";
 
   return (
@@ -68,6 +76,10 @@ export function DealColumn({ stage, deals, canDrag }: DealColumnProps) {
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Total</span>
           <span className="font-semibold">{formatMoney(total, currency)}</span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-muted-foreground/70">Weighted</span>
+          <span className="text-muted-foreground">{formatMoney(weighted, currency)}</span>
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Deals</span>

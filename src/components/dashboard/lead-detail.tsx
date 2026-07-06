@@ -47,6 +47,9 @@ interface TeamMember {
   user_id: string;
   role: string;
   email: string;
+  name?: string | null;
+  canEditLeads?: boolean;
+  position_name?: string | null;
 }
 
 interface LeadDetailProps {
@@ -267,11 +270,9 @@ export function LeadDetail({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link href="/leads">
-            <Button variant="ghost" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
           <div>
             <h1 className="text-2xl font-bold">
               {lead.first_name} {lead.last_name}
@@ -410,10 +411,10 @@ export function LeadDetail({
                   <SelectContent>
                     <SelectItem value="unassigned">Unassigned</SelectItem>
                     {teamMembers
-                      .filter((m) => m.role !== "viewer")
+                      .filter((m) => m.canEditLeads !== false)
                       .map((m) => (
                         <SelectItem key={m.user_id} value={m.user_id}>
-                          {m.email} ({m.role})
+                          {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
                         </SelectItem>
                       ))}
                   </SelectContent>

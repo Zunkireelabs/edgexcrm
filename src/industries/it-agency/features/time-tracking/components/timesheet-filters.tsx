@@ -1,6 +1,5 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -35,6 +34,7 @@ interface Project {
 interface TeamMember {
   user_id: string;
   email: string;
+  name?: string | null;
 }
 
 interface TimesheetFiltersProps {
@@ -83,6 +83,10 @@ const PRESETS = [
   { label: "Last 4w", getRange: last4wRange },
 ] as const;
 
+const SECONDARY_BUTTON =
+  "inline-flex items-center h-7 px-2.5 text-xs font-medium rounded-md border border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b] transition-colors";
+const SECONDARY_BUTTON_ACTIVE = "border-[#0f0f10] bg-[#0000170b] text-[#0f0f10]";
+
 export function TimesheetFilters({
   isAdmin,
   filters,
@@ -97,35 +101,42 @@ export function TimesheetFilters({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="shrink-0 bg-card rounded-lg border">
       {/* Preset chips + Export */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-3 p-3">
         <div className="flex items-center gap-1.5 flex-wrap">
-          {PRESETS.map(({ label, getRange }) => (
-            <button
-              key={label}
-              type="button"
-              className="px-3 py-1 text-xs rounded-full border bg-background transition-colors hover:bg-muted/60"
-              onClick={() => update(getRange())}
-            >
-              {label}
-            </button>
-          ))}
+          {PRESETS.map(({ label, getRange }) => {
+            const range = getRange();
+            const isActive = filters.from === range.from && filters.to === range.to;
+            return (
+              <button
+                key={label}
+                type="button"
+                className={`${SECONDARY_BUTTON} ${isActive ? SECONDARY_BUTTON_ACTIVE : ""}`}
+                onClick={() => update(range)}
+              >
+                {label}
+              </button>
+            );
+          })}
         </div>
-        <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onExport}>
+        <div className="flex-1" />
+        <button type="button" className={SECONDARY_BUTTON} onClick={onExport}>
           <Download className="h-3.5 w-3.5 mr-1.5" />
           Export CSV
-        </Button>
+        </button>
       </div>
 
+      <div className="h-px bg-border" />
+
       {/* Filter row */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+      <div className="flex flex-wrap items-center gap-3 px-3 py-2">
         {/* From */}
         <div className="space-y-1.5">
           <Label className="text-xs">From</Label>
           <Input
             type="date"
-            className="h-8 text-sm"
+            className="h-7 text-xs"
             value={filters.from}
             onChange={(e) => update({ from: e.target.value })}
           />
@@ -136,7 +147,7 @@ export function TimesheetFilters({
           <Label className="text-xs">To</Label>
           <Input
             type="date"
-            className="h-8 text-sm"
+            className="h-7 text-xs"
             value={filters.to}
             onChange={(e) => update({ to: e.target.value })}
           />
@@ -150,14 +161,14 @@ export function TimesheetFilters({
               value={filters.memberId || "_all"}
               onValueChange={(v) => update({ memberId: v === "_all" ? "" : v })}
             >
-              <SelectTrigger className="h-8 text-sm">
+              <SelectTrigger className="h-7 text-xs">
                 <SelectValue placeholder="All members" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_all">All members</SelectItem>
                 {teamMembers.map((m) => (
                   <SelectItem key={m.user_id} value={m.user_id}>
-                    {m.email}
+                    {m.name || m.email.split("@")[0]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -172,7 +183,7 @@ export function TimesheetFilters({
             value={filters.accountId || "_all"}
             onValueChange={(v) => update({ accountId: v === "_all" ? "" : v })}
           >
-            <SelectTrigger className="h-8 text-sm">
+            <SelectTrigger className="h-7 text-xs">
               <SelectValue placeholder="All accounts" />
             </SelectTrigger>
             <SelectContent>
@@ -193,7 +204,7 @@ export function TimesheetFilters({
             value={filters.projectId || "_all"}
             onValueChange={(v) => update({ projectId: v === "_all" ? "" : v })}
           >
-            <SelectTrigger className="h-8 text-sm">
+            <SelectTrigger className="h-7 text-xs">
               <SelectValue placeholder="All projects" />
             </SelectTrigger>
             <SelectContent>
@@ -214,7 +225,7 @@ export function TimesheetFilters({
             value={filters.status || "_all"}
             onValueChange={(v) => update({ status: v === "_all" ? "" : v })}
           >
-            <SelectTrigger className="h-8 text-sm">
+            <SelectTrigger className="h-7 text-xs">
               <SelectValue placeholder="All" />
             </SelectTrigger>
             <SelectContent>

@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
+import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -16,6 +17,7 @@ import {
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
+import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -99,7 +101,7 @@ export async function PATCH(request: NextRequest) {
   if (body.assigned_to) {
     const { data: member } = await supabase
       .from("tenant_users")
-      .select("id, branch_id")
+      .select("id, branch_id, positions(slug)")
       .eq("tenant_id", auth.tenantId)
       .eq("user_id", body.assigned_to)
       .single();
@@ -111,6 +113,26 @@ export async function PATCH(request: NextRequest) {
     // §4.2: branch manager may only assign to users in their own branch
     if (isTeamScoped && member.branch_id !== auth.branchId) {
       return apiForbidden();
+    }
+
+    // Chain check: education chain-position callers (non-admin, non-team-scope) may
+    // only assign to their allowed chain targets.
+    if (
+      auth.industryId === "education_consultancy" &&
+      auth.positionSlug != null &&
+      ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+      auth.permissions.baseTier === "member" &&
+      !isTeamScoped
+    ) {
+      const posEmbed = Array.isArray((member as unknown as { positions: unknown }).positions)
+        ? ((member as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+        : ((member as unknown as { positions: { slug: string } | null }).positions);
+      const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+      const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
+      const okBranch = auth.branchId == null || (member.branch_id ?? null) === auth.branchId;
+      if (!targetSlug || !allowed.has(targetSlug) || !okBranch) {
+        return apiForbidden();
+      }
     }
   }
 
@@ -132,14 +154,14 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Validate list_id: feature gate, resolve, check access, require archive_reason
-  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown } | null = null;
+  let targetList: { id: string; slug: string; name: string; is_archive: boolean; access: unknown; pipeline_id: string | null } | null = null;
   if (body.list_id !== undefined && body.list_id !== null) {
     if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
       return apiForbidden();
     }
     const { data: listCheck } = await supabase
       .from("lead_lists")
-      .select("id, slug, name, is_archive, access")
+      .select("id, slug, name, is_archive, access, pipeline_id")
       .eq("tenant_id", auth.tenantId)
       .eq("id", body.list_id)
       .maybeSingle();
@@ -150,6 +172,7 @@ export async function PATCH(request: NextRequest) {
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
+      listCheck.id,
     );
     if (!accessible) return apiForbidden();
     if (listCheck.is_archive && !body.archive_reason) {
@@ -202,6 +225,20 @@ export async function PATCH(request: NextRequest) {
     if (targetList) {
       bulkUpdatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       if (body.archive_reason) bulkUpdatePayload.archive_reason = body.archive_reason;
+      // Sync pipeline + default stage so stage updates work after the move
+      if (targetList.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", targetList.pipeline_id)
+          .eq("is_default", true)
+          .maybeSingle();
+        if (defaultStage) {
+          bulkUpdatePayload.pipeline_id = targetList.pipeline_id;
+          bulkUpdatePayload.stage_id = defaultStage.id;
+          bulkUpdatePayload.status = defaultStage.slug;
+        }
+      }
     }
   }
 
@@ -236,6 +273,15 @@ export async function PATCH(request: NextRequest) {
     { count: idsToUpdate.length, ids: idsToUpdate, assigned_to: body.assigned_to },
     "Bulk updated leads"
   );
+
+  // Record the new assignee as a collaborator on every updated lead (engaged-user visibility).
+  if (body.assigned_to) {
+    try {
+      await addLeadCollaborators(supabase, auth.tenantId, idsToUpdate, body.assigned_to);
+    } catch (err) {
+      log.error({ err }, "addLeadCollaborators on bulk assign failed");
+    }
+  }
 
   // Keep lead_branches origin rows in sync for each updated lead
   if (body.branch_id !== undefined || body.assigned_to !== undefined) {
