@@ -19,6 +19,8 @@ export interface BootstrapData {
   navCatalog: NavCatalogItem[];
   widgetCatalog: WidgetCatalogItem[];
   maxBranches: number;
+  timezone: string;
+  weekendDays: number[];
 }
 
 interface SettingsModalContextValue {
