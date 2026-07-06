@@ -90,7 +90,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
     const resolvedBranchId = membership.branch_id ?? null;
 
     const memberIds =
-      permissions.leadScope === "team" && resolvedBranchId
+      (permissions.leadScope === "team" || positionSlug === "lead-executive") && resolvedBranchId
         ? await fetchBranchMemberIds(serviceClient, membership.tenant_id, resolvedBranchId)
         : [];
 
