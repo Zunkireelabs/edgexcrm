@@ -57,6 +57,7 @@ interface PositionPermissions {
   leadScope: "all" | "own" | "team";
   canEditLeads?: boolean;
   canManageApplications?: boolean;
+  canManageHR?: boolean;
   canExport?: boolean;
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
@@ -96,6 +97,7 @@ function buildDefaultForm(navCatalog: NavItem[], widgetCatalog: WidgetItem[]) {
     leadScope: "all" as "all" | "own" | "team",
     canEditLeads: false,
     canManageApplications: false,
+    canManageHR: false,
     canExport: false,
     widgetsMode: "all" as "all" | "allow",
     widgetKeys: [] as string[],
@@ -120,6 +122,7 @@ function permissionsFromForm(form: FormState): PositionPermissions {
     leadScope: form.leadScope,
     ...(form.base_tier === "member" ? { canEditLeads: form.leadScope === "own" ? true : form.canEditLeads } : {}),
     ...(form.base_tier === "member" ? { canManageApplications: form.canManageApplications } : {}),
+    ...(form.base_tier === "member" ? { canManageHR: form.canManageHR } : {}),
     dashboard: form.widgetsMode === "all"
       ? { widgets: { mode: "all" } }
       : { widgets: { mode: "allow", keys: form.widgetKeys } },
@@ -140,6 +143,7 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
     leadScope: p.leadScope,
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
+    canManageHR: p.canManageHR === true,
     canExport: p.canExport === true,
     widgetsMode: p.dashboard.widgets.mode,
     widgetKeys: p.dashboard.widgets.mode === "allow" ? p.dashboard.widgets.keys : [],
@@ -592,6 +596,30 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                 </div>
                 <p className="text-xs text-muted-foreground pl-6">
                   Allows adding, editing, and deleting student applications.
+                </p>
+              </div>
+            )}
+
+            {/* Can manage HR (member tier only) */}
+            {form.base_tier === "member" && (
+              <div className="space-y-1.5">
+                <Label>HR</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="can-manage-hr"
+                    checked={form.canManageHR}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, canManageHR: Boolean(c) }))
+                    }
+                  />
+                  <label htmlFor="can-manage-hr" className="text-sm cursor-pointer">
+                    Can manage HR
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Allows viewing and editing every employee profile, department, skill, and
+                  project allocation. Without this, members only see their own profile
+                  (or their direct reports&apos; profiles, if they manage anyone).
                 </p>
               </div>
             )}
