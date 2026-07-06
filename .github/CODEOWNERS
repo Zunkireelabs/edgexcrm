@@ -1,0 +1,23 @@
+# CODEOWNERS — auto-requests review on the high-conflict shared surfaces that
+# have caused work to "revert" when two branches edit them and a merge drops a
+# side. See docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md § 4.
+#
+# Soft gate for now: branch protection has require_code_owner_reviews=false, so
+# these owners are auto-REQUESTED (pinged), not a hard block. Flip
+# require_code_owner_reviews=true on `main` when the team wants a hard gate.
+
+# Hot shared files (edited by many features)
+/src/components/dashboard/shell.tsx          @sthasadin @ani-shh
+/src/lib/leads/queries.ts                    @sthasadin @ani-shh
+/src/app/(main)/api/v1/leads/route.ts        @sthasadin @ani-shh
+/src/app/(main)/api/v1/lead-lists/route.ts   @sthasadin @ani-shh
+/src/industries/_registry.ts                 @sthasadin @ani-shh
+/src/industries/*/manifest.ts                @sthasadin @ani-shh
+/src/lib/settings/catalogs.ts                @sthasadin @ani-shh
+
+# Sensitive infra: migrations + CI/deploy workflows
+/supabase/migrations/                        @sthasadin @ani-shh
+/.github/                                     @sthasadin @ani-shh
+
+# The process docs themselves
+/docs/dev-collab/                            @sthasadin
