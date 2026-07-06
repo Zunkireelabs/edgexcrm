@@ -499,8 +499,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         </>
       )}
 
-      {/* Activity list (all, calls, meetings) */}
-      {(activeTab === "all" || activeTab === "calls" || activeTab === "meetings") && (
+      {/* Activity list (calls, meetings only — "all" tab uses unified timeline below) */}
+      {(activeTab === "calls" || activeTab === "meetings") && (
         <>
           {isLoading ? (
             <Card className="shadow-none rounded-lg py-0">
@@ -536,9 +536,18 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               ))}
             </div>
           )}
+        </>
+      )}
 
-          {/* Unified timeline on "all" tab — system events + notes + calls/meetings + app notes */}
-          {activeTab === "all" && (() => {
+      {/* Unified timeline on "all" tab — system events + notes + calls/meetings + app notes */}
+      {activeTab === "all" && isLoading && (
+        <Card className="shadow-none rounded-lg py-0">
+          <CardContent className="p-8 text-center">
+            <p className="text-muted-foreground">Loading activities...</p>
+          </CardContent>
+        </Card>
+      )}
+      {activeTab === "all" && !isLoading && (() => {
             type UnifiedItem =
               | { kind: "system"; id: string; at: string; event: LeadActivity }
               | { kind: "note"; id: string; at: string; note: LeadNote }
@@ -569,7 +578,14 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems]
               .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
-            if (all.length === 0) return null;
+            if (all.length === 0) return (
+              <Card className="shadow-none rounded-lg py-0">
+                <CardContent className="p-8 text-center">
+                  <Clock className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-muted-foreground">{getEmptyMessage()}</p>
+                </CardContent>
+              </Card>
+            );
 
             // Group by day
             const dayGroups: { dayKey: string; label: string; items: UnifiedItem[] }[] = [];
@@ -623,7 +639,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                             <div className="min-w-0 pb-3 flex-1">
                               <p className="text-sm text-foreground">Note added</p>
                               {plain && (
-                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 whitespace-pre-wrap break-words">
+                                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                   {plain}
                                 </p>
                               )}
@@ -653,7 +669,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                             <div className="min-w-0 pb-3 flex-1">
                               <p className="text-sm text-foreground">{label}</p>
                               {notes && (
-                                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 break-words">
+                                <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                   {notes}
                                 </p>
                               )}
@@ -693,9 +709,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                 ))}
               </div>
             );
-          })()}
-        </>
-      )}
+      })()}
 
       {/* Log Activity Modal */}
       <LogActivityModal

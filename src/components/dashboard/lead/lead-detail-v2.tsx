@@ -69,6 +69,8 @@ interface LeadDetailV2Props {
   canEditLeads?: boolean;
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
   assignableMembers?: TeamMember[];
+  /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
+  nextPositionMembers?: TeamMember[];
   canManageApplications?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
@@ -138,6 +140,7 @@ export function LeadDetailV2({
   canAssign = false,
   canEditLeads = false,
   assignableMembers,
+  nextPositionMembers,
   canManageApplications,
   canEnroll,
   leadLists,
@@ -642,7 +645,8 @@ export function LeadDetailV2({
             }}
             leadLists={leadLists}
             activeLeadLists={activeLeadLists}
-            onListChange={async (listId, archiveReason) => {
+            nextPositionMembers={nextPositionMembers}
+            onListChange={async (listId, archiveReason, assignToUserId) => {
               const prevLead = currentLead;
               const targetList = leadLists?.find((l) => l.id === listId);
               const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
@@ -651,17 +655,22 @@ export function LeadDetailV2({
                 list_id: listId,
                 lead_type: newLeadType,
                 archive_reason: archiveReason ?? null,
+                ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
               } as Lead));
+              if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
               try {
+                const body: Record<string, unknown> = { list_id: listId, archive_reason: archiveReason ?? null };
+                if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
                 const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
                   method: "PATCH",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ list_id: listId, archive_reason: archiveReason ?? null }),
+                  body: JSON.stringify(body),
                 });
                 if (!res.ok) throw new Error("Failed to move lead");
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
               } catch {
                 setCurrentLead(prevLead);
+                if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
                 toast.error("Failed to move lead");
               }
             }}
