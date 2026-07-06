@@ -423,7 +423,8 @@ export async function PATCH(
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
-      // Reset stage to the destination list's default stage on list move
+      // Reset stage to the destination list's default stage on list move.
+      // If destination has no pipeline, clear stage so it doesn't show stale/null as "Unknown".
       if (targetList.pipeline_id) {
         const { data: defaultStage } = await supabase
           .from("pipeline_stages")
@@ -436,6 +437,10 @@ export async function PATCH(
           updatePayload.stage_id = defaultStage.id;
           updatePayload.status = defaultStage.slug;
         }
+      } else {
+        updatePayload.pipeline_id = null;
+        updatePayload.stage_id = null;
+        updatePayload.status = null;
       }
     }
   }

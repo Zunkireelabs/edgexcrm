@@ -671,8 +671,8 @@ export function LeadDetailV2({
                 if (!res.ok) throw new Error("Failed to move lead");
                 const json = await res.json();
                 const updated = json.data as Lead;
-                // Sync stage_id — server auto-resets it to the default for the new list's pipeline
-                if (updated.stage_id && updated.stage_id !== stageId) {
+                // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
+                if (updated.stage_id !== stageId) {
                   setStageId(updated.stage_id);
                   setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
                 }
