@@ -233,6 +233,7 @@ When the user gives ANY development request (build, create, implement, fix, upda
 |-------|--------|
 | `/project-pm` | Orchestrator for all dev tasks |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
+| `/hr-expert` | HR/HRMS domain — org/positions, onboarding, leave/attendance, payroll, performance, ESS/MSS; plans people features, reuses existing team/positions spine, routes to dev skills |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
 | `/frontend-dev` | Pages, components, forms, React/shadcn/Tailwind |
 | `/api-dev` | API routes, auth, validation, rate limiting |

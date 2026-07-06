@@ -11,6 +11,7 @@ export interface PositionPermissions {
   canEditLeads?: boolean;                                          // only meaningful for member+leadScope:all (branch manager). Absent ⇒ default per resolver.
   canManageApplications?: boolean;                                 // controls write access to the Application Tracking feature. Absent ⇒ default per resolver.
   canManageClasses?: boolean;                                      // controls write access to the Classes feature. Absent ⇒ default per resolver.
+  canManageHR?: boolean;                                           // controls org-wide HR access (all employee_profiles/departments/skills/allocations). Absent ⇒ default per resolver (self/direct-reports only).
   canExport?: boolean;                                            // controls access to the leads Export button. Absent => default per resolver (owner/admin only).
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
@@ -27,6 +28,7 @@ export interface ResolvedPermissions {
   canEditLeads: boolean;
   canManageApplications: boolean;
   canManageClasses: boolean;
+  canManageHR: boolean;
   canExport: boolean;
   dashboardWidgets: Set<string> | null;        // null = all
 }
@@ -51,6 +53,7 @@ export function resolvePermissions(
       canEditLeads: true,
       canManageApplications: true,
       canManageClasses: true,
+      canManageHR: true,
       canExport: true,
       dashboardWidgets: null,
     };
@@ -70,6 +73,7 @@ export function resolvePermissions(
       canEditLeads: role === "counselor", // counselors edit own; viewers don't
       canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
       canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
+      canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
       dashboardWidgets: null,
     };
@@ -87,6 +91,7 @@ export function resolvePermissions(
     canEditLeads: p.leadScope === "own" ? true : (p.canEditLeads === true),
     canManageApplications: p.canManageApplications === true,
     canManageClasses: p.canManageClasses === true,
+    canManageHR: p.canManageHR === true,
     canExport: false, // export is owner/admin only; position config cannot grant it
     dashboardWidgets:
       p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
@@ -127,6 +132,9 @@ export function canDeleteApplication(p: ResolvedPermissions): boolean {
 }
 export function canManageClasses(p: ResolvedPermissions): boolean {
   return p.canManageClasses;
+}
+export function canManageHR(p: ResolvedPermissions): boolean {
+  return p.canManageHR;
 }
 const CLASS_ENROLL_POSITIONS = new Set(["branch-manager", "lead-executive", "counselor", "application-executive"]);
 export function canEnrollStudents(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
@@ -277,6 +285,11 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canManageClasses (optional)
   if (p.canManageClasses !== undefined && typeof p.canManageClasses !== "boolean") {
     return "permissions.canManageClasses must be a boolean";
+  }
+
+  // canManageHR (optional)
+  if (p.canManageHR !== undefined && typeof p.canManageHR !== "boolean") {
+    return "permissions.canManageHR must be a boolean";
   }
 
   // canExport (optional)
