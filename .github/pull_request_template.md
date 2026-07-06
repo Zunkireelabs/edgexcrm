@@ -20,8 +20,9 @@
 - [ ] `npx eslint --max-warnings 50` clean.
 
 ## Database / migrations (delete this block if no DB change)
-- [ ] New migration file has a **globally unique number** (`ls supabase/migrations/ | sort` → next number; never reuse).
+- [ ] Started from `supabase/migrations/_TEMPLATE.sql`; **globally unique number** (`ls supabase/migrations/ | sort` → next; never reuse).
 - [ ] Transactional (`BEGIN; … COMMIT;`), **additive only**, with a header comment: what it does, expected **before/after row counts**, and a **rollback** line.
+- [ ] **Self-records in the ledger** — ends with `INSERT INTO public.schema_migrations (version) VALUES ('NNN_name.sql') ON CONFLICT (version) DO NOTHING;` (exact filename).
 - [ ] New tenant-owned table has `tenant_id` FK + RLS policies (`get_user_tenant_ids()` SELECT, `is_tenant_admin()` mutations).
 - [ ] Applied to the **stage DB** and verified (tables/policies/counts). Smoked as a **real logged-in user**, not service-role.
 - [ ] If it edits a **shared** DB object (view / SECURITY DEFINER function / policy on an existing table), I called it out below and coordinated.

@@ -87,11 +87,17 @@ A short list of files are edited by almost every feature. When git flags a confl
 
 ## 5. Migration protocol (the part that causes 500s)
 
-Migrations are **plain SQL files in `supabase/migrations/`, applied by hand** (psql or Supabase MCP). There is currently **no automatic migration runner** and **no ledger** — discipline is manual. Treat every migration as a coupled release with its code.
+Migrations are **plain SQL files in `supabase/migrations/`, applied by hand** (psql or Supabase MCP) — there is **no automatic runner**. A **ledger table** (`public.schema_migrations`, mig 123) now records what's applied to each DB; each migration **self-records its own filename**. Treat every migration as a coupled release with its code. Start from **`supabase/migrations/_TEMPLATE.sql`**.
 
 ### Authoring
-- **Number:** `ls supabase/migrations/ | sort` → take `<highest + 1>`. **Never reuse a number** (we already have a duplicate `110_*` from skipping this — don't add more).
+- **Number:** `ls supabase/migrations/ | sort` → take `<highest + 1>`. **Never reuse a number** (historical dupes `110_*`/`112_*` exist from before this rule — don't add more).
 - **Shape:** wrap in `BEGIN; … COMMIT;`. **Additive only** (add tables/columns/policies). Include a header comment with: what it does, expected **before/after row counts**, and a **rollback** line.
+- **Self-record in the ledger (required).** End every migration, inside the transaction, with:
+  ```sql
+  INSERT INTO public.schema_migrations (version) VALUES ('NNN_name.sql')
+    ON CONFLICT (version) DO NOTHING;
+  ```
+  Set the string to the file's exact name. This is how the ledger stays true no matter who applies it or with which tool.
 - **New tenant-owned table?** `tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE` + RLS policies (`get_user_tenant_ids()` for SELECT, `is_tenant_admin(tenant_id)` for mutations). See `CLAUDE.md` § Tenant Isolation.
 - **Editing a SHARED object** (a view, a `SECURITY DEFINER` function, an RLS policy on an existing table) is the DB equivalent of a shared-file conflict — two devs `CREATE OR REPLACE`-ing the same function out of order silently reverts one. Flag it, coordinate, and note it in the PR.
 
@@ -102,10 +108,12 @@ Migrations are **plain SQL files in `supabase/migrations/`, applied by hand** (p
    (a) apply migration(s) to PROD db  →  (b) verify  →  (c) merge stage → main (code deploys)
    ```
    Never (c) before (a). Doing so = prod runs new code on old schema = 500s.
-3. **Record what you applied.** Until we add a ledger table, note it in the PR description and in `docs/SESSION-LOG.md` (e.g. "migs 119–120 applied to stage 2026-07-06; prod: HELD"). A migration is **not on prod until you have personally run it on prod** — never assume.
+3. **Check the ledger — don't guess.** `STAGE_DB_URL=… scripts/migrate-status.sh stage` (or `prod`) lists **applied vs pending vs ghost** for that DB. A migration is **not on prod until it shows applied on prod.** Because it self-records, applying it *is* recording it — no separate bookkeeping.
 
-### The ledger (adopt next — recommended)
-Add a `schema_migrations(version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ DEFAULT now())` table to **each** DB and `INSERT` the filename at the end of every migration. Then "what's applied on prod?" becomes `SELECT version FROM schema_migrations ORDER BY 1;` instead of a guess. This kills the duplicate-number and split-brain classes of bug.
+### The ledger (`public.schema_migrations`, mig 123 — adopted)
+Each DB has a `schema_migrations(version TEXT PRIMARY KEY, applied_at, applied_by)` table; every migration self-records its filename (keyed on filename, so the historical `110`/`112` dupes are distinct rows). "What's applied on `<env>`?" is now `scripts/migrate-status.sh <env>` — not a guess. This closes the duplicate-number and split-brain classes.
+
+**Backfill note (per-DB, deliberate):** stage was backfilled with all present files when the ledger landed. **Prod is backfilled at the consolidated promotion, AFTER the held migrations are applied** — a blind insert-all on prod would wrongly mark held migs as applied. At promotion: apply mig 123 to prod → apply each held migration (they self-record) → backfill the remaining historical prod set → `migrate-status.sh prod` should then show 0 pending.
 
 ---
 
