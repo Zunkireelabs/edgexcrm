@@ -537,7 +537,23 @@ async function handlePost(request: NextRequest) {
       leadPayload.list_id = intakeList?.id ?? null;
     }
   } else {
-    leadPayload.list_id = (body.list_id as string | null) ?? null;
+    const explicitListId = (body.list_id as string) ?? null;
+    if (explicitListId) {
+      const { data: listCheck } = await supabase
+        .from("lead_lists")
+        .select("id, is_archive")
+        .eq("tenant_id", tenantId)
+        .eq("id", explicitListId)
+        .maybeSingle();
+      if (!listCheck) {
+        return apiValidationError({ list_id: ["List not found in this tenant"] });
+      }
+      if (listCheck.is_archive && !body.archive_reason) {
+        return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
+      }
+    }
+    leadPayload.list_id = explicitListId;
+    if (body.archive_reason) leadPayload.archive_reason = body.archive_reason as string;
   }
 
   // Set branch on insert path only; stripped from the update destructure below.
