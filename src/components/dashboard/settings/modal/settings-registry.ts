@@ -10,6 +10,7 @@ import {
   MessageSquare,
   Plug,
   FileCheck,
+  CalendarClock,
 } from "lucide-react";
 
 export interface GatingContext {
@@ -59,6 +60,12 @@ export const SETTINGS_CATEGORIES: Omit<SettingsCategory, "panel">[] = [
     key: "lead-management",
     label: "Lead Management",
     icon: ListChecks,
+    isVisible: () => true,
+  },
+  {
+    key: "leave",
+    label: "Leave",
+    icon: CalendarClock,
     isVisible: () => true,
   },
   {

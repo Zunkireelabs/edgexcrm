@@ -64,6 +64,7 @@ const VALID_TABS = [
   "organization",
   "team-roles",
   "lead-management",
+  "leave",
   "academic-operations",
   "communications",
   "integrations",
