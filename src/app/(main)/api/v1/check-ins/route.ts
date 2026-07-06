@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
     .from("lead_notes")
     .select(`
       id, user_id, content, created_at, user_email, checked_out_at,
-      leads!inner(id, first_name, last_name, email, phone, assigned_to, tenant_id, deleted_at,
+      leads!inner(id, first_name, last_name, email, phone, assigned_to, tags, tenant_id, deleted_at,
         pipeline_stages(name, color),
         pipelines(name)
       )
@@ -85,6 +85,7 @@ export async function GET(request: NextRequest) {
       email: string | null;
       phone: string | null;
       assigned_to: string | null;
+      tags: string[] | null;
       pipeline_stages: { name: string; color: string } | null;
       pipelines: { name: string } | null;
     };
@@ -96,6 +97,7 @@ export async function GET(request: NextRequest) {
       email: lead?.email || null,
       phone: lead?.phone || null,
       assigned_to: lead?.assigned_to || null,
+      tags: lead?.tags ?? [],
       stage_name: lead?.pipeline_stages?.name || null,
       stage_color: lead?.pipeline_stages?.color || null,
       pipeline_name: lead?.pipelines?.name || null,
