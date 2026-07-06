@@ -169,8 +169,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const isCounselor = (m: TeamMember) =>
     m.position_slug === "counselor" || (m.position_slug == null && m.role === "counselor");
   const counselorMembers = industryId !== "travel_agency"
-    ? teamMembers.filter(isCounselor)
-    : teamMembers;
+    ? allBranchMembers.filter(isCounselor)
+    : allBranchMembers;
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [meetWithId, setMeetWithId] = useState<string>("");
