@@ -154,6 +154,8 @@ export interface Lead {
   intake_source: string | null;
   intake_medium: string | null;
   intake_campaign: string | null;
+  ref_code: string | null;
+  form_source: string | null;
   preferred_contact_method: string | null;
   tags: string[];
   lead_type: string;

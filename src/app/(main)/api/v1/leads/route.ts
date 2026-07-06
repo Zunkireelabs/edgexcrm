@@ -483,6 +483,8 @@ async function handlePost(request: NextRequest) {
     intake_source: body.intake_source || null,
     intake_medium: body.intake_medium || null,
     intake_campaign: body.intake_campaign || null,
+    ref_code: (body.ref_code as string | null | undefined) || null,
+    form_source: (body.form_source as string | null | undefined) || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : (tenant.industry_id === "education_consultancy" ? ["student"] : []),
     assigned_to: body.assigned_to || null,
@@ -1152,6 +1154,20 @@ async function handlePost(request: NextRequest) {
         lead as Lead,
         { isResubmission: false, tenant: { name: tenant.name } }
       ).catch(() => {});
+    }
+
+    // Record affiliate conversion when ref_code is present (Admizz affiliate leads)
+    const leadRefCode = (lead as Lead).ref_code ?? null;
+    if (leadRefCode && tenant.industry_id === "education_consultancy") {
+      void supabase
+        .rpc("record_affiliate_conversion", {
+          p_lead_id: lead.id,
+          p_ref_code: leadRefCode,
+          p_form_source: (lead as Lead).form_source ?? null,
+        })
+        .then(({ error: rpcErr }) => {
+          if (rpcErr) log.error({ err: rpcErr, leadId: lead.id }, "record_affiliate_conversion failed");
+        });
     }
   }
 

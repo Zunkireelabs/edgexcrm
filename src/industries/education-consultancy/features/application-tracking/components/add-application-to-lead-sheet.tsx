@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, ChevronsUpDown, Check } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -21,7 +22,36 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import type { ApplicationStage } from "@/types/database";
+
+const COUNTRIES = [
+  "Australia",
+  "Canada",
+  "China",
+  "France",
+  "Germany",
+  "India",
+  "Japan",
+  "Nepal",
+  "New Zealand",
+  "Singapore",
+  "UAE",
+  "United Kingdom",
+  "United States",
+  "Other",
+];
 
 interface AgentOption {
   id: string;
@@ -35,6 +65,72 @@ interface AddApplicationToLeadSheetProps {
   leadId: string;
   stages: ApplicationStage[];
   onSuccess: () => void;
+}
+
+interface AutocompleteInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  id?: string;
+}
+
+function AutocompleteInput({ value, onChange, suggestions, placeholder, id }: AutocompleteInputProps) {
+  const [open, setOpen] = useState(false);
+
+  const filtered = suggestions.filter((s) =>
+    s.toLowerCase().includes(value.toLowerCase())
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative">
+          <Input
+            id={id}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              if (!open && e.target.value) setOpen(true);
+            }}
+            onFocus={() => { if (filtered.length > 0) setOpen(true); }}
+            placeholder={placeholder}
+            className="pr-8"
+            autoComplete="off"
+          />
+          <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        </div>
+      </PopoverTrigger>
+      {filtered.length > 0 && (
+        <PopoverContent
+          className="p-0 w-[--radix-popover-trigger-width]"
+          align="start"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
+          <Command shouldFilter={false}>
+            <CommandList>
+              <CommandEmpty>No suggestions</CommandEmpty>
+              {filtered.slice(0, 20).map((s) => (
+                <CommandItem
+                  key={s}
+                  value={s}
+                  onSelect={() => {
+                    onChange(s);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")}
+                  />
+                  {s}
+                </CommandItem>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      )}
+    </Popover>
+  );
 }
 
 export function AddApplicationToLeadSheet({
@@ -105,7 +201,7 @@ export function AddApplicationToLeadSheet({
       };
       if (stageId) body.stage_id = stageId;
       if (intakeTerm.trim()) body.intake_term = intakeTerm.trim();
-      if (country.trim()) body.country = country.trim();
+      if (country && country !== "__none__") body.country = country;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
       if (appliedDate) body.applied_date = appliedDate;
@@ -140,24 +236,16 @@ export function AddApplicationToLeadSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-          <datalist id="university-suggestions">
-            {universitySuggestions.map((u) => <option key={u} value={u} />)}
-          </datalist>
-          <datalist id="program-suggestions">
-            {programSuggestions.map((p) => <option key={p} value={p} />)}
-          </datalist>
-
           <div className="space-y-1.5">
             <Label htmlFor="app-university" className="text-xs text-gray-600">
               University <span className="text-destructive">*</span>
             </Label>
-            <Input
+            <AutocompleteInput
               id="app-university"
-              list="university-suggestions"
               value={universityName}
-              onChange={(e) => setUniversityName(e.target.value)}
+              onChange={setUniversityName}
+              suggestions={universitySuggestions}
               placeholder="e.g. University of Melbourne"
-              required
             />
           </div>
 
@@ -165,13 +253,12 @@ export function AddApplicationToLeadSheet({
             <Label htmlFor="app-program" className="text-xs text-gray-600">
               Program <span className="text-destructive">*</span>
             </Label>
-            <Input
+            <AutocompleteInput
               id="app-program"
-              list="program-suggestions"
               value={programName}
-              onChange={(e) => setProgramName(e.target.value)}
+              onChange={setProgramName}
+              suggestions={programSuggestions}
               placeholder="e.g. Master of Computer Science"
-              required
             />
           </div>
 
@@ -186,13 +273,17 @@ export function AddApplicationToLeadSheet({
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="app-country" className="text-xs text-gray-600">Country</Label>
-              <Input
-                id="app-country"
-                value={country}
-                onChange={(e) => setCountry(e.target.value)}
-                placeholder="e.g. Australia"
-              />
+              <Label className="text-xs text-gray-600">Country</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COUNTRIES.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

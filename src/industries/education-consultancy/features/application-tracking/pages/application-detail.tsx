@@ -48,6 +48,11 @@ import { ApplicationActivityTimeline } from "../components/application-activity-
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
+const COUNTRIES = [
+  "Australia", "Canada", "China", "France", "Germany", "India", "Japan",
+  "Nepal", "New Zealand", "Singapore", "UAE", "United Kingdom", "United States", "Other",
+];
+
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
 
@@ -578,7 +583,16 @@ export function ApplicationDetailPage({
                 <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Country</Label>
                   {editing ? (
-                    <Input value={country} onChange={(e) => setCountry(e.target.value)} placeholder="e.g. Australia" />
+                    <Select value={country} onValueChange={setCountry}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select country" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {COUNTRIES.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   ) : (
                     <p className="text-sm">{application.country ?? "—"}</p>
                   )}
