@@ -97,18 +97,18 @@ export function ConsentSignForm({
               file_size: blob.size,
               mime_type: "image/png",
               field_name: "consent_signature",
-              session_id: "consent",
+              session_id: `consent-${token}`,
             }),
           });
           if (!urlRes.ok) { resolve(null); return; }
           const urlJson = await urlRes.json();
-          const { path, token, public_url } = urlJson.data as { path: string; token: string; public_url: string };
+          const { path, token: uploadToken, public_url } = urlJson.data as { path: string; token: string; public_url: string };
 
           // Step 2: upload using Supabase storage client (mirrors public-form.tsx:326-333)
           const supabase = createClient();
           const { error: uploadError } = await supabase.storage
             .from("lead-documents")
-            .uploadToSignedUrl(path, token, blob, { contentType: "image/png" });
+            .uploadToSignedUrl(path, uploadToken, blob, { contentType: "image/png" });
 
           if (uploadError) { resolve(null); return; }
 
