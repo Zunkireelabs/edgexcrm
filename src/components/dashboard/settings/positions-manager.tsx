@@ -236,7 +236,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
         throw new Error(err.error?.message || "Failed to save position");
       }
 
-      toast.success(editingPosition ? "Position updated" : "Position created");
+      toast.success(editingPosition ? "Role updated" : "Role created");
       setDialogOpen(false);
       fetchData();
     } catch (err) {
@@ -254,7 +254,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
         const err = await res.json();
         throw new Error(err.error?.message || "Failed to delete position");
       }
-      toast.success("Position deleted");
+      toast.success("Role deleted");
       fetchData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete");
@@ -303,7 +303,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Positions
+            Roles & Permissions
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -320,15 +320,15 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
               <Shield className="h-5 w-5" />
-              Positions
+              Roles & Permissions
             </CardTitle>
             <CardDescription>
-              Define permission profiles and assign them to team members
+              Roles control what a person can do in the app — not their job title. Set job titles in People.
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" />
-            New Position
+            New Role
           </Button>
         </CardHeader>
         <CardContent>
@@ -390,7 +390,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingPosition ? `Edit "${editingPosition.name}"` : "New Position"}
+              {editingPosition ? `Edit "${editingPosition.name}"` : "New Role"}
             </DialogTitle>
           </DialogHeader>
 
@@ -401,7 +401,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. Branch Manager"
+                placeholder="e.g. Manager, Member, Read-only"
                 disabled={editingPosition?.is_system}
               />
             </div>
@@ -663,7 +663,7 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving..." : editingPosition ? "Save changes" : "Create position"}
+              {saving ? "Saving..." : editingPosition ? "Save changes" : "Create role"}
             </Button>
           </DialogFooter>
         </DialogContent>
