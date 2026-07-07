@@ -96,10 +96,13 @@ jobs:
           if [ -z "$BEFORE" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
             BEFORE=$(git rev-parse HEAD^1)
           fi
-          if git diff --name-only "$BEFORE" HEAD -- supabase/migrations/ | grep -qE '\.sql$'; then
+          # Only NUMBERED migration files (NNN_*.sql) count. A change to a non-
+          # numbered file like _TEMPLATE.sql (docs/scaffolding) must NOT trip the
+          # gate — that caused a spurious prod-DB approval pause on #145.
+          if git diff --name-only "$BEFORE" HEAD -- supabase/migrations/ | grep -qE '/[0-9]{3}_[^/]*\.sql$'; then
             echo "has_migrations=true" >> "$GITHUB_OUTPUT"
             echo "Migration files detected in this push — apply job will require approval:"
-            git diff --name-only "$BEFORE" HEAD -- supabase/migrations/
+            git diff --name-only "$BEFORE" HEAD -- supabase/migrations/ | grep -E '/[0-9]{3}_[^/]*\.sql$'
           else
             echo "has_migrations=false" >> "$GITHUB_OUTPUT"
             echo "No migration files in this push — apply job will be skipped."
