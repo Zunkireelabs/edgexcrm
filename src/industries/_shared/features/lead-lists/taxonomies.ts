@@ -7,6 +7,7 @@ export const DESTINATIONS = [
   "Canada",
   "Finland",
   "India",
+  "Nepal",
   "Europe",
   "Malta",
   "France",
@@ -20,10 +21,17 @@ export const FIELDS_OF_STUDY = [
   "Medical & Pharmacy",
   "Allied Health Sciences",
   "Humanities & Social Sciences",
+  "Law & Legal Studies",
+  "Architecture & Design",
+  "Applied Sciences",
   "Not decided",
 ] as const;
 
-export const DEGREE_LEVELS = ["UG", "PG", "PhD"] as const;
+export const DEGREE_LEVELS = [
+  { value: "UG", label: "Undergraduate" },
+  { value: "PG", label: "Postgraduate" },
+  { value: "PhD", label: "Doctor of Philosophy (PhD)" },
+] as const;
 
 export const INTAKE_SOURCES = [
   { value: "manual_entry", label: "Manual Entry" },

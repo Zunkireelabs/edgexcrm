@@ -1,6 +1,21 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import {
+  DndContext,
+  DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +35,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { List, Lock, Pencil, Trash2, Plus, ChevronUp, ChevronDown, Archive } from "lucide-react";
+import { List, Lock, Pencil, Trash2, Plus, ChevronUp, ChevronDown, Archive, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 
 interface Position {
@@ -67,6 +82,116 @@ function formFromList(list: LeadListRow): LeadListFormState {
     accessMode: list.access.mode,
     positionIds: list.access.mode === "allow" ? list.access.positionIds : [],
   };
+}
+
+interface LeadListRowProps {
+  list: LeadListRow;
+  isFirst: boolean;
+  isLast: boolean;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDelete }: LeadListRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: list.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : undefined,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center justify-between py-2 border-b last:border-0 bg-background ${
+        isDragging ? "shadow-lg ring-2 ring-primary/20 rounded-md" : ""
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          className="cursor-grab active:cursor-grabbing p-0.5 text-muted-foreground/50 hover:text-muted-foreground shrink-0"
+          aria-label="Drag to reorder"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVertical className="h-4 w-4" />
+        </button>
+        {list.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
+        {list.color && (
+          <div
+            className="h-3 w-3 rounded-full shrink-0"
+            style={{ backgroundColor: list.color }}
+          />
+        )}
+        <div>
+          <p className="text-sm font-medium">{list.name}</p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {list.is_system && (
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                System
+              </Badge>
+            )}
+            {list.is_archive && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 flex items-center gap-0.5">
+                <Archive className="h-2.5 w-2.5" />
+                Archive
+              </Badge>
+            )}
+            <span className="text-xs text-muted-foreground">
+              {list.count} lead{list.count !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div className="flex items-center gap-1">
+        {/* Up/down reorder */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          disabled={isFirst}
+          onClick={onMoveUp}
+        >
+          <ChevronUp className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7"
+          disabled={isLast}
+          onClick={onMoveDown}
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          onClick={onEdit}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </Button>
+        {!list.is_system && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export function LeadListsManager() {
@@ -178,29 +303,45 @@ export function LeadListsManager() {
     }
   }
 
-  async function handleReorder(list: LeadListRow, direction: "up" | "down") {
+  async function persistOrder(reordered: LeadListRow[]) {
+    const previous = lists;
+    setLists(reordered.map((l, idx) => ({ ...l, sort_order: idx })));
+    try {
+      const res = await fetch("/api/v1/lead-lists/reorder", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order: reordered.map((l) => l.id) }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message || "Failed to reorder");
+      }
+    } catch (err) {
+      setLists(previous);
+      toast.error(err instanceof Error ? err.message : "Failed to reorder");
+    }
+  }
+
+  function handleReorder(list: LeadListRow, direction: "up" | "down") {
     const idx = lists.findIndex((l) => l.id === list.id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
     if (swapIdx < 0 || swapIdx >= lists.length) return;
+    persistOrder(arrayMove(lists, idx, swapIdx));
+  }
 
-    const swap = lists[swapIdx];
-    try {
-      await Promise.all([
-        fetch(`/api/v1/lead-lists/${list.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: swap.sort_order }),
-        }),
-        fetch(`/api/v1/lead-lists/${swap.id}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sort_order: list.sort_order }),
-        }),
-      ]);
-      fetchData();
-    } catch {
-      toast.error("Failed to reorder");
-    }
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 5 },
+    })
+  );
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = lists.findIndex((l) => l.id === active.id);
+    const newIndex = lists.findIndex((l) => l.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    persistOrder(arrayMove(lists, oldIndex, newIndex));
   }
 
   function togglePositionId(id: string) {
@@ -248,80 +389,22 @@ export function LeadListsManager() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {lists.map((list, idx) => (
-              <div
-                key={list.id}
-                className="flex items-center justify-between py-2 border-b last:border-0"
-              >
-                <div className="flex items-center gap-3">
-                  {list.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
-                  {list.color && (
-                    <div
-                      className="h-3 w-3 rounded-full shrink-0"
-                      style={{ backgroundColor: list.color }}
-                    />
-                  )}
-                  <div>
-                    <p className="text-sm font-medium">{list.name}</p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      {list.is_system && (
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          System
-                        </Badge>
-                      )}
-                      {list.is_archive && (
-                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 flex items-center gap-0.5">
-                          <Archive className="h-2.5 w-2.5" />
-                          Archive
-                        </Badge>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        {list.count} lead{list.count !== 1 ? "s" : ""}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {/* Up/down reorder */}
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    disabled={idx === 0}
-                    onClick={() => handleReorder(list, "up")}
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7"
-                    disabled={idx === lists.length - 1}
-                    onClick={() => handleReorder(list, "down")}
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => openEdit(list)}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                  {!list.is_system && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      onClick={() => handleDelete(list)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  )}
-                </div>
-              </div>
-            ))}
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={lists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                {lists.map((list, idx) => (
+                  <LeadListRow
+                    key={list.id}
+                    list={list}
+                    isFirst={idx === 0}
+                    isLast={idx === lists.length - 1}
+                    onMoveUp={() => handleReorder(list, "up")}
+                    onMoveDown={() => handleReorder(list, "down")}
+                    onEdit={() => openEdit(list)}
+                    onDelete={() => handleDelete(list)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
             {lists.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No lists yet. Create one to get started.
