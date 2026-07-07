@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at, positions(permissions)")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at, positions(permissions, name)")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -61,7 +61,7 @@ export async function GET(request: Request) {
     branch_id: string | null;
     default_hourly_rate: number | null;
     created_at: string;
-    positions: { permissions: PositionPermissions | null } | { permissions: PositionPermissions | null }[] | null;
+    positions: { permissions: PositionPermissions | null; name: string | null } | { permissions: PositionPermissions | null; name: string | null }[] | null;
   }>;
 
   // Fetch user emails + names from auth.users — uses raw() escape hatch since
@@ -87,6 +87,7 @@ export async function GET(request: Request) {
   const enriched = members.map((m) => {
     // Position is the source of truth for assignability — resolve it, don't read legacy `role`.
     const { canEditLeads } = resolvePermissions(m.role as UserRole, positionPermissionsFromEmbed(m.positions));
+    const positionData = Array.isArray(m.positions) ? m.positions[0] : m.positions;
     return {
       id: m.id,
       user_id: m.user_id,
@@ -98,6 +99,7 @@ export async function GET(request: Request) {
       default_hourly_rate: m.default_hourly_rate,
       created_at: m.created_at,
       canEditLeads,
+      position_name: positionData?.name ?? null,
     };
   });
 

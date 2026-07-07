@@ -99,4 +99,11 @@ BEGIN
   RAISE NOTICE '124 AFTER: % country rows, % course rows', v_countries, v_courses;
 END$$;
 
+-- Self-record in the ledger (mig 123). Added retroactively (2026-07-07): this
+-- migration originally shipped without the required self-record line, so it was
+-- hand-applied to stage+prod but never recorded, leaving the auto-migrate runner
+-- to re-flag it as pending. Idempotent via ON CONFLICT.
+INSERT INTO public.schema_migrations (version) VALUES ('124_countries_courses.sql')
+  ON CONFLICT (version) DO NOTHING;
+
 COMMIT;

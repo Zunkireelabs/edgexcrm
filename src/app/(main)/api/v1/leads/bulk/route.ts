@@ -184,7 +184,7 @@ export async function PATCH(request: NextRequest) {
   // Verify all leads exist and belong to tenant (exclude converted leads from bulk operations)
   const { data: existingLeads, error: fetchError } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id, list_id")
+    .select("id, assigned_to, branch_id, list_id, status")
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -196,7 +196,7 @@ export async function PATCH(request: NextRequest) {
   }
 
   const existingMap = new Map(
-    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id, list_id: l.list_id as string | null }])
+    (existingLeads ?? []).map((l) => [l.id, { assigned_to: l.assigned_to, branch_id: l.branch_id, list_id: l.list_id as string | null, status: (l as { status: string | null }).status ?? null }])
   );
   const notFoundIds = body.ids.filter((id) => !existingMap.has(id));
 
@@ -225,6 +225,17 @@ export async function PATCH(request: NextRequest) {
     if (targetList) {
       bulkUpdatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       if (body.archive_reason) bulkUpdatePayload.archive_reason = body.archive_reason;
+      // Archive snapshot: who/when are common to the batch; the per-lead stage(list)
+      // + status snapshot is written in a follow-up loop below. Clear on un-archive.
+      if (targetList.is_archive) {
+        bulkUpdatePayload.archived_by = auth.userId;
+        bulkUpdatePayload.archived_at = new Date().toISOString();
+      } else {
+        bulkUpdatePayload.archived_by = null;
+        bulkUpdatePayload.archived_at = null;
+        bulkUpdatePayload.archived_from_list_id = null;
+        bulkUpdatePayload.archived_from_status = null;
+      }
       // Sync pipeline + default stage so stage updates work after the move
       if (targetList.pipeline_id) {
         const { data: defaultStage } = await supabase
@@ -252,6 +263,24 @@ export async function PATCH(request: NextRequest) {
   if (updateError) {
     log.error({ err: updateError }, "Failed to bulk update leads");
     return apiServiceUnavailable("Failed to update leads");
+  }
+
+  // Per-lead archive snapshot: each lead's prior list (stage) + status differ, so they
+  // can't ride the single bulk payload. Written after the move using the pre-move values.
+  if (targetList?.is_archive) {
+    await Promise.all(
+      idsToUpdate.map((id) => {
+        const prev = existingMap.get(id);
+        return supabase
+          .from("leads")
+          .update({
+            archived_from_list_id: prev?.list_id ?? null,
+            archived_from_status: prev?.status ?? null,
+          })
+          .eq("tenant_id", auth.tenantId)
+          .eq("id", id);
+      }),
+    );
   }
 
   // Assign display IDs to education leads moving out of staging (best-effort).

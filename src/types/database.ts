@@ -196,6 +196,10 @@ export interface Lead {
   pre_app_fee_amount: number | null;
   pre_app_fee_notes: string | null;
   archive_reason: string | null;
+  archived_by: string | null;
+  archived_at: string | null;
+  archived_from_list_id: string | null;
+  archived_from_status: string | null;
   last_activity_at: string;
   created_at: string;
   updated_at: string;

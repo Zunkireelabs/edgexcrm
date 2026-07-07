@@ -33,7 +33,10 @@ export default async function LeadsPage({
   const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
 
   // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
-  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
+  const poolSlug = tenantData.tenant.industry_id === "education_consultancy" && tenantData.positionSlug
+    ? (POSITION_HOME_LIST[tenantData.positionSlug] ?? null)
+    : null;
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId, poolSlug);
   if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
     scope.branchId = branchCookieVal;
   }
@@ -239,6 +242,9 @@ export default async function LeadsPage({
         userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
         viewMode={tableViewMode}
+        {...(tableViewMode === "archived"
+          ? { extraDefaultVisibleKeys: ["archived_from_stage", "archived_from_status", "archived_by", "archived_at"] }
+          : {})}
         intakeListId={intakeListId}
         canExport={tenantData.permissions.canExport}
         canEditLeads={tenantData.permissions.canEditLeads}

@@ -172,7 +172,9 @@ export interface LeadQueryScope {
   restrictToSelf: boolean;
   userId: string;
   pipelineIds: string[] | null; // null = all pipelines
-  branchId: string | null;      // null = no branch filter
+  branchId: string | null;      // null = no branch filter (team scope) or own-scope
+  userBranchId?: string | null; // own-scope user's branch (for cross-branch pool lookup)
+  crossBranchPoolListSlug?: string | null; // list slug for unassigned cross-branch pool
   listId?: string | null;          // filter to one list (lead-lists feature)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
   onlyDeleted?: boolean;            // recycle bin: show soft-deleted leads (deleted_at NOT NULL)
@@ -181,6 +183,7 @@ export function leadQueryScope(
   p: ResolvedPermissions,
   userId: string,
   branchId?: string | null,
+  crossBranchPoolListSlug?: string | null,
 ): LeadQueryScope {
   // §4.1 critical guard: team-scoped user with NO branchId MUST fall back to own-only,
   // never all — otherwise the null-branch path leaks the entire tenant.
@@ -191,6 +194,8 @@ export function leadQueryScope(
     userId,
     pipelineIds: p.pipelineAccess === "all" ? null : [...p.pipelineAccess.ids],
     branchId: effectiveBranchId,
+    userBranchId: restrictToSelf ? (branchId ?? null) : null,
+    crossBranchPoolListSlug: restrictToSelf ? (crossBranchPoolListSlug ?? null) : null,
   };
 }
 

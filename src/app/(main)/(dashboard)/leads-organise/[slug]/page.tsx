@@ -15,6 +15,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
 import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -63,7 +64,10 @@ export default async function LeadsOrganiseCockpitPage({
   if (!accessible) notFound();
 
   // Build scope for this staging list's leads
-  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
+  const poolSlug = tenantData.tenant.industry_id === "education_consultancy" && tenantData.positionSlug
+    ? (POSITION_ROUTE_MAP[tenantData.positionSlug] ?? null)
+    : null;
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId, poolSlug);
   if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
     scope.branchId = branchCookieVal;
   }

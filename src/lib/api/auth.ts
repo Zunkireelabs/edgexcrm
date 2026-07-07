@@ -134,6 +134,23 @@ export function requireLeadBranchAccess(
   return auth.branchMemberIds.includes(lead.assigned_to);
 }
 
+// Walk-in "other" contacts (the education Contacts page) are branch-shared: any
+// user in the contact's branch may read/append its notes & check-ins, even an
+// own-scope holder who isn't the assignee. Narrowed to the "other" tag so
+// regular pipeline leads are unaffected. Mirrors the Contacts page's own
+// branch-scoping (admin/owner see all branches; branch users see their branch).
+export function isOwnBranchContact(
+  auth: AuthContext,
+  lead: { branch_id?: string | null; tags?: string[] | null },
+): boolean {
+  return (
+    auth.branchId != null &&
+    lead.branch_id === auth.branchId &&
+    Array.isArray(lead.tags) &&
+    lead.tags.includes("other")
+  );
+}
+
 export interface UserContext {
   userId: string;
   email: string;
