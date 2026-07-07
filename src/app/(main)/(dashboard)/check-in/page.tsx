@@ -64,7 +64,7 @@ export default async function CheckInRoute() {
     tenantData.permissions.baseTier === "admin";
   const branchMembers = isAdminTier || !tenantData.branchId
     ? teamMembers
-    : teamMembers.filter((m) => m.branch_id === tenantData.branchId);
+    : teamMembers.filter((m) => m.branch_id === null || m.branch_id === tenantData.branchId);
 
   return (
     <div className="flex flex-col h-full min-h-0">

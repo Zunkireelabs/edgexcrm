@@ -1,13 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Phone, Calendar, MessageSquare, Loader2, ChevronRight } from "lucide-react";
+import { Mail, Phone, Calendar, MessageSquare, Clock, Loader2, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import type { Lead, UserRole } from "@/types/database";
+
+interface CheckInRecord {
+  id: string;
+  content: string;
+  created_at: string;
+  user_email: string;
+}
 
 interface ContactsPageProps {
   leads: Lead[];
@@ -18,6 +25,7 @@ interface ContactsPageProps {
 export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: ContactsPageProps) {
   const [selectedContact, setSelectedContact] = useState<Lead | null>(null);
   const [notes, setNotes] = useState<{ id: string; content: string; created_at: string }[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
   const [loadingNotes, setLoadingNotes] = useState(false);
   const [newNote, setNewNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
@@ -27,11 +35,16 @@ export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: Contac
     setNewNote("");
     setLoadingNotes(true);
     try {
-      const res = await fetch(`/api/v1/leads/${lead.id}/notes`);
-      const json = await res.json();
-      if (json.data) setNotes(json.data);
+      const [notesRes, checkInsRes] = await Promise.all([
+        fetch(`/api/v1/leads/${lead.id}/notes`),
+        fetch(`/api/v1/leads/${lead.id}/check-ins`),
+      ]);
+      const notesJson = await notesRes.json();
+      const checkInsJson = await checkInsRes.json();
+      if (notesJson.data) setNotes(notesJson.data);
+      if (checkInsJson.data) setCheckIns(checkInsJson.data);
     } catch {
-      toast.error("Failed to load notes");
+      toast.error("Failed to load contact details");
     } finally {
       setLoadingNotes(false);
     }
@@ -137,38 +150,81 @@ export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: Contac
             </div>
           </div>
 
-          <div className="flex-1 flex flex-col overflow-hidden p-5 gap-4">
-            <h3 className="text-sm font-semibold flex items-center gap-2 shrink-0">
-              <MessageSquare className="h-4 w-4" />
-              Notes
-            </h3>
-
-            <Card className="shrink-0">
-              <CardContent className="p-3 space-y-2">
-                <Textarea
-                  value={newNote}
-                  onChange={(e) => setNewNote(e.target.value)}
-                  placeholder="Add a note..."
-                  className="min-h-[70px] resize-none text-sm"
-                />
-                <div className="flex justify-end">
-                  <Button size="sm" onClick={handleAddNote} disabled={savingNote || !newNote.trim()}>
-                    {savingNote ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
-                    Save Note
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            <div className="flex-1 overflow-y-auto space-y-2">
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+            {/* Check-in History */}
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <Clock className="h-4 w-4" />
+                Check-in History
+                {checkIns.length > 0 && (
+                  <Badge variant="secondary" className="h-5 px-1.5 text-xs">{checkIns.length}</Badge>
+                )}
+              </h3>
               {loadingNotes ? (
-                <div className="flex justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                <div className="flex justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 </div>
-              ) : notes.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">No notes yet</p>
+              ) : checkIns.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No check-ins recorded.</p>
               ) : (
-                notes.map((note) => (
+                <div className="space-y-2">
+                  {checkIns.map((ci) => {
+                    const noteText = (() => {
+                      const dashIdx = ci.content.indexOf(" — ");
+                      return dashIdx !== -1 ? ci.content.slice(dashIdx + 3).trim() : "";
+                    })();
+                    return (
+                      <Card key={ci.id} className="bg-muted/30">
+                        <CardContent className="p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-xs font-medium">
+                                {new Date(ci.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                                <span className="text-muted-foreground font-normal ml-1">
+                                  {new Date(ci.created_at).toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}
+                                </span>
+                              </p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">By {ci.user_email}</p>
+                              {noteText && <p className="text-xs mt-1 text-muted-foreground">{noteText}</p>}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Notes */}
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2 mb-3">
+                <MessageSquare className="h-4 w-4" />
+                Notes
+              </h3>
+
+              <Card className="mb-3">
+                <CardContent className="p-3 space-y-2">
+                  <Textarea
+                    value={newNote}
+                    onChange={(e) => setNewNote(e.target.value)}
+                    placeholder="Add a note..."
+                    className="min-h-[70px] resize-none text-sm"
+                  />
+                  <div className="flex justify-end">
+                    <Button size="sm" onClick={handleAddNote} disabled={savingNote || !newNote.trim()}>
+                      {savingNote ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : null}
+                      Save Note
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {!loadingNotes && notes.length === 0 && (
+                <p className="text-sm text-muted-foreground">No notes yet.</p>
+              )}
+              <div className="space-y-2">
+                {notes.map((note) => (
                   <Card key={note.id} className="bg-muted/30">
                     <CardContent className="p-3">
                       <p className="text-sm whitespace-pre-wrap">{note.content}</p>
@@ -177,8 +233,8 @@ export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: Contac
                       </p>
                     </CardContent>
                   </Card>
-                ))
-              )}
+                ))}
+              </div>
             </div>
           </div>
         </div>
