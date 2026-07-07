@@ -187,7 +187,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
             : m
         )
       );
-      toast.success("Position updated");
+      toast.success("Role updated");
       setEditingPositionFor(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update position");
@@ -394,7 +394,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                         disabled={savingPosition}
                       >
                         <SelectTrigger className="h-7 w-36 text-xs">
-                          <SelectValue placeholder="Pick position" />
+                          <SelectValue placeholder="Pick role" />
                         </SelectTrigger>
                         <SelectContent>
                           {assignablePositions.map((p) => (
@@ -426,7 +426,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                           size="icon"
                           className="h-6 w-6"
                           onClick={() => setEditingPositionFor(member.user_id)}
-                          title="Change position"
+                          title="Change role"
                         >
                           <Pencil className="h-3 w-3 text-muted-foreground" />
                         </Button>
@@ -522,7 +522,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
               />
               <Select value={invitePositionId} onValueChange={setInvitePositionId}>
                 <SelectTrigger className="w-full sm:w-[160px]">
-                  <SelectValue placeholder="Position" />
+                  <SelectValue placeholder="Role" />
                 </SelectTrigger>
                 <SelectContent>
                   {assignablePositions.map((p) => (

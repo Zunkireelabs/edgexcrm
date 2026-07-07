@@ -394,7 +394,7 @@ export function LeadListsManager() {
 
             {/* Per-list position access */}
             <div className="space-y-2">
-              <Label>Position access</Label>
+              <Label>Role access</Label>
               <div className="flex items-center gap-2">
                 <Checkbox
                   id="access-all"
@@ -410,7 +410,7 @@ export function LeadListsManager() {
               {form.accessMode === "allow" && (
                 <div className="space-y-1.5 pl-6">
                   {positions.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">No positions defined yet</p>
+                    <p className="text-xs text-muted-foreground">No roles defined yet</p>
                   ) : (
                     positions.map((pos) => (
                       <div key={pos.id} className="flex items-center gap-2">
