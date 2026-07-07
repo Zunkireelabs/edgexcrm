@@ -299,8 +299,8 @@ feature/* ──► stage (staging) ──► main (production)
 | Trigger | Result |
 |---------|--------|
 | PR to `main` or `stage` | CI checks (lint, typecheck, build) |
-| Push to `stage` | Auto-deploy to `dev-lead-crm.zunkireelabs.com` |
-| Push to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` (⚠️ no migration step) |
+| PR merged to `stage` | Auto-deploy to `dev-lead-crm.zunkireelabs.com` |
+| PR merged to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` (⚠️ no migration step) |
 | Manual dispatch | Rollback (code only — see rule 5) |
 
 ```bash
@@ -320,9 +320,9 @@ gh pr merge <num> --squash --delete-branch
 
 # Promote to production — MIGRATIONS FIRST, THEN CODE
 #   1) apply pending migrations to the PROD db (per-action approval) + verify
-#   2) then promote code via a stage→main PR (1 approval; merge commit, not squash):
+#   2) then promote code via a stage→main PR (1 approval; Squash and merge):
 gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
-# ...get 1 approval, then merge it (merge commit) → auto-deploys prod.
+# ...get 1 approval, then squash-merge it → auto-deploys prod.
 
 # Monitor
 gh run list --limit 5
