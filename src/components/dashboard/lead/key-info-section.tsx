@@ -158,6 +158,15 @@ export function KeyInfoSection({
     PIPELINE_STAGE_SLUGS.includes(l.slug)
   );
 
+  // Stages scoped to this lead's pipeline, sorted by position.
+  const pipelineStages = stages
+    .filter((s) => s.pipeline_id === lead.pipeline_id)
+    .sort((a, b) => a.position - b.position);
+  const defaultPipelineStage =
+    pipelineStages.find((s) => s.is_default) ?? pipelineStages[0];
+  // When lead has no stage_id yet, show the pipeline's default/first stage.
+  const effectiveStageId = stageId || defaultPipelineStage?.id || "";
+
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
     ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
@@ -189,12 +198,12 @@ export function KeyInfoSection({
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-              <Select value={stageId || ""} onValueChange={onStageChange}>
+              <Select value={effectiveStageId} onValueChange={onStageChange}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
                 <SelectContent>
-                  {stages.map((stage) => (
+                  {pipelineStages.map((stage) => (
                     <SelectItem key={stage.id} value={stage.id}>
                       <div className="flex items-center gap-2">
                         <div
@@ -216,7 +225,7 @@ export function KeyInfoSection({
                     : undefined
                 }
               >
-                {currentStage?.name || "—"}
+                {currentStage?.name || defaultPipelineStage?.name || "—"}
               </Badge>
             )}
           </div>

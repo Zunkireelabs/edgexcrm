@@ -433,11 +433,22 @@ export async function PATCH(
           .select("id, slug")
           .eq("pipeline_id", targetList.pipeline_id)
           .eq("is_default", true)
-          .single();
-        if (defaultStage) {
+          .maybeSingle();
+        // Fall back to first stage by position when no is_default stage configured.
+        const { data: firstStage } = !defaultStage
+          ? await supabase
+              .from("pipeline_stages")
+              .select("id, slug")
+              .eq("pipeline_id", targetList.pipeline_id)
+              .order("position", { ascending: true })
+              .limit(1)
+              .maybeSingle()
+          : { data: null };
+        const resolvedStage = defaultStage ?? firstStage;
+        if (resolvedStage) {
           updatePayload.pipeline_id = targetList.pipeline_id;
-          updatePayload.stage_id = defaultStage.id;
-          updatePayload.status = defaultStage.slug;
+          updatePayload.stage_id = resolvedStage.id;
+          updatePayload.status = resolvedStage.slug;
         }
       } else {
         updatePayload.pipeline_id = null;
