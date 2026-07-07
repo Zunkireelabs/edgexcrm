@@ -136,6 +136,7 @@ jobs:
     if: >-
       always() &&
       needs.build-push.result == 'success' &&
+      needs.migrate-check.result != 'failure' &&
       (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
     environment: production
     steps:

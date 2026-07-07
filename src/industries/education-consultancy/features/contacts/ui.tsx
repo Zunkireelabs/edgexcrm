@@ -33,6 +33,8 @@ export function ContactsPage({ leads, role: _role, tenantId: _tenantId }: Contac
   const handleSelectContact = async (lead: Lead) => {
     setSelectedContact(lead);
     setNewNote("");
+    setNotes([]);
+    setCheckIns([]);
     setLoadingNotes(true);
     try {
       const [notesRes, checkInsRes] = await Promise.all([
