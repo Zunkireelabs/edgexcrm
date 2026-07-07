@@ -23,6 +23,7 @@ import {
   NotificationTypes,
 } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import type { Lead } from "@/types/database";
@@ -108,7 +109,22 @@ export async function GET(
       !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) {
     // Collaborators (anyone ever assigned) keep VIEW access even after reassignment.
     const isCollab = await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
-    if (!isCollab) return apiNotFound("Lead");
+    // Cross-branch pool: own-scope chain member can view an unassigned cross-branch lead
+    // shared into their branch when the lead's list matches their position route.
+    let isCrossBranchPoolLead = false;
+    if (!isCollab && auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId) {
+      const routeSlug = POSITION_ROUTE_MAP[auth.positionSlug];
+      const inBranchUnassigned = membership.some((m) => m.branch_id === auth.branchId && m.assigned_to === null);
+      if (routeSlug && inBranchUnassigned && (lead as Record<string, unknown>).list_id) {
+        const { data: listRow } = await supabase
+          .from("lead_lists").select("slug")
+          .eq("id", (lead as Record<string, unknown>).list_id as string)
+          .eq("tenant_id", auth.tenantId)
+          .maybeSingle();
+        isCrossBranchPoolLead = (listRow as { slug?: string } | null)?.slug === routeSlug;
+      }
+    }
+    if (!isCollab && !isCrossBranchPoolLead) return apiNotFound("Lead");
   }
   if (scope.branchId) {
     const inBranch =
@@ -193,7 +209,37 @@ export async function PATCH(
     isSelfCheckInAssign = (count ?? 0) > 0;
   }
 
-  if (!isSelfCheckInAssign && !requireLeadAccess(auth, existingLead, patchMembership)) {
+  // Narrow exception: own-scope chain member may assign an unassigned cross-branch lead
+  // shared into their branch when the lead's list matches their position route.
+  let isCrossBranchPooledAssign = false;
+  if (
+    !isSelfCheckInAssign &&
+    auth.industryId === "education_consultancy" &&
+    auth.positionSlug != null &&
+    ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
+    auth.permissions.leadScope === "own" &&
+    auth.permissions.canAssignLeads &&
+    existingLead.assigned_to == null &&
+    Object.keys(body).length === 1 &&
+    body.assigned_to !== undefined
+  ) {
+    const inBranchUnassigned = !!auth.branchId && patchMembership.some(
+      (m) => m.branch_id === auth.branchId && m.assigned_to === null,
+    );
+    if (inBranchUnassigned) {
+      const routeSlug = POSITION_ROUTE_MAP[auth.positionSlug];
+      if (routeSlug && (existingLead as Record<string, unknown>).list_id) {
+        const { data: listRow } = await supabase
+          .from("lead_lists").select("slug")
+          .eq("id", (existingLead as Record<string, unknown>).list_id as string)
+          .eq("tenant_id", auth.tenantId)
+          .maybeSingle();
+        isCrossBranchPooledAssign = (listRow as { slug?: string } | null)?.slug === routeSlug;
+      }
+    }
+  }
+
+  if (!isSelfCheckInAssign && !isCrossBranchPooledAssign && !requireLeadAccess(auth, existingLead, patchMembership)) {
     return apiForbidden();
   }
 
@@ -554,6 +600,16 @@ export async function PATCH(
   // Keep lead_branches origin row in sync with leads.branch_id / leads.assigned_to
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
+  }
+  // Sync lead_branches.assigned_to for the caller's branch when assigned_to changes:
+  // prevents the cross-branch pool from showing an already-claimed lead to other callers.
+  if (updatePayload.assigned_to !== undefined && auth.branchId) {
+    await supabase.from("lead_branches")
+      .update({ assigned_to: (updated as Lead).assigned_to ?? null })
+      .eq("tenant_id", auth.tenantId)
+      .eq("lead_id", id)
+      .eq("branch_id", auth.branchId)
+      .is("assigned_to", null);
   }
 
   // New assignee becomes a permanent collaborator (engaged-user visibility).
