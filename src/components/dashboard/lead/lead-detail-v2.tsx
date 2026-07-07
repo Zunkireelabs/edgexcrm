@@ -27,11 +27,8 @@ import type { LeadActivity } from "@/lib/supabase/queries";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
-import {
-  DESTINATIONS,
-  FIELDS_OF_STUDY,
-  DEGREE_LEVELS,
-} from "@/industries/_shared/features/lead-lists/taxonomies";
+import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
@@ -156,6 +153,7 @@ export function LeadDetailV2({
   const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
+  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -854,7 +852,7 @@ export function LeadDetailV2({
               </button>
               {qualifyDestOpen && (
                 <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background">
-                  {DESTINATIONS.map((dest) => (
+                  {destOptions.map((dest) => (
                     <div key={dest} className="flex items-center gap-2">
                       <Checkbox
                         id={`qd-${dest}`}
@@ -883,7 +881,7 @@ export function LeadDetailV2({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {FIELDS_OF_STUDY.map((f) => (
+                  {fieldsOfStudy.map((f) => (
                     <SelectItem key={f} value={f}>{f}</SelectItem>
                   ))}
                 </SelectContent>
@@ -902,7 +900,7 @@ export function LeadDetailV2({
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
                   {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
