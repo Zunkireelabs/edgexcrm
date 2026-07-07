@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { authenticateRequest, requireLeadBranchAccess, isOwnBranchContact } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
@@ -38,7 +38,7 @@ export async function GET(
   // Verify lead exists, not soft-deleted, tenant scoped
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, assigned_to, branch_id")
+    .select("id, assigned_to, branch_id, tags")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -49,9 +49,11 @@ export async function GET(
   // Counselor: own-only; branch-manager: membership-based.
   // Own-scope holders keep access as collaborators (mirrors getLead), so a
   // counsellor who handed the lead off can still read its notes.
+  // Exception: walk-in "other" contacts are visible to any user in their branch.
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
   if (
     shouldRestrictToSelf(auth.permissions) &&
+    !isOwnBranchContact(auth, lead) &&
     !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId) &&
     !(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))
   )
@@ -100,7 +102,7 @@ export async function POST(
 
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, first_name, last_name, assigned_to, branch_id")
+    .select("id, first_name, last_name, assigned_to, branch_id, tags")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -108,9 +110,11 @@ export async function POST(
 
   if (!lead) return apiNotFound("Lead");
 
+  // Exception: walk-in "other" contacts are writable by any user in their branch.
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
   if (
     shouldRestrictToSelf(auth.permissions) &&
+    !isOwnBranchContact(auth, lead) &&
     !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId) &&
     !(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))
   )
