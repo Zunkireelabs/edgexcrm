@@ -36,10 +36,10 @@ import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
 import {
-  DESTINATIONS,
   DEGREE_LEVELS,
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 interface LeadResult {
   id: string;
@@ -164,6 +164,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
 
 export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin }: CheckInPageProps) {
   const router = useRouter();
+  const { destinations: destOptions } = useEduTaxonomy();
   const memberNameById = new Map(
     allBranchMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
   );
@@ -707,7 +708,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                   <SelectValue placeholder="Select destination (optional)" />
                                 </SelectTrigger>
                                 <SelectContent>
-                                  {DESTINATIONS.map((d) => (
+                                  {destOptions.map((d) => (
                                     <SelectItem key={d} value={d}>
                                       {d}
                                     </SelectItem>

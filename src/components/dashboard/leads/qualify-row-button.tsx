@@ -21,11 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { LeadList } from "@/types/database";
-import {
-  DESTINATIONS,
-  FIELDS_OF_STUDY,
-  DEGREE_LEVELS,
-} from "@/industries/_shared/features/lead-lists/taxonomies";
+import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 interface QualifyRowButtonProps {
   leadId: string;
@@ -44,6 +41,7 @@ export function QualifyRowButton({
   qualifiedList,
   onQualified,
 }: QualifyRowButtonProps) {
+  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [open, setOpen] = useState(false);
   const [dests, setDests] = useState<string[]>(currentDestinations);
   const [fieldOfStudy, setFieldOfStudy] = useState(currentFieldOfStudy ?? "");
@@ -137,7 +135,7 @@ export function QualifyRowButton({
               </button>
               {destOpen && (
                 <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background">
-                  {DESTINATIONS.map((dest) => (
+                  {destOptions.map((dest) => (
                     <div key={dest} className="flex items-center gap-2">
                       <Checkbox
                         id={`qr-${dest}-${leadId}`}
@@ -161,7 +159,7 @@ export function QualifyRowButton({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {FIELDS_OF_STUDY.map((f) => (
+                  {fieldsOfStudy.map((f) => (
                     <SelectItem key={f} value={f}>{f}</SelectItem>
                   ))}
                 </SelectContent>

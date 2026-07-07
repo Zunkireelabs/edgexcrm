@@ -35,11 +35,10 @@ import {
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import {
-  DESTINATIONS,
-  FIELDS_OF_STUDY,
   DEGREE_LEVELS,
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { COUNTRY_CODES } from "@/lib/country-codes";
 import { parseStoredPhone } from "@/lib/phone-utils";
@@ -147,10 +146,12 @@ function DestinationsField({
   selected,
   onToggle,
   disabled,
+  options,
 }: {
   selected: string[];
   onToggle: (dest: string) => void;
   disabled: boolean;
+  options: string[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -174,7 +175,7 @@ function DestinationsField({
       </button>
       {open && (
         <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
-          {DESTINATIONS.map((dest) => (
+          {options.map((dest) => (
             <div key={dest} className="flex items-center gap-2">
               <Checkbox
                 id={`dest-${dest}`}
@@ -211,6 +212,7 @@ export function AddLeadSheet({
   userBranchId = null,
 }: AddLeadSheetProps) {
   const router = useRouter();
+  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -903,6 +905,7 @@ export function AddLeadSheet({
             selected={formData.destinations}
             onToggle={toggleDestination}
             disabled={isSubmitting}
+            options={destOptions}
           />
         )}
         {industryId === "education_consultancy" && (
@@ -919,7 +922,7 @@ export function AddLeadSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Select field</SelectItem>
-                  {FIELDS_OF_STUDY.map((f) => (
+                  {fieldsOfStudy.map((f) => (
                     <SelectItem key={f} value={f}>{f}</SelectItem>
                   ))}
                 </SelectContent>
