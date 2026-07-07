@@ -823,6 +823,93 @@ const STATIC_COLUMNS: LeadColumn[] = [
     },
   },
 
+  // ── archived_from_stage — the stage(list) the lead was in when archived
+  {
+    key: "archived_from_stage",
+    label: "Stage",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="archived_from_stage" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[110px]">
+        Stage
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const list = lead.archived_from_list_id
+        ? (ctx.leadLists ?? []).find((l) => l.id === lead.archived_from_list_id)
+        : null;
+      return (
+        <td key="archived_from_stage" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {list?.name || <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
+  },
+
+  // ── archived_from_status — the pipeline status the lead held when archived
+  {
+    key: "archived_from_status",
+    label: "Status",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="archived_from_status" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[110px]">
+        Status
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const slug = lead.archived_from_status;
+      const name = slug
+        ? (ctx.stages.find((s) => s.slug === slug)?.name ?? humanizeKey(slug))
+        : null;
+      return (
+        <td key="archived_from_status" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {name || <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
+  },
+
+  // ── archived_by — who moved the lead into the archive
+  {
+    key: "archived_by",
+    label: "Archived By",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="archived_by" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[120px]">
+        Archived By
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      const email = lead.archived_by ? ctx.memberMap[lead.archived_by] : null;
+      const name = lead.archived_by ? ctx.memberNames?.[lead.archived_by] : null;
+      return (
+        <td key="archived_by" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {email ? (name || email.split("@")[0]) : <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
+  },
+
+  // ── archived_at — when the lead was archived
+  {
+    key: "archived_at",
+    label: "Archived Date",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="archived_at" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[90px]">
+        Archived Date
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="archived_at" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+        {lead.archived_at ? new Date(lead.archived_at).toLocaleDateString() : <span className="text-gray-400">—</span>}
+      </td>
+    ),
+  },
+
 ];
 
 // ─── Public API ────────────────────────────────────────────────────────────────

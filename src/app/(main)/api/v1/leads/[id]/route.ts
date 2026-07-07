@@ -471,12 +471,26 @@ export async function PATCH(
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")
-      .select("id, slug, name, pipeline_id")
+      .select("id, slug, name, pipeline_id, is_archive")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
+      // Archive snapshot: capture stage(list) + status + who/when at archive time,
+      // BEFORE the block below clears live stage_id/status. Clear on un-archive.
+      const wasArchived = !!(existingLead as Record<string, unknown>).archived_at;
+      if (targetList.is_archive) {
+        updatePayload.archived_by = auth.userId;
+        updatePayload.archived_at = new Date().toISOString();
+        updatePayload.archived_from_list_id = (existingLead as Record<string, unknown>).list_id ?? null;
+        updatePayload.archived_from_status = (existingLead as Record<string, unknown>).status ?? null;
+      } else if (wasArchived) {
+        updatePayload.archived_by = null;
+        updatePayload.archived_at = null;
+        updatePayload.archived_from_list_id = null;
+        updatePayload.archived_from_status = null;
+      }
       // Reset stage to the destination list's default stage on list move.
       // If destination has no pipeline, clear stage so it doesn't show stale/null as "Unknown".
       if (targetList.pipeline_id) {

@@ -242,6 +242,9 @@ export default async function LeadsPage({
         userBranchId={tenantData.branchId}
         leadLists={accessibleLists}
         viewMode={tableViewMode}
+        {...(tableViewMode === "archived"
+          ? { extraDefaultVisibleKeys: ["archived_from_stage", "archived_from_status", "archived_by", "archived_at"] }
+          : {})}
         intakeListId={intakeListId}
         canExport={tenantData.permissions.canExport}
         canEditLeads={tenantData.permissions.canEditLeads}
