@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import {
   DndContext,
   DragEndEvent,
@@ -37,6 +38,7 @@ import {
 } from "@/components/ui/dialog";
 import { List, Lock, Pencil, Trash2, Plus, ChevronUp, ChevronDown, Archive, GripVertical } from "lucide-react";
 import { toast } from "sonner";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 
 interface Position {
   id: string;
@@ -84,6 +86,70 @@ function formFromList(list: LeadListRow): LeadListFormState {
   };
 }
 
+function LeadListInfo({ list }: { list: LeadListRow }) {
+  return (
+    <>
+      {list.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
+      {list.color && (
+        <div
+          className="h-3 w-3 rounded-full shrink-0"
+          style={{ backgroundColor: list.color }}
+        />
+      )}
+      <div>
+        <p className="text-sm font-medium">{list.name}</p>
+        <div className="flex items-center gap-2 mt-0.5">
+          {list.is_system && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              System
+            </Badge>
+          )}
+          {list.is_archive && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 flex items-center gap-0.5">
+              <Archive className="h-2.5 w-2.5" />
+              Archive
+            </Badge>
+          )}
+          <span className="text-xs text-muted-foreground">
+            {list.count} lead{list.count !== 1 ? "s" : ""}
+          </span>
+        </div>
+      </div>
+    </>
+  );
+}
+
+interface LeadListRowActionsProps {
+  onEdit: () => void;
+  onDelete: () => void;
+  isSystem: boolean;
+}
+
+function LeadListRowActions({ onEdit, onDelete, isSystem }: LeadListRowActionsProps) {
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-8 w-8"
+        onClick={onEdit}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+      </Button>
+      {!isSystem && (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+          onClick={onDelete}
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      )}
+    </>
+  );
+}
+
 interface LeadListRowProps {
   list: LeadListRow;
   isFirst: boolean;
@@ -124,32 +190,7 @@ function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDe
         >
           <GripVertical className="h-4 w-4" />
         </button>
-        {list.is_system && <Lock className="h-4 w-4 text-muted-foreground shrink-0" />}
-        {list.color && (
-          <div
-            className="h-3 w-3 rounded-full shrink-0"
-            style={{ backgroundColor: list.color }}
-          />
-        )}
-        <div>
-          <p className="text-sm font-medium">{list.name}</p>
-          <div className="flex items-center gap-2 mt-0.5">
-            {list.is_system && (
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                System
-              </Badge>
-            )}
-            {list.is_archive && (
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 flex items-center gap-0.5">
-                <Archive className="h-2.5 w-2.5" />
-                Archive
-              </Badge>
-            )}
-            <span className="text-xs text-muted-foreground">
-              {list.count} lead{list.count !== 1 ? "s" : ""}
-            </span>
-          </div>
-        </div>
+        <LeadListInfo list={list} />
       </div>
       <div className="flex items-center gap-1">
         {/* Up/down reorder */}
@@ -171,30 +212,33 @@ function LeadListRow({ list, isFirst, isLast, onMoveUp, onMoveDown, onEdit, onDe
         >
           <ChevronDown className="h-3.5 w-3.5" />
         </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={onEdit}
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-        {!list.is_system && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 text-muted-foreground hover:text-destructive"
-            onClick={onDelete}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
+        <LeadListRowActions onEdit={onEdit} onDelete={onDelete} isSystem={list.is_system} />
+      </div>
+    </div>
+  );
+}
+
+interface PinnedLeadListRowProps {
+  list: LeadListRow;
+  onEdit: () => void;
+  onDelete: () => void;
+}
+
+function PinnedLeadListRow({ list, onEdit, onDelete }: PinnedLeadListRowProps) {
+  return (
+    <div className="flex items-center justify-between py-2 border-b last:border-0 bg-background">
+      <div className="flex items-center gap-3">
+        <LeadListInfo list={list} />
+      </div>
+      <div className="flex items-center gap-1">
+        <LeadListRowActions onEdit={onEdit} onDelete={onDelete} isSystem={list.is_system} />
       </div>
     </div>
   );
 }
 
 export function LeadListsManager() {
+  const router = useRouter();
   const [lists, setLists] = useState<LeadListRow[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
@@ -202,6 +246,9 @@ export function LeadListsManager() {
   const [editingList, setEditingList] = useState<LeadListRow | null>(null);
   const [form, setForm] = useState<LeadListFormState>(buildDefaultForm);
   const [saving, setSaving] = useState(false);
+
+  const funnelLists = useMemo(() => lists.filter((l) => !isOffFunnelLeadList(l)), [lists]);
+  const offFunnelLists = useMemo(() => lists.filter((l) => isOffFunnelLeadList(l)), [lists]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -316,6 +363,8 @@ export function LeadListsManager() {
         const err = await res.json();
         throw new Error(err.error?.message || "Failed to reorder");
       }
+      toast.success("List order saved");
+      router.refresh();
     } catch (err) {
       setLists(previous);
       toast.error(err instanceof Error ? err.message : "Failed to reorder");
@@ -323,10 +372,10 @@ export function LeadListsManager() {
   }
 
   function handleReorder(list: LeadListRow, direction: "up" | "down") {
-    const idx = lists.findIndex((l) => l.id === list.id);
+    const idx = funnelLists.findIndex((l) => l.id === list.id);
     const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= lists.length) return;
-    persistOrder(arrayMove(lists, idx, swapIdx));
+    if (idx === -1 || swapIdx < 0 || swapIdx >= funnelLists.length) return;
+    persistOrder([...arrayMove(funnelLists, idx, swapIdx), ...offFunnelLists]);
   }
 
   const sensors = useSensors(
@@ -338,10 +387,10 @@ export function LeadListsManager() {
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = lists.findIndex((l) => l.id === active.id);
-    const newIndex = lists.findIndex((l) => l.id === over.id);
+    const oldIndex = funnelLists.findIndex((l) => l.id === active.id);
+    const newIndex = funnelLists.findIndex((l) => l.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
-    persistOrder(arrayMove(lists, oldIndex, newIndex));
+    persistOrder([...arrayMove(funnelLists, oldIndex, newIndex), ...offFunnelLists]);
   }
 
   function togglePositionId(id: string) {
@@ -390,13 +439,13 @@ export function LeadListsManager() {
         <CardContent>
           <div className="space-y-2">
             <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={lists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-                {lists.map((list, idx) => (
+              <SortableContext items={funnelLists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                {funnelLists.map((list, idx) => (
                   <LeadListRow
                     key={list.id}
                     list={list}
                     isFirst={idx === 0}
-                    isLast={idx === lists.length - 1}
+                    isLast={idx === funnelLists.length - 1}
                     onMoveUp={() => handleReorder(list, "up")}
                     onMoveDown={() => handleReorder(list, "down")}
                     onEdit={() => openEdit(list)}
@@ -409,6 +458,21 @@ export function LeadListsManager() {
               <p className="text-sm text-muted-foreground text-center py-4">
                 No lists yet. Create one to get started.
               </p>
+            )}
+            {offFunnelLists.length > 0 && (
+              <div className="pt-2">
+                <p className="text-xs font-medium text-muted-foreground border-t pt-2 pb-1">
+                  Archive &amp; Delete
+                </p>
+                {offFunnelLists.map((list) => (
+                  <PinnedLeadListRow
+                    key={list.id}
+                    list={list}
+                    onEdit={() => openEdit(list)}
+                    onDelete={() => handleDelete(list)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </CardContent>
