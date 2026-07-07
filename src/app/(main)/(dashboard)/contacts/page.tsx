@@ -25,19 +25,27 @@ export default async function ContactsRoutePage() {
     );
   }
 
-  // education_consultancy → show "other" tagged walk-in contacts (admin/owner only)
+  // education_consultancy → show "other" tagged walk-in contacts.
+  // Admin/owner (all-scope) see every branch; a branch user sees only their branch's contacts.
   if (industry === INDUSTRIES.EDUCATION_CONSULTANCY && getFeatureAccess(industry, FEATURES.CONTACTS)) {
     const { baseTier } = tenantData.permissions;
-    if (baseTier !== "owner" && baseTier !== "admin") redirect("/dashboard");
+    const isAllScope = baseTier === "owner" || baseTier === "admin";
+    // A non-admin with no branch can't be branch-scoped — nothing to show.
+    if (!isAllScope && !tenantData.branchId) redirect("/dashboard");
 
     const supabase = await createServiceClient();
 
-    const { data: otherLeads } = await supabase
+    let query = supabase
       .from("leads")
       .select("*")
       .eq("tenant_id", tenantData.tenant.id)
       .is("deleted_at", null)
-      .contains("tags", ["other"])
+      .contains("tags", ["other"]);
+
+    // Branch users are limited to their own branch; admin/owner see all branches.
+    if (!isAllScope) query = query.eq("branch_id", tenantData.branchId);
+
+    const { data: otherLeads } = await query
       .order("created_at", { ascending: false })
       .limit(500);
 

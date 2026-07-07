@@ -28,7 +28,8 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator, collaboratorLeadIdsForUser } from "@/lib/leads/collaborators";
 import {
   normalizeEmail,
@@ -154,12 +155,19 @@ export async function GET(request: NextRequest) {
   } else if (scope.restrictToSelf) {
     // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
     // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
-    const [sharedIds, collabIds] = await Promise.all([
+    // Also widen to unassigned cross-branch leads matching the user's position route (e.g. Pre-qualified for Lead Callers).
+    const poolSlug = auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+      ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+      : null;
+    const [sharedIds, collabIds, poolIds] = await Promise.all([
       sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
       collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
+      poolSlug && auth.branchId
+        ? unassignedCrossBranchLeadIds(supabase, auth.tenantId, auth.branchId, poolSlug)
+        : Promise.resolve([]),
     ]);
     // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    const rawExtra = [...new Set([...sharedIds, ...collabIds])];
+    const rawExtra = [...new Set([...sharedIds, ...collabIds, ...poolIds])];
     const extraIds = rawExtra.slice(0, 300);
     if (extraIds.length > 0) {
       query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);

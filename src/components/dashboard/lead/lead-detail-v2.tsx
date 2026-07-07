@@ -49,6 +49,7 @@ interface TeamMember {
   role: string;
   email: string;
   name?: string | null;
+  position_name?: string | null;
 }
 
 interface LeadDetailV2Props {

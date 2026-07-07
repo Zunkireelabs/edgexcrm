@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type LeadMembership = { branch_id: string; assigned_to: string | null }[];
+export type LeadMembership = { branch_id: string; assigned_to: string | null; is_origin: boolean }[];
 
 // Minimal auth shape needed here — avoids circular import with auth.ts.
 interface BranchManageAuth {
@@ -111,11 +111,49 @@ export async function getLeadMembership(
   tenantId: string,
   leadId: string,
 ): Promise<LeadMembership> {
-  const { data } = await db.from("lead_branches").select("branch_id, assigned_to").eq("tenant_id", tenantId).eq("lead_id", leadId);
-  return (data ?? []).map((r: { branch_id: string; assigned_to: string | null }) => ({
+  const { data } = await db.from("lead_branches").select("branch_id, assigned_to, is_origin").eq("tenant_id", tenantId).eq("lead_id", leadId);
+  return (data ?? []).map((r: { branch_id: string; assigned_to: string | null; is_origin: boolean }) => ({
     branch_id: r.branch_id,
     assigned_to: r.assigned_to ?? null,
+    is_origin: r.is_origin ?? false,
   }));
+}
+
+// Lead IDs for unassigned cross-branch leads in a given branch whose list matches a specific slug.
+// Used to surface position-appropriate unassigned shared leads to own-scope chain members
+// (e.g. show Pre-qualified cross-branch leads to Lead Callers in the target branch).
+export async function unassignedCrossBranchLeadIds(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  branchId: string,
+  listSlug: string,
+): Promise<string[]> {
+  const { data: lbRows } = await db.from("lead_branches")
+    .select("lead_id")
+    .eq("tenant_id", tenantId)
+    .eq("branch_id", branchId)
+    .is("assigned_to", null)
+    .eq("is_origin", false);
+
+  const leadIds = (lbRows ?? []).map((r: { lead_id: string }) => r.lead_id);
+  if (leadIds.length === 0) return [];
+
+  const { data: listRows } = await db.from("lead_lists")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("slug", listSlug);
+
+  const listIds = (listRows ?? []).map((r: { id: string }) => r.id);
+  if (listIds.length === 0) return [];
+
+  const { data: leads } = await db.from("leads")
+    .select("id")
+    .in("id", leadIds)
+    .in("list_id", listIds)
+    .is("deleted_at", null);
+
+  return (leads ?? []).map((r: { id: string }) => r.id);
 }
 
 // Keep the is_origin row in sync when the existing single-branch columns change.

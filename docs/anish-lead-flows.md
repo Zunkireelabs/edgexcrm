@@ -152,6 +152,58 @@ Walk-in visitors tagged as **"other"** (non-student, non-parent) are **not place
 
 ---
 
+## Cross-Branch Lead Sharing
+
+A Branch Manager (or Admin/Owner) can send a lead to another branch using the **Send to branch** button on the lead detail page. This inserts a row in `lead_branches` with `assigned_to = null`.
+
+### Who can see a cross-branch lead
+
+Visibility in the target branch is **position-scoped** based on the lead's current stage:
+
+| Lead's current stage | Visible to (target branch) |
+|----------------------|---------------------------|
+| Pre-qualified | Lead Telecaller + Branch Manager + Admin/Owner |
+| Qualified | Lead Executive + Branch Manager + Admin/Owner |
+| Prospects | Counselor + Branch Manager + Admin/Owner |
+| Applications | Application Executive + Branch Manager + Admin/Owner |
+
+Branch Manager always has team-scope access so they see the lead regardless. Admin/Owner see all leads tenant-wide.
+
+The Lead Telecaller / Lead Executive / Counselor see cross-branch leads via an **unassigned pool** — the query surfaces `lead_branches` rows where `assigned_to IS NULL AND is_origin = false AND branch_id = [target branch]`, filtered to leads whose list slug matches the caller's position route.
+
+### Assignment from the pool
+
+Once a cross-branch lead appears in a Lead Telecaller's queue (for example), they can:
+- **Self-assign** — assigns the lead to themselves
+- **Assign to a peer** — same-position member in the same branch (subject to normal position chain rules)
+
+Branch Manager can also assign from the lead detail page.
+
+After assignment, `lead_branches.assigned_to` is synced so the lead disappears from other callers' unassigned pool view.
+
+### Position → Stage routing map
+
+| Position slug | Lands in stage |
+|---------------|---------------|
+| `lead-caller` | Pre-qualified |
+| `lead-executive` | Qualified |
+| `branch-manager` | Prospects |
+| `counselor` | Prospects |
+| `application-executive` | Applications |
+
+This map (`POSITION_ROUTE_MAP`) lives in `src/industries/education-consultancy/features/new-leads-triage/position-routing.ts`.
+
+### Example flow
+
+1. Janakpur BM creates a lead in Pre-qualified and clicks **Send to branch → KTM**.
+2. A `lead_branches` row is inserted: `{ branch_id: KTM, assigned_to: null, is_origin: false }`.
+3. KTM Lead Telecaller opens their Pre-qualified list → the lead appears in their queue.
+4. KTM Telecaller self-assigns → `leads.assigned_to = ktm_caller_id`; `lead_branches.assigned_to` synced.
+5. Other KTM callers no longer see the lead in the unassigned pool.
+6. Normal chain flow continues: Telecaller sends to Lead Executive when ready.
+
+---
+
 ## Assignment Chain
 
 ```

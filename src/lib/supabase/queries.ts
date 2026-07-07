@@ -2,7 +2,7 @@ import { createClient, createServiceClient } from "./server";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership } from "@/lib/leads/branch-membership";
+import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
 
 export async function getCurrentUserTenant(): Promise<{
@@ -78,6 +78,8 @@ export async function getLeads(
     pipelineIds?: string[] | null;
     limit?: number;
     branchId?: string | null;
+    userBranchId?: string | null;
+    crossBranchPoolListSlug?: string | null;
     listId?: string | null;
     excludeListIds?: string[];
     onlyDeleted?: boolean;
@@ -93,13 +95,17 @@ export async function getLeads(
   let memberIds: string[] | null = null;
   if (scope?.restrictToSelf && scope.userId) {
     // Widen own-scope to leads the user has ever been assigned (collaborators),
-    // so handed-off leads stay visible. Merged with branch shared-in ids.
-    const [branchShared, collab] = await Promise.all([
+    // so handed-off leads stay visible. Merged with branch shared-in ids and
+    // position-appropriate unassigned cross-branch leads (e.g. Pre-qualified for Lead Callers).
+    const [branchShared, collab, pooled] = await Promise.all([
       sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId),
       collaboratorLeadIdsForUser(supabase, tenantId, scope.userId),
+      scope.crossBranchPoolListSlug && scope.userBranchId
+        ? unassignedCrossBranchLeadIds(supabase, tenantId, scope.userBranchId, scope.crossBranchPoolListSlug)
+        : Promise.resolve([]),
     ]);
     // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    sharedIds = [...new Set([...branchShared, ...collab])].slice(0, 300);
+    sharedIds = [...new Set([...branchShared, ...collab, ...pooled])].slice(0, 300);
   } else if (scope?.branchId) {
     // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
     // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []

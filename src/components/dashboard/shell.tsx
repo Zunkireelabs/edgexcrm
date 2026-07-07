@@ -461,7 +461,7 @@ export function DashboardShell({
                 </Suspense>
                 {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
-                {(role === "owner" || role === "admin") && navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
+                {navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}
