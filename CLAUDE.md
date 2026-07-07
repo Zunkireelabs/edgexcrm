@@ -233,6 +233,7 @@ When the user gives ANY development request (build, create, implement, fix, upda
 | Skill | Domain |
 |-------|--------|
 | `/project-pm` | Orchestrator for all dev tasks |
+| `/coo-it-agency` | Operating-strategy brain for `it_agency` tenants — whole-company product direction, end-to-end workflow design/critique, AI-native touchpoint hunting; sits above crm/hr experts and orchestrates them; advises & routes. One COO skill per industry. |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
 | `/hr-expert` | HR/HRMS domain — org/positions, onboarding, leave/attendance, payroll, performance, ESS/MSS; plans people features, reuses existing team/positions spine, routes to dev skills |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
