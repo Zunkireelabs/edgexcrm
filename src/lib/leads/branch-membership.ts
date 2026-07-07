@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-export type LeadMembership = { branch_id: string; assigned_to: string | null }[];
+export type LeadMembership = { branch_id: string; assigned_to: string | null; is_origin: boolean }[];
 
 // Minimal auth shape needed here — avoids circular import with auth.ts.
 interface BranchManageAuth {
@@ -111,10 +111,11 @@ export async function getLeadMembership(
   tenantId: string,
   leadId: string,
 ): Promise<LeadMembership> {
-  const { data } = await db.from("lead_branches").select("branch_id, assigned_to").eq("tenant_id", tenantId).eq("lead_id", leadId);
-  return (data ?? []).map((r: { branch_id: string; assigned_to: string | null }) => ({
+  const { data } = await db.from("lead_branches").select("branch_id, assigned_to, is_origin").eq("tenant_id", tenantId).eq("lead_id", leadId);
+  return (data ?? []).map((r: { branch_id: string; assigned_to: string | null; is_origin: boolean }) => ({
     branch_id: r.branch_id,
     assigned_to: r.assigned_to ?? null,
+    is_origin: r.is_origin ?? false,
   }));
 }
 

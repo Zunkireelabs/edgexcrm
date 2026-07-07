@@ -114,7 +114,8 @@ export async function GET(
     let isCrossBranchPoolLead = false;
     if (!isCollab && auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId) {
       const routeSlug = POSITION_ROUTE_MAP[auth.positionSlug];
-      const inBranchUnassigned = membership.some((m) => m.branch_id === auth.branchId && m.assigned_to === null);
+      // Only sent-in (is_origin=false) shared rows qualify — never the branch's own origin lead.
+      const inBranchUnassigned = membership.some((m) => m.branch_id === auth.branchId && m.assigned_to === null && !m.is_origin);
       if (routeSlug && inBranchUnassigned && (lead as Record<string, unknown>).list_id) {
         const { data: listRow } = await supabase
           .from("lead_lists").select("slug")
@@ -223,8 +224,9 @@ export async function PATCH(
     Object.keys(body).length === 1 &&
     body.assigned_to !== undefined
   ) {
+    // Only sent-in (is_origin=false) shared rows qualify — never the branch's own origin lead.
     const inBranchUnassigned = !!auth.branchId && patchMembership.some(
-      (m) => m.branch_id === auth.branchId && m.assigned_to === null,
+      (m) => m.branch_id === auth.branchId && m.assigned_to === null && !m.is_origin,
     );
     if (inBranchUnassigned) {
       const routeSlug = POSITION_ROUTE_MAP[auth.positionSlug];
