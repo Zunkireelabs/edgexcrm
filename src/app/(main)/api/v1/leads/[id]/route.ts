@@ -22,7 +22,7 @@ import {
   getTenantAdminRecipients,
   NotificationTypes,
 } from "@/lib/notifications";
-import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
+import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs, peerSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
@@ -342,7 +342,11 @@ export async function PATCH(
       // Fall back to role when no position is configured (e.g. role="counselor" with no positions row)
       const targetRole = (memberCheck as unknown as { role?: string }).role ?? null;
       const effectiveSlug = targetSlug ?? targetRole;
-      const allowed = new Set(assignableTargetSlugs(auth.positionSlug));
+      // Cross-branch pool grab: restrict to self + same-position peers (no forward-to-next hop).
+      // Normal own-scope assign keeps the full chain targets (peer + next position).
+      const allowed = new Set(
+        isCrossBranchPooledAssign ? peerSlugs(auth.positionSlug) : assignableTargetSlugs(auth.positionSlug),
+      );
       const okBranch = auth.branchId == null || ((memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null) === auth.branchId;
       if (!effectiveSlug || !allowed.has(effectiveSlug) || !okBranch) {
         return apiForbidden();
