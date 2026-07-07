@@ -58,6 +58,12 @@ BEGIN
   RAISE NOTICE '126 AFTER: all education branch-manager positions have /contacts';
 END$$;
 
+-- Self-record in the ledger (mig 123). Added retroactively (2026-07-07): this
+-- migration originally shipped without the required self-record line, so it was
+-- hand-applied to stage+prod but never recorded. Idempotent via ON CONFLICT.
+INSERT INTO public.schema_migrations (version) VALUES ('126_branch_manager_contacts_nav.sql')
+  ON CONFLICT (version) DO NOTHING;
+
 COMMIT;
 
 -- Rollback (removes the key again):
