@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
+import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -150,11 +151,6 @@ export function KeyInfoSection({
   );
   const isInIntakeList = currentLeadList?.is_intake ?? false;
 
-  const PIPELINE_STAGE_SLUGS = ["pre-qualified", "qualified", "prospects"];
-  const stageListOptions = (leadLists ?? []).filter((l) =>
-    PIPELINE_STAGE_SLUGS.includes(l.slug)
-  );
-
   // Stages scoped to this lead's pipeline, sorted by position.
   const pipelineStages = stages
     .filter((s) => s.pipeline_id === lead.pipeline_id)
@@ -228,38 +224,22 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Stage (lead list) — dropdown limited to Pre-qualified / Qualified / Prospects */}
+          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →] */}
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
-              {stageListOptions.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-                <Select
-                  value={lead.list_id ?? ""}
-                  onValueChange={(listId) => {
-                    const selected = stageListOptions.find((l) => l.id === listId);
-                    if (
-                      selected?.slug === "qualified" &&
-                      isInIntakeList &&
-                      industryId === "education_consultancy" &&
-                      onQualify
-                    ) {
-                      onQualify();
-                    } else {
-                      onListChange(listId);
-                    }
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-sm">
-                    <SelectValue placeholder="Select stage" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {stageListOptions.map((l) => (
-                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+              {leadLists && leadLists.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
+                <ListStepper
+                  currentListId={lead.list_id ?? null}
+                  activeLists={activeLeadLists ?? leadLists}
+                  accessibleLists={leadLists}
+                  industryId={industryId}
+                  onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
+                  onQualify={onQualify}
+                  nextPositionMembers={nextPositionMembers}
+                />
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (
@@ -305,7 +285,7 @@ export function KeyInfoSection({
                               {getInitials(m.email)}
                             </span>
                           </div>
-                          <span className="truncate">{m.position_name || m.name || m.email.split("@")[0]}</span>
+                          <span className="truncate">{m.name || m.position_name || m.email.split("@")[0]}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -320,7 +300,7 @@ export function KeyInfoSection({
                         {getInitials(assignedMember.email)}
                       </span>
                     </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.position_name || assignedMember.name || assignedMember.email.split("@")[0]}</span>
+                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.position_name || assignedMember.email.split("@")[0]}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
