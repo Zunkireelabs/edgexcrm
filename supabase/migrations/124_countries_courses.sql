@@ -2,6 +2,10 @@
 -- Allows admins to manage destination countries and fields of study via the
 -- Organization settings page. Seeded with current taxonomy data from taxonomies.ts.
 -- Additive + idempotent.
+--
+-- ROLLBACK:
+--   DROP TABLE IF EXISTS courses;
+--   DROP TABLE IF EXISTS countries;
 
 BEGIN;
 
@@ -17,20 +21,22 @@ CREATE TABLE IF NOT EXISTS countries (
   UNIQUE(tenant_id, name)
 );
 
+CREATE INDEX IF NOT EXISTS idx_countries_tenant ON countries (tenant_id);
+
 ALTER TABLE countries ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "countries_select" ON countries
-  FOR SELECT USING (tenant_id = ANY(get_user_tenant_ids()));
+  FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
 CREATE POLICY "countries_insert" ON countries
-  FOR INSERT WITH CHECK (is_tenant_admin(tenant_id));
+  FOR INSERT WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids()));
 CREATE POLICY "countries_update" ON countries
-  FOR UPDATE USING (is_tenant_admin(tenant_id));
+  FOR UPDATE USING (is_tenant_admin(tenant_id)) WITH CHECK (is_tenant_admin(tenant_id));
 CREATE POLICY "countries_delete" ON countries
   FOR DELETE USING (is_tenant_admin(tenant_id));
 
-CREATE TRIGGER countries_updated_at
+CREATE TRIGGER trigger_countries_updated_at
   BEFORE UPDATE ON countries
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ── courses table ─────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS courses (
@@ -44,29 +50,24 @@ CREATE TABLE IF NOT EXISTS courses (
   UNIQUE(tenant_id, name)
 );
 
+CREATE INDEX IF NOT EXISTS idx_courses_tenant ON courses (tenant_id);
+
 ALTER TABLE courses ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "courses_select" ON courses
-  FOR SELECT USING (tenant_id = ANY(get_user_tenant_ids()));
+  FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
 CREATE POLICY "courses_insert" ON courses
-  FOR INSERT WITH CHECK (is_tenant_admin(tenant_id));
+  FOR INSERT WITH CHECK (tenant_id IN (SELECT get_user_tenant_ids()));
 CREATE POLICY "courses_update" ON courses
-  FOR UPDATE USING (is_tenant_admin(tenant_id));
+  FOR UPDATE USING (is_tenant_admin(tenant_id)) WITH CHECK (is_tenant_admin(tenant_id));
 CREATE POLICY "courses_delete" ON courses
   FOR DELETE USING (is_tenant_admin(tenant_id));
 
-CREATE TRIGGER courses_updated_at
+CREATE TRIGGER trigger_courses_updated_at
   BEFORE UPDATE ON courses
-  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- ── Seed education_consultancy tenants ────────────────────────────────────────
-DO $$
-DECLARE v_count int;
-BEGIN
-  SELECT COUNT(*) INTO v_count FROM tenants WHERE industry_id = 'education_consultancy';
-  RAISE NOTICE '124: seeding % education_consultancy tenant(s)', v_count;
-END$$;
-
 INSERT INTO countries (tenant_id, name)
 SELECT t.id, c.name
 FROM tenants t
