@@ -113,6 +113,13 @@ export function PeopleDirectory({
     loadDepartments();
   }, [load, loadDepartments]);
 
+  const jobTitleSuggestions = useMemo(
+    () => Array.from(new Set(
+      rows.map((r) => r.profile?.job_title?.trim()).filter((t): t is string => !!t)
+    )).sort((a, b) => a.localeCompare(b)),
+    [rows]
+  );
+
   async function createDepartment() {
     if (!newDeptName.trim()) return;
     try {
@@ -209,6 +216,7 @@ export function PeopleDirectory({
         <EmployeeEditSheet
           row={editTarget}
           departments={departments}
+          jobTitleSuggestions={jobTitleSuggestions}
           canManageHR={canManageHR}
           isSelf={editTarget.user_id === currentUserId}
           onClose={() => setEditTarget(null)}
@@ -242,6 +250,7 @@ export function PeopleDirectory({
 function EmployeeEditSheet({
   row,
   departments,
+  jobTitleSuggestions,
   canManageHR,
   isSelf,
   onClose,
@@ -249,6 +258,7 @@ function EmployeeEditSheet({
 }: {
   row: EmployeeRow;
   departments: Department[];
+  jobTitleSuggestions: string[];
   canManageHR: boolean;
   isSelf: boolean;
   onClose: () => void;
@@ -433,7 +443,15 @@ function EmployeeEditSheet({
           </div>
           <div className="space-y-1.5">
             <Label>Job title</Label>
-            <Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} disabled={!canEditAtAll} />
+            <Input
+              value={jobTitle}
+              onChange={(e) => setJobTitle(e.target.value)}
+              disabled={!canEditAtAll}
+              list={`job-title-suggestions-${row.tenant_user_id}`}
+            />
+            <datalist id={`job-title-suggestions-${row.tenant_user_id}`}>
+              {jobTitleSuggestions.map((t) => <option key={t} value={t} />)}
+            </datalist>
           </div>
           <div className="space-y-1.5">
             <Label>Phone</Label>
