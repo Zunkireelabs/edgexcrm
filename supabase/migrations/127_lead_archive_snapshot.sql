@@ -17,6 +17,12 @@ ALTER TABLE leads
   ADD COLUMN IF NOT EXISTS archived_from_list_id UUID REFERENCES lead_lists(id)  ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS archived_from_status  TEXT;
 
+-- Self-record in the ledger (mig 123). Added retroactively (2026-07-07): this
+-- migration originally shipped without the required self-record line, so it was
+-- hand-applied to stage+prod but never recorded. Idempotent via ON CONFLICT.
+INSERT INTO public.schema_migrations (version) VALUES ('127_lead_archive_snapshot.sql')
+  ON CONFLICT (version) DO NOTHING;
+
 COMMIT;
 
 -- Rollback:

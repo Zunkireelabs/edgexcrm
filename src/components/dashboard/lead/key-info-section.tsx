@@ -7,11 +7,8 @@ import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
-import {
-  DESTINATIONS,
-  FIELDS_OF_STUDY,
-  DEGREE_LEVELS,
-} from "@/industries/_shared/features/lead-lists/taxonomies";
+import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -602,6 +599,7 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
     degree_level?: string | null;
   };
 
+  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [destOpen, setDestOpen] = useState(false);
@@ -678,7 +676,7 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
             </button>
             {destOpen && (
               <div className="mt-1 border border-input rounded p-2 grid grid-cols-2 gap-1 bg-background">
-                {DESTINATIONS.map((dest) => (
+                {destOptions.map((dest) => (
                   <div key={dest} className="flex items-center gap-1.5">
                     <Checkbox
                       id={`kd-${dest}`}
@@ -705,7 +703,7 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select field</span>
                 </SelectItem>
-                {FIELDS_OF_STUDY.map((f) => (
+                {fieldsOfStudy.map((f) => (
                   <SelectItem key={f} value={f}>{f}</SelectItem>
                 ))}
               </SelectContent>
@@ -726,7 +724,7 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                   <span className="text-muted-foreground">Select level</span>
                 </SelectItem>
                 {DEGREE_LEVELS.map((d) => (
-                  <SelectItem key={d} value={d}>{d}</SelectItem>
+                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
