@@ -941,7 +941,7 @@ export function AddLeadSheet({
                 <SelectContent>
                   <SelectItem value="__none__">Select level</SelectItem>
                   {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

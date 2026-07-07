@@ -899,7 +899,7 @@ export function LeadDetailV2({
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
                   {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d} value={d}>{d}</SelectItem>
+                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

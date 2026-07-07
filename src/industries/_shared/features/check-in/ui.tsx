@@ -725,8 +725,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                   </SelectTrigger>
                                   <SelectContent>
                                     {DEGREE_LEVELS.map((d) => (
-                                      <SelectItem key={d} value={d}>
-                                        {d}
+                                      <SelectItem key={d.value} value={d.value}>
+                                        {d.label}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
