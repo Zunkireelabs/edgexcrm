@@ -13,7 +13,7 @@
 3. **Always branch from the latest `origin/stage`, and rebase onto it right before you merge.** Stale bases are the #1 cause of a merge silently reverting someone else's work on a shared file.
 4. **One migration number = one file, globally unique.** Check the highest number in `supabase/migrations/` and take the next one. Never reuse a number.
 5. **Migrations are DB-first and environment-explicit.** Apply to **stage** → verify → (at promotion) apply to **prod**. There are **two separate databases**; a migration on one is *not* on the other.
-6. **Apply a migration to the PROD database BEFORE the code that needs it lands on `main`.** `main` auto-deploys with no migration step — merge code first and prod runs new code on an old schema → 500s (split-brain).
+6. **Migrations apply automatically in the deploy, gated on prod.** A stage→main promotion carrying migration file(s) **pauses for a required-reviewer approval** (`production-db` environment), applies them to the prod DB **before** the container swaps, then deploys — so new code never runs on an old schema (split-brain is structurally prevented, no longer a manual apply-before-merge you can forget). Code-only promotions skip it. Review the migration in the PR; approve it in the deploy. (Emergency out-of-band prod SQL can still be hand-applied under per-action approval.)
 7. **Migrations are additive + reversible.** Wrap in a transaction, log before/after row counts, include a rollback line. No destructive `DROP TABLE` / `DROP COLUMN` on live data without an explicit, approved plan.
 8. **Never resolve a conflict on a hot shared file by "keep my whole file."** Merge hunk-by-hunk. Assume the other person also changed `shell.tsx`, `leads/route.ts`, `queries.ts`, etc.
 9. **Rollback is a fire alarm, not a convenience.** `rollback.yml` un-deploys everything after the target SHA and does **not** roll back the database. Announce before running it (see § Rollback).
@@ -105,7 +105,7 @@ A short list of files are edited by almost every feature. When git flags a confl
 
 ## 5. Migration protocol (the part that causes 500s)
 
-Migrations are **plain SQL files in `supabase/migrations/`, applied by hand** (psql or Supabase MCP) — there is **no automatic runner**. A **ledger table** (`public.schema_migrations`, mig 123) now records what's applied to each DB; each migration **self-records its own filename**. Treat every migration as a coupled release with its code. Start from **`supabase/migrations/_TEMPLATE.sql`**.
+Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and prod now **apply them automatically inside the deploy pipeline** via a ledger-diff runner (`scripts/migrate-apply.sh`): **staging** applies on every deploy; **prod** applies behind a **required-reviewer approval gate** (the `production-db` GitHub Environment), *before* the container swaps — so the split-brain is structurally impossible, not just discouraged (see "Applying" below). A **ledger table** (`public.schema_migrations`, mig 123) records what's applied to each DB; each migration **self-records its own filename**. You can still apply by hand (psql / Supabase MCP) for out-of-band or emergency changes — the runner then sees it already in the ledger and no-ops. Treat every migration as a coupled release with its code. Start from **`supabase/migrations/_TEMPLATE.sql`**.
 
 ### Authoring
 - **Number:** `ls supabase/migrations/ | sort` → take `<highest + 1>`. **Never reuse a number** (historical dupes `110_*`/`112_*` exist from before this rule — don't add more).
@@ -121,11 +121,7 @@ Migrations are **plain SQL files in `supabase/migrations/`, applied by hand** (p
 
 ### Applying — order matters
 1. **Stage first.** Apply to the stage DB (`dymeudcddasqpomfpjvt`), in a transaction, log before/after counts. Verify tables/policies/seed. Smoke on local/dev as a **real logged-in user** (not service-role — RLS only shows up under a real JWT).
-2. **Prod at promotion — BEFORE the code merges to `main`.** Because `main` auto-deploys with no migration step, the order is always:
-   ```
-   (a) apply migration(s) to PROD db  →  (b) verify  →  (c) merge stage → main (code deploys)
-   ```
-   Never (c) before (a). Doing so = prod runs new code on old schema = 500s.
+2. **Prod — automatic + gated at promotion (no more manual apply-before-merge).** When a stage→main promotion contains migration file(s), the prod deploy (`deploy.yml`) detects them (`migrate-check` job), **pauses at "Apply Pending Migrations" for a required-reviewer approval** (`production-db` environment — reviewers sthasadin/ani-shh, admin-bypass off), applies them to the prod DB **before** the container swaps, then deploys. Migrations always land before the code that needs them → the "new code on old schema = 500s" split-brain can't happen. A code-only promotion skips the migrate job entirely (no approval pause). **So for the normal flow you no longer hand-apply to prod before merging** — you review the migration in the PR, then approve it in the deploy. (Emergency/out-of-band prod SQL can still be applied by hand under per-action approval; the runner then no-ops on it.)
 3. **Check the ledger — don't guess.** `STAGE_DB_URL=… scripts/migrate-status.sh stage` (or `prod`) lists **applied vs pending vs ghost** for that DB. A migration is **not on prod until it shows applied on prod.** Because it self-records, applying it *is* recording it — no separate bookkeeping.
 
 ### The ledger (`public.schema_migrations`, mig 123 — adopted)
@@ -146,21 +142,24 @@ Merging a PR to `stage` **is** the staging deploy (`deploy-staging.yml` builds i
 Do this deliberately, not casually. **Sequence (never reorder):**
 
 ```
-1. Confirm stage is green and smoked.
-2. List every migration since the last prod promotion. Apply them to the PROD db
-   (pirhnklvtjjpuvbvibxf) — transaction, before/after counts — with per-action approval.
-   Include any manual steps (e.g. creating a private storage bucket).
-3. Verify prod DB: tables/policies/counts as expected.
-4. THEN promote code via a PR (you can NOT push to `main` directly — it's protected):
+1. Confirm stage is green and smoked. Skim the migrations since the last prod promotion
+   (`git diff origin/main..origin/stage -- supabase/migrations/`) and review them in the PR —
+   you approve them at step 4, so know what they do (before/after counts, additive, rollback line).
+2. Promote code via a PR (you can NOT push to `main` directly — it's protected):
       gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
    Wait for CI green + **1 approval** (from another admin), then merge it (use a **merge commit** —
-   main keeps stage's individual commits; do not squash the whole promotion). The push to `main`
-   auto-builds + deploys prod. Watch `gh run list`.
-5. Post-deploy: hit prod, confirm the feature + no 500s. Check `docker logs leads-crm`.
-6. Update docs/SESSION-LOG.md: what shipped, which migs are now on prod.
+   main keeps stage's individual commits; do not squash the whole promotion).
+3. The push to `main` runs the prod deploy. If the promotion carries migration file(s), it
+   **pauses at "Apply Pending Migrations" for a required-reviewer approval** (`production-db`
+   environment). Review the pending list in the job log, then approve → it applies to the prod
+   DB **before** the container swaps, then deploys. Code-only promotions skip this with no pause.
+   Watch `gh run list`.
+4. Post-deploy: hit prod, confirm the feature + no 500s. Check `docker logs leads-crm`.
+   `scripts/migrate-status.sh prod` should read 0 pending.
+5. Update docs/SESSION-LOG.md: what shipped, which migs are now on prod.
 ```
 
-- **Coupled changes** (code needs schema): step 2 **before** step 4, always.
+- **Manual steps the runner can't do** (e.g. creating a private storage bucket, a data backfill outside `supabase/migrations/`, or an out-of-band emergency change): apply those to the prod DB by hand **before** promoting, with per-action approval + before/after counts.
 - **`main` is protected**: promotion is always a `stage → main` PR with 1 approval — no `git push origin main`, no `git merge && push`. Merge it as a **merge commit** (not squash) so each feature stays visible on `main`.
 - Never run a bare `docker compose` in the prod dir — there's a stray dev `docker-compose.yml` there that clobbers prod. The workflows use `-f docker-compose.prod.yml`; you should too if you ever touch the box.
 
