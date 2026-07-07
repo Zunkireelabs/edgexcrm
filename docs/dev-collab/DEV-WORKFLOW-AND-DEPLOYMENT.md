@@ -38,6 +38,16 @@ If you're an AI session: you may apply migrations to **stage** and verify. You m
 
 **For your Claude/AI session:** same rules. It branches from the latest `origin/stage`, opens a PR to `stage`, waits for green CI, squash-merges; it never pushes to `stage`/`main` directly, never merges to `main` without a stage→main PR + approval, and never touches prod without an explicit per-action "go." If your Claude proposes `git push origin stage/main`, a merge-commit into stage, or skipping "Update branch," it's wrong — stop it.
 
+### ⚡ Two more CI guards added (2026-07-07) — after the "#140 promotion" incident
+
+A real promotion nearly broke because of two latent problems; both are now caught by CI so they can't recur silently. Read the one-paragraph post-mortem so you understand *why*:
+
+> Promoting #140 surfaced that migrations **124/126/127 had been hand-applied to both DBs but shipped without their self-record line** — so the ledger sat at 123 while the schema was at 127. The auto-migrate runner then saw all three as "pending" and would have re-run them; **124's unguarded `CREATE POLICY` fails on re-run → fail-closed → blocked deploy.** Separately, a feature (#138) had been merged **straight to `main`**, diverging main from stage, so a blind `stage→main` promotion hit conflicts. Both were reconciled by hand; these two guards stop the class of bug.
+
+- **Migration Guard** (`scripts/check-migrations.sh`, runs on every PR): every migration file numbered **≥ 123** that your PR adds/edits **must** contain its self-record `INSERT INTO public.schema_migrations (version) VALUES ('<its exact filename>') ON CONFLICT (version) DO NOTHING;`. Missing it fails the PR. Run it locally: `BASE_REF=origin/stage scripts/check-migrations.sh` (or `--all` to audit the whole tree).
+- **Promotion Source Guard** (runs on every PR): a PR **into `main`** may only come from **`stage`** or a **`promote/*`** branch. This blocks the direct-to-main feature merge that diverged the branches. Feature work goes to stage first — always.
+- **Never hand-apply a migration to prod out-of-band as the normal path.** The `production-db` gate in the deploy *is* the apply mechanism now. Out-of-band `psql`/MCP application is for genuine emergencies only, and if you do it you **must** run the migration's own self-record `INSERT` in the same session (or the ledger drifts — that's exactly what caused the incident above).
+
 ---
 
 ## 1. Why this doc exists (the failure modes it prevents)
@@ -49,6 +59,8 @@ If you're an AI session: you may apply migrations to **stage** and verify. You m
 | "We applied migration N but it's not there." | **Duplicate migration number** or no record of what's applied where — no ledger. | 4, § Migrations |
 | "Rollback took prod down / brought back an old bug / broke the schema." | `rollback.yml` uses the wrong compose file, rebuilds on the slow box, detaches HEAD, and never rolls back the DB. | 9, § Rollback |
 | "Stage and prod behave differently." | A migration or a `.env`/compose pointer was changed in only one environment. | 5, § Environments |
+| "The next deploy's migrate step failed / a migration keeps re-running." | A migration shipped **without its self-record line** (or was hand-applied without recording) → ledger drift → runner re-runs it → a non-idempotent statement (e.g. unguarded `CREATE POLICY`) errors, fail-closed. | Migration Guard CI, § Migrations |
+| "Promoting stage→main hit conflicts / main had a feature stage never saw." | A feature was merged **straight to `main`**, diverging the branches. | Promotion Source Guard CI, rule 1 |
 
 ---
 
@@ -110,12 +122,13 @@ Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and pro
 ### Authoring
 - **Number:** `ls supabase/migrations/ | sort` → take `<highest + 1>`. **Never reuse a number** (historical dupes `110_*`/`112_*` exist from before this rule — don't add more).
 - **Shape:** wrap in `BEGIN; … COMMIT;`. **Additive only** (add tables/columns/policies). Include a header comment with: what it does, expected **before/after row counts**, and a **rollback** line.
-- **Self-record in the ledger (required).** End every migration, inside the transaction, with:
+- **Self-record in the ledger (required — CI-enforced).** End every migration, inside the transaction, with:
   ```sql
   INSERT INTO public.schema_migrations (version) VALUES ('NNN_name.sql')
     ON CONFLICT (version) DO NOTHING;
   ```
-  Set the string to the file's exact name. This is how the ledger stays true no matter who applies it or with which tool.
+  Set the string to the file's exact name. This is how the ledger stays true no matter who applies it or with which tool. **The Migration Guard CI check fails your PR if it's missing** (see the 2026-07-07 post-mortem above) — this is not optional.
+- **Every statement must be idempotent (safe to re-run).** The auto-migrate runner can re-encounter a migration; a non-idempotent statement then errors and, fail-closed, blocks the deploy. Use `CREATE TABLE/INDEX IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`, guarded `UPDATE`s, and — because policies have no `IF NOT EXISTS` — `DROP POLICY IF EXISTS "p" ON t; CREATE POLICY "p" …`. (Mig 124's unguarded `CREATE POLICY` was the concrete bug.)
 - **New tenant-owned table?** `tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE` + RLS policies (`get_user_tenant_ids()` for SELECT, `is_tenant_admin(tenant_id)` for mutations). See `CLAUDE.md` § Tenant Isolation.
 - **Editing a SHARED object** (a view, a `SECURITY DEFINER` function, an RLS policy on an existing table) is the DB equivalent of a shared-file conflict — two devs `CREATE OR REPLACE`-ing the same function out of order silently reverts one. Flag it, coordinate, and note it in the PR.
 
@@ -127,7 +140,7 @@ Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and pro
 ### The ledger (`public.schema_migrations`, mig 123 — adopted)
 Each DB has a `schema_migrations(version TEXT PRIMARY KEY, applied_at, applied_by)` table; every migration self-records its filename (keyed on filename, so the historical `110`/`112` dupes are distinct rows). "What's applied on `<env>`?" is now `scripts/migrate-status.sh <env>` — not a guess. This closes the duplicate-number and split-brain classes.
 
-**Backfill note (per-DB, deliberate):** stage was backfilled with all present files when the ledger landed. **Prod is backfilled at the consolidated promotion, AFTER the held migrations are applied** — a blind insert-all on prod would wrongly mark held migs as applied. At promotion: apply mig 123 to prod → apply each held migration (they self-record) → backfill the remaining historical prod set → `migrate-status.sh prod` should then show 0 pending.
+**Backfill note (per-DB, deliberate):** stage was backfilled with all present files when the ledger landed. **Prod is backfilled at the consolidated promotion, AFTER the held migrations are applied** — a blind insert-all on prod would wrongly mark held migs as applied. At promotion: apply mig 123 to prod → apply each held migration (they self-record) → backfill the remaining historical prod set → `migrate-status.sh prod` should then show 0 pending. **As of 2026-07-07 both ledgers read `125/125, 0 pending`** (drift from 124/126/127 reconciled; those three now self-record). The Migration Guard keeps them in sync going forward.
 
 ---
 
@@ -160,7 +173,8 @@ Do this deliberately, not casually. **Sequence (never reorder):**
 ```
 
 - **Manual steps the runner can't do** (e.g. creating a private storage bucket, a data backfill outside `supabase/migrations/`, or an out-of-band emergency change): apply those to the prod DB by hand **before** promoting, with per-action approval + before/after counts.
-- **`main` is protected**: promotion is always a `stage → main` PR with 1 approval — no `git push origin main`, no `git merge && push`. Merge it as a **merge commit** (not squash) so each feature stays visible on `main`.
+- **`main` is protected**: promotion is always a `stage → main` PR with 1 approval — no `git push origin main`, no `git merge && push`. Merge it as a **merge commit** (not squash) so each feature stays visible on `main`. **The PR into `main` may only come from `stage` or a `promote/*` branch** (Promotion Source Guard enforces this) — never a `feature/*` branch straight to main.
+- **If stage has drifted from main** (someone hand-merged to main, or a prior promotion was squashed and lost ancestry), reconcile before promoting: cut a `promote/stage-to-main-<date>` branch from `origin/stage`, `git merge origin/main` into it, resolve conflicts **hunk-by-hunk** keeping stage's superset, build, and open **that** branch → `main`. This restores main as an ancestor so the promotion is conflict-free (the working precedent is the 2026-07-07 #143 promotion).
 - Never run a bare `docker compose` in the prod dir — there's a stray dev `docker-compose.yml` there that clobbers prod. The workflows use `-f docker-compose.prod.yml`; you should too if you ever touch the box.
 
 ### 6c. Hotfix straight to prod
