@@ -7,6 +7,7 @@ export const DESTINATIONS = [
   "Canada",
   "Finland",
   "India",
+  "Nepal",
   "Europe",
   "Malta",
   "France",
@@ -20,6 +21,9 @@ export const FIELDS_OF_STUDY = [
   "Medical & Pharmacy",
   "Allied Health Sciences",
   "Humanities & Social Sciences",
+  "Law & Legal Studies",
+  "Architecture & Design",
+  "Applied Sciences",
   "Not decided",
 ] as const;
 

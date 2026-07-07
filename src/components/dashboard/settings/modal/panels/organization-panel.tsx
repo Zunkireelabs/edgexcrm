@@ -6,6 +6,8 @@ import { IndustryEntitiesManager } from "@/components/dashboard/settings/industr
 import { BranchesManager } from "@/components/dashboard/settings/branches-manager";
 import { TenantLocaleManager } from "@/components/dashboard/settings/tenant-locale-manager";
 import { PartnerCollegesManager } from "@/components/dashboard/settings/partner-colleges-manager";
+import { CountriesManager } from "@/components/dashboard/settings/countries-manager";
+import { CoursesManager } from "@/components/dashboard/settings/courses-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -43,6 +45,8 @@ export function OrganizationPanel() {
             <IndustryEntitiesManager industry={industry} initialEntities={entities} />
           )}
           {hasPartnerColleges && <PartnerCollegesManager />}
+          {hasPartnerColleges && <CountriesManager />}
+          {hasPartnerColleges && <CoursesManager />}
           <BranchesManager maxBranches={maxBranches} />
           <TenantLocaleManager
             timezone={bootstrapData?.timezone ?? "Asia/Kathmandu"}
