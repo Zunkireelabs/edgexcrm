@@ -109,13 +109,35 @@ Leads progress through 4 main stages. Each stage has a dedicated position that w
 
 ## Walk-in Check-in Shortcut
 
-A lead can skip Pre-qualified and Qualified entirely:
+A lead can skip Pre-qualified and Qualified entirely via the Check-In page (`/check-in`).
 
-- Lead executive / branch manager does check-in and selects a counselor → lead lands directly in **Prospects** at status `Prospect Ready`, assigned to that counselor.
-- Lead executive does check-in, no counselor selected → lead lands in **Qualified** at status `New Lead`, assigned to that lead-executive.
-- Lead executive can assign a counselor later from the Check-in History panel — the lead then auto-promotes to **Prospects**.
+### New walk-in (lead not yet in system)
 
-**Important:** The counselor assignment must be set **before or at** check-in time for the auto-promotion to fire. If assigned via the history panel after the fact, promotion still triggers on the next check-in or reassignment.
+Use the **Add Lead & Check In** form (appears automatically when no existing lead is found).
+
+| Tag | "Assigned To" dropdown shows | Stage after check-in |
+|-----|------------------------------|----------------------|
+| Student | Counselors (same branch, or branch-unassigned) | **Prospects** — if a counselor is selected |
+| Parent | Counselors (same branch, or branch-unassigned) | **Prospects** — if a counselor is selected |
+| Other | All branch members (all roles) | **Contacts page only** — not placed in pipeline |
+
+If no counselor is selected for a student/parent, the lead stays at the default intake stage (Pre-qualified / New Lead) and must be processed through the normal flow.
+
+### Existing lead check-in
+
+Search by email or phone → click **View Details** → right panel opens.
+
+- **Meet with** dropdown shows all branch members (any role) — select who the visitor is meeting.
+- If the selected person is a counselor → lead auto-promotes to **Prospects** at status `Prospect Ready`.
+- If no one selected or the selected person is not a counselor → no auto-promotion; lead stays at its current stage.
+- Click **Check In** to record the visit.
+
+### Check-in History panel — post-check-in assignment
+
+The **Assigned To / Meet with** column in the history list allows reassigning after check-in:
+
+- **Student / Parent** rows → "Assigned To" — shows counselors only. Selecting a counselor triggers auto-promotion to **Prospects** (if not already there).
+- **Other** rows → "Meet with" — shows all branch members. Selection records who they met; no stage change.
 
 ---
 
@@ -123,9 +145,10 @@ A lead can skip Pre-qualified and Qualified entirely:
 
 Walk-in visitors tagged as **"other"** (non-student, non-parent) are **not placed in the lead pipeline**. They do not appear in Pre-qualified, Qualified, Prospects, or Applications.
 
-- Stored as leads in the DB but with no `list_id` / stage assignment.
+- Stored as leads in the DB but with no stage assignment.
 - Visible only in the **Contacts page** (`/contacts`), accessible to **admin and owner only**.
 - Check-in history is recorded normally; notes can be added from the Contacts detail view.
+- The **Meet with** dropdown shows all branch members (not counselor-only) since "other" visitors may be meeting any staff member.
 
 ---
 
