@@ -404,7 +404,7 @@ export function LeadListsManager() {
                   }
                 />
                 <label htmlFor="access-all" className="text-sm cursor-pointer">
-                  All positions
+                  All roles
                 </label>
               </div>
               {form.accessMode === "allow" && (
