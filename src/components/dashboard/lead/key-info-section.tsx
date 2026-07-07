@@ -27,7 +27,6 @@ import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
-import { ListStepper } from "@/components/dashboard/leads/list-stepper";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -48,6 +47,7 @@ interface TeamMember {
   email: string;
   name?: string | null;
   canEditLeads?: boolean;
+  position_name?: string | null;
 }
 
 interface LeadDraftSubset {
@@ -148,6 +148,16 @@ export function KeyInfoSection({
       : [...baseAssignable, ...teamMembers.filter((m) => m.user_id === assignedTo)];
   const entityLabel = industry?.entity_type_singular || "Entity";
 
+  const currentLeadList = [...(activeLeadLists ?? []), ...(leadLists ?? [])].find(
+    (l) => l.id === lead.list_id
+  );
+  const isInIntakeList = currentLeadList?.is_intake ?? false;
+
+  const PIPELINE_STAGE_SLUGS = ["pre-qualified", "qualified", "prospects"];
+  const stageListOptions = (leadLists ?? []).filter((l) =>
+    PIPELINE_STAGE_SLUGS.includes(l.slug)
+  );
+
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
     ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
@@ -174,7 +184,8 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* Status (pipeline stage) */}
+          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list */}
+          {!isInIntakeList && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
@@ -209,23 +220,40 @@ export function KeyInfoSection({
               </Badge>
             )}
           </div>
+          )}
 
-          {/* List — any tenant with lead-lists; legacy Lead Type toggle stays education-only */}
+          {/* Stage (lead list) — dropdown limited to Pre-qualified / Qualified / Prospects */}
           {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
-              {leadLists && leadLists.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-                <ListStepper
-                  currentListId={(lead as { list_id?: string | null }).list_id ?? null}
-                  activeLists={activeLeadLists ?? leadLists}
-                  accessibleLists={leadLists}
-                  industryId={industryId}
-                  onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
-                  onQualify={onQualify}
-                  nextPositionMembers={nextPositionMembers}
-                />
+              {stageListOptions.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
+                <Select
+                  value={lead.list_id ?? ""}
+                  onValueChange={(listId) => {
+                    const selected = stageListOptions.find((l) => l.id === listId);
+                    if (
+                      selected?.slug === "qualified" &&
+                      isInIntakeList &&
+                      industryId === "education_consultancy" &&
+                      onQualify
+                    ) {
+                      onQualify();
+                    } else {
+                      onListChange(listId);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-sm">
+                    <SelectValue placeholder="Select stage" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {stageListOptions.map((l) => (
+                      <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (
@@ -271,7 +299,7 @@ export function KeyInfoSection({
                               {getInitials(m.email)}
                             </span>
                           </div>
-                          <span className="truncate">{m.name || m.email.split("@")[0]}</span>
+                          <span className="truncate">{m.position_name || m.name || m.email.split("@")[0]}</span>
                         </div>
                       </SelectItem>
                     ))}
@@ -286,7 +314,7 @@ export function KeyInfoSection({
                         {getInitials(assignedMember.email)}
                       </span>
                     </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.email.split("@")[0]}</span>
+                    <span className="text-sm font-medium truncate">{assignedMember.position_name || assignedMember.name || assignedMember.email.split("@")[0]}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
