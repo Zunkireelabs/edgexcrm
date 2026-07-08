@@ -8,7 +8,7 @@ import { SettingsModalProvider } from "@/contexts/settings-modal-context";
 import { GlobalSearchProvider } from "@/contexts/global-search-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { canAccessList } from "@/lib/api/permissions";
+import { canAccessList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
 import type { LeadList } from "@/types/database";
@@ -80,7 +80,10 @@ export default async function DashboardLayout({
       : [...tenantData.permissions.allowedNavKeys];
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
-  const selectedBranchId = branchCookieVal === "all" ? null : branchCookieVal;
+  const selectedBranchId = resolveEffectiveBranch(
+    branchCookieVal,
+    branches.map((b) => b.id),
+  );
 
   const navIndex = buildNavIndex({
     industrySidebarItems,

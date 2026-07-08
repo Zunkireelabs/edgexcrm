@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getBranchIds } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
-import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList } from "@/lib/api/permissions";
+import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import {
@@ -315,14 +316,20 @@ async function handlePost(request: NextRequest) {
   // "all" / "overall" / empty = Overall view → treat as no active branch.
   const cookieStore = await cookies();
   const edgexBranchVal = cookieStore.get("edgex_branch")?.value ?? null;
-  const cookieBranchId =
-    edgexBranchVal && edgexBranchVal !== "all" && edgexBranchVal !== "overall"
-      ? edgexBranchVal
-      : null;
 
   // Optional session auth for creator's branch affiliation (step 3).
   // Dashboard callers have a session; unauthenticated / widget callers return null.
   const dashAuth = await authenticateRequest();
+
+  // Validate the cookie against the caller's real tenant branches — a stale cookie
+  // (leftover from another tenant / a deleted branch) must not silently attribute
+  // the new lead to the wrong branch. No session (widget/unauthenticated callers) → no
+  // tenant context to validate against, so the cookie is ignored either way.
+  const validBranchIds =
+    dashAuth && dashAuth.entitlements.maxBranches > 1
+      ? await getBranchIds(dashAuth.tenantId)
+      : [];
+  const cookieBranchId = dashAuth ? resolveEffectiveBranch(edgexBranchVal, validBranchIds) : null;
 
   // Precedence: 1. explicit body branch_id  2. active branch cookie  3. creator's branch
   //             4. tenant default branch (is_default = true)

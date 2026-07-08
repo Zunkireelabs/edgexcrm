@@ -9,6 +9,140 @@ export interface FilterOption {
   description?: string;
 }
 
+export interface FilterOptionListProps {
+  options: FilterOption[];
+  multiple: boolean;
+  value: string | string[];
+  searchable?: boolean;
+  onSelectSingle: (value: string) => void;
+  onSelectMulti: (value: string) => void;
+  onClearMulti?: () => void;
+}
+
+/** Shared option-list body (search + checkbox/radio rows) used by both
+ * FilterDropdown and FilterMenu's level-2 drill-in — single source of truth. */
+export function FilterOptionList({
+  options,
+  multiple,
+  value,
+  searchable = true,
+  onSelectSingle,
+  onSelectMulti,
+  onClearMulti,
+}: FilterOptionListProps) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (searchable && searchInputRef.current) {
+      const timer = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [searchable]);
+
+  const filteredOptions = options.filter((opt) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      opt.label.toLowerCase().includes(query) ||
+      opt.description?.toLowerCase().includes(query)
+    );
+  });
+
+  return (
+    <>
+      {/* Search input */}
+      {searchable && (
+        <div className="p-2 border-b border-gray-100">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              placeholder="Search..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Options list */}
+      <div className="max-h-56 overflow-y-auto py-1">
+        {filteredOptions.length === 0 ? (
+          <div className="px-3 py-2 text-xs text-gray-500 text-center">
+            No results found
+          </div>
+        ) : (
+          filteredOptions.map((option) => {
+            const isSelected = multiple
+              ? (value as string[]).includes(option.value)
+              : (value as string) === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() =>
+                  multiple ? onSelectMulti(option.value) : onSelectSingle(option.value)
+                }
+                className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
+              >
+                {/* Selection indicator — square checkbox for multi-select, circle radio for single-select */}
+                {multiple ? (
+                  <div
+                    className={`mt-0.5 w-4 h-4 rounded-[4px] border-2 flex items-center justify-center shrink-0 ${
+                      isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-400"
+                    }`}
+                  >
+                    {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+                  </div>
+                ) : (
+                  <div
+                    className={`
+                      mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0
+                      ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
+                    `}
+                  >
+                    {isSelected && <Check className="w-2 h-2 text-white" />}
+                  </div>
+                )}
+
+                {/* Option content */}
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs font-medium text-[#0f0f10]">
+                    {option.label}
+                  </div>
+                  {option.description && (
+                    <div className="text-[11px] text-[#787871] mt-0.5 truncate">
+                      {option.description}
+                    </div>
+                  )}
+                </div>
+              </button>
+            );
+          })
+        )}
+      </div>
+
+      {/* Clear button for multi-select when selections exist */}
+      {multiple && (value as string[]).length > 0 && onClearMulti && (
+        <div className="px-3 py-2 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={onClearMulti}
+            className="text-xs text-muted-foreground hover:text-foreground underline"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 type FilterDropdownProps =
   | {
       label: string;
@@ -41,9 +175,7 @@ export function FilterDropdown({
   const multiple = (rest as { multiple?: boolean }).multiple === true;
 
   const [isOpen, setIsOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Derived display label and active state
   let displayLabel: string;
@@ -66,20 +198,11 @@ export function FilterDropdown({
     isActive = single !== "all" && single !== "__all__";
   }
 
-  const filteredOptions = options.filter((opt) => {
-    const query = searchQuery.toLowerCase();
-    return (
-      opt.label.toLowerCase().includes(query) ||
-      opt.description?.toLowerCase().includes(query)
-    );
-  });
-
   // Close on outside click
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
-        setSearchQuery("");
       }
     }
     if (isOpen) {
@@ -88,23 +211,12 @@ export function FilterDropdown({
     }
   }, [isOpen]);
 
-  // Focus search on open
-  useEffect(() => {
-    if (isOpen && searchable && searchInputRef.current) {
-      const timer = setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen, searchable]);
-
   // Escape key
   useEffect(() => {
     if (!isOpen) return;
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsOpen(false);
-        setSearchQuery("");
       }
     }
     document.addEventListener("keydown", handleKeyDown);
@@ -114,7 +226,6 @@ export function FilterDropdown({
   function handleSelectSingle(optionValue: string) {
     (onChange as (v: string) => void)(optionValue);
     setIsOpen(false);
-    setSearchQuery("");
   }
 
   function handleSelectMulti(optionValue: string) {
@@ -152,95 +263,15 @@ export function FilterDropdown({
       {/* Dropdown Panel */}
       {isOpen && (
         <div className="absolute top-full left-0 mt-1.5 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-          {/* Search input */}
-          {searchable && (
-            <div className="p-2 border-b border-gray-100">
-              <div className="relative">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
-                <input
-                  ref={searchInputRef}
-                  type="text"
-                  placeholder="Search..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-gray-200 rounded-full focus:outline-none focus:ring-1 focus:ring-gray-300 focus:border-transparent"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Options list */}
-          <div className="max-h-56 overflow-y-auto py-1">
-            {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-xs text-gray-500 text-center">
-                No results found
-              </div>
-            ) : (
-              filteredOptions.map((option) => {
-                const isSelected = multiple
-                  ? (value as string[]).includes(option.value)
-                  : (value as string) === option.value;
-
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() =>
-                      multiple
-                        ? handleSelectMulti(option.value)
-                        : handleSelectSingle(option.value)
-                    }
-                    className="w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors hover:bg-[#0000170b]"
-                  >
-                    {/* Selection indicator — square checkbox for multi-select, circle radio for single-select */}
-                    {multiple ? (
-                      <div
-                        className={`mt-0.5 w-4 h-4 rounded-[4px] border-2 flex items-center justify-center shrink-0 ${
-                          isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-400"
-                        }`}
-                      >
-                        {isSelected && <Check className="w-2.5 h-2.5 text-white" />}
-                      </div>
-                    ) : (
-                      <div
-                        className={`
-                          mt-0.5 w-3.5 h-3.5 rounded-full border-2 flex items-center justify-center shrink-0
-                          ${isSelected ? "border-[#0f0f10] bg-[#0f0f10]" : "border-gray-300"}
-                        `}
-                      >
-                        {isSelected && <Check className="w-2 h-2 text-white" />}
-                      </div>
-                    )}
-
-                    {/* Option content */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-[#0f0f10]">
-                        {option.label}
-                      </div>
-                      {option.description && (
-                        <div className="text-[11px] text-[#787871] mt-0.5 truncate">
-                          {option.description}
-                        </div>
-                      )}
-                    </div>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          {/* Clear button for multi-select when selections exist */}
-          {multiple && (value as string[]).length > 0 && (
-            <div className="px-3 py-2 border-t border-gray-100">
-              <button
-                type="button"
-                onClick={() => (onChange as (v: string[]) => void)([])}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Clear
-              </button>
-            </div>
-          )}
+          <FilterOptionList
+            options={options}
+            multiple={multiple}
+            value={value}
+            searchable={searchable}
+            onSelectSingle={handleSelectSingle}
+            onSelectMulti={handleSelectMulti}
+            onClearMulti={() => (onChange as (v: string[]) => void)([])}
+          />
         </div>
       )}
     </div>

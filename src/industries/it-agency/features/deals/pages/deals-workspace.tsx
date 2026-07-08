@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Plus, LayoutGrid, List, Search, Download, X, ArrowUpDown } from "lucide-react";
+import { Plus, LayoutGrid, List, Search, Download, ArrowUpDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { DealBoard } from "../components/deal-board";
 import { DealsTable } from "../components/deals-table";
 import { AddDealSheet } from "../components/add-deal-sheet";
@@ -226,8 +227,51 @@ export function DealsWorkspace({
     router.refresh();
   }, [router]);
 
+  const filterDefs: FilterDef[] = [
+    {
+      id: "owner",
+      label: "Owner",
+      multiple: false,
+      searchable: true,
+      defaultValue: "all",
+      value: ownerFilter,
+      onChange: setOwnerFilter,
+      options: ownerOptions,
+    },
+    {
+      id: "type",
+      label: "Deal Type",
+      multiple: false,
+      searchable: false,
+      defaultValue: "all",
+      value: typeFilter,
+      onChange: setTypeFilter,
+      options: typeOptions,
+    },
+    {
+      id: "priority",
+      label: "Priority",
+      multiple: false,
+      searchable: false,
+      defaultValue: "all",
+      value: priorityFilter,
+      onChange: setPriorityFilter,
+      options: priorityOptions,
+    },
+    {
+      id: "created",
+      label: "Created",
+      multiple: false,
+      searchable: false,
+      defaultValue: "all",
+      value: dateFilter,
+      onChange: setDateFilter,
+      options: DATE_OPTIONS,
+    },
+  ];
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-3">
+    <div className="flex flex-col flex-1 min-h-0 gap-1">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 shrink-0">
         <div>
@@ -258,7 +302,7 @@ export function DealsWorkspace({
       </div>
 
       {/* Filter toolbar */}
-      <div className="flex flex-wrap items-center gap-2 shrink-0 bg-card border rounded-lg px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 shrink-0 px-3 py-2">
         {/* Search */}
         <div className="relative w-52">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
@@ -271,47 +315,7 @@ export function DealsWorkspace({
           />
         </div>
 
-        <FilterDropdown
-          label="Owner"
-          value={ownerFilter}
-          onChange={setOwnerFilter}
-          options={ownerOptions}
-        />
-
-        <FilterDropdown
-          label="Deal Type"
-          value={typeFilter}
-          onChange={setTypeFilter}
-          options={typeOptions}
-          searchable={false}
-        />
-
-        <FilterDropdown
-          label="Priority"
-          value={priorityFilter}
-          onChange={setPriorityFilter}
-          options={priorityOptions}
-          searchable={false}
-        />
-
-        <FilterDropdown
-          label="Created"
-          value={dateFilter}
-          onChange={setDateFilter}
-          options={DATE_OPTIONS}
-          searchable={false}
-        />
-
-        {activeFilterCount > 0 && (
-          <button
-            type="button"
-            onClick={clearFilters}
-            className="inline-flex items-center gap-1 h-7 px-2 text-xs text-muted-foreground hover:text-foreground rounded-md border border-dashed border-muted-foreground/40 hover:border-foreground/40 transition-colors"
-          >
-            <X className="h-3 w-3" />
-            Clear ({activeFilterCount})
-          </button>
-        )}
+        <FilterMenu filters={filterDefs} activeCount={activeFilterCount} onClearAll={clearFilters} />
 
         <div className="flex-1" />
 
@@ -360,6 +364,12 @@ export function DealsWorkspace({
           </button>
         </div>
       </div>
+
+      {activeFilterCount > 0 && (
+        <div className="shrink-0">
+          <FilterChips filters={filterDefs} onClearAll={clearFilters} />
+        </div>
+      )}
 
       {/* Content */}
       {view === "board" ? (

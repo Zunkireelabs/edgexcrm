@@ -8,12 +8,13 @@ import {
   getPipelines,
   getLeadListsByTenant,
   getLeads,
+  getBranchIds,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineSelector } from "@/components/pipeline/PipelineSelector";
 import { ListFunnelBoard } from "@/components/pipeline/ListFunnelBoard";
-import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
@@ -34,11 +35,14 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     cookies(),
   ]);
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+  const validBranchIds =
+    tenantData.entitlements.maxBranches > 1 ? await getBranchIds(tenantData.tenant.id) : [];
+  const effectiveBranch = resolveEffectiveBranch(branchCookieVal, validBranchIds);
 
   const pipelineScope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
   // Admin cookie override: all-scope users can filter by a specific branch from the header
-  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
-    pipelineScope.branchId = branchCookieVal;
+  if (tenantData.permissions.leadScope === "all" && effectiveBranch) {
+    pipelineScope.branchId = effectiveBranch;
   }
 
   // Tenants with the Lead Lists feature get a read-only Kanban keyed off list

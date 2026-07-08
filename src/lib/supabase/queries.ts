@@ -618,6 +618,12 @@ export async function getBranches(tenantId: string): Promise<Branch[]> {
   return (data as Branch[]) ?? [];
 }
 
+export async function getBranchIds(tenantId: string): Promise<string[]> {
+  const supabase = await createClient();
+  const { data } = await supabase.from("branches").select("id").eq("tenant_id", tenantId);
+  return (data ?? []).map((b) => b.id as string);
+}
+
 export async function getLeadChecklists(leadId: string): Promise<LeadChecklist[]> {
   const supabase = await createClient();
   const { data, error } = await supabase
