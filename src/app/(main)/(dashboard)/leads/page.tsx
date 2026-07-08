@@ -159,10 +159,7 @@ export default async function LeadsPage({
   );
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
   const roleMap = Object.fromEntries(
-    teamMembers.map((m) => [
-      m.user_id,
-      m.position_name ? `${m.name ?? m.email} (${m.position_name})` : (m.name ?? m.email),
-    ])
+    teamMembers.map((m) => [m.user_id, m.position_name ?? m.role])
   );
   const positionSlugMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.position_slug])
