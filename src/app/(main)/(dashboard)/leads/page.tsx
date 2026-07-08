@@ -158,6 +158,15 @@ export default async function LeadsPage({
     teamMembers.filter((m) => m.branch_id).map((m) => [m.user_id, m.branch_id as string])
   );
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
+  const roleMap = Object.fromEntries(
+    teamMembers.map((m) => [
+      m.user_id,
+      m.position_name ? `${m.name ?? m.email} (${m.position_name})` : (m.name ?? m.email),
+    ])
+  );
+  const positionSlugMap = Object.fromEntries(
+    teamMembers.map((m) => [m.user_id, m.position_slug])
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -253,6 +262,8 @@ export default async function LeadsPage({
         activeListSlug={activeList?.slug ?? null}
         hasListPipeline={hasListPipeline}
         isTeamScoped={tenantData.permissions.leadScope === "team"}
+        roleMap={roleMap}
+        positionSlugMap={positionSlugMap}
       />
     </div>
   );
