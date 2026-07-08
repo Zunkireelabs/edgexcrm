@@ -1215,10 +1215,10 @@ export function LeadsTable({
   return (
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
-      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
+      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
 
       {/* Enhanced Toolbar - matching pipeline style */}
-      <div className="shrink-0 bg-card rounded-lg border">
+      <div className="shrink-0 bg-card">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}
