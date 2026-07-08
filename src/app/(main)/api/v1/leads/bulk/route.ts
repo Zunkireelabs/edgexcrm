@@ -221,8 +221,10 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Build bulk update payload
+  const now = new Date().toISOString();
   const bulkUpdatePayload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+    updated_at: now,
+    last_activity_at: now,
   };
   if (body.assigned_to !== undefined) bulkUpdatePayload.assigned_to = body.assigned_to ?? null;
   if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
