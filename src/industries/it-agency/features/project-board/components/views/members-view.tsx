@@ -231,7 +231,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                       {ownedProjects.map((p) => (
                         <div key={p.id} className="flex items-center gap-3 py-1 min-w-0">
                           <a
-                            href={`/time-tracking/projects/${p.id}`}
+                            href={`/projects/${p.id}`}
                             className="text-sm text-[#0f0f10] hover:underline font-medium truncate flex-1 min-w-0"
                           >
                             {p.name}
@@ -268,7 +268,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
                               <a
                                 href={
                                   t.projects
-                                    ? `/time-tracking/projects/${t.projects.id}`
+                                    ? `/projects/${t.projects.id}`
                                     : "#"
                                 }
                                 className="text-sm text-[#0f0f10] hover:underline font-medium truncate flex-1 min-w-0"
