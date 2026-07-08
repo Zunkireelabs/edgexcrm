@@ -4,10 +4,10 @@ import { useRef, useEffect } from "react";
 import { Search, LayoutGrid, TableProperties, ListTodo, Users } from "lucide-react";
 import { TagMultiPicker } from "./tag-multi-picker";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FilterDropdown, type FilterOption } from "@/components/ui/filter-dropdown";
+import { type FilterOption } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
 import type { Account, ProjectStatus, TaskStatus, TaskPriority } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 import type { WorkspaceFilters } from "../hooks/use-workspace-filters";
@@ -167,14 +167,6 @@ export function WorkspaceHeader({
   const isMembersView = filters.view === "members";
   const isTasksOrMembersView = isTasksView || isMembersView;
 
-  const hasActiveFilters =
-    !!filters.q ||
-    filters.account !== ALL_SENTINEL ||
-    filters.owner !== ALL_SENTINEL ||
-    filters.statuses.length > 0 ||
-    (isTasksOrMembersView && filters.assignee !== ALL_SENTINEL) ||
-    (isTasksOrMembersView && filters.due !== ALL_SENTINEL);
-
   const activeFiltersCount = [
     !!filters.q,
     filters.account !== ALL_SENTINEL,
@@ -184,8 +176,69 @@ export function WorkspaceHeader({
     isTasksOrMembersView && filters.due !== ALL_SENTINEL,
   ].filter(Boolean).length;
 
+  const filterDefs: FilterDef[] = [
+    {
+      id: "account",
+      label: "Account",
+      multiple: false,
+      defaultValue: ALL_SENTINEL,
+      value: filters.account,
+      onChange: (v: string) => onFilterChange({ account: v }),
+      options: accountOptions,
+    },
+    ...(isBoardOrTable || isMembersView
+      ? [
+          {
+            id: "owner",
+            label: "Owner",
+            multiple: false,
+            defaultValue: ALL_SENTINEL,
+            value: filters.owner,
+            onChange: (v: string) => onFilterChange({ owner: v }),
+            options: ownerOptions,
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(isBoardOrTable
+      ? [
+          {
+            id: "status",
+            label: "Status",
+            multiple: true,
+            searchable: false,
+            value: filters.statuses,
+            onChange: (next: string[]) => onFilterChange({ statuses: next as ProjectStatus[] }),
+            options: statusOptions,
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(isTasksOrMembersView
+      ? [
+          {
+            id: "assignee",
+            label: "Assignee",
+            multiple: false,
+            defaultValue: ALL_SENTINEL,
+            value: filters.assignee,
+            onChange: (v: string) => onFilterChange({ assignee: v }),
+            options: assigneeOptions,
+          } satisfies FilterDef,
+          {
+            id: "due",
+            label: "Due",
+            multiple: false,
+            searchable: false,
+            defaultValue: ALL_SENTINEL,
+            value: filters.due,
+            onChange: (v: string) => onFilterChange({ due: v }),
+            options: DUE_OPTIONS,
+          } satisfies FilterDef,
+        ]
+      : []),
+  ];
+
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-1">
       {/* Title row */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
@@ -215,8 +268,8 @@ export function WorkspaceHeader({
       </div>
 
       {/* Toolbar card */}
-      <div className="shrink-0 bg-card rounded-lg border">
-        {/* Top row: count + search + spacer */}
+      <div className="shrink-0 bg-card">
+        {/* Top row: count + search + spacer + Filters */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           <div className="text-sm font-medium text-muted-foreground shrink-0">
             {projectCount} {projectCount === 1 ? "Project" : "Projects"}
@@ -234,102 +287,32 @@ export function WorkspaceHeader({
             />
           </div>
           <div className="flex-1" />
-        </div>
-
-        {/* Divider */}
-        <div className="h-px bg-border" />
-
-        {/* Filter row */}
-        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-          {/* Account filter — all views */}
-          <FilterDropdown
-            label="Account"
-            value={filters.account}
-            onChange={(v) => onFilterChange({ account: v })}
-            options={accountOptions}
-          />
-
-          {/* Owner filter — Board, Table, Members */}
-          {(isBoardOrTable || isMembersView) && (
-            <FilterDropdown
-              label="Owner"
-              value={filters.owner}
-              onChange={(v) => onFilterChange({ owner: v })}
-              options={ownerOptions}
-            />
-          )}
-
-          {/* Status filter — Board + Table only */}
-          {isBoardOrTable && (
-            <FilterDropdown
-              label="Status"
-              multiple
-              value={filters.statuses}
-              onChange={(next) => onFilterChange({ statuses: next as ProjectStatus[] })}
-              options={statusOptions}
-              searchable={false}
-            />
-          )}
-
-          {/* Assignee filter — Tasks + Members */}
-          {isTasksOrMembersView && (
-            <FilterDropdown
-              label="Assignee"
-              value={filters.assignee}
-              onChange={(v) => onFilterChange({ assignee: v })}
-              options={assigneeOptions}
-            />
-          )}
-
-          {/* Due keyword — Tasks + Members */}
-          {isTasksOrMembersView && (
-            <FilterDropdown
-              label="Due"
-              value={filters.due}
-              onChange={(v) => onFilterChange({ due: v })}
-              options={DUE_OPTIONS}
-              searchable={false}
-            />
-          )}
-
-          {/* Show cancelled toggle — Board + Table only */}
-          {isBoardOrTable && (
-            <div className="flex items-center gap-1.5 ml-1">
-              <Checkbox
-                id="show-cancelled"
-                checked={filters.showCancelled}
-                onCheckedChange={(checked) => {
-                  const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
-                  if (!checked && filters.statuses.includes("cancelled")) {
-                    next.statuses = filters.statuses.filter((s) => s !== "cancelled");
-                  }
-                  onFilterChange(next);
-                }}
-              />
-              <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
-                Show cancelled
-              </Label>
-            </div>
-          )}
-
-          <div className="flex-1" />
-
-          {/* Active filters indicator */}
-          {hasActiveFilters && (
-            <div className="flex items-center gap-1.5">
-              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
-                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
-              </Badge>
-              <button
-                type="button"
-                onClick={onClearFilters}
-                className="text-xs text-muted-foreground hover:text-foreground underline"
-              >
-                Clear
-              </button>
-            </div>
+          {filterDefs.length > 0 && (
+            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={onClearFilters} />
           )}
         </div>
+
+        {/* Show cancelled toggle — Board + Table only */}
+        {isBoardOrTable && (
+          <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+            <Checkbox
+              id="show-cancelled"
+              checked={filters.showCancelled}
+              onCheckedChange={(checked) => {
+                const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
+                if (!checked && filters.statuses.includes("cancelled")) {
+                  next.statuses = filters.statuses.filter((s) => s !== "cancelled");
+                }
+                onFilterChange(next);
+              }}
+            />
+            <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
+              Show cancelled
+            </Label>
+          </div>
+        )}
+
+        {activeFiltersCount > 0 && <FilterChips filters={filterDefs} onClearAll={onClearFilters} />}
       </div>
 
       {/* Task status chips — Tasks view only */}
