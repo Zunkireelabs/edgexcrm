@@ -261,6 +261,7 @@ export default async function LeadsPage({
         isTeamScoped={tenantData.permissions.leadScope === "team"}
         roleMap={roleMap}
         positionSlugMap={positionSlugMap}
+        allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
       />
     </div>
   );
