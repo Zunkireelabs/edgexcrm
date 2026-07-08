@@ -532,7 +532,7 @@ export function PipelineBoard({
     return (
       <div className="flex flex-col flex-1 min-h-0 gap-1">
         {/* Toolbar skeleton */}
-        <div className="shrink-0 bg-card p-3">
+        <div className="shrink-0 p-3">
           <div className="flex items-center gap-3">
             <div className="h-7 w-60 bg-muted rounded animate-pulse" />
             <div className="h-7 w-32 bg-muted rounded animate-pulse" />
@@ -649,7 +649,7 @@ export function PipelineBoard({
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-1">
       {/* Enhanced Toolbar */}
-      <div className="shrink-0 bg-card">
+      <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}

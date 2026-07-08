@@ -207,7 +207,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
         ) : (
           <>
             {/* Toolbar card */}
-            <div className="shrink-0 bg-card">
+            <div className="shrink-0">
               {/* Top Row: count + search + spacer + Filters + Sort + New Account */}
               <div className="flex flex-wrap items-center gap-3 p-3">
                 <div className="text-sm font-medium text-muted-foreground shrink-0">

@@ -188,7 +188,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
         <h1 className="shrink-0 text-lg font-bold mb-4">Contacts</h1>
 
         {/* Enhanced Toolbar - matching leads style */}
-        <div className="shrink-0 bg-card">
+        <div className="shrink-0">
           {/* Top Row: count + search + spacer + Filters + Sort + Add */}
           <div className="flex flex-wrap items-center gap-3 p-3">
             {/* Contact count */}

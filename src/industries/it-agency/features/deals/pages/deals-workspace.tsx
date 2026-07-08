@@ -302,7 +302,7 @@ export function DealsWorkspace({
       </div>
 
       {/* Filter toolbar */}
-      <div className="flex flex-wrap items-center gap-2 shrink-0 bg-card px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2 shrink-0 px-3 py-2">
         {/* Search */}
         <div className="relative w-52">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />

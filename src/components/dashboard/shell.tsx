@@ -371,7 +371,7 @@ export function DashboardShell({
 
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#fafafa]">
+    <div className="flex flex-col h-full bg-sidebar-bg">
       {/* EdgeX product brand wordmark */}
       <div className="px-5 py-3 h-[52px] flex items-center">
         <span className="text-lg font-semibold text-gray-900 tracking-tight">
@@ -386,11 +386,11 @@ export function DashboardShell({
       <div className="px-3 pb-2">
         <Tabs value={navMode} onValueChange={handleNavModeChange}>
           <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
-            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-white">
+            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
               <LayoutGrid className="w-3.5 h-3.5" />
               Ops
             </TabsTrigger>
-            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-white">
+            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
               <Bot className="w-3.5 h-3.5" />
               Orca
             </TabsTrigger>
@@ -700,16 +700,16 @@ export function DashboardShell({
   );
 
   return (
-    <div className="flex h-screen bg-[#fafafa]">
+    <div className="flex h-screen bg-sidebar-bg">
       {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa] print:hidden">
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-sidebar-bg print:hidden">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
-      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#fafafa]">
+      <div className="flex flex-col flex-1 min-w-0 h-full bg-sidebar-bg">
         {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
+        <header className="bg-sidebar-bg px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -768,7 +768,7 @@ export function DashboardShell({
         <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
           <main
-            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
+            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
             style={{
               borderRadius: '8px',
               border: '1px solid #00001d13'
