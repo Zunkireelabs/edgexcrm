@@ -123,6 +123,8 @@ interface LeadsTableProps {
   hasListPipeline?: boolean;
   /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
   isTeamScoped?: boolean;
+  /** All pipeline lists (non-archive, non-staging) — used for assignAutoListId routing regardless of position access. */
+  allLeadLists?: LeadList[];
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -165,6 +167,7 @@ export function LeadsTable({
   activeListSlug = null,
   hasListPipeline = false,
   isTeamScoped = false,
+  allLeadLists,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -520,12 +523,14 @@ export function LeadsTable({
   const allResultsSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
 
   // Auto-route list based on assignee's position (fires for any view when positionSlugMap available).
+  // Uses allLeadLists (all pipeline lists) so position-restricted lists are still reachable for routing.
   const assignAutoListId = useMemo(() => {
     if (!assignTo || assignTo === "unassign") return null;
     const posSlug = positionSlugMap?.[assignTo] ?? null;
     const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
-    return listSlug ? (leadLists.find((l) => l.slug === listSlug)?.id ?? null) : null;
-  }, [assignTo, positionSlugMap, leadLists]);
+    const listPool = allLeadLists ?? leadLists;
+    return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
+  }, [assignTo, positionSlugMap, leadLists, allLeadLists]);
 
   function toggleSelectAll() {
     if (allSelected) {
