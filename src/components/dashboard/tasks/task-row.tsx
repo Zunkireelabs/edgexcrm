@@ -102,7 +102,7 @@ export function TaskRow({
             </Link>
           )}
           {task.projects && (
-            <Link href={`/time-tracking/projects/${task.projects.id}`} className="text-xs text-blue-600 hover:underline truncate">
+            <Link href={`/projects/${task.projects.id}`} className="text-xs text-blue-600 hover:underline truncate">
               {task.projects.name}
             </Link>
           )}

@@ -6,17 +6,12 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { recordProjectEvent } from "@/lib/projects/events";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
-/**
- * The Phase 1 event contract (brief §2) lists only `milestone_accepted`, not
- * a rejected counterpart — rejection here is a state change, not a ledger
- * event. Flagged to Opus as a possible intentional gap worth symmetric
- * `milestone_rejected` treatment in review.
- */
 export async function POST(request: NextRequest, { params }: Props) {
   const { id } = await params;
   const requestId = crypto.randomUUID();
@@ -38,14 +33,21 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (!valid) return apiValidationError(errors);
 
   const db = await scopedClient(auth);
-  const { data: existing } = await db.from("project_milestones").select("id").eq("id", id).maybeSingle();
+  const { data: existing } = await db
+    .from("project_milestones")
+    .select("id, project_id, title")
+    .eq("id", id)
+    .maybeSingle();
   if (!existing) return apiNotFound("Milestone");
+  const existingRow = existing as unknown as { project_id: string; title: string };
+
+  const reason = body.reason ? String(body.reason).trim() : null;
 
   const { data: updated, error } = await db
     .from("project_milestones")
     .update({
       status: "rejected",
-      rejection_reason: body.reason ? String(body.reason).trim() : null,
+      rejection_reason: reason,
       accepted_at: null,
       accepted_by: null,
     })
@@ -57,6 +59,16 @@ export async function POST(request: NextRequest, { params }: Props) {
     log.error({ error }, "Failed to reject milestone");
     return apiError("DB_ERROR", "Failed to reject milestone", 500);
   }
+
+  await recordProjectEvent(db, {
+    projectId: existingRow.project_id,
+    eventType: "milestone_rejected",
+    actorId: auth.userId,
+    summary: `Milestone rejected: ${existingRow.title}`,
+    payload: { milestone_id: id, reason },
+    subjectType: "milestone",
+    subjectId: id,
+  });
 
   log.info({ milestoneId: id }, "Milestone rejected");
   return apiSuccess(updated);

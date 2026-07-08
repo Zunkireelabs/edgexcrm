@@ -17,8 +17,9 @@ interface HealthDotProps {
 
 /** Small budget-ratio health signal for board cards. Deliberately omits the
  * due-date clause of the full health rule (no reliable pct_complete at
- * board-list scope) — see the project cockpit page for the authoritative
- * health computation. */
+ * board-list scope) — this is an approximation only. `GET
+ * /api/v1/projects/[id]` (surfaced via HealthBanner on the project cockpit)
+ * is the authoritative health computation. */
 export function HealthDot({ project, billableMinutes }: HealthDotProps) {
   if (project.current_estimate_minutes == null) return null;
 

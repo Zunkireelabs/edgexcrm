@@ -25,10 +25,11 @@ const ENGAGEMENT_MODELS: { value: EngagementModel; label: string }[] = [
 
 interface QualifyPanelProps {
   project: Project;
+  isAdmin: boolean;
   onQualify: (payload: Record<string, unknown>) => Promise<boolean>;
 }
 
-export function QualifyPanel({ project, onQualify }: QualifyPanelProps) {
+export function QualifyPanel({ project, isAdmin, onQualify }: QualifyPanelProps) {
   const [dod, setDod] = useState("");
   const [baselineHours, setBaselineHours] = useState("");
   const [engagementModel, setEngagementModel] = useState<EngagementModel | "">("");
@@ -76,6 +77,19 @@ export function QualifyPanel({ project, onQualify }: QualifyPanelProps) {
             </div>
           )}
         </CardContent>
+      </Card>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/40">
+        <CardHeader>
+          <CardTitle className="text-sm">Awaiting qualification</CardTitle>
+          <CardDescription>
+            An admin needs to commit the baseline estimate and Definition of Done before work starts.
+          </CardDescription>
+        </CardHeader>
       </Card>
     );
   }

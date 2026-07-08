@@ -9,14 +9,22 @@ import type { ProjectStatusReport } from "@/types/database";
 
 const HEALTH_LABEL: Record<string, string> = { green: "On track", amber: "At risk", red: "Off track" };
 
+/** hours_actual_snapshot / hours_estimate_snapshot store MINUTES (column
+ * names are a historical no-migration holdover) — divide by 60 to display. */
+function formatSnapshotHours(minutes: number | null): string {
+  if (minutes == null) return "—";
+  return (minutes / 60).toFixed(1);
+}
+
 interface StatusReportsPanelProps {
   reports: ProjectStatusReport[];
   loading: boolean;
+  isAdmin: boolean;
   onCreateDraft: (summary: string) => Promise<boolean>;
   onPublish: (id: string) => Promise<boolean>;
 }
 
-export function StatusReportsPanel({ reports, loading, onCreateDraft, onPublish }: StatusReportsPanelProps) {
+export function StatusReportsPanel({ reports, loading, isAdmin, onCreateDraft, onPublish }: StatusReportsPanelProps) {
   const [summary, setSummary] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
@@ -39,18 +47,20 @@ export function StatusReportsPanel({ reports, loading, onCreateDraft, onPublish 
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Textarea
-            value={summary}
-            onChange={(e) => setSummary(e.target.value)}
-            placeholder="What's the human-readable update for this period?"
-            rows={3}
-            disabled={submitting}
-          />
-          <Button size="sm" onClick={handleSaveDraft} disabled={submitting || summary.trim().length === 0}>
-            Save draft
-          </Button>
-        </div>
+        {isAdmin && (
+          <div className="space-y-2">
+            <Textarea
+              value={summary}
+              onChange={(e) => setSummary(e.target.value)}
+              placeholder="What's the human-readable update for this period?"
+              rows={3}
+              disabled={submitting}
+            />
+            <Button size="sm" onClick={handleSaveDraft} disabled={submitting || summary.trim().length === 0}>
+              Save draft
+            </Button>
+          </div>
+        )}
 
         {!loading && drafts.length === 0 && published.length === 0 && (
           <p className="text-sm text-muted-foreground italic">No status reports yet.</p>
@@ -60,10 +70,12 @@ export function StatusReportsPanel({ reports, loading, onCreateDraft, onPublish 
           <div key={r.id} className="rounded-md border p-3 space-y-2 bg-muted/30">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Draft · {r.report_date}</span>
-              <Button size="sm" onClick={() => onPublish(r.id)}>
-                <Send className="h-3.5 w-3.5 mr-1.5" />
-                Publish
-              </Button>
+              {isAdmin && (
+                <Button size="sm" onClick={() => onPublish(r.id)}>
+                  <Send className="h-3.5 w-3.5 mr-1.5" />
+                  Publish
+                </Button>
+              )}
             </div>
             {r.summary && <p className="text-sm text-foreground">{r.summary}</p>}
           </div>
@@ -76,7 +88,7 @@ export function StatusReportsPanel({ reports, loading, onCreateDraft, onPublish 
               <p className="text-xs text-muted-foreground">
                 Published {r.published_at ? new Date(r.published_at).toLocaleDateString() : ""} ·{" "}
                 {r.health_snapshot && HEALTH_LABEL[r.health_snapshot]} · {r.pct_complete_snapshot}% complete ·{" "}
-                {r.hours_actual_snapshot}h / {r.hours_estimate_snapshot}h
+                {formatSnapshotHours(r.hours_actual_snapshot)}h / {formatSnapshotHours(r.hours_estimate_snapshot)}h
               </p>
             </div>
           </div>

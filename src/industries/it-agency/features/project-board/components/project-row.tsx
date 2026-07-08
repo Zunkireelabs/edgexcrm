@@ -71,7 +71,7 @@ export function ProjectRow({ project, team, onProjectUpdated }: ProjectRowProps)
     <tr className={`border-b border-gray-100 hover:bg-gray-50 transition-colors ${saving ? "opacity-60" : ""}`}>
       <td className="py-2.5 px-3">
         <Link
-          href={`/time-tracking/projects/${project.id}`}
+          href={`/projects/${project.id}`}
           className="text-sm font-medium text-[#0f0f10] hover:underline"
         >
           {project.name}

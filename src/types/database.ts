@@ -684,6 +684,7 @@ export type ProjectEventType =
   | "change_request_rejected"
   | "task_reconciled"
   | "milestone_accepted"
+  | "milestone_rejected"
   | "issue_raised"
   | "issue_resolved"
   | "status_published"

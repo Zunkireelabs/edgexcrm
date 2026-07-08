@@ -384,7 +384,7 @@ function TaskRow({
       <TableCell className="max-w-[160px]">
         {task.projects ? (
           <a
-            href={`/time-tracking/projects/${task.projects.id}`}
+            href={`/projects/${task.projects.id}`}
             className="text-xs text-[#0f0f10] hover:underline truncate block"
           >
             {task.projects.name}

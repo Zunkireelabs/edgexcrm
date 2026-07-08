@@ -9,10 +9,11 @@ import type { Project } from "@/types/database";
 
 interface BriefEditorProps {
   project: Project;
+  isAdmin: boolean;
   onSave: (brief: string) => Promise<boolean>;
 }
 
-export function BriefEditor({ project, onSave }: BriefEditorProps) {
+export function BriefEditor({ project, isAdmin, onSave }: BriefEditorProps) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(project.brief ?? "");
   const [saving, setSaving] = useState(false);
@@ -29,10 +30,12 @@ export function BriefEditor({ project, onSave }: BriefEditorProps) {
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">
           <CardTitle className="text-sm">Brief</CardTitle>
-          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
-            <Pencil className="h-3.5 w-3.5 mr-1.5" />
-            {project.brief ? "Edit" : "Add brief"}
-          </Button>
+          {isAdmin && (
+            <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+              <Pencil className="h-3.5 w-3.5 mr-1.5" />
+              {project.brief ? "Edit" : "Add brief"}
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           {project.brief ? (

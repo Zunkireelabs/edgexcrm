@@ -17,9 +17,12 @@ interface Props {
  * `projects.current_estimate_minutes` bump, and the ledger event. Supabase's
  * REST layer has no client-side multi-table transaction here (matches the
  * rest of this codebase's junction/child-table routes, which are also
- * sequential writes, not DB transactions) — a concurrent double-approve of
- * the same CR is a known, accepted gap for Phase 1 given `status !==
- * 'proposed'` guards against re-approving an already-decided CR.
+ * sequential writes, not DB transactions). To close the read-then-write race
+ * a concurrent double-approve could hit, the CR update below is itself
+ * conditioned on `status = "proposed"` — only the request that wins that
+ * conditional update goes on to apply the estimate delta, so a second
+ * concurrent approve affects zero rows and bails out instead of
+ * double-counting.
  */
 export async function POST(request: NextRequest, { params }: Props) {
   const { id } = await params;
@@ -68,11 +71,15 @@ export async function POST(request: NextRequest, { params }: Props) {
       client_approved: clientApproved,
     })
     .eq("id", id)
+    .eq("status", "proposed")
     .select()
-    .single();
+    .maybeSingle();
   if (crError) {
     log.error({ error: crError }, "Failed to approve change request");
     return apiError("DB_ERROR", "Failed to approve change request", 500);
+  }
+  if (!updatedCr) {
+    return apiConflict("Change request already decided");
   }
 
   const { data: project } = await db

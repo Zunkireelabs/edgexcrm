@@ -18,12 +18,13 @@ const STATUS_CONFIG: Record<MilestoneStatus, { label: string; className: string 
 interface MilestonesPanelProps {
   milestones: ProjectMilestone[];
   loading: boolean;
+  isAdmin: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onAccept: (milestoneId: string) => Promise<boolean>;
   onReject: (milestoneId: string) => Promise<boolean>;
 }
 
-export function MilestonesPanel({ milestones, loading, onCreate, onAccept, onReject }: MilestonesPanelProps) {
+export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAccept, onReject }: MilestonesPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -50,13 +51,15 @@ export function MilestonesPanel({ milestones, loading, onCreate, onAccept, onRej
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Milestones</CardTitle>
-        <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Add
-        </Button>
+        {isAdmin && (
+          <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Add
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && (
+        {adding && isAdmin && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Input placeholder="Milestone title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <div className="flex gap-2">
@@ -100,7 +103,7 @@ export function MilestonesPanel({ milestones, loading, onCreate, onAccept, onRej
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
                   {cfg.label}
                 </span>
-                {pendingDecision && (
+                {pendingDecision && isAdmin && (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => onAccept(m.id)} title="Accept">
                       <Check className="h-3.5 w-3.5 text-green-600" />

@@ -30,6 +30,7 @@ const EVENT_ICON: Record<string, typeof Circle> = {
   change_request_rejected: XCircle,
   task_reconciled: Scale,
   milestone_accepted: Milestone,
+  milestone_rejected: XCircle,
   issue_raised: AlertCircle,
   issue_resolved: CheckCircle2,
   status_published: Send,
@@ -50,10 +51,11 @@ function relativeTime(iso: string): string {
 interface TimelinePanelProps {
   events: ProjectEvent[];
   loading: boolean;
+  isAdmin: boolean;
   onAddRetroLesson: (lesson: string) => Promise<boolean>;
 }
 
-export function TimelinePanel({ events, loading, onAddRetroLesson }: TimelinePanelProps) {
+export function TimelinePanel({ events, loading, isAdmin, onAddRetroLesson }: TimelinePanelProps) {
   const [adding, setAdding] = useState(false);
   const [lesson, setLesson] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -75,13 +77,15 @@ export function TimelinePanel({ events, loading, onAddRetroLesson }: TimelinePan
           <CardTitle className="text-sm">Institutional memory</CardTitle>
           <CardDescription>Every decision this project has made, in order.</CardDescription>
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          Retro lesson
-        </Button>
+        {isAdmin && (
+          <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            Retro lesson
+          </Button>
+        )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && (
+        {adding && isAdmin && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Textarea
               value={lesson}

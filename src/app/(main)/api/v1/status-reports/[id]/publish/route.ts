@@ -60,16 +60,18 @@ export async function POST(_request: NextRequest, { params }: Props) {
     targetEndDate: projectRow?.target_end_date ?? null,
     pctComplete,
   });
-  const hoursActual = Math.round(actualMinutes / 60);
-  const hoursEstimate = Math.round((projectRow?.current_estimate_minutes ?? 0) / 60);
+  // hours_actual_snapshot / hours_estimate_snapshot store MINUTES, matching
+  // the minutes convention used everywhere else in the schema (column names
+  // are a historical no-migration holdover) — divide by 60 at display time.
+  const estimateMinutesSnapshot = projectRow?.current_estimate_minutes ?? 0;
 
   const { data: updated, error } = await db
     .from("project_status_reports")
     .update({
       health_snapshot: health,
       pct_complete_snapshot: pctComplete,
-      hours_actual_snapshot: hoursActual,
-      hours_estimate_snapshot: hoursEstimate,
+      hours_actual_snapshot: actualMinutes,
+      hours_estimate_snapshot: estimateMinutesSnapshot,
       published_at: new Date().toISOString(),
       published_by: auth.userId,
     })
@@ -91,8 +93,8 @@ export async function POST(_request: NextRequest, { params }: Props) {
       status_report_id: id,
       health,
       pct_complete: pctComplete,
-      hours_actual: hoursActual,
-      hours_estimate: hoursEstimate,
+      hours_actual: Math.round(actualMinutes / 60),
+      hours_estimate: Math.round(estimateMinutesSnapshot / 60),
     },
     subjectType: "status_report",
     subjectId: id,

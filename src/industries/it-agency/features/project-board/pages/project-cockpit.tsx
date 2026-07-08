@@ -6,6 +6,9 @@ import { useProjectCockpit } from "../hooks/use-project-cockpit";
 import { HealthBanner } from "../components/cockpit/health-banner";
 import { BriefEditor } from "../components/cockpit/brief-editor";
 import { QualifyPanel } from "../components/cockpit/qualify-panel";
+import { BillableSummary } from "../components/cockpit/billable-summary";
+import { ContactsSection } from "../components/cockpit/contacts-section";
+import { TasksSection } from "../components/cockpit/tasks-section";
 import { DeliveryTab } from "../components/cockpit/delivery-tab";
 import { ReportsTab } from "../components/cockpit/reports-tab";
 import { TimelinePanel } from "../components/cockpit/timeline-panel";
@@ -15,9 +18,11 @@ import type { ProjectStatus } from "@/types/database";
 
 interface ProjectCockpitPageProps {
   projectId: string;
+  role: string;
 }
 
-export function ProjectCockpitPage({ projectId }: ProjectCockpitPageProps) {
+export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps) {
+  const isAdmin = role === "owner" || role === "admin";
   const {
     project,
     events,
@@ -82,17 +87,25 @@ export function ProjectCockpitPage({ projectId }: ProjectCockpitPageProps) {
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
-          <BriefEditor project={project} onSave={(brief) => updateProject({ brief })} />
-          <QualifyPanel project={project} onQualify={qualifyProject} />
+          <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
+          <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
+          {project.is_billable && <BillableSummary projectId={projectId} />}
+          <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
+          <TasksSection projectId={projectId} isAdmin={isAdmin} />
         </TabsContent>
         <TabsContent value="delivery" className="mt-4">
-          <DeliveryTab projectId={projectId} onProjectChanged={refetch} />
+          <DeliveryTab
+            projectId={projectId}
+            isAdmin={isAdmin}
+            onProjectChanged={refetch}
+            onEventRecorded={refetchEvents}
+          />
         </TabsContent>
         <TabsContent value="reports" className="mt-4">
-          <ReportsTab projectId={projectId} onEventRecorded={refetchEvents} />
+          <ReportsTab projectId={projectId} isAdmin={isAdmin} onEventRecorded={refetchEvents} />
         </TabsContent>
         <TabsContent value="timeline" className="mt-4">
-          <TimelinePanel events={events} loading={loading} onAddRetroLesson={addRetroLesson} />
+          <TimelinePanel events={events} loading={loading} isAdmin={isAdmin} onAddRetroLesson={addRetroLesson} />
         </TabsContent>
       </Tabs>
     </div>

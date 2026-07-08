@@ -7,10 +7,11 @@ import { StatusReportsPanel } from "./status-reports-panel";
 
 interface ReportsTabProps {
   projectId: string;
+  isAdmin: boolean;
   onEventRecorded: () => void;
 }
 
-export function ReportsTab({ projectId, onEventRecorded }: ReportsTabProps) {
+export function ReportsTab({ projectId, isAdmin, onEventRecorded }: ReportsTabProps) {
   const reconciliation = useProjectReconciliation(projectId);
   const statusReports = useProjectStatusReports(projectId);
 
@@ -32,11 +33,13 @@ export function ReportsTab({ projectId, onEventRecorded }: ReportsTabProps) {
         tasks={reconciliation.tasks}
         rollup={reconciliation.rollup}
         loading={reconciliation.loading}
+        isAdmin={isAdmin}
         onReconcile={handleReconcile}
       />
       <StatusReportsPanel
         reports={statusReports.reports}
         loading={statusReports.loading}
+        isAdmin={isAdmin}
         onCreateDraft={statusReports.createDraft}
         onPublish={handlePublish}
       />
