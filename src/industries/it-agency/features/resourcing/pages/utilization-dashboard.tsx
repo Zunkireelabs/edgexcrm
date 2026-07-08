@@ -68,7 +68,7 @@ export function UtilizationDashboard() {
       <h1 className="text-lg font-bold mb-4">Utilization</h1>
 
       {rows.length === 0 ? (
-        <div className="border rounded-xl p-12 text-center bg-background">
+        <div className="border rounded-xl p-12 text-center bg-card">
           <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <p className="text-muted-foreground text-sm">No approved billable time entries yet.</p>
         </div>

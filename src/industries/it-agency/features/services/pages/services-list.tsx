@@ -183,7 +183,7 @@ export function ServicesListPage({ role }: ServicesListPageProps) {
         <h1 className="shrink-0 text-lg font-bold mb-4">Services</h1>
 
         {services.length === 0 ? (
-          <div className="border rounded-xl p-12 text-center bg-background">
+          <div className="border rounded-xl p-12 text-center bg-card">
             <Package className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-lg mb-1">No services yet</h3>
             <p className="text-muted-foreground text-sm mb-6">

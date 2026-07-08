@@ -289,7 +289,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : contacts.length === 0 ? (
-          <div className="border rounded-xl p-12 text-center bg-background">
+          <div className="border rounded-xl p-12 text-center bg-card">
             <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-lg mb-1">No contacts found</h3>
             <p className="text-muted-foreground text-sm mb-6">
