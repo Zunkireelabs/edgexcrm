@@ -6,10 +6,10 @@
 
 ---
 
-## 0. The 10 non-negotiable rules (TL;DR)
+## 0. The 11 non-negotiable rules (TL;DR)
 
 1. **Never commit or merge directly to `main`.** Flow is always `feature/* → stage → main`. `main` = production, auto-deploys on every push.
-2. **Never merge directly to `stage` either — open a PR.** PRs run CI (lint/type/build) and leave a review trail.
+2. **Never merge directly to `stage` either — open a PR, and a lead must approve it.** PRs run CI (lint/type/build/test) and leave a review trail. **Every** feature PR into `stage` needs **1 approval from a lead** (`@sthasadin` / `@ani-shh`) before it merges — no self-merging (see § 10).
 3. **Always branch from the latest `origin/stage`, and rebase onto it right before you merge.** Stale bases are the #1 cause of a merge silently reverting someone else's work on a shared file.
 4. **One migration number = one file, globally unique.** Check the highest number in `supabase/migrations/` and take the next one. Never reuse a number.
 5. **Migrations are DB-first and environment-explicit.** Apply to **stage** → verify → (at promotion) apply to **prod**. There are **two separate databases**; a migration on one is *not* on the other.
@@ -18,6 +18,7 @@
 8. **Never resolve a conflict on a hot shared file by "keep my whole file."** Merge hunk-by-hunk. Assume the other person also changed `shell.tsx`, `leads/route.ts`, `queries.ts`, etc.
 9. **Rollback is a fire alarm, not a convenience.** `rollback.yml` un-deploys everything after the target SHA and does **not** roll back the database. Announce before running it (see § Rollback).
 10. **Prod DB changes require explicit, per-action approval from Sadin.** State the exact SQL + expected before/after counts; run only after "go" for that specific change. Never batch.
+11. **Local first.** Build and verify on your **isolated local DB** (OrbStack Supabase) before pushing — including testing a new migration on the local baseline. Local is a real environment now, not a window onto the shared stage DB. See `LOCAL-DEV-SETUP.md`.
 
 If you're an AI session: you may apply migrations to **stage** and verify. You may **not** touch **prod** (DB or deploy) without an explicit per-action "go." You do not merge PRs unless told.
 
@@ -33,7 +34,7 @@ If you're an AI session: you may apply migrations to **stage** and verify. You m
 - **Feature PRs into `stage` merge by SQUASH** (one clean commit per feature). The merge button says **"Squash and merge."**
 - **You can't force-push or delete `stage`/`main`.** History is safe.
 - **CODEOWNERS auto-requests reviewers** (@sthasadin / @ani-shh) when you touch hot shared files (`shell.tsx`, `queries.ts`, leads routes, manifests, migrations, CI). Wait for / ping them.
-- **`main` needs 1 approval; `stage` needs 0** (you can self-merge to stage once CI is green + up to date).
+- **Both `stage` and `main` require a lead reviewer's approval before merge** (Zunkiree Labs policy — updated 2026-07-08). `stage` = **1 approval from a lead** (`@sthasadin` / `@ani-shh`) on **every** feature PR; `main` = 1 approval on the promotion. You no longer self-merge to stage — a lead checks and accepts it. Full role-by-role flow in **§ 10**. *(Enforce in Settings → Branches: `stage` required approvals = 1.)*
 - Rules apply to admins too — nobody bypasses. In a genuine emergency an admin can toggle protection off in repo Settings → Branches, then restore it.
 
 **For your Claude/AI session:** same rules. It branches from the latest `origin/stage`, opens a PR to `stage`, waits for green CI, squash-merges; it never pushes to `stage`/`main` directly, never merges to `main` without a stage→main PR + approval, and never touches prod without an explicit per-action "go." If your Claude proposes `git push origin stage/main`, a merge-commit into stage, or skipping "Update branch," it's wrong — stop it.
@@ -68,13 +69,14 @@ A real promotion nearly broke because of two latent problems; both are now caugh
 
 | Env | Branch | URL | Supabase project | Deploy trigger |
 |---|---|---|---|---|
-| **Local** | your `feature/*` | `localhost:3000` | **stage** DB (`dymeudcddasqpomfpjvt`) | `npm run dev` |
+| **Local** | your `feature/*` | `localhost:3000` | **local** — Supabase on OrbStack, isolated (`127.0.0.1:54321`) | `npm run dev` |
 | **Staging** | `stage` | `dev-lead-crm.zunkireelabs.com` | **stage** DB (`dymeudcddasqpomfpjvt`) | push to `stage` |
 | **Production** | `main` | `edgex.zunkireelabs.com` / `lead-crm.zunkireelabs.com` | **prod** DB (`pirhnklvtjjpuvbvibxf`) | push to `main` |
 
-- **Two separate Supabase databases since 2026-06-21.** They do **not** share data or schema. "Applied a migration" is meaningless without saying *which DB*.
-- **Local dev points at the stage DB.** Log in as any prod email with `edgexdev123`.
-- The DB pointer lives in **two places per environment** — `docker-compose*.yml` build args (baked at build) **and** the VPS `.env.local` (runtime). Change both in lockstep or you get a client/server split-brain.
+- **Three tiers, three databases.** As of **2026-07-08**, local dev runs its **own isolated Supabase** (OrbStack Docker) instead of pointing at the shared stage DB. So "works locally" now means real isolation — you can wipe, reseed, and break your DB with zero effect on anyone else. Setup + daily use is **[`LOCAL-DEV-SETUP.md`](./LOCAL-DEV-SETUP.md)** — every new dev runs it once.
+- **Local login:** `admin@edgex.local` / `edgexdev123` (tenant *Test Agency*, `it_agency`). **Flip the app back to the stage DB** anytime with `cp .env.stage.local .env.local` (your stage env is backed up there; both are gitignored).
+- **Two separate *hosted* Supabase databases since 2026-06-21** (stage + prod). They do **not** share data or schema. "Applied a migration" is meaningless without saying *which DB* — and note local is now a third.
+- The hosted DB pointer lives in **two places per environment** — `docker-compose*.yml` build args (baked at build) **and** the VPS `.env.local` (runtime). Change both in lockstep or you get a client/server split-brain.
 
 ---
 
@@ -83,8 +85,10 @@ A real promotion nearly broke because of two latent problems; both are now caugh
 ```
 git fetch origin
 git switch -c feature/<short-name> origin/stage       # 1. branch from LATEST stage
-# ... build. Commit in logical chunks. ...
+scripts/migrate-apply.sh local                        # 1b. sync local DB — apply any migration files that came with the pull
+# ... build against your isolated local DB (npm run dev). Commit in logical chunks. ...
 git fetch origin && git rebase origin/stage            # 2. rebase before you open/refresh the PR
+scripts/migrate-apply.sh local                         # 2b. re-sync local DB after the rebase pulls new migrations
 npm run build && npx eslint --max-warnings 50          # 3. gates green locally
 gh pr create --base stage --title "..." --body "..."   # 4. PR ALWAYS targets stage
 # 5. CI green (Build / Lint / Type Check). Vercel check is noise — ignore it.
@@ -131,11 +135,13 @@ Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and pro
 - **Every statement must be idempotent (safe to re-run).** The auto-migrate runner can re-encounter a migration; a non-idempotent statement then errors and, fail-closed, blocks the deploy. Use `CREATE TABLE/INDEX IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`, guarded `UPDATE`s, and — because policies have no `IF NOT EXISTS` — `DROP POLICY IF EXISTS "p" ON t; CREATE POLICY "p" …`. (Mig 124's unguarded `CREATE POLICY` was the concrete bug.)
 - **New tenant-owned table?** `tenant_id UUID REFERENCES tenants(id) ON DELETE CASCADE` + RLS policies (`get_user_tenant_ids()` for SELECT, `is_tenant_admin(tenant_id)` for mutations). See `CLAUDE.md` § Tenant Isolation.
 - **Editing a SHARED object** (a view, a `SECURITY DEFINER` function, an RLS policy on an existing table) is the DB equivalent of a shared-file conflict — two devs `CREATE OR REPLACE`-ing the same function out of order silently reverts one. Flag it, coordinate, and note it in the PR.
+- **One-time data ETL does NOT belong in a numbered migration.** A migration file is *schema* — DDL that must replay cleanly on **any** database, including an empty one. A one-time data load/backfill/reconciliation tied to a specific tenant's real rows (hardcoded UUIDs, `RAISE EXCEPTION 'Expected N rows'` assertions, prod-only FKs) is **not** schema — put it in **`scripts/`** and run it once against the named DB. Mixing the two is what made migrations `009` + the Admizz/RKU/Agentics series (`069`–`096`) **unreplayable from scratch** (they abort on an empty DB), which is why local now baselines its schema from stage instead of replaying history (`LOCAL-DEV-SETUP.md` § "why baseline"). If a schema change genuinely needs a data step, make the data step idempotent and guarded (`WHERE EXISTS (…)`) so it no-ops on a DB that doesn't have the rows — never assert on counts that only hold on prod.
 
 ### Applying — order matters
-1. **Stage first.** Apply to the stage DB (`dymeudcddasqpomfpjvt`), in a transaction, log before/after counts. Verify tables/policies/seed. Smoke on local/dev as a **real logged-in user** (not service-role — RLS only shows up under a real JWT).
-2. **Prod — automatic + gated at promotion (no more manual apply-before-merge).** When a stage→main promotion contains migration file(s), the prod deploy (`deploy.yml`) detects them (`migrate-check` job), **pauses at "Apply Pending Migrations" for a required-reviewer approval** (`production-db` environment — reviewers sthasadin/ani-shh, admin-bypass off), applies them to the prod DB **before** the container swaps, then deploys. Migrations always land before the code that needs them → the "new code on old schema = 500s" split-brain can't happen. A code-only promotion skips the migrate job entirely (no approval pause). **So for the normal flow you no longer hand-apply to prod before merging** — you review the migration in the PR, then approve it in the deploy. (Emergency/out-of-band prod SQL can still be applied by hand under per-action approval; the runner then no-ops on it.)
-3. **Check the ledger — don't guess.** `STAGE_DB_URL=… scripts/migrate-status.sh stage` (or `prod`) lists **applied vs pending vs ghost** for that DB. A migration is **not on prod until it shows applied on prod.** Because it self-records, applying it *is* recording it — no separate bookkeeping.
+1. **Local first.** Apply the new migration to your **local baseline DB** and verify the feature + RLS as a real logged-in user. Isolated and free — catch the obvious errors before a shared DB ever sees them. (Local doesn't replay history, so you apply just your new file on top of the baseline — see `LOCAL-DEV-SETUP.md` § "testing a new migration".)
+2. **Stage next.** Apply to the stage DB (`dymeudcddasqpomfpjvt`), in a transaction, log before/after counts. Verify tables/policies/seed. Smoke on dev as a **real logged-in user** (not service-role — RLS only shows up under a real JWT).
+3. **Prod — automatic + gated at promotion (no more manual apply-before-merge).** When a stage→main promotion contains migration file(s), the prod deploy (`deploy.yml`) detects them (`migrate-check` job), **pauses at "Apply Pending Migrations" for a required-reviewer approval** (`production-db` environment — reviewers sthasadin/ani-shh, admin-bypass off), applies them to the prod DB **before** the container swaps, then deploys. Migrations always land before the code that needs them → the "new code on old schema = 500s" split-brain can't happen. A code-only promotion skips the migrate job entirely (no approval pause). **So for the normal flow you no longer hand-apply to prod before merging** — you review the migration in the PR, then approve it in the deploy. (Emergency/out-of-band prod SQL can still be applied by hand under per-action approval; the runner then no-ops on it.)
+4. **Check the ledger — don't guess.** `STAGE_DB_URL=… scripts/migrate-status.sh stage` (or `prod`) lists **applied vs pending vs ghost** for that DB. A migration is **not on prod until it shows applied on prod.** Because it self-records, applying it *is* recording it — no separate bookkeeping.
 
 ### The ledger (`public.schema_migrations`, mig 123 — adopted)
 Each DB has a `schema_migrations(version TEXT PRIMARY KEY, applied_at, applied_by)` table; every migration self-records its filename (keyed on filename, so the historical `110`/`112` dupes are distinct rows). "What's applied on `<env>`?" is now `scripts/migrate-status.sh <env>` — not a guess. This closes the duplicate-number and split-brain classes.
@@ -225,10 +231,275 @@ The rules above are mechanical. These are the human habits that make them cheap 
 
 **Before promoting to prod:**
 - [ ] Stage green + smoked.
-- [ ] All pending migrations applied to **prod DB** and verified — **before** merging code.
+- [ ] Migrations are on stage + self-record; ledgers clean (`migrate-status.sh`). **The prod DB apply happens automatically at the gate** — a lead approves the `production-db` environment and it applies **before** the swap (§ 5, § 10 Stage 8). No manual pre-apply for the normal flow.
 - [ ] Any manual prod steps done (storage buckets, env pointers in lockstep).
-- [ ] Merge `stage → main`, watch deploy, smoke prod, confirm no 500s.
+- [ ] Lead approves + merges `stage → main` (merge commit), approves the migration gate, watch deploy, smoke prod, confirm no 500s.
 - [ ] `docs/SESSION-LOG.md` updated with what shipped + which migs are now on prod.
+
+---
+
+## 10. The complete team workflow — the SOP every change follows
+
+**This is the canonical, end-to-end path for a change at Zunkiree Labs — from a developer's laptop to production, and exactly where a lead checks and accepts the work.** Every change follows it; no shortcuts. It has two roles:
+
+| Role | Who | Owns |
+|---|---|---|
+| **Developer** | anyone building a change (incl. an AI/Claude session) | local build & test · authoring migrations · opening PRs · merging *after* approval · verifying each deploy |
+| **Lead Reviewer** | **`@sthasadin` / `@ani-shh`** | **reviewing & accepting** every feature PR into `stage` · approving the `stage → main` promotion · approving the **prod-DB migration** in the deploy gate |
+
+**Policy (2026-07-08):** a **Lead Reviewer must approve every feature PR into `stage`** — developers do **not** self-merge. This is the team's quality gate; the lead is the second pair of eyes on every change before it reaches the shared staging environment, and the sole approver of everything that reaches prod.
+
+### 10.1 The flow — two views of the same thing
+
+**Plain view** — reads anywhere, including VS Code's Markdown preview (no Mermaid extension needed):
+
+```text
+        THE ZUNKIREE LABS DEV WORKFLOW — every change follows this
+
+╭──────────────────────────────────────────────────────────────────╮
+│  ① LOCAL — you, on your machine        (every time you start work) │
+├──────────────────────────────────────────────────────────────────┤
+│  1. Get the latest       git fetch · branch off origin/stage       │
+│  2. Sync your database   scripts/migrate-apply.sh local            │
+│  3. Start the app        npm run dev                               │
+│                                                                    │
+│  4. ★ BUILD YOUR FEATURE ★  — write the code / make your changes    │
+│         (this is the actual work — the rest is just getting in     │
+│          and out of it safely)                                     │
+│                                                                    │
+│  5. Changed the database?   add a migration file + test on local   │
+│  6. Check it works          click through, logged in as a user     │
+│  7. Get the latest again    rebase on stage · build + lint pass    │
+╰──────────────────────────────────────────────────────────────────╯
+              │
+              ▼   You open a Pull Request  ──►  stage
+╭──────────────────────────────────────────────────────────────────╮
+│  ② A LEAD CHECKS YOUR WORK                     🟨 lead approval #1  │
+├──────────────────────────────────────────────────────────────────┤
+│   Robot checks first:  Lint · Type · Build · Test · Guards         │
+│              │                                                     │
+│   A lead (@sthasadin / @ani-shh) reads your code + migration       │
+│         ├─ needs changes  →  back to step 4                        │
+│         └─ APPROVES  →  you merge it                               │
+╰──────────────────────────────────────────────────────────────────╯
+              │
+              ▼   You merge  ──►  stage   (this deploys automatically)
+╭──────────────────────────────────────────────────────────────────╮
+│  ③ IT GOES LIVE ON STAGING              (automatic — no clicks)     │
+├──────────────────────────────────────────────────────────────────┤
+│   build the app → update the STAGE database → restart the app      │
+│              │                                                     │
+│   ● LIVE at dev-lead-crm.zunkireelabs.com  → you test it there     │
+╰──────────────────────────────────────────────────────────────────╯
+              │
+              ▼   Open a Pull Request  stage ──► main   (to go to prod)
+╭──────────────────────────────────────────────────────────────────╮
+│  ④ A LEAD APPROVES THE RELEASE                 🟨 lead approval #2  │
+├──────────────────────────────────────────────────────────────────┤
+│   Guards + robot checks pass                                       │
+│              │                                                     │
+│   A lead reviews the release → APPROVES → merges to main           │
+╰──────────────────────────────────────────────────────────────────╯
+              │
+              ▼
+╭──────────────────────────────────────────────────────────────────╮
+│  ⑤ IT GOES LIVE IN PRODUCTION           🟨 lead approval #3         │
+├──────────────────────────────────────────────────────────────────┤
+│   If there's a database change, the deploy PAUSES and waits:       │
+│              │                                                     │
+│   A lead approves  →  update the PROD database  →  restart app     │
+│              │                                                     │
+│   ● LIVE at edgex.zunkireelabs.com  → smoke-test · log it          │
+╰──────────────────────────────────────────────────────────────────╯
+
+  A lead checks your work at 3 points:  #1 your PR to stage ·
+  #2 the release to prod · #3 the production database change.
+  Nothing reaches staging or production without a lead's OK.
+
+  Golden rule: the database change always lands BEFORE the code that
+  needs it — local (you) · stage (robot) · prod (lead approves).
+```
+
+**Visual flowchart** — renders as a diagram on GitHub and in editors with Mermaid support:
+
+```mermaid
+flowchart TB
+  classDef dev  fill:#e0e7ff,stroke:#4f46e5,color:#1e1b4b;
+  classDef work fill:#c7d2fe,stroke:#4338ca,color:#1e1b4b,stroke-width:3px;
+  classDef lead fill:#fde68a,stroke:#b45309,color:#442100;
+  classDef ci   fill:#ede9fe,stroke:#7c3aed,color:#2e1065;
+  classDef db   fill:#cffafe,stroke:#0e7490,color:#083344;
+  classDef live fill:#bbf7d0,stroke:#15803d,color:#052e16;
+
+  subgraph PH1["① LOCAL — you, on your machine (every time you start work)"]
+    direction TB
+    A1["1 · Get the latest<br/>git fetch · branch off origin/stage"]:::dev
+    A2["2 · Sync your database<br/>scripts/migrate-apply.sh local"]:::db
+    A3["3 · Start the app<br/>npm run dev"]:::dev
+    A4["★ 4 · BUILD YOUR FEATURE ★<br/>write the code / make your changes"]:::work
+    A5["5 · Changed the DB?<br/>add a migration file + test on local"]:::db
+    A6["6 · Check it works<br/>click through, logged in as a user"]:::dev
+    A7["7 · Get the latest again<br/>rebase on stage · build + lint pass"]:::dev
+    A1 --> A2 --> A3 --> A4 --> A5 --> A6 --> A7
+  end
+
+  A7 --> P1["You open a Pull Request → stage"]:::dev
+
+  subgraph PH2["② A LEAD CHECKS YOUR WORK"]
+    direction TB
+    C1["Robot checks: Lint · Type · Build · Test · Guards"]:::ci
+    LR1{"🟨 LEAD approval #1<br/>reads your code + migration"}:::lead
+    C1 --> LR1
+  end
+  P1 --> C1
+  LR1 -->|"needs changes"| A4
+  LR1 -->|"APPROVES"| M1["You squash-merge to stage"]:::dev
+
+  subgraph PH3["③ IT GOES LIVE ON STAGING (automatic)"]
+    direction TB
+    S1["build the app → GHCR"]:::ci
+    S2["update the STAGE database"]:::db
+    S3["restart the app"]:::ci
+    S4["● LIVE · dev-lead-crm.zunkireelabs.com"]:::live
+    S1 --> S2 --> S3 --> S4
+  end
+  M1 --> S1
+  S4 --> V1["You test it on staging"]:::dev
+
+  V1 --> P2["Open Pull Request stage → main"]:::dev
+
+  subgraph PH4["④ A LEAD APPROVES THE RELEASE"]
+    direction TB
+    C2["Guards + robot checks pass"]:::ci
+    LR2{"🟨 LEAD approval #2<br/>reviews the release"}:::lead
+    C2 --> LR2
+  end
+  P2 --> C2
+  LR2 -->|"APPROVES + merges"| M2["merge → main"]:::lead
+
+  subgraph PH5["⑤ IT GOES LIVE IN PRODUCTION"]
+    direction TB
+    D1["deploy PAUSES if there's a DB change"]:::ci
+    LR3{"🟨 LEAD approval #3<br/>approve the prod DB change"}:::lead
+    D2["update the PROD database"]:::db
+    D3["restart the app"]:::ci
+    D4["● LIVE · edgex.zunkireelabs.com"]:::live
+    D1 --> LR3 --> D2 --> D3 --> D4
+  end
+  M2 --> D1
+  D4 --> PD["Smoke-test prod · update SESSION-LOG"]:::dev
+```
+
+> **The 3 yellow steps are the only places a human gates the pipeline — and all 3 are a lead:** #1 approve your stage PR · #2 approve the release · #3 approve the production database change. Everything else is you (blue) and automation (purple).
+
+### 10.2 Step-by-step (what each person does, and the gate to pass)
+
+**Stage 0 — Pick up work · _Developer_**
+```bash
+git fetch origin
+git switch -c feature/<short-name> origin/stage   # branch from the LATEST stage
+scripts/migrate-apply.sh local                    # sync your local DB with any new migration files
+supabase start && npm run dev                      # (if the stack isn't up)
+```
+→ *Gate:* you're on a fresh branch off latest `stage`, local DB current. (First time on this machine? `LOCAL-DEV-SETUP.md`.)
+
+**Stage 1 — ★ Build your feature ★ & verify locally · _Developer_**  *(this is the actual work)*
+- **Write the code / make your changes** — build the feature or fix on your `feature/*` branch, running against your isolated local DB.
+- If it needs a schema change, author `supabase/migrations/NNN_*.sql` from `_TEMPLATE.sql` (additive · idempotent · self-records — § 5) and apply it with `scripts/migrate-apply.sh local`.
+- Verify in `npm run dev` **as a real logged-in user** (RLS only shows up under a real JWT). Classify feature scope (Global / Industry-aware / Industry-scoped) per `CLAUDE.md`.
+- `npm run build && npx eslint --max-warnings 50` clean.
+→ *Gate:* works on your isolated DB, gates green locally.
+
+**Stage 2 — Open the PR · _Developer_**
+```bash
+git fetch origin && git rebase origin/stage       # rebase onto latest stage
+scripts/migrate-apply.sh local                    # re-sync local DB after the rebase
+gh pr create --base stage --title "..." --body "..."   # base is ALWAYS stage
+```
+- Fill the PR template. Keep it **small and single-purpose**. If you touched a hot shared file (`shell.tsx`, `queries.ts`, leads/lead-lists routes, manifests, `_registry.ts`, migrations, CI), CODEOWNERS auto-requests a lead.
+→ *Gate:* PR open against `stage`, CI running, up to date with base.
+
+**Stage 3 — Review & accept · _Lead Reviewer_  ← lead checkpoint #1**
+The lead does **not** rubber-stamp. Before approving, the lead confirms:
+- [ ] **CI is green** — Lint · Type Check · Build · Test (Vercel check is noise).
+- [ ] **Migration Guard passed** — any migration ≥ 123 carries its self-record line; it's additive + idempotent; not a disguised one-time data ETL (that belongs in `scripts/`, § 5).
+- [ ] **Scope & isolation** — right industry folder / gate; tenant queries use `scopedClient` or explicit `.eq("tenant_id", …)`; new tables have RLS.
+- [ ] **Shared-file safety** — if `shell.tsx` / `queries.ts` / a route changed, no prod hotfix was dropped and the change is hunk-clean, not "kept my whole file."
+- [ ] **Branch is up to date** with `stage` (GitHub shows no "out-of-date").
+- [ ] Small enough to actually review. If not → request a split.
+→ *Gate:* **Lead clicks "Approve" (1 approval — required).** Requesting changes bounces it back to Stage 1.
+
+**Stage 4 — Merge + staging deploy · _Developer_ merges, _automation_ deploys**
+```bash
+gh pr merge <n> --squash --delete-branch          # only after: approved + green + up to date
+```
+- Merging **is** the staging deploy (`deploy-staging.yml`): CI builds the image → GHCR → the **`migrate` job applies pending migrations to the stage DB** → VPS pulls → container swaps.
+→ *Gate:* deploy run is green; migrations show applied on stage (`scripts/migrate-status.sh stage`).
+
+**Stage 5 — Verify on staging · _Developer_**
+- Smoke the change on `dev-lead-crm.zunkireelabs.com` (hosted — catches the ~5% local can't: pooler, extensions, real auth). Verify universal features (leads/pipeline/settings) still work for an affected tenant.
+→ *Gate:* staging behaves correctly. If not → fix forward with a new PR (back to Stage 0).
+
+**Stage 6 — Open the promotion PR · _Developer_ (or Lead)**
+```bash
+gh pr create --base main --head stage --title "Promote stage → main (prod deploy)" --body "..."
+```
+- Must come from `stage` (or a `promote/*` branch) — the Promotion Source Guard enforces it. List which migrations will apply to prod.
+→ *Gate:* promotion PR open, guards + CI green.
+
+**Stage 7 — Promotion review & accept · _Lead Reviewer_  ← lead checkpoint #2**
+- [ ] `main` hasn't diverged (no feature was merged straight to `main`).
+- [ ] Every migration in the diff is on stage already and self-records; ledgers read clean (`migrate-status.sh`).
+- [ ] Knows which migrations the prod gate will apply, and their before/after row counts.
+→ *Gate:* **Lead approves (1 required) and merges via _merge commit_** (not squash — preserves stage's history on main).
+
+**Stage 8 — Production deploy · _automation_ + _Lead Reviewer_  ← lead checkpoint #3**
+- The prod deploy (`deploy.yml`) runs `migrate-check`. **If the promotion carries migration files**, it **pauses at "Apply Pending Migrations"** for a required reviewer.
+- [ ] **Lead approves the `production-db` environment** → the runner applies the migrations to the **prod DB** (`pirhnklvtjjpuvbvibxf`) **before** the container swaps → then deploys. A code-only promotion skips this pause.
+→ *Gate:* migrations applied to prod, container swapped, deploy green.
+
+**Stage 9 — Post-deploy · _Developer_ + _Lead_**
+- Smoke `edgex.zunkireelabs.com` (log in, hit the changed flow, confirm no 500s). Watch `gh run list`.
+- Update `docs/SESSION-LOG.md` (what shipped + which migrations are now on prod); move the roadmap entry; `git mv` any brief into `docs/archive/`.
+→ *Done.* If prod is wrong: prefer a **roll-forward revert PR**; `rollback.yml` is the fire alarm (code only, never the DB — § 7).
+
+### 10.3 The gates at a glance
+
+| # | Gate | Who acts | Required to pass |
+|---|---|---|---|
+| 1 | Feature PR → `stage` | **Lead** (checkpoint #1) | CI green + **1 lead approval** + up to date |
+| 2 | Staging deploy | automation | migrate job + container swap green |
+| 3 | Promotion PR `stage → main` | **Lead** (checkpoint #2) | Guards + CI + **1 lead approval**, merge-commit |
+| 4 | Prod-DB migration | **Lead** (checkpoint #3) | approve `production-db` env → apply before swap |
+
+### 10.4 What backs each gate (enforcement, not etiquette)
+
+These aren't honor-system — GitHub blocks the dangerous action:
+- `stage` & `main` are **branch-protected**: no direct pushes, PR must be **up to date**, required CI checks must pass, linear history, admins included.
+- **Required approvals:** `stage` = **1** (lead), `main` = **1** (lead). *(If `stage` still shows 0 required approvals in Settings → Branches, set it to 1 to enforce Policy B above.)*
+- **Required status checks:** Lint · Type Check · Build · Test · Migration Guard · Promotion Source Guard.
+- **CODEOWNERS** auto-requests `@sthasadin` / `@ani-shh` on hot shared files.
+- **`production-db` GitHub Environment** with required reviewers (admin-bypass off) gates the prod migration.
+
+### 10.5 One-screen quick reference
+
+```
+DEVELOPER                                   LEAD REVIEWER
+─────────                                   ─────────────
+0  branch off latest stage
+   migrate-apply.sh local
+1  build · npm run dev · verify (real login)
+   author+test migration on local
+2  rebase · gates green · open PR → stage ─▶ 3  REVIEW: CI green? migration ok? scope/RLS?
+                                               shared files safe? → APPROVE (required)
+4  squash-merge  ─▶ auto: build→GHCR→migrate STAGE DB→swap
+5  verify on dev-lead-crm
+6  open PR stage → main ───────────────────▶ 7  REVIEW promotion → APPROVE + merge-commit
+                          auto: migrate-check ▶ 8  APPROVE production-db → apply PROD DB → swap
+9  smoke prod · update SESSION-LOG ◀───────── (both)
+```
+
+**The invariant behind all of it:** schema lands on each database *before* the code that needs it (local by you, stage by CI, prod behind a lead's approval), and nothing reaches `stage` or `main` without a lead's eyes on it.
 
 ---
 

@@ -5,6 +5,7 @@ Process & collaboration home. If you're a developer (or an AI/Claude session) wo
 | Doc | What it's for |
 |---|---|
 | [`DEV-WORKFLOW-AND-DEPLOYMENT.md`](./DEV-WORKFLOW-AND-DEPLOYMENT.md) | **The SOP.** Branch discipline, the migration protocol (apply-to-prod-before-code), promotion & rollback runbooks, shared-file conflict rules, team collaboration norms, and copy-paste checklists. Authoritative. |
+| [`LOCAL-DEV-SETUP.md`](./LOCAL-DEV-SETUP.md) | **New dev? Start here.** Stand up an isolated local database (OrbStack + Supabase) in ~15 min, daily-use commands, how to test a migration locally, and why local baselines its schema instead of replaying history. |
 | [`../../.github/pull_request_template.md`](../../.github/pull_request_template.md) | The checklist that auto-fills every PR — enforces the same rules at PR time. |
 
 **⚡ These rules are now ENFORCED** — `main` and `stage` are branch-protected (as of 2026-07-06). You can't push to them directly, your PR must be up to date before it merges, CI must pass, and feature PRs squash-merge into `stage`. See **§ "What changed"** at the top of the SOP for exactly how your day-to-day works now (and what to tell your Claude session).

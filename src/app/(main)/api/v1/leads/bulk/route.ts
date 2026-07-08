@@ -168,7 +168,9 @@ export async function PATCH(request: NextRequest) {
     if (!listCheck) {
       return apiValidationError({ list_id: ["List not found in this tenant"] });
     }
-    const accessible = canAccessList(
+    // Branch managers (isTeamScoped) can move leads to any stage in their branch
+    // per the assignment chain rules — skip position-based list access check for them.
+    const accessible = isTeamScoped || canAccessList(
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
@@ -207,7 +209,11 @@ export async function PATCH(request: NextRequest) {
   // §4.2: branch manager can only update leads already in their branch
   let idsToUpdate = body.ids.filter((id) => existingMap.has(id));
   if (isTeamScoped) {
-    idsToUpdate = idsToUpdate.filter((id) => existingMap.get(id)?.branch_id === auth.branchId);
+    idsToUpdate = idsToUpdate.filter((id) => {
+      const lead = existingMap.get(id);
+      // Allow leads directly in this branch OR with no branch_id (visible via team member assignment)
+      return lead?.branch_id === auth.branchId || lead?.branch_id == null;
+    });
   }
 
   if (idsToUpdate.length === 0) {
@@ -215,8 +221,10 @@ export async function PATCH(request: NextRequest) {
   }
 
   // Build bulk update payload
+  const now = new Date().toISOString();
   const bulkUpdatePayload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+    updated_at: now,
+    last_activity_at: now,
   };
   if (body.assigned_to !== undefined) bulkUpdatePayload.assigned_to = body.assigned_to ?? null;
   if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
