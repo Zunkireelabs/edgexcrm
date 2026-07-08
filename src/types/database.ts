@@ -639,6 +639,10 @@ export interface Service {
 
 export type ProjectStatus = "planning" | "active" | "in_review" | "delivered" | "on_hold" | "cancelled";
 
+export type EngagementModel = "fixed_bid" | "time_materials" | "retainer" | "staff_aug";
+
+export type ProjectHealth = "green" | "amber" | "red";
+
 export interface Project {
   id: string;
   tenant_id: string;
@@ -650,6 +654,135 @@ export interface Project {
   notes: string | null;
   owner_id: string | null;
   deal_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // Delivery Workflow Phase 1 — Brief/Qualify/Control (mig 128)
+  brief: string | null;
+  engagement_model: EngagementModel | null;
+  definition_of_done: string | null;
+  baseline_estimate_minutes: number | null;
+  current_estimate_minutes: number | null;
+  budget_amount: number | null;
+  start_date: string | null;
+  target_end_date: string | null;
+  health_override: ProjectHealth | null;
+  health_note: string | null;
+  qualified_at: string | null;
+  qualified_by: string | null;
+  // Derived, only present on GET responses that compute them
+  pct_complete?: number;
+  health?: ProjectHealth;
+  actual_minutes?: number;
+}
+
+export type ProjectEventType =
+  | "brief_captured"
+  | "scope_baseline_set"
+  | "plan_committed"
+  | "change_request_proposed"
+  | "change_request_approved"
+  | "change_request_rejected"
+  | "task_reconciled"
+  | "milestone_accepted"
+  | "issue_raised"
+  | "issue_resolved"
+  | "status_published"
+  | "retro_lesson"
+  | string;
+
+export interface ProjectEvent {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  event_type: ProjectEventType;
+  actor_id: string | null;
+  summary: string | null;
+  payload: Record<string, unknown>;
+  subject_type: string | null;
+  subject_id: string | null;
+  occurred_at: string;
+  created_at: string;
+}
+
+export type MilestoneStatus = "pending" | "in_progress" | "submitted" | "accepted" | "rejected";
+
+export interface ProjectMilestone {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  sort_order: number;
+  amount: number | null;
+  status: MilestoneStatus;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type IssueKind = "query" | "issue" | "blocker";
+export type IssueSeverity = "low" | "medium" | "high";
+export type IssueStatus = "open" | "in_progress" | "resolved" | "closed";
+export type IssueSource = "internal" | "client";
+
+export interface ProjectIssue {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  kind: IssueKind;
+  severity: IssueSeverity;
+  status: IssueStatus;
+  source: IssueSource;
+  raised_by_label: string | null;
+  raised_by_contact_id: string | null;
+  assigned_to: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChangeRequestClassification = "in_scope" | "new_scope";
+export type ChangeRequestStatus = "proposed" | "approved" | "rejected";
+
+export interface ProjectChangeRequest {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  classification: ChangeRequestClassification;
+  estimate_delta_minutes: number;
+  budget_delta_amount: number | null;
+  status: ChangeRequestStatus;
+  client_approved: boolean;
+  origin_issue_id: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectStatusReport {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  report_date: string;
+  period_start: string | null;
+  period_end: string | null;
+  health_snapshot: ProjectHealth | null;
+  summary: string | null;
+  pct_complete_snapshot: number | null;
+  hours_actual_snapshot: number | null;
+  hours_estimate_snapshot: number | null;
+  is_client_visible: boolean;
+  published_at: string | null;
+  published_by: string | null;
   created_at: string;
   updated_at: string;
 }

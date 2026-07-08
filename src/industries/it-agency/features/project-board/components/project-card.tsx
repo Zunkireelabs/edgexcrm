@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { HealthDot } from "./health-dot";
 import type { Project } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 
@@ -156,13 +157,16 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
       {/* Divider */}
       <div className="border-t border-border/50 my-3" />
 
-      {/* Section 3: Footer — urgency badge + owner avatar */}
+      {/* Section 3: Footer — urgency badge + health + owner avatar */}
       <div className="flex items-center justify-between">
-        <div
-          className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
-        >
-          <Clock className="h-3 w-3" />
-          <span>{days === 0 ? "Today" : `${days}d`}</span>
+        <div className="flex items-center gap-2">
+          <div
+            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}
+          >
+            <Clock className="h-3 w-3" />
+            <span>{days === 0 ? "Today" : `${days}d`}</span>
+          </div>
+          <HealthDot project={project} billableMinutes={hoursMap.get(project.id) ?? 0} />
         </div>
         {owner ? (
           <div
