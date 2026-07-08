@@ -168,7 +168,9 @@ export async function PATCH(request: NextRequest) {
     if (!listCheck) {
       return apiValidationError({ list_id: ["List not found in this tenant"] });
     }
-    const accessible = canAccessList(
+    // Branch managers (isTeamScoped) can move leads to any stage in their branch
+    // per the assignment chain rules — skip position-based list access check for them.
+    const accessible = isTeamScoped || canAccessList(
       auth.permissions,
       listCheck.access as { mode: string; positionIds?: string[] },
       auth.positionId,
