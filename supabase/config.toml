@@ -52,7 +52,13 @@ max_client_conn = 100
 
 [db.migrations]
 # If disabled, migrations will be skipped during a db push or reset.
-enabled = true
+# LOCAL DEV: disabled on purpose. The historical migration chain is NOT replayable
+# from scratch (001-096 include one-time prod ETL with hardcoded tenant UUIDs +
+# row-count assertions). Local schema is baselined from stage instead — see
+# ./baseline/schema.sql loaded via [db.seed] below, and scripts/local-db-setup.sh.
+# New migrations are tested locally with scripts/migrate-apply.sh (custom ledger),
+# NOT `supabase db reset`.
+enabled = false
 # Specifies an ordered list of schema files that describe your database.
 # Supports glob patterns relative to supabase directory: "./schemas/*.sql"
 schema_paths = []
@@ -62,7 +68,9 @@ schema_paths = []
 enabled = true
 # Specifies an ordered list of seed files to load during db reset.
 # Supports glob patterns relative to supabase directory: "./seeds/*.sql"
-sql_paths = ["./seed.sql"]
+# Order matters: baseline schema (all tables/RLS/functions from stage) → ledger
+# backfill (marks the 125 historical migrations as applied) → synthetic test data.
+sql_paths = ["./baseline/schema.sql", "./baseline/ledger.sql", "./baseline/reference.sql", "./seed.sql"]
 
 [db.network_restrictions]
 # Enable management of network restrictions.

@@ -123,6 +123,8 @@ interface LeadsTableProps {
   hasListPipeline?: boolean;
   /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
   isTeamScoped?: boolean;
+  /** All pipeline lists (non-archive, non-staging) — used for assignAutoListId routing regardless of position access. */
+  allLeadLists?: LeadList[];
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -165,6 +167,7 @@ export function LeadsTable({
   activeListSlug = null,
   hasListPipeline = false,
   isTeamScoped = false,
+  allLeadLists,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -519,13 +522,15 @@ export function LeadsTable({
   const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
   const allResultsSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
 
-  // For isStagingView: the list a lead should auto-move to when assigned (based on assignee's position).
+  // Auto-route list based on assignee's position (fires for any view when positionSlugMap available).
+  // Uses allLeadLists (all pipeline lists) so position-restricted lists are still reachable for routing.
   const assignAutoListId = useMemo(() => {
-    if (!isStagingView || !assignTo || assignTo === "unassign") return null;
+    if (!assignTo || assignTo === "unassign") return null;
     const posSlug = positionSlugMap?.[assignTo] ?? null;
     const listSlug = posSlug ? (POSITION_ROUTE_MAP[posSlug] ?? null) : null;
-    return listSlug ? (leadLists.find((l) => l.slug === listSlug)?.id ?? null) : null;
-  }, [isStagingView, assignTo, positionSlugMap, leadLists]);
+    const listPool = allLeadLists ?? leadLists;
+    return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
+  }, [assignTo, positionSlugMap, leadLists, allLeadLists]);
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -604,7 +609,7 @@ export function LeadsTable({
         body: JSON.stringify({
           ids: idsToAssign,
           assigned_to: assignTo === "unassign" ? null : assignTo,
-          ...(isStagingView && assignAutoListId ? { list_id: assignAutoListId } : {}),
+          ...(assignAutoListId ? { list_id: assignAutoListId } : {}),
         }),
       });
 
@@ -1422,15 +1427,6 @@ export function LeadsTable({
                 Branch
               </button>
             )}
-            {(isAdmin || isTeamScoped) && leadLists.length > 0 && (
-              <button
-                onClick={() => setMoveListDialogOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
-              >
-                <ArrowRightLeft className="h-4 w-4" />
-                Move to list
-              </button>
-            )}
             {(isAdmin || isTeamScoped) && archivedList && (
               <button
                 onClick={() => {
@@ -1727,7 +1723,7 @@ export function LeadsTable({
                   ))}
               </SelectContent>
             </Select>
-            {isStagingView && assignAutoListId && (
+            {assignAutoListId && (
               <p className="mt-2 text-xs text-blue-600 font-medium">
                 → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
               </p>

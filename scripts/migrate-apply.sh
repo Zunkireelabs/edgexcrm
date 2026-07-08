@@ -2,6 +2,7 @@
 # migrate-apply.sh — apply pending migrations to a DB, in order, idempotently.
 #
 # Usage:
+#   scripts/migrate-apply.sh local  [--dry-run]     # your OrbStack DB (default URL)
 #   STAGE_DB_URL='postgresql://...' scripts/migrate-apply.sh stage [--dry-run]
 #   PROD_DB_URL='postgresql://...'  scripts/migrate-apply.sh prod  [--dry-run]
 #
@@ -38,7 +39,11 @@ done
 case "$ENV" in
   stage) DB="${STAGE_DB_URL:-}"; [ -z "$DB" ] && { echo "Set STAGE_DB_URL (see CLAUDE.md § Credentials)."; exit 1; } ;;
   prod)  DB="${PROD_DB_URL:-}";  [ -z "$DB" ] && { echo "Set PROD_DB_URL (see CLAUDE.md § Credentials)."; exit 1; } ;;
-  *)     echo "Usage: $0 <stage|prod> [--dry-run]   (DB URL via STAGE_DB_URL / PROD_DB_URL env)"; exit 1 ;;
+  # local = your OrbStack Supabase (LOCAL-DEV-SETUP.md). Applies migrations teammates
+  # merged (that arrived as files via `git pull`) on top of your baseline. Defaults to
+  # the standard local DB URL; override with LOCAL_DB_URL if you changed ports.
+  local) DB="${LOCAL_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}" ;;
+  *)     echo "Usage: $0 <local|stage|prod> [--dry-run]   (DB URL via LOCAL_DB_URL / STAGE_DB_URL / PROD_DB_URL env)"; exit 1 ;;
 esac
 
 DIR="$(cd "$(dirname "$0")/../supabase/migrations" && pwd)"
