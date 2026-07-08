@@ -1404,7 +1404,7 @@ export function LeadsTable({
               </>
             ) : (
             <>
-            {isAdmin && teamMembers.length > 0 && (
+            {(isAdmin || isTeamScoped) && teamMembers.length > 0 && (
               <button
                 onClick={() => setAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
@@ -1422,7 +1422,7 @@ export function LeadsTable({
                 Branch
               </button>
             )}
-            {isAdmin && leadLists.length > 0 && (
+            {(isAdmin || isTeamScoped) && leadLists.length > 0 && (
               <button
                 onClick={() => setMoveListDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
@@ -1431,7 +1431,7 @@ export function LeadsTable({
                 Move to list
               </button>
             )}
-            {isAdmin && archivedList && (
+            {(isAdmin || isTeamScoped) && archivedList && (
               <button
                 onClick={() => {
                   setMoveArchiveReason("");
@@ -1454,7 +1454,7 @@ export function LeadsTable({
                 Merge
               </button>
             )}
-            {isAdmin && (
+            {(isAdmin || isTeamScoped) && (
               <button
                 onClick={() => setDeleteDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
