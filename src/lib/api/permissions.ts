@@ -199,6 +199,20 @@ export function leadQueryScope(
   };
 }
 
+/**
+ * Resolve the effective branch filter from the edgex_branch cookie.
+ * Returns null (no branch filter) when the cookie is empty, an "all"/"overall"
+ * sentinel, or a value that is NOT a real branch id for the current tenant
+ * (stale cookie from another tenant / deleted branch). Otherwise returns the id.
+ */
+export function resolveEffectiveBranch(
+  cookieVal: string | null | undefined,
+  validBranchIds: string[],
+): string | null {
+  if (!cookieVal || cookieVal === "all" || cookieVal === "overall") return null;
+  return validBranchIds.includes(cookieVal) ? cookieVal : null;
+}
+
 // ── Role derivation (positions → legacy role) ──────────────────────
 export function deriveRole(
   baseTier: "owner" | "admin" | "member",

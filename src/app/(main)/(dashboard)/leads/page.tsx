@@ -4,7 +4,7 @@ import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, g
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
-import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
+import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
@@ -29,16 +29,24 @@ export default async function LeadsPage({
   ]);
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
-  // Normalize "all" sentinel → null for the Add Lead branch picker default
-  const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
 
-  // Build base scope; for all-scope admins apply the edgex_branch cookie from the header switcher
+  // Fetch branches up front (also reused below for the table's branch picker) so the
+  // stale/invalid edgex_branch cookie can be validated before it's applied to scope.
+  const branches =
+    tenantData.entitlements.maxBranches > 1 ? await getBranches(tenantData.tenant.id) : [];
+  const effectiveBranch = resolveEffectiveBranch(
+    branchCookieVal,
+    branches.map((b) => b.id),
+  );
+  const selectedBranchId = effectiveBranch;
+
+  // Build base scope; for all-scope admins apply the validated branch filter from the header switcher
   const poolSlug = tenantData.tenant.industry_id === "education_consultancy" && tenantData.positionSlug
     ? (POSITION_HOME_LIST[tenantData.positionSlug] ?? null)
     : null;
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId, poolSlug);
-  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
-    scope.branchId = branchCookieVal;
+  if (tenantData.permissions.leadScope === "all" && effectiveBranch) {
+    scope.branchId = effectiveBranch;
   }
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
@@ -128,7 +136,7 @@ export default async function LeadsPage({
       ? await getListPipeline(activeList.id, tenantData.tenant.id)
       : null;
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, branches] =
+  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
     await Promise.all([
       getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
       getTeamMembers(tenantData.tenant.id),
@@ -147,9 +155,6 @@ export default async function LeadsPage({
         .eq("tenant_id", tenantData.tenant.id)
         .eq("is_active", true)
         .order("position", { ascending: true }),
-      tenantData.entitlements.maxBranches > 1
-        ? getBranches(tenantData.tenant.id)
-        : Promise.resolve([]),
     ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));

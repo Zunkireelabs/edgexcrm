@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranchIds } from "@/lib/supabase/queries";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
-import { canSeeNav, canSeeWidget, leadQueryScope } from "@/lib/api/permissions";
+import { canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
@@ -23,12 +23,15 @@ export default async function DashboardPage() {
 
   const cookieStore = await cookies();
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
+  const validBranchIds =
+    tenantData.entitlements.maxBranches > 1 ? await getBranchIds(tenantData.tenant.id) : [];
+  const effectiveBranch = resolveEffectiveBranch(branchCookieVal, validBranchIds);
 
   // Fix: pass branchId so branch managers (leadScope "team") are correctly scoped
   const scope = leadQueryScope(permissions, tenantData.userId, tenantData.branchId);
   // Admin cookie override: all-scope users can filter by a specific branch from the header
-  if (permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
-    scope.branchId = branchCookieVal;
+  if (permissions.leadScope === "all" && effectiveBranch) {
+    scope.branchId = effectiveBranch;
   }
 
   const [leads, teamMembers, stages, formConfigs] = await Promise.all([
