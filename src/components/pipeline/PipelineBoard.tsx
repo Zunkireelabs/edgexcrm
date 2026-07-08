@@ -24,10 +24,9 @@ import {
   SelectTrigger,
   SelectValue
 } from "@/components/ui/select";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import {
   Search,
-  X,
   Users2,
   Globe,
   ArrowUpDown,
@@ -37,8 +36,6 @@ import {
   Briefcase,
 } from "lucide-react";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -351,8 +348,6 @@ export function PipelineBoard({
     industryFilter !== "all",
   ].filter(Boolean).length;
 
-  const hasActiveFilters = activeFiltersCount > 0;
-
   // Export to CSV
   const handleExport = () => {
     const allLeads = Object.values(filteredColumns).flat();
@@ -535,9 +530,9 @@ export function PipelineBoard({
   // Show loading state until mounted to prevent hydration mismatch
   if (!mounted) {
     return (
-      <div className="flex flex-col flex-1 min-h-0 gap-2">
+      <div className="flex flex-col flex-1 min-h-0 gap-1">
         {/* Toolbar skeleton */}
-        <div className="shrink-0 bg-card rounded-lg border p-3">
+        <div className="shrink-0 bg-card p-3">
           <div className="flex items-center gap-3">
             <div className="h-7 w-60 bg-muted rounded animate-pulse" />
             <div className="h-7 w-32 bg-muted rounded animate-pulse" />
@@ -567,10 +562,94 @@ export function PipelineBoard({
     );
   }
 
+  const filterDefs: FilterDef[] = [
+    ...(isAdmin
+      ? [
+          {
+            id: "counselor",
+            label: "All Counselors",
+            icon: <Users2 className="h-3.5 w-3.5" />,
+            multiple: false,
+            defaultValue: "all",
+            value: counselorFilter,
+            onChange: setCounselorFilter,
+            options: [
+              { value: "all", label: "All Counselors", description: "Show leads from everyone" },
+              { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
+              ...teamMembers.map((m) => ({
+                value: m.user_id,
+                label: m.name || m.email.split("@")[0],
+                description: m.email,
+              })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(sources.length > 0
+      ? [
+          {
+            id: "source",
+            label: "All Sources",
+            icon: <Globe className="h-3.5 w-3.5" />,
+            multiple: false,
+            defaultValue: "all",
+            value: sourceFilter,
+            onChange: setSourceFilter,
+            options: [
+              { value: "all", label: "All Sources", description: "Show leads from all sources" },
+              ...sources.map((s) => ({
+                value: s,
+                label: s,
+                description: `Leads from ${s}`,
+              })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(industryId === "it_agency"
+      ? [
+          {
+            id: "industry",
+            label: "All Industries",
+            icon: <Briefcase className="h-3.5 w-3.5" />,
+            multiple: false,
+            defaultValue: "all",
+            value: industryFilter,
+            onChange: setIndustryFilter,
+            options: [
+              { value: "all", label: "All Industries", description: "Show all leads" },
+              ...PROSPECT_INDUSTRIES.map((ind) => ({
+                value: ind.value,
+                label: ind.label,
+                description: `${ind.label} leads`,
+              })),
+              { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    {
+      id: "created",
+      label: "Any time",
+      icon: <Calendar className="h-3.5 w-3.5" />,
+      multiple: false,
+      searchable: false,
+      defaultValue: "all",
+      value: createdFilter,
+      onChange: setCreatedFilter,
+      options: [
+        { value: "all", label: "Any time", description: "All time periods" },
+        { value: "today", label: "Today", description: "Last 24 hours" },
+        { value: "week", label: "Last 7 days", description: "Past week" },
+        { value: "month", label: "Last 30 days", description: "Past month" },
+      ],
+    } satisfies FilterDef,
+  ];
+
   return (
-    <div className="flex flex-col flex-1 min-h-0 gap-2">
+    <div className="flex flex-col flex-1 min-h-0 gap-1">
       {/* Enhanced Toolbar */}
-      <div className="shrink-0 bg-card rounded-lg border">
+      <div className="shrink-0 bg-card">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}
@@ -591,6 +670,8 @@ export function PipelineBoard({
           </div>
 
           <div className="flex-1" />
+
+          <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
 
           {/* Sort */}
           <Popover>
@@ -674,102 +755,7 @@ export function PipelineBoard({
           )}
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-border" />
-
-        {/* Filter Row - Compact */}
-        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-          {/* Counselor Filter (Admin only) */}
-          {isAdmin && (
-            <FilterDropdown
-              label="All Counselors"
-              value={counselorFilter}
-              onChange={setCounselorFilter}
-              icon={<Users2 className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Counselors", description: "Show leads from everyone" },
-                { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
-                ...teamMembers.map((m) => ({
-                  value: m.user_id,
-                  label: m.name || m.email.split("@")[0],
-                  description: m.email,
-                })),
-              ]}
-            />
-          )}
-
-          {/* Source Filter */}
-          {sources.length > 0 && (
-            <FilterDropdown
-              label="All Sources"
-              value={sourceFilter}
-              onChange={setSourceFilter}
-              icon={<Globe className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Sources", description: "Show leads from all sources" },
-                ...sources.map((s) => ({
-                  value: s,
-                  label: s,
-                  description: `Leads from ${s}`,
-                })),
-              ]}
-            />
-          )}
-
-          {/* Industry Filter — it_agency only */}
-          {industryId === "it_agency" && (
-            <FilterDropdown
-              label="All Industries"
-              value={industryFilter}
-              onChange={setIndustryFilter}
-              icon={<Briefcase className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Industries", description: "Show all leads" },
-                ...PROSPECT_INDUSTRIES.map((ind) => ({
-                  value: ind.value,
-                  label: ind.label,
-                  description: `${ind.label} leads`,
-                })),
-                { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
-              ]}
-            />
-          )}
-
-          {/* Created Date Filter */}
-          <FilterDropdown
-            label="Any time"
-            value={createdFilter}
-            onChange={setCreatedFilter}
-            icon={<Calendar className="h-3 w-3" />}
-            searchable={false}
-            options={[
-              { value: "all", label: "Any time", description: "All time periods" },
-              { value: "today", label: "Today", description: "Last 24 hours" },
-              { value: "week", label: "Last 7 days", description: "Past week" },
-              { value: "month", label: "Last 30 days", description: "Past month" },
-            ]}
-          />
-
-          <div className="flex-1" />
-
-          {/* Active Filters Indicator + Clear */}
-          {hasActiveFilters && (
-            <div className="flex items-center gap-1.5">
-              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
-                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3 mr-1" />
-                Clear
-              </Button>
-            </div>
-          )}
-        </div>
+        {activeFiltersCount > 0 && <FilterChips filters={filterDefs} onClearAll={clearFilters} />}
       </div>
 
       {/* Kanban Board */}
