@@ -36,22 +36,6 @@ import {
 } from "@/components/ui/command";
 import type { ApplicationStage } from "@/types/database";
 
-const COUNTRIES = [
-  "Australia",
-  "Canada",
-  "China",
-  "France",
-  "Germany",
-  "India",
-  "Japan",
-  "Nepal",
-  "New Zealand",
-  "Singapore",
-  "UAE",
-  "United Kingdom",
-  "United States",
-  "Other",
-];
 
 interface AgentOption {
   id: string;
@@ -111,9 +95,10 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCr
           className="p-0 w-[--radix-popover-trigger-width]"
           align="start"
           onOpenAutoFocus={(e) => e.preventDefault()}
+          onWheel={(e) => e.stopPropagation()}
         >
           <Command shouldFilter={false}>
-            <CommandList>
+            <CommandList className="max-h-52 overflow-y-auto">
               <CommandEmpty>No matches</CommandEmpty>
               {filtered.slice(0, 20).map((s) => (
                 <CommandItem
@@ -169,7 +154,8 @@ export function AddApplicationToLeadSheet({
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
   const [partnerColleges, setPartnerColleges] = useState<string[]>([]);
-  const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
+  const [courses, setCourses] = useState<string[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
 
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
@@ -199,9 +185,17 @@ export function AddApplicationToLeadSheet({
         if (j?.data) setPartnerColleges((j.data as { name: string }[]).map((c) => c.name));
       })
       .catch(() => {});
-    fetch("/api/v1/applications/suggestions")
+    fetch("/api/v1/courses")
       .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setProgramSuggestions(j.data.programs ?? []); })
+      .then((j) => {
+        if (j?.data) setCourses((j.data as { name: string }[]).map((c) => c.name));
+      })
+      .catch(() => {});
+    fetch("/api/v1/countries")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name));
+      })
       .catch(() => {});
   }, [open]);
 
@@ -295,7 +289,7 @@ export function AddApplicationToLeadSheet({
               id="app-program"
               value={programName}
               onChange={setProgramName}
-              suggestions={programSuggestions}
+              suggestions={courses}
               placeholder="e.g. Master of Computer Science"
             />
           </div>
@@ -317,7 +311,7 @@ export function AddApplicationToLeadSheet({
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {COUNTRIES.map((c) => (
+                  {countries.map((c) => (
                     <SelectItem key={c} value={c}>{c}</SelectItem>
                   ))}
                 </SelectContent>
