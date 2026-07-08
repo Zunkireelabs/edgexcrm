@@ -3,10 +3,9 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Plus, Users, Loader2, Search, Building2, X, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { Plus, Users, Loader2, Search, Building2, ArrowUpDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Select,
@@ -104,7 +103,6 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
     filterAccountId !== "all",
     filterStatus !== "active",
   ].filter(Boolean).length;
-  const hasActiveFilters = activeFiltersCount > 0;
 
   function clearFilters() {
     setSearchInput("");
@@ -149,14 +147,49 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
     return sorted.slice(startIndex, endIndex);
   }, [sorted, startIndex, endIndex]);
 
+  const filterDefs: FilterDef[] = [
+    {
+      id: "account",
+      label: "Account",
+      icon: <Building2 className="h-3.5 w-3.5" />,
+      multiple: false,
+      searchable: true,
+      defaultValue: "all",
+      value: filterAccountId,
+      onChange: (val: string) => { setFilterAccountId(val); setCurrentPage(1); },
+      options: [
+        { value: "all", label: "All Accounts", description: "Show contacts at every account" },
+        ...accounts.map((a) => ({
+          value: a.id,
+          label: a.name,
+          description: `Contacts at ${a.name}`,
+        })),
+      ],
+    },
+    {
+      id: "status",
+      label: "Status",
+      multiple: false,
+      searchable: false,
+      defaultValue: "active",
+      value: filterStatus,
+      onChange: (val: string) => { setFilterStatus(val as typeof filterStatus); setCurrentPage(1); },
+      options: [
+        { value: "active", label: "Active", description: "Active contacts only" },
+        { value: "inactive", label: "Inactive", description: "Inactive contacts only" },
+        { value: "all", label: "All Statuses", description: "Show every contact" },
+      ],
+    },
+  ];
+
   return (
     <div className="flex flex-1 min-h-0 gap-0">
-      <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden pr-6">
+      <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden pr-6">
         <h1 className="shrink-0 text-lg font-bold mb-4">Contacts</h1>
 
         {/* Enhanced Toolbar - matching leads style */}
-        <div className="shrink-0 bg-card rounded-lg border">
-          {/* Top Row: count + search + spacer + Sort + Add */}
+        <div className="shrink-0 bg-card">
+          {/* Top Row: count + search + spacer + Filters + Sort + Add */}
           <div className="flex flex-wrap items-center gap-3 p-3">
             {/* Contact count */}
             <div className="text-sm font-medium text-muted-foreground shrink-0">
@@ -176,6 +209,8 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
             </div>
 
             <div className="flex-1" />
+
+            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
 
             {/* Sort */}
             <Popover>
@@ -245,58 +280,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
             )}
           </div>
 
-          {/* Divider */}
-          <div className="h-px bg-border" />
-
-          {/* Filter Row */}
-          <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-            <FilterDropdown
-              label="All Accounts"
-              value={filterAccountId}
-              onChange={(val) => { setFilterAccountId(val); setCurrentPage(1); }}
-              icon={<Building2 className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Accounts", description: "Show contacts at every account" },
-                ...accounts.map((a) => ({
-                  value: a.id,
-                  label: a.name,
-                  description: `Contacts at ${a.name}`,
-                })),
-              ]}
-            />
-
-            <FilterDropdown
-              label="All Statuses"
-              value={filterStatus}
-              onChange={(val) => { setFilterStatus(val as typeof filterStatus); setCurrentPage(1); }}
-              searchable={false}
-              options={[
-                { value: "active", label: "Active", description: "Active contacts only" },
-                { value: "inactive", label: "Inactive", description: "Inactive contacts only" },
-                { value: "all", label: "All Statuses", description: "Show every contact" },
-              ]}
-            />
-
-            <div className="flex-1" />
-
-            {/* Active Filters Indicator + Clear */}
-            {hasActiveFilters && (
-              <div className="flex items-center gap-1.5">
-                <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
-                  {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
-                </Badge>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearFilters}
-                  className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  Clear
-                </Button>
-              </div>
-            )}
-          </div>
+          {activeFiltersCount > 0 && <FilterChips filters={filterDefs} onClearAll={clearFilters} />}
         </div>
 
         {/* Content */}
