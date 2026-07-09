@@ -30,12 +30,23 @@ interface QualifyPanelProps {
 }
 
 export function QualifyPanel({ project, isAdmin, onQualify }: QualifyPanelProps) {
-  const [dod, setDod] = useState("");
-  const [baselineHours, setBaselineHours] = useState("");
-  const [engagementModel, setEngagementModel] = useState<EngagementModel | "">("");
+  // Seeded from the deal/proposal handoff (mig 129), if any — an editable
+  // draft the PM confirms or overrides, not a fait accompli. startDate /
+  // targetEndDate have no seed source and stay blank.
+  const [dod, setDod] = useState(project.definition_of_done ?? "");
+  const [baselineHours, setBaselineHours] = useState(
+    project.baseline_estimate_minutes != null
+      ? String(Math.round((project.baseline_estimate_minutes / 60) * 100) / 100)
+      : ""
+  );
+  const [engagementModel, setEngagementModel] = useState<EngagementModel | "">(
+    project.engagement_model ?? ""
+  );
   const [startDate, setStartDate] = useState("");
   const [targetEndDate, setTargetEndDate] = useState("");
-  const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetAmount, setBudgetAmount] = useState(
+    project.budget_amount != null ? String(project.budget_amount) : ""
+  );
   const [submitting, setSubmitting] = useState(false);
 
   if (project.qualified_at) {

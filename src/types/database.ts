@@ -669,6 +669,8 @@ export interface Project {
   health_note: string | null;
   qualified_at: string | null;
   qualified_by: string | null;
+  // Deal/Proposal -> Project handoff (mig 129)
+  currency: string | null;
   // Derived, only present on GET responses that compute them
   pct_complete?: number;
   health?: ProjectHealth;
@@ -677,6 +679,7 @@ export interface Project {
 
 export type ProjectEventType =
   | "brief_captured"
+  | "baseline_seeded_from_proposal"
   | "scope_baseline_set"
   | "plan_committed"
   | "change_request_proposed"
@@ -1093,6 +1096,8 @@ export interface Proposal {
   deleted_at: string | null;
   public_token: string | null;
   public_enabled: boolean;
+  // Deal/Proposal -> Project handoff (mig 129) — set once this proposal seeds a project.
+  project_id: string | null;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;
   line_items?: ProposalLineItem[];

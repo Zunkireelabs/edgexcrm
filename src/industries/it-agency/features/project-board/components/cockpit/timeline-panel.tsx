@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   FileText,
+  Sprout,
   ShieldCheck,
   ClipboardList,
   GitPullRequestArrow,
@@ -23,6 +24,7 @@ import type { ProjectEvent } from "@/types/database";
 
 const EVENT_ICON: Record<string, typeof Circle> = {
   brief_captured: FileText,
+  baseline_seeded_from_proposal: Sprout,
   scope_baseline_set: ShieldCheck,
   plan_committed: ClipboardList,
   change_request_proposed: GitPullRequestArrow,
