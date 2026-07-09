@@ -171,7 +171,7 @@ function SidebarGroupRender({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+        className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
             : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -193,7 +193,7 @@ function SidebarGroupRender({
                 key={child.href}
                 href={child.href}
                 onClick={onNavigate}
-                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
                     : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -326,7 +326,7 @@ export function DashboardShell({
         key={item.href}
         href={item.href}
         onClick={handleClick}
-        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
             : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
@@ -371,7 +371,7 @@ export function DashboardShell({
 
 
   const sidebarContent = (
-    <div className="flex flex-col h-full bg-[#fafafa]">
+    <div className="flex flex-col h-full bg-sidebar-bg">
       {/* EdgeX product brand wordmark */}
       <div className="px-5 py-3 h-[52px] flex items-center">
         <span className="text-lg font-semibold text-gray-900 tracking-tight">
@@ -386,11 +386,11 @@ export function DashboardShell({
       <div className="px-3 pb-2">
         <Tabs value={navMode} onValueChange={handleNavModeChange}>
           <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
-            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-white">
+            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
               <LayoutGrid className="w-3.5 h-3.5" />
               Ops
             </TabsTrigger>
-            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-white">
+            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
               <Bot className="w-3.5 h-3.5" />
               Orca
             </TabsTrigger>
@@ -403,7 +403,7 @@ export function DashboardShell({
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>
@@ -436,7 +436,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Leads" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -448,7 +448,7 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 <Suspense key="lead-lists-nav" fallback={
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                     <Users className="w-[18px] h-[18px] shrink-0" />
                     All Leads
                   </div>
@@ -508,7 +508,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Sales" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -522,7 +522,7 @@ export function DashboardShell({
                 {navAllowed("/leads") && (
                   leadLists.length > 0 ? (
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>
@@ -575,7 +575,7 @@ export function DashboardShell({
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
-                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                   <span className="w-[18px] h-[18px] shrink-0" />
                   Leads Organise
                 </div>
@@ -593,7 +593,7 @@ export function DashboardShell({
                 if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium text-gray-500">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>
@@ -700,16 +700,16 @@ export function DashboardShell({
   );
 
   return (
-    <div className="flex h-screen bg-[#fafafa]">
+    <div className="flex h-screen bg-sidebar-bg">
       {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-[#fafafa] print:hidden">
+      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-sidebar-bg print:hidden">
         {sidebarContent}
       </aside>
 
       {/* Main content area with header */}
-      <div className="flex flex-col flex-1 min-w-0 h-full bg-[#fafafa]">
+      <div className="flex flex-col flex-1 min-w-0 h-full bg-sidebar-bg">
         {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-[#fafafa] px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
+        <header className="bg-sidebar-bg px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
           {/* Mobile menu button */}
           <div className="md:hidden">
             {mounted ? (
@@ -768,7 +768,7 @@ export function DashboardShell({
         <div className="flex-1 min-w-0 overflow-hidden flex">
           {/* Main content - shrinks when AI panel opens */}
           <main
-            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-white transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
+            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
             style={{
               borderRadius: '8px',
               border: '1px solid #00001d13'

@@ -74,7 +74,7 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
   }
 
   return (
-    <div className="flex flex-col gap-4 h-full">
+    <div className="flex flex-col gap-1 h-full">
       <WorkspaceHeader
         filters={filters}
         onFilterChange={setFilters}

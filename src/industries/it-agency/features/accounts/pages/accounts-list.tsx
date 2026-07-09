@@ -4,12 +4,12 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
-  Plus, Building2, Loader2, Pencil, Trash2, Search, X,
+  Plus, Building2, Loader2, Pencil, Trash2, Search,
   ArrowUpDown, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -110,7 +110,6 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
     searchInput !== "",
     filterStatus !== "active",
   ].filter(Boolean).length;
-  const hasActiveFilters = activeFiltersCount > 0;
 
   function clearFilters() {
     setSearchInput("");
@@ -161,6 +160,23 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
     [sorted, startIndex, endIndex]
   );
 
+  const filterDefs: FilterDef[] = [
+    {
+      id: "status",
+      label: "Status",
+      multiple: false,
+      searchable: false,
+      defaultValue: "active",
+      value: filterStatus,
+      onChange: (val: string) => { setFilterStatus(val as typeof filterStatus); setCurrentPage(1); },
+      options: [
+        { value: "active", label: "Active", description: "Active accounts only" },
+        { value: "inactive", label: "Inactive", description: "Inactive accounts only" },
+        { value: "all", label: "All Statuses", description: "Show every account" },
+      ],
+    },
+  ];
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48">
@@ -171,11 +187,11 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
-      <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden pr-6">
+      <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden pr-6">
         <h1 className="shrink-0 text-lg font-bold mb-4">Accounts</h1>
 
         {accounts.length === 0 ? (
-          <div className="border rounded-xl p-12 text-center bg-background">
+          <div className="border rounded-xl p-12 text-center bg-card">
             <Building2 className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
             <h3 className="font-semibold text-lg mb-1">No accounts yet</h3>
             <p className="text-muted-foreground text-sm mb-6">
@@ -191,8 +207,8 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
         ) : (
           <>
             {/* Toolbar card */}
-            <div className="shrink-0 bg-card rounded-lg border">
-              {/* Top Row: count + search + spacer + Sort + New Account */}
+            <div className="shrink-0">
+              {/* Top Row: count + search + spacer + Filters + Sort + New Account */}
               <div className="flex flex-wrap items-center gap-3 p-3">
                 <div className="text-sm font-medium text-muted-foreground shrink-0">
                   {sorted.length} Accounts
@@ -210,6 +226,8 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                 </div>
 
                 <div className="flex-1" />
+
+                <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
 
                 <Popover>
                   <PopoverTrigger asChild>
@@ -279,41 +297,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                 )}
               </div>
 
-              <div className="h-px bg-border" />
-
-              {/* Filter Row */}
-              <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-                <FilterDropdown
-                  label="Status"
-                  value={filterStatus}
-                  onChange={(val) => { setFilterStatus(val as typeof filterStatus); setCurrentPage(1); }}
-                  searchable={false}
-                  options={[
-                    { value: "active", label: "Active", description: "Active accounts only" },
-                    { value: "inactive", label: "Inactive", description: "Inactive accounts only" },
-                    { value: "all", label: "All Statuses", description: "Show every account" },
-                  ]}
-                />
-
-                <div className="flex-1" />
-
-                {hasActiveFilters && (
-                  <div className="flex items-center gap-1.5">
-                    <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
-                      {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
-                    </Badge>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={clearFilters}
-                      className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-                    >
-                      <X className="h-3 w-3 mr-1" />
-                      Clear
-                    </Button>
-                  </div>
-                )}
-              </div>
+              {activeFiltersCount > 0 && <FilterChips filters={filterDefs} onClearAll={clearFilters} />}
             </div>
 
             {/* Table card */}
