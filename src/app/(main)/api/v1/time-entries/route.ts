@@ -45,7 +45,14 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await query.order("entry_date", { ascending: false });
   if (error) return apiError("DB_ERROR", "Failed to fetch time entries", 500);
-  return apiSuccess(data ?? []);
+
+  // cost_rate_snapshot is staff-cost information (what the agency pays, not
+  // what it bills) — admin/owner only. The cockpit hides it client-side, but
+  // redact server-side too so it never rides in the JSON for non-admins.
+  const rows = isAdmin
+    ? (data ?? [])
+    : (data ?? []).map((row) => ({ ...(row as unknown as Record<string, unknown>), cost_rate_snapshot: null }));
+  return apiSuccess(rows);
 }
 
 export async function POST(request: NextRequest) {
@@ -121,6 +128,11 @@ export async function POST(request: NextRequest) {
     return apiError("DB_ERROR", "Failed to create time entry", 500);
   }
 
+  // cost_rate_snapshot is staff-cost information — admin/owner only (see GET above).
+  const responseEntry = requireAdmin(auth)
+    ? created
+    : { ...(created as unknown as Record<string, unknown>), cost_rate_snapshot: null };
+
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -140,5 +152,5 @@ export async function POST(request: NextRequest) {
   ]);
 
   log.info({ entryId: (created as { id: string }).id }, "Time entry created");
-  return apiSuccess(created, 201);
+  return apiSuccess(responseEntry, 201);
 }

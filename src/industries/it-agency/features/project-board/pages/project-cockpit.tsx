@@ -7,6 +7,7 @@ import { HealthBanner } from "../components/cockpit/health-banner";
 import { BriefEditor } from "../components/cockpit/brief-editor";
 import { QualifyPanel } from "../components/cockpit/qualify-panel";
 import { BillableSummary } from "../components/cockpit/billable-summary";
+import { InvoicesPanel } from "../components/cockpit/invoices-panel";
 import { ContactsSection } from "../components/cockpit/contacts-section";
 import { TasksSection } from "../components/cockpit/tasks-section";
 import { DeliveryTab } from "../components/cockpit/delivery-tab";
@@ -96,6 +97,9 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
           <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
           <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
           {project.is_billable && <BillableSummary projectId={projectId} isAdmin={isAdmin} />}
+          {isAdmin && project.is_billable && (
+            <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
+          )}
           <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
           <TasksSection projectId={projectId} isAdmin={isAdmin} />
         </TabsContent>

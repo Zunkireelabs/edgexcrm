@@ -693,6 +693,10 @@ export type ProjectEventType =
   | "issue_resolved"
   | "status_published"
   | "retro_lesson"
+  | "invoice_generated"
+  | "invoice_sent"
+  | "invoice_paid"
+  | "invoice_voided"
   | string;
 
 export interface ProjectEvent {
@@ -726,6 +730,48 @@ export interface ProjectMilestone {
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+  // Invoicing spine (mig 133) — stamped when a generated invoice captures this milestone.
+  invoiced_at: string | null;
+}
+
+export type InvoiceStatus = "draft" | "sent" | "paid" | "void";
+
+export interface Invoice {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  account_id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  currency: string;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  issue_date: string | null;
+  due_date: string | null;
+  notes: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined (from API)
+  line_items?: InvoiceLineItem[];
+  projects?: { id: string; name: string } | null;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  milestone_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  sort_order: number;
+  created_at: string;
 }
 
 export type IssueKind = "query" | "issue" | "blocker";
