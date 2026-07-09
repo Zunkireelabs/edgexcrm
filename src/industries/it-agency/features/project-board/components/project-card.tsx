@@ -166,7 +166,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
             <Clock className="h-3 w-3" />
             <span>{days === 0 ? "Today" : `${days}d`}</span>
           </div>
-          <HealthDot project={project} billableMinutes={hoursMap.get(project.id) ?? 0} />
+          <HealthDot project={project} />
         </div>
         {owner ? (
           <div

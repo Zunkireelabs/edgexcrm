@@ -26,6 +26,12 @@ import { AssigneePicker } from "../../project-board/components/assignee-picker";
 import type { TeamMember } from "../../project-board/hooks/use-projects";
 import type { Task, TaskStatus } from "@/types/database";
 
+/** Minutes → hours string for the estimate input, rounded to 2 decimals to avoid float artifacts (e.g. 100min -> "1.67"). */
+function minutesToHoursInput(minutes: number | null): string {
+  if (minutes == null) return "";
+  return String(Math.round((minutes / 60) * 100) / 100);
+}
+
 const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "todo",        label: "To Do" },
   { value: "in_progress", label: "In Progress" },
@@ -47,15 +53,13 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
-  const [estimatedMinutes, setEstimatedMinutes] = useState(
-    task.estimated_minutes != null ? String(task.estimated_minutes) : ""
-  );
+  const [estimatedHours, setEstimatedHours] = useState(minutesToHoursInput(task.estimated_minutes));
 
   function handleEditOpen() {
     setTitle(task.title);
     setDescription(task.description ?? "");
     setStatus(task.status);
-    setEstimatedMinutes(task.estimated_minutes != null ? String(task.estimated_minutes) : "");
+    setEstimatedHours(minutesToHoursInput(task.estimated_minutes));
     setEditOpen(true);
   }
 
@@ -71,7 +75,7 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
           title: title.trim(),
           description: description.trim() || null,
           status,
-          estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes, 10) : null,
+          estimated_minutes: estimatedHours.trim() ? Math.round(parseFloat(estimatedHours) * 60) : null,
         }),
       });
       if (!res.ok) {
@@ -224,14 +228,15 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="task-est">Est. minutes</Label>
+                <Label htmlFor="task-est">Est. hours</Label>
                 <Input
                   id="task-est"
                   type="number"
-                  min="1"
-                  value={estimatedMinutes}
-                  onChange={(e) => setEstimatedMinutes(e.target.value)}
-                  placeholder="e.g. 90"
+                  min="0"
+                  step="0.25"
+                  value={estimatedHours}
+                  onChange={(e) => setEstimatedHours(e.target.value)}
+                  placeholder="e.g. 1.5"
                 />
               </div>
             </div>
