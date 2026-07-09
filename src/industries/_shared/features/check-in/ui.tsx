@@ -86,7 +86,7 @@ interface CheckInPageProps {
   isAdmin: boolean;
 }
 
-type DateFilter = "today" | "week" | "month" | "custom";
+type DateFilter = "today" | "yesterday" | "last7" | "last30" | "custom";
 
 function getDateRange(filter: DateFilter, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -100,16 +100,26 @@ function getDateRange(filter: DateFilter, customFrom?: string, customTo?: string
       from = start.toISOString();
       break;
     }
-    case "week": {
+    case "yesterday": {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      from = start.toISOString();
+      to = end.toISOString();
+      break;
+    }
+    case "last7": {
       const start = new Date(now);
       start.setDate(start.getDate() - 7);
       start.setHours(0, 0, 0, 0);
       from = start.toISOString();
       break;
     }
-    case "month": {
+    case "last30": {
       const start = new Date(now);
-      start.setMonth(start.getMonth() - 1);
+      start.setDate(start.getDate() - 30);
       start.setHours(0, 0, 0, 0);
       from = start.toISOString();
       break;
@@ -517,7 +527,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `check-ins-${dateFilter === "custom" ? `${customFrom}-to-${customTo}` : dateFilter}-${new Date().toISOString().split("T")[0]}.csv`;
+    const filterLabel = dateFilter === "custom" ? `${customFrom}-to-${customTo}` : dateFilter === "yesterday" ? "yesterday" : dateFilter === "last7" ? "last-7-days" : dateFilter === "last30" ? "last-30-days" : dateFilter;
+    link.download = `check-ins-${filterLabel}-${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -889,7 +900,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex gap-1">
-              {(["today", "week", "month", "custom"] as DateFilter[]).map((f) => (
+              {(["today", "yesterday", "last7", "last30", "custom"] as DateFilter[]).map((f) => (
                 <Button
                   key={f}
                   variant={dateFilter === f ? "default" : "outline"}
@@ -897,7 +908,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   className="text-xs h-7 px-2.5"
                   onClick={() => setDateFilter(f)}
                 >
-                  {f === "today" ? "Today" : f === "week" ? "This Week" : f === "month" ? "This Month" : "Custom"}
+                  {f === "today" ? "Today" : f === "yesterday" ? "Yesterday" : f === "last7" ? "Last 7 Days" : f === "last30" ? "Last 30 Days" : "Custom"}
                 </Button>
               ))}
             </div>

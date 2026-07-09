@@ -151,6 +151,7 @@ export async function unassignedCrossBranchLeadIds(
     .select("id")
     .in("id", leadIds)
     .in("list_id", listIds)
+    .is("assigned_to", null)
     .is("deleted_at", null);
 
   return (leads ?? []).map((r: { id: string }) => r.id);

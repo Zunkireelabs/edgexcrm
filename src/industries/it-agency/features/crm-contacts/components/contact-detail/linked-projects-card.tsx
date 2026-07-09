@@ -96,7 +96,7 @@ export function LinkedProjectsCard({
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="min-w-0">
                       <Link
-                        href={`/time-tracking/projects/${proj.id}`}
+                        href={`/projects/${proj.id}`}
                         className="text-sm font-medium hover:underline truncate block"
                       >
                         {proj.name}

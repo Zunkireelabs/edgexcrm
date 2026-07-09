@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FilterDropdown } from "@/components/ui/filter-dropdown";
+import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import {
   Dialog,
   DialogContent,
@@ -22,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Badge } from "@/components/ui/badge";
 import {
   Popover,
   PopoverContent,
@@ -457,8 +456,6 @@ export function LeadsTable({
     createdFilter !== "all",
     prospectIndustryFilter !== "all",
   ].filter(Boolean).length;
-
-  const hasActiveFilters = activeFiltersCount > 0;
 
   // Assignment hint for the staging Move-to-list dialog
   const selectionAssignmentHint = useMemo(() => {
@@ -1072,13 +1069,156 @@ export function LeadsTable({
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
   const totalColSpan = 3 + visibleColumns.length;
 
+  // Filter menu config — reuses the exact option arrays / onChange closures from the
+  // filter dropdowns below (gating conditions preserved identically).
+  const filterDefs: FilterDef[] = [
+    ...(sources.length > 0
+      ? [
+          {
+            id: "source",
+            label: "Source",
+            icon: <Globe className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: sourceFilter,
+            onChange: (val: string[]) => {
+              setSourceFilter(val);
+              setCurrentPage(1);
+            },
+            options: sources.map((s) => ({
+              value: s,
+              label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`,
+              description: `Leads from ${s}`,
+            })),
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...((isAdmin || isTeamScoped) && counselors.length > 0
+      ? [
+          {
+            id: "counselor",
+            label: "Counselor",
+            icon: <Users2 className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: counselorFilter,
+            onChange: (val: string[]) => {
+              setCounselorFilter(val);
+              setCurrentPage(1);
+            },
+            options: [
+              {
+                value: "unassigned",
+                label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                description: "Leads not assigned yet",
+              },
+              ...counselors.map(([userId, email]) => ({
+                value: userId,
+                label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+                description: email,
+              })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(showTags
+      ? [
+          {
+            id: "tag",
+            label: "Tag",
+            icon: <Tag className="h-3.5 w-3.5" />,
+            value: tagFilter,
+            onChange: (val: string) => {
+              setTagFilter(val);
+              setCurrentPage(1);
+            },
+            options: [
+              { value: "all", label: "All Tags", description: "Show all leads" },
+              { value: "student", label: "Student", description: "Student leads only" },
+              { value: "parent", label: "Parent", description: "Parent leads only" },
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(showItAgencyFields
+      ? [
+          {
+            id: "industry",
+            label: "Industry",
+            icon: <Briefcase className="h-3.5 w-3.5" />,
+            value: prospectIndustryFilter,
+            onChange: (val: string) => {
+              setProspectIndustryFilter(val);
+              setCurrentPage(1);
+            },
+            options: [
+              { value: "all", label: "All Industries", description: "Show all leads" },
+              ...PROSPECT_INDUSTRIES.map((ind) => ({
+                value: ind.value,
+                label: ind.label,
+                description: `${ind.label} leads`,
+              })),
+              { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    {
+      id: "created",
+      label: "Date created",
+      icon: <Calendar className="h-3.5 w-3.5" />,
+      searchable: false,
+      value: createdFilter,
+      onChange: (val: string) => {
+        setCreatedFilter(val);
+        setCurrentPage(1);
+      },
+      options: [
+        { value: "all", label: "Any time", description: "All time periods" },
+        { value: "today", label: "Today", description: "Last 24 hours" },
+        { value: "week", label: "Last 7 days", description: "Past week" },
+        { value: "month", label: "Last 30 days", description: "Past month" },
+      ],
+    } satisfies FilterDef,
+    {
+      id: "status",
+      label: "Status",
+      searchable: false,
+      value: statusFilter,
+      onChange: (val: string) => {
+        setStatusFilter(val);
+        setCurrentPage(1);
+      },
+      options: statusFilterOptions,
+    } satisfies FilterDef,
+    ...(hasMultipleForms
+      ? [
+          {
+            id: "form",
+            label: "Form",
+            value: formFilter,
+            onChange: (val: string) => {
+              setFormFilter(val);
+              setCurrentPage(1);
+            },
+            options: [
+              { value: "all", label: "All Forms", description: "Show leads from all forms" },
+              ...formEntries.map(([id, name]) => ({
+                value: id,
+                label: name,
+                description: `Form: ${name}`,
+              })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+  ];
+
   return (
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
-      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-2 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
+      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
 
       {/* Enhanced Toolbar - matching pipeline style */}
-      <div className="shrink-0 bg-card rounded-lg border">
+      <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
           {/* Lead count */}
@@ -1121,6 +1261,9 @@ export function LeadsTable({
           )}
 
           <div className="flex-1" />
+
+          {/* Filters */}
+          <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
 
           {/* Sort */}
           <Popover>
@@ -1205,166 +1348,13 @@ export function LeadsTable({
           )}
         </div>
 
-        {/* Divider */}
-        <div className="h-px bg-border" />
-
-        {/* Filter Row - Compact */}
-        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-          {/* Source Filter */}
-          {sources.length > 0 && (
-            <FilterDropdown
-              label="All Sources"
-              multiple
-              value={sourceFilter}
-              onChange={(val) => {
-                setSourceFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Globe className="h-3 w-3" />}
-              options={sources.map((s) => ({
-                value: s,
-                label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`,
-                description: `Leads from ${s}`,
-              }))}
-            />
-          )}
-
-          {/* Counselor Filter (Admin + Branch Manager) */}
-          {(isAdmin || isTeamScoped) && counselors.length > 0 && (
-            <FilterDropdown
-              label="All Counselors"
-              multiple
-              value={counselorFilter}
-              onChange={(val) => {
-                setCounselorFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Users2 className="h-3 w-3" />}
-              options={[
-                {
-                  value: "unassigned",
-                  label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
-                  description: "Leads not assigned yet",
-                },
-                ...counselors.map(([userId, email]) => ({
-                  value: userId,
-                  label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
-                  description: email,
-                })),
-              ]}
-            />
-          )}
-
-          {/* Tag Filter — education_consultancy only */}
-          {showTags && (
-            <FilterDropdown
-              label="All Tags"
-              value={tagFilter}
-              onChange={(val) => {
-                setTagFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Tag className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Tags", description: "Show all leads" },
-                { value: "student", label: "Student", description: "Student leads only" },
-                { value: "parent", label: "Parent", description: "Parent leads only" },
-              ]}
-            />
-          )}
-
-          {/* Prospect Industry Filter — it_agency only */}
-          {showItAgencyFields && (
-            <FilterDropdown
-              label="All Industries"
-              value={prospectIndustryFilter}
-              onChange={(val) => {
-                setProspectIndustryFilter(val);
-                setCurrentPage(1);
-              }}
-              icon={<Briefcase className="h-3 w-3" />}
-              options={[
-                { value: "all", label: "All Industries", description: "Show all leads" },
-                ...PROSPECT_INDUSTRIES.map((ind) => ({
-                  value: ind.value,
-                  label: ind.label,
-                  description: `${ind.label} leads`,
-                })),
-                { value: "__none__", label: "Unspecified", description: "Leads with no industry set" },
-              ]}
-            />
-          )}
-
-          {/* Created Date Filter */}
-          <FilterDropdown
-            label="Any time"
-            value={createdFilter}
-            onChange={(val) => {
-              setCreatedFilter(val);
-              setCurrentPage(1);
-            }}
-            icon={<Calendar className="h-3 w-3" />}
-            searchable={false}
-            options={[
-              { value: "all", label: "Any time", description: "All time periods" },
-              { value: "today", label: "Today", description: "Last 24 hours" },
-              { value: "week", label: "Last 7 days", description: "Past week" },
-              { value: "month", label: "Last 30 days", description: "Past month" },
-            ]}
-          />
-
-          {/* Status Filter */}
-          <FilterDropdown
-            label="All Status"
-            value={statusFilter}
-            onChange={(val) => {
-              setStatusFilter(val);
-              setCurrentPage(1);
-            }}
-            searchable={false}
-            options={statusFilterOptions}
-          />
-
-          {/* Form Filter (if multiple forms) */}
-          {hasMultipleForms && (
-            <FilterDropdown
-              label="All Forms"
-              value={formFilter}
-              onChange={(val) => {
-                setFormFilter(val);
-                setCurrentPage(1);
-              }}
-              options={[
-                { value: "all", label: "All Forms", description: "Show leads from all forms" },
-                ...formEntries.map(([id, name]) => ({
-                  value: id,
-                  label: name,
-                  description: `Form: ${name}`,
-                })),
-              ]}
-            />
-          )}
-
-          <div className="flex-1" />
-
-          {/* Active Filters Indicator + Clear */}
-          {hasActiveFilters && (
-            <div className="flex items-center gap-1.5">
-              <Badge variant="secondary" className="text-[11px] font-normal h-6 px-2">
-                {activeFiltersCount} filter{activeFiltersCount !== 1 ? "s" : ""}
-              </Badge>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="h-6 px-2 text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                <X className="h-3 w-3 mr-1" />
-                Clear
-              </Button>
-            </div>
-          )}
-        </div>
+        {/* Chips row — active filters only, replaces the old always-visible pill row */}
+        {activeFiltersCount > 0 && (
+          <>
+            <div className="h-px bg-border" />
+            <FilterChips filters={filterDefs} onClearAll={clearFilters} />
+          </>
+        )}
       </div>
 
       {/* Bulk Action Bar - animated container between filters and table */}

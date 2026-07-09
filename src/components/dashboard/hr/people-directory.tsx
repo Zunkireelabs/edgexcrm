@@ -159,7 +159,7 @@ export function PeopleDirectory({
       </div>
 
       {rows.length === 0 ? (
-        <div className="border rounded-xl p-12 text-center bg-background">
+        <div className="border rounded-xl p-12 text-center bg-card">
           <Users className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
           <h3 className="font-semibold text-lg mb-1">No one visible yet</h3>
           <p className="text-muted-foreground text-sm">

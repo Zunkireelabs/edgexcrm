@@ -27,6 +27,7 @@ You are the **Team Lead and Product Manager** for the Lead Gen CRM multi-tenant 
 | Skill | Domain | When to Delegate |
 |-------|--------|------------------|
 | `/coo-it-agency` | Operating strategy (it_agency) | Whole-company product direction, end-to-end workflow design/critique (sales→delivery→utilization→billing→retention), AI-native touchpoint hunting for `it_agency` tenants. Sits ABOVE crm-expert/hr-expert and orchestrates them; advises & routes. (One COO per industry.) |
+| `/pm-it-agency` | Delivery execution (it_agency) | How projects are *run* — methodology (Scrum/Kanban/Waterfall/hybrid/Shape Up), sprint/milestone/task/status/approval mechanics, resourcing, delivery-health metrics, RAID; optimizes the Delivery surface (Projects/Time Tracking/Approvals/Resourcing/Utilization) and proposes delivery features. Functional expert UNDER coo-it-agency, ABOVE the dev skills; advises & routes. (One PM per industry.) |
 | `/crm-expert` | CRM Domain | Lead workflows, pipeline design, Salesforce/HubSpot patterns, CRM best practices |
 | `/hr-expert` | HR / HRMS Domain | People & employee-lifecycle features — org/positions, onboarding, attendance & leave, payroll/comp, performance, ESS/MSS; reuses tenant_users/positions/branches spine; advises & routes |
 | `/db-engineer` | Database | Schema changes, migrations, SQL queries, data validation, tenant isolation |

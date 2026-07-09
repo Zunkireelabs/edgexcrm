@@ -14,7 +14,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
-import { canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canAccessList, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -44,7 +44,16 @@ export default async function LeadsOrganiseCockpitPage({
   ]);
 
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
-  const selectedBranchId = branchCookieVal && branchCookieVal !== "all" ? branchCookieVal : null;
+
+  // Fetch branches up front (also reused below for the table's branch picker) so the
+  // stale/invalid edgex_branch cookie can be validated before it's applied to scope.
+  const branches =
+    tenantData.entitlements.maxBranches > 1 ? await getBranches(tenantData.tenant.id) : [];
+  const effectiveBranch = resolveEffectiveBranch(
+    branchCookieVal,
+    branches.map((b) => b.id),
+  );
+  const selectedBranchId = effectiveBranch;
 
   const allLists = await getLeadListsByTenant(tenantData.tenant.id);
 
@@ -68,8 +77,8 @@ export default async function LeadsOrganiseCockpitPage({
     ? (POSITION_ROUTE_MAP[tenantData.positionSlug] ?? null)
     : null;
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId, poolSlug);
-  if (tenantData.permissions.leadScope === "all" && branchCookieVal && branchCookieVal !== "all") {
-    scope.branchId = branchCookieVal;
+  if (tenantData.permissions.leadScope === "all" && effectiveBranch) {
+    scope.branchId = effectiveBranch;
   }
   scope.listId = stagingList.id;
 
@@ -94,7 +103,6 @@ export default async function LeadsOrganiseCockpitPage({
     formConfigs,
     industryResult,
     entitiesResult,
-    branches,
   ] = await Promise.all([
     getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
     getTeamMembers(tenantData.tenant.id),
@@ -115,9 +123,6 @@ export default async function LeadsOrganiseCockpitPage({
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("position", { ascending: true }),
-    tenantData.entitlements.maxBranches > 1
-      ? getBranches(tenantData.tenant.id)
-      : Promise.resolve([]),
   ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));

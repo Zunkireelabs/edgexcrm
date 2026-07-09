@@ -375,7 +375,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
       toast.success("Project created");
       setLinkedProjectId(json.data.id);
       setConvertOpen(false);
-      router.push(`/time-tracking/projects/${json.data.id}`);
+      router.push(`/projects/${json.data.id}`);
     } catch {
       toast.error("Failed to convert deal");
     } finally {
@@ -450,7 +450,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
                 <>
                   {linkedProjectId ? (
                     <Button size="sm" variant="outline" asChild>
-                      <Link href={`/time-tracking/projects/${linkedProjectId}`}>
+                      <Link href={`/projects/${linkedProjectId}`}>
                         <FolderKanban className="h-4 w-4 mr-1" />
                         View project
                       </Link>

@@ -166,7 +166,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
         type: NotificationTypes.TASK_ASSIGNED,
         title: "New task assigned",
         message: existingTask.title,
-        link: existingTask.project_id ? `/time-tracking/projects/${existingTask.project_id}` : "/home",
+        link: existingTask.project_id ? `/projects/${existingTask.project_id}` : "/home",
       },
     ]);
   }
