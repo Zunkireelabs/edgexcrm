@@ -87,8 +87,8 @@ export const manifest: IndustryManifest = {
           icon: "Clock",
         },
         {
-          featureId: FEATURES.TIME_TRACKING,
-          href: "/time-tracking/approvals",
+          featureId: FEATURES.PROJECT_BOARD,
+          href: "/approvals",
           label: "Approvals",
           icon: "Stamp",
           minRoles: ["owner", "admin"] as const,

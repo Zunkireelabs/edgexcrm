@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from "@/lib/api/response";
+import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiConflict } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -24,12 +24,18 @@ export async function POST(_request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("project_milestones")
-    .select("id, project_id, title, amount")
+    .select("id, project_id, title, amount, status")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Milestone");
-  const existingRow = existing as unknown as { project_id: string; title: string; amount: number | null };
+  const existingRow = existing as unknown as { project_id: string; title: string; amount: number | null; status: string };
+  if (existingRow.status === "accepted" || existingRow.status === "rejected") {
+    return apiConflict(`Milestone already ${existingRow.status}`);
+  }
 
+  // TOCTOU guard: only pending/in_progress/submitted milestones can be
+  // accepted (cockpit legitimately accepts from any of those stages) — a
+  // concurrent double-accept affects 0 rows and bails out below.
   const { data: updated, error } = await db
     .from("project_milestones")
     .update({
@@ -39,12 +45,16 @@ export async function POST(_request: NextRequest, { params }: Props) {
       rejection_reason: null,
     })
     .eq("id", id)
+    .in("status", ["pending", "in_progress", "submitted"])
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
     log.error({ error }, "Failed to accept milestone");
     return apiError("DB_ERROR", "Failed to accept milestone", 500);
+  }
+  if (!updated) {
+    return apiConflict("Milestone already decided");
   }
 
   await recordProjectEvent(db, {
