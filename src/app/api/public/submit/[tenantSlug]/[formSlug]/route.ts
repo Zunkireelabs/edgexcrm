@@ -428,7 +428,7 @@ export async function POST(
     entity_id: body.entity_id || null,
     intake_source: body.intake_source
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_source : null)
-      || "api",
+      || "Website",
     intake_medium: body.intake_medium
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_medium : null)
       || null,
