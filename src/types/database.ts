@@ -781,6 +781,11 @@ export interface ProjectStatusReport {
   period_end: string | null;
   health_snapshot: ProjectHealth | null;
   summary: string | null;
+  accomplishments: string | null;
+  in_progress: string | null;
+  risks: string | null;
+  asks: string | null;
+  client_message: string | null;
   pct_complete_snapshot: number | null;
   hours_actual_snapshot: number | null;
   hours_estimate_snapshot: number | null;

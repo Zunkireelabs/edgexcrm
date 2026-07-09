@@ -93,11 +93,42 @@ function AiReadSignals({
   );
 }
 
+interface DraftFields {
+  accomplishments?: string;
+  in_progress?: string;
+  risks?: string;
+  asks?: string;
+  client_message?: string;
+}
+
+const SECTION_FIELDS: { key: keyof DraftFields; label: string }[] = [
+  { key: "accomplishments", label: "Accomplishments" },
+  { key: "in_progress", label: "In progress" },
+  { key: "risks", label: "Risks" },
+  { key: "asks", label: "Asks" },
+  { key: "client_message", label: "Recommended client message" },
+];
+
+function ReportSections({ report }: { report: ProjectStatusReport }) {
+  const sections = SECTION_FIELDS.filter((f) => report[f.key]);
+  if (sections.length === 0) {
+    if (!report.summary) return null;
+    return <p className="text-sm text-foreground">{report.summary}</p>;
+  }
+  return (
+    <div className="space-y-2">
+      {sections.map((f) => (
+        <DraftSection key={f.key} label={f.label} text={report[f.key] as string} />
+      ))}
+    </div>
+  );
+}
+
 interface StatusReportsPanelProps {
   reports: ProjectStatusReport[];
   loading: boolean;
   isAdmin: boolean;
-  onCreateDraft: (summary: string) => Promise<boolean>;
+  onCreateDraft: (fields: DraftFields) => Promise<boolean>;
   onPublish: (id: string) => Promise<boolean>;
   // AI-synth vision preview (lib/ai-preview.ts) — Zunkiree dogfood + admin only.
   projectId: string;
@@ -117,15 +148,33 @@ export function StatusReportsPanel({
   events,
   previewEnabled,
 }: StatusReportsPanelProps) {
-  const [summary, setSummary] = useState("");
+  const [fields, setFields] = useState({
+    accomplishments: "",
+    inProgress: "",
+    risks: "",
+    asks: "",
+    clientMessage: "",
+  });
   const [submitting, setSubmitting] = useState(false);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
 
+  function updateField(key: keyof typeof fields, value: string) {
+    setFields((f) => ({ ...f, [key]: value }));
+  }
+
+  const allFieldsEmpty = Object.values(fields).every((v) => v.trim().length === 0);
+
   async function handleSaveDraft() {
     setSubmitting(true);
-    const ok = await onCreateDraft(summary.trim());
+    const ok = await onCreateDraft({
+      accomplishments: fields.accomplishments.trim() || undefined,
+      in_progress: fields.inProgress.trim() || undefined,
+      risks: fields.risks.trim() || undefined,
+      asks: fields.asks.trim() || undefined,
+      client_message: fields.clientMessage.trim() || undefined,
+    });
     setSubmitting(false);
-    if (ok) setSummary("");
+    if (ok) setFields({ accomplishments: "", inProgress: "", risks: "", asks: "", clientMessage: "" });
   }
 
   const drafts = reports.filter((r) => !r.published_at);
@@ -139,6 +188,21 @@ export function StatusReportsPanel({
   const eventsSinceLastReport = lastPublishedAt
     ? events.filter((e) => e.occurred_at > lastPublishedAt).length
     : events.length;
+
+  const sortedPublished = [...published].sort((a, b) =>
+    (b.published_at ?? "").localeCompare(a.published_at ?? "")
+  );
+  const [latestPublished, priorPublished] = sortedPublished;
+  const periodDiff = !priorPublished
+    ? null
+    : {
+        healthFrom: priorPublished.health_snapshot,
+        healthTo: latestPublished.health_snapshot,
+        pctFrom: priorPublished.pct_complete_snapshot,
+        pctTo: latestPublished.pct_complete_snapshot,
+        hoursFrom: priorPublished.hours_actual_snapshot,
+        hoursTo: latestPublished.hours_actual_snapshot,
+      };
 
   return (
     <>
@@ -162,15 +226,60 @@ export function StatusReportsPanel({
       </CardHeader>
       <CardContent className="space-y-4">
         {isAdmin && (
-          <div className="space-y-2">
+          <div className="space-y-3">
+            <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
+              <span>
+                {eventsSinceLastReport} new event{eventsSinceLastReport === 1 ? "" : "s"} since{" "}
+                {lastPublishedAt ? new Date(lastPublishedAt).toLocaleDateString() : "the start"}
+              </span>
+              {periodDiff ? (
+                <span className="ml-2">
+                  · Health {periodDiff.healthFrom ? HEALTH_LABEL[periodDiff.healthFrom] : "—"} →{" "}
+                  {periodDiff.healthTo ? HEALTH_LABEL[periodDiff.healthTo] : "—"} · Complete{" "}
+                  {periodDiff.pctFrom ?? 0}% → {periodDiff.pctTo ?? 0}% · Hours{" "}
+                  {formatSnapshotHours(periodDiff.hoursFrom)}h → {formatSnapshotHours(periodDiff.hoursTo)}h
+                </span>
+              ) : (
+                <span className="ml-2 italic">First report</span>
+              )}
+            </div>
+
             <Textarea
-              value={summary}
-              onChange={(e) => setSummary(e.target.value)}
-              placeholder="What's the human-readable update for this period?"
-              rows={3}
+              value={fields.accomplishments}
+              onChange={(e) => updateField("accomplishments", e.target.value)}
+              placeholder="Accomplishments"
+              rows={2}
               disabled={submitting}
             />
-            <Button size="sm" onClick={handleSaveDraft} disabled={submitting || summary.trim().length === 0}>
+            <Textarea
+              value={fields.inProgress}
+              onChange={(e) => updateField("inProgress", e.target.value)}
+              placeholder="In progress"
+              rows={2}
+              disabled={submitting}
+            />
+            <Textarea
+              value={fields.risks}
+              onChange={(e) => updateField("risks", e.target.value)}
+              placeholder="Risks"
+              rows={2}
+              disabled={submitting}
+            />
+            <Textarea
+              value={fields.asks}
+              onChange={(e) => updateField("asks", e.target.value)}
+              placeholder="Asks"
+              rows={2}
+              disabled={submitting}
+            />
+            <Textarea
+              value={fields.clientMessage}
+              onChange={(e) => updateField("clientMessage", e.target.value)}
+              placeholder="Recommended client message"
+              rows={2}
+              disabled={submitting}
+            />
+            <Button size="sm" onClick={handleSaveDraft} disabled={submitting || allFieldsEmpty}>
               Save draft
             </Button>
           </div>
@@ -191,14 +300,14 @@ export function StatusReportsPanel({
                 </Button>
               )}
             </div>
-            {r.summary && <p className="text-sm text-foreground">{r.summary}</p>}
+            <ReportSections report={r} />
           </div>
         ))}
 
         {published.map((r) => (
           <div key={r.id} className="flex items-start justify-between gap-3 py-2 border-b border-border/50 last:border-0">
-            <div className="min-w-0">
-              <p className="text-sm text-foreground">{r.summary}</p>
+            <div className="min-w-0 space-y-2">
+              <ReportSections report={r} />
               <p className="text-xs text-muted-foreground">
                 Published {r.published_at ? new Date(r.published_at).toLocaleDateString() : ""} ·{" "}
                 {r.health_snapshot && HEALTH_LABEL[r.health_snapshot]} · {r.pct_complete_snapshot}% complete ·{" "}

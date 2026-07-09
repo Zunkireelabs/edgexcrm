@@ -24,11 +24,18 @@ export function useProjectStatusReports(projectId: string) {
     load();
   }, [load]);
 
-  async function createDraft(summary: string): Promise<boolean> {
+  async function createDraft(fields: {
+    summary?: string;
+    accomplishments?: string;
+    in_progress?: string;
+    risks?: string;
+    asks?: string;
+    client_message?: string;
+  }): Promise<boolean> {
     const res = await fetch(`/api/v1/projects/${projectId}/status-reports`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ summary }),
+      body: JSON.stringify(fields),
     });
     const json = await res.json();
     if (!res.ok) {
