@@ -12,17 +12,22 @@ import { TasksSection } from "../components/cockpit/tasks-section";
 import { DeliveryTab } from "../components/cockpit/delivery-tab";
 import { ReportsTab } from "../components/cockpit/reports-tab";
 import { TimelinePanel } from "../components/cockpit/timeline-panel";
+import { AiSummaryCard } from "../components/cockpit/ai-summary-card";
 import { StatusPill } from "../components/status-pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AI_SYNTH_PREVIEW } from "../lib/ai-preview";
 import type { ProjectStatus } from "@/types/database";
 
 interface ProjectCockpitPageProps {
   projectId: string;
   role: string;
+  // Tenant slug, for the AI-synth vision-preview flag (lib/ai-preview.ts).
+  tenantSlug: string | null;
 }
 
-export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps) {
+export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockpitPageProps) {
   const isAdmin = role === "owner" || role === "admin";
+  const aiPreviewEnabled = AI_SYNTH_PREVIEW.enabledFor(tenantSlug, isAdmin);
   const {
     project,
     events,
@@ -87,6 +92,7 @@ export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps)
           <TabsTrigger value="timeline">Timeline</TabsTrigger>
         </TabsList>
         <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
+          {aiPreviewEnabled && <AiSummaryCard />}
           <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
           <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
           {project.is_billable && <BillableSummary projectId={projectId} />}
@@ -102,7 +108,14 @@ export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps)
           />
         </TabsContent>
         <TabsContent value="reports" className="mt-4">
-          <ReportsTab projectId={projectId} isAdmin={isAdmin} onEventRecorded={refetchEvents} />
+          <ReportsTab
+            projectId={projectId}
+            isAdmin={isAdmin}
+            onEventRecorded={refetchEvents}
+            project={project}
+            events={events}
+            aiPreviewEnabled={aiPreviewEnabled}
+          />
         </TabsContent>
         <TabsContent value="timeline" className="mt-4">
           <TimelinePanel events={events} loading={loading} isAdmin={isAdmin} onAddRetroLesson={addRetroLesson} />

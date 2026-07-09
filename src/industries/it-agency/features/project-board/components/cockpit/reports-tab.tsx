@@ -4,14 +4,26 @@ import { useProjectReconciliation } from "../../hooks/use-project-reconciliation
 import { useProjectStatusReports } from "../../hooks/use-project-status-reports";
 import { ReconciliationPanel } from "./reconciliation-panel";
 import { StatusReportsPanel } from "./status-reports-panel";
+import type { Project, ProjectEvent } from "@/types/database";
 
 interface ReportsTabProps {
   projectId: string;
   isAdmin: boolean;
   onEventRecorded: () => void;
+  project: Project;
+  events: ProjectEvent[];
+  // AI-synth vision preview (lib/ai-preview.ts) — Zunkiree dogfood + admin only.
+  aiPreviewEnabled: boolean;
 }
 
-export function ReportsTab({ projectId, isAdmin, onEventRecorded }: ReportsTabProps) {
+export function ReportsTab({
+  projectId,
+  isAdmin,
+  onEventRecorded,
+  project,
+  events,
+  aiPreviewEnabled,
+}: ReportsTabProps) {
   const reconciliation = useProjectReconciliation(projectId);
   const statusReports = useProjectStatusReports(projectId);
 
@@ -42,6 +54,10 @@ export function ReportsTab({ projectId, isAdmin, onEventRecorded }: ReportsTabPr
         isAdmin={isAdmin}
         onCreateDraft={statusReports.createDraft}
         onPublish={handlePublish}
+        projectId={projectId}
+        project={project}
+        events={events}
+        previewEnabled={aiPreviewEnabled}
       />
     </div>
   );

@@ -14,5 +14,5 @@ export default async function ProjectCockpitRoute({ params }: Props) {
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD)) notFound();
 
-  return <ProjectCockpitPage projectId={id} role={tenantData.role} />;
+  return <ProjectCockpitPage projectId={id} role={tenantData.role} tenantSlug={tenantData.tenant.slug} />;
 }
