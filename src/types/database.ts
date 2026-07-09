@@ -108,6 +108,7 @@ export interface TenantUser {
   user_id: string;
   role: UserRole;
   default_hourly_rate: number | null;
+  cost_rate: number | null;
   branch_id: string | null;
   created_at: string;
 }
@@ -835,6 +836,7 @@ export interface TimeEntry {
   notes: string | null;
   is_billable: boolean;
   rate_snapshot: number | null;
+  cost_rate_snapshot: number | null;
   approval_status: ApprovalStatus;
   approved_by: string | null;
   approved_at: string | null;

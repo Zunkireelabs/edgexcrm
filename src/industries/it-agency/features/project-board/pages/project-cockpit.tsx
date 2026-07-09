@@ -95,7 +95,7 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
           {aiPreviewEnabled && <AiSummaryCard />}
           <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
           <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
-          {project.is_billable && <BillableSummary projectId={projectId} />}
+          {project.is_billable && <BillableSummary projectId={projectId} isAdmin={isAdmin} />}
           <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
           <TasksSection projectId={projectId} isAdmin={isAdmin} />
         </TabsContent>
