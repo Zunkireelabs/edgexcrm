@@ -629,6 +629,17 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
     field_of_study?: string | null;
     degree_level?: string | null;
   };
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+
+  // Fall back to custom_fields for form-submitted leads where dedicated columns are null
+  const effectiveDestinations: string[] =
+    (leadWithEdu.destinations?.length ?? 0) > 0
+      ? (leadWithEdu.destinations ?? [])
+      : cf.countries
+      ? [cf.countries as string]
+      : [];
+  const effectiveFieldOfStudy = leadWithEdu.field_of_study || (cf.field_of_study as string) || null;
+  const effectiveDegreeLevel = leadWithEdu.degree_level || (cf.education_level as string) || null;
 
   const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
@@ -668,9 +679,9 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
   }
 
   const hasAny =
-    (leadWithEdu.destinations?.length ?? 0) > 0 ||
-    leadWithEdu.field_of_study ||
-    leadWithEdu.degree_level;
+    effectiveDestinations.length > 0 ||
+    effectiveFieldOfStudy ||
+    effectiveDegreeLevel;
 
   return (
     <>
@@ -777,11 +788,11 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         </div>
       ) : hasAny ? (
         <div className="space-y-2">
-          {(leadWithEdu.destinations?.length ?? 0) > 0 && (
+          {effectiveDestinations.length > 0 && (
             <div>
               <p className="text-xs text-muted-foreground">Destinations</p>
               <div className="flex flex-wrap gap-1 mt-0.5">
-                {(leadWithEdu.destinations ?? []).map((d) => (
+                {effectiveDestinations.map((d) => (
                   <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">
                     {d}
                   </span>
@@ -789,11 +800,11 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
               </div>
             </div>
           )}
-          {leadWithEdu.field_of_study && (
-            <InfoRow label="Field of Study" value={leadWithEdu.field_of_study} />
+          {effectiveFieldOfStudy && (
+            <InfoRow label="Field of Study" value={effectiveFieldOfStudy} />
           )}
-          {leadWithEdu.degree_level && (
-            <InfoRow label="Degree Level" value={leadWithEdu.degree_level} />
+          {effectiveDegreeLevel && (
+            <InfoRow label="Degree Level" value={effectiveDegreeLevel} />
           )}
         </div>
       ) : (
@@ -930,17 +941,29 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
         </div>
       ) : (
         <div className="space-y-2">
-          <InfoRow label="Source Category" value={lead.intake_source || "—"} />
-          <InfoRow label="Source Channel" value={lead.intake_medium || "—"} />
-          <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
-          <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
-          {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
-          {lead.ref_code && (
-            <InfoRow
-              label="Ref Code"
-              value={affiliateName ? `${lead.ref_code} · ${affiliateName}` : lead.ref_code}
-            />
-          )}
+          {(() => {
+            const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+            const sourceCategory = lead.intake_source || "—";
+            const sourceChannel = lead.intake_medium || (cf.source as string) || "—";
+            const sourcePage = lead.intake_account || "—";
+            const campaign = lead.intake_campaign || "—";
+            const refCode = lead.ref_code || (cf.ref_code as string) || null;
+            return (
+              <>
+                <InfoRow label="Source Category" value={sourceCategory} />
+                <InfoRow label="Source Channel" value={sourceChannel} />
+                <InfoRow label="Source Page / Account" value={sourcePage} />
+                <InfoRow label="Campaign" value={campaign} />
+                {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
+                {refCode && (
+                  <InfoRow
+                    label="Ref Code"
+                    value={affiliateName ? `${refCode} · ${affiliateName}` : refCode}
+                  />
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
     </>

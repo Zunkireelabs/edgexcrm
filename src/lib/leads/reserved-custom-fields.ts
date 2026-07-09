@@ -11,6 +11,13 @@ const PROMOTED_KEYS = new Set([
   "program_category",
   "interested_country",
   "campaign",
+  // form-submission keys — have dedicated UI in Lead Source / Study Interest panels
+  "source",
+  "ref_code",
+  "field_of_study",
+  "education_level",
+  "countries",
+  "hear_about",
 ]);
 
 export function isReservedCustomField(key: string): boolean {
