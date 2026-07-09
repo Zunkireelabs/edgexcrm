@@ -54,6 +54,7 @@ export function ReportsTab({
         isAdmin={isAdmin}
         onCreateDraft={statusReports.createDraft}
         onPublish={handlePublish}
+        onRefetch={statusReports.refetch}
         projectId={projectId}
         project={project}
         events={events}

@@ -1,10 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import { Send, Sparkles } from "lucide-react";
+import { toast } from "sonner";
+import { Send, Sparkles, Share2, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   Sheet,
   SheetContent,
@@ -93,6 +103,121 @@ function AiReadSignals({
   );
 }
 
+function ShareDialog({
+  report,
+  open,
+  onClose,
+  onUpdated,
+}: {
+  report: ProjectStatusReport;
+  open: boolean;
+  onClose: () => void;
+  onUpdated: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const publicUrl = report.public_token
+    ? `${process.env.NEXT_PUBLIC_APP_URL ?? (typeof window !== "undefined" ? window.location.origin : "")}/reports/share/${report.public_token}`
+    : null;
+
+  async function patchReport(body: { is_client_visible?: boolean; regenerate_token?: boolean }) {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/v1/status-reports/${report.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message ?? "Failed to update share settings");
+      onUpdated();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update share settings");
+    } finally {
+      setSaving(false);
+      setConfirmRegen(false);
+    }
+  }
+
+  function copyUrl() {
+    if (!publicUrl) return;
+    navigator.clipboard.writeText(publicUrl).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Share status report</DialogTitle>
+          <DialogDescription>
+            Anyone with the link can view a read-only, branded version of this report. No login required.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex flex-col gap-4 py-2">
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id="report-public-toggle"
+              checked={!!report.is_client_visible}
+              disabled={saving}
+              onCheckedChange={(checked) => patchReport({ is_client_visible: checked === true })}
+              className="mt-0.5"
+            />
+            <Label htmlFor="report-public-toggle" className="text-sm font-medium cursor-pointer">
+              Public link enabled
+            </Label>
+          </div>
+
+          {report.is_client_visible && publicUrl && (
+            <div className="flex flex-col gap-2">
+              <Label className="text-xs text-muted-foreground">Public URL</Label>
+              <div className="flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-muted px-2 py-1.5 text-xs">{publicUrl}</code>
+                <Button size="icon" variant="outline" className="shrink-0 h-8 w-8" onClick={copyUrl}>
+                  {copied ? <Check className="h-3.5 w-3.5 text-green-600" /> : <Copy className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {report.is_client_visible && (
+            <div className="border-t pt-4">
+              {!confirmRegen ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                  onClick={() => setConfirmRegen(true)}
+                  disabled={saving}
+                >
+                  Regenerate link
+                </Button>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <p className="text-sm text-destructive">This will break the existing URL. Are you sure?</p>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="destructive" disabled={saving} onClick={() => patchReport({ regenerate_token: true })}>
+                      Yes, regenerate
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmRegen(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 interface DraftFields {
   accomplishments?: string;
   in_progress?: string;
@@ -130,6 +255,7 @@ interface StatusReportsPanelProps {
   isAdmin: boolean;
   onCreateDraft: (fields: DraftFields) => Promise<boolean>;
   onPublish: (id: string) => Promise<boolean>;
+  onRefetch: () => void;
   // AI-synth vision preview (lib/ai-preview.ts) — Zunkiree dogfood + admin only.
   projectId: string;
   project: Project;
@@ -143,6 +269,7 @@ export function StatusReportsPanel({
   isAdmin,
   onCreateDraft,
   onPublish,
+  onRefetch,
   projectId,
   project,
   events,
@@ -157,6 +284,10 @@ export function StatusReportsPanel({
   });
   const [submitting, setSubmitting] = useState(false);
   const [aiPreviewOpen, setAiPreviewOpen] = useState(false);
+  const [shareReportId, setShareReportId] = useState<string | null>(null);
+  // Derived from `reports` (not copied into state) so a refetch after
+  // toggling/regenerating keeps the open dialog showing the live token.
+  const shareReport = shareReportId ? reports.find((r) => r.id === shareReportId) ?? null : null;
 
   function updateField(key: keyof typeof fields, value: string) {
     setFields((f) => ({ ...f, [key]: value }));
@@ -314,6 +445,12 @@ export function StatusReportsPanel({
                 {formatSnapshotHours(r.hours_actual_snapshot)}h / {formatSnapshotHours(r.hours_estimate_snapshot)}h
               </p>
             </div>
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="shrink-0" onClick={() => setShareReportId(r.id)}>
+                <Share2 className="h-3.5 w-3.5 mr-1.5" />
+                Share
+              </Button>
+            )}
           </div>
         ))}
       </CardContent>
@@ -382,6 +519,15 @@ export function StatusReportsPanel({
           )}
         </SheetContent>
       </Sheet>
+    )}
+
+    {shareReport && (
+      <ShareDialog
+        report={shareReport}
+        open={!!shareReport}
+        onClose={() => setShareReportId(null)}
+        onUpdated={onRefetch}
+      />
     )}
     </>
   );

@@ -790,6 +790,7 @@ export interface ProjectStatusReport {
   hours_actual_snapshot: number | null;
   hours_estimate_snapshot: number | null;
   is_client_visible: boolean;
+  public_token: string | null;
   published_at: string | null;
   published_by: string | null;
   created_at: string;
