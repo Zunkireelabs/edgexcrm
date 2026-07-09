@@ -621,15 +621,16 @@ export async function PATCH(
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
   }
-  // Sync lead_branches.assigned_to for the caller's branch when assigned_to changes:
-  // prevents the cross-branch pool from showing an already-claimed lead to other callers.
-  if (updatePayload.assigned_to !== undefined && auth.branchId) {
+  // Mirror leads.assigned_to onto every non-origin pool row for this lead — prevents the
+  // cross-branch pool from showing an already-claimed lead to other callers, and reopens
+  // the pool row on unassign. Runs for every assigner (incl. admin/owner with no branchId)
+  // and covers all pool rows, not just the caller's own branch.
+  if (updatePayload.assigned_to !== undefined) {
     await supabase.from("lead_branches")
       .update({ assigned_to: (updated as Lead).assigned_to ?? null })
       .eq("tenant_id", auth.tenantId)
       .eq("lead_id", id)
-      .eq("branch_id", auth.branchId)
-      .is("assigned_to", null);
+      .eq("is_origin", false);
   }
 
   // New assignee becomes a permanent collaborator (engaged-user visibility).
