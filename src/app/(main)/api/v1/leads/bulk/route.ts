@@ -332,6 +332,16 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
+  // Mirror the new assignee onto every non-origin pool row so the cross-branch pool
+  // (unassignedCrossBranchLeadIds) never treats an assigned lead as unclaimed.
+  if (body.assigned_to !== undefined) {
+    await supabase.from("lead_branches")
+      .update({ assigned_to: body.assigned_to ?? null })
+      .eq("tenant_id", auth.tenantId)
+      .in("lead_id", idsToUpdate)
+      .eq("is_origin", false);
+  }
+
   // Resolve old list names for human-readable audit entries
   const oldListNameMap = new Map<string, string>();
   if (body.list_id !== undefined) {
