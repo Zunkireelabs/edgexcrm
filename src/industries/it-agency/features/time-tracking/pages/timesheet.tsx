@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Plus, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Loader2, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TimesheetFilters, type TimesheetFilterValues } from "../components/timesheet-filters";
 import { TimesheetStatsCards } from "../components/timesheet-stats-cards";
@@ -183,10 +184,18 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
           </p>
         </div>
         {isAdmin ? (
-          <Button onClick={() => setLogTimeOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Log time
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/time-tracking/compliance">
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Team compliance
+              </Link>
+            </Button>
+            <Button onClick={() => setLogTimeOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Log time
+            </Button>
+          </div>
         ) : (
           !showInlineForm && (
             <Button onClick={() => setShowInlineForm(true)}>
