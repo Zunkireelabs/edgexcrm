@@ -63,6 +63,8 @@ interface CheckInRecord {
   assigned_to: string | null;
   assigned_to_name: string | null;
   tags: string[];
+  lead_created_at: string | null;
+  is_new: boolean;
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
@@ -217,6 +219,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   // Check-in history state
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
+  // "other" walk-ins belong on the Contacts page only, not Check-In History
+  const visibleCheckIns = checkIns.filter((r) => !(r.tags ?? []).includes("other"));
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -502,13 +506,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   }, [showAddForm, query]);
 
   const handleExportCSV = () => {
-    if (checkIns.length === 0) {
+    if (visibleCheckIns.length === 0) {
       toast.error("No check-ins to export");
       return;
     }
 
     const headers = ["Name", "Email", "Phone", "Pipeline", "Stage", "Checked In At", "Checked In By"];
-    const rows = checkIns.map((r) => [
+    const rows = visibleCheckIns.map((r) => [
       [r.first_name, r.last_name].filter(Boolean).join(" ") || "Unknown",
       r.email || "",
       r.phone || "",
@@ -894,7 +898,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             <Clock className="h-4 w-4" />
             Check-In History
             <Badge variant="secondary" className="text-xs ml-1">
-              {checkIns.length}
+              {visibleCheckIns.length}
             </Badge>
           </h2>
 
@@ -948,7 +952,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   size="sm"
                   className="text-xs h-7 px-2.5"
                   onClick={handleExportCSV}
-                  disabled={checkIns.length === 0}
+                  disabled={visibleCheckIns.length === 0}
                 >
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Export CSV
@@ -960,13 +964,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : checkIns.length === 0 ? (
+            ) : visibleCheckIns.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
                 No check-ins found for this period
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-3 pt-2 space-y-1">
-                {checkIns.map((record) => {
+                {visibleCheckIns.map((record) => {
                   const checkedInByName = memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by;
                   const noteContent = (() => {
                     const raw = record.note || "";
@@ -1002,17 +1006,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-xs font-medium truncate">{checkedInByName}</div>
                       </div>
 
-                      {/* Assigned To / Meet with — depends on lead tag */}
+                      {/* Assigned To / Meet with — depends on whether the lead was new (walk-in) or already existed */}
                       {(() => {
                         const isStudentOrParent = (record.tags ?? []).some((t) => t === "student" || t === "parent");
-                        const colLabel = isStudentOrParent ? "Assigned To" : "Meet with";
-                        const colMembers = isStudentOrParent ? counselorMembers : allBranchMembers;
+                        const isNew = isStudentOrParent && record.is_new;
+                        const colLabel = isNew ? "Assigned To" : "Meet with";
+                        const colMembers = isNew ? counselorMembers : allBranchMembers;
                         return (
                           <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
                             <div className="text-[10px] text-muted-foreground">{colLabel}</div>
-                            {canAssignThis ? (
+                            {meetWithId == null && canAssignThis ? (
                               <Select
-                                value={meetWithId ?? "__unassigned__"}
+                                value="__unassigned__"
                                 onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
                                 disabled={assigningId === record.id}
                               >
