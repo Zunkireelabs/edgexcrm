@@ -468,15 +468,62 @@ export async function PATCH(
   // Also resolve list names for the audit log so the activity timeline can render them.
   let newListName: string | null = null;
   let oldListName: string | null = null;
+  let isRevert = false;
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")
-      .select("id, slug, name, pipeline_id, is_archive")
+      .select("id, slug, name, pipeline_id, is_archive, sort_order")
       .eq("id", updatePayload.list_id as string)
       .maybeSingle();
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
+
+      // Stage-transition governance: on a backward (revert) move in the education funnel,
+      // reassign to the previous stage's holder instead of leaving assigned_to untouched.
+      // Only fires when the caller didn't pass an explicit assigned_to (send-to-next always does).
+      if (
+        auth.industryId === "education_consultancy" &&
+        !targetList.is_archive &&
+        body.assigned_to === undefined
+      ) {
+        const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+        let currentSortOrder: number | null = null;
+        if (currentListId) {
+          const { data: currentList } = await supabase
+            .from("lead_lists")
+            .select("sort_order, is_archive")
+            .eq("id", currentListId)
+            .maybeSingle();
+          currentSortOrder = currentList && !currentList.is_archive ? currentList.sort_order : null;
+        }
+        if (currentSortOrder !== null && targetList.sort_order < currentSortOrder) {
+          isRevert = true;
+          const isExempt =
+            auth.permissions.baseTier !== "member" || auth.permissions.leadScope === "team";
+          const currentHolder = existingLead.assigned_to as string | null;
+          let lastHandoffFromUserId: string | null = null;
+          if (currentHolder) {
+            const { data: lastHandoff } = await supabase
+              .from("lead_assignment_history")
+              .select("from_user_id")
+              .eq("lead_id", id)
+              .eq("to_user_id", currentHolder)
+              .order("created_at", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            lastHandoffFromUserId = (lastHandoff as { from_user_id?: string } | null)?.from_user_id ?? null;
+          }
+          if (lastHandoffFromUserId) {
+            updatePayload.assigned_to = lastHandoffFromUserId;
+          } else if (!isExempt) {
+            // No prior handoff recorded → this holder is the lead's origin.
+            return apiForbidden("First holder cannot revert this lead");
+          }
+          // Exempt origin caller: allow the move, leave assigned_to as-is.
+        }
+      }
+
       // Archive snapshot: capture stage(list) + status + who/when at archive time,
       // BEFORE the block below clears live stage_id/status. Clear on un-archive.
       const wasArchived = !!(existingLead as Record<string, unknown>).archived_at;
@@ -820,8 +867,10 @@ export async function PATCH(
         ]
       : []),
     // Lead assignment history: only true user→user handoffs (both ends non-null),
-    // snapshotting each user's position at the moment of the handoff.
-    ...(assignedChanged && existingLead.assigned_to && updated.assigned_to
+    // snapshotting each user's position at the moment of the handoff. Revert-reassign
+    // is excluded — it's a bounce-back to a known prior holder, not a new handoff, and
+    // recording it here would let the reverted-to user "revert" again (breaking §4).
+    ...(assignedChanged && existingLead.assigned_to && updated.assigned_to && !isRevert
       ? [
           (async () => {
             const { data: members } = await supabase

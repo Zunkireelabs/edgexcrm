@@ -74,8 +74,8 @@ export function apiUnauthorized() {
   return apiError("UNAUTHORIZED", "Authentication required", 401);
 }
 
-export function apiForbidden() {
-  return apiError("FORBIDDEN", "Insufficient permissions", 403);
+export function apiForbidden(message = "Insufficient permissions") {
+  return apiError("FORBIDDEN", message, 403);
 }
 
 export function apiConflict(message: string) {
