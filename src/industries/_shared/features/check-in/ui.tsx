@@ -62,6 +62,10 @@ interface CheckInRecord {
   phone: string | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
+  // Per-visit "meet with" person for THIS check-in, separate from the lead's
+  // assigned counselor (assigned_to).
+  meet_with_id: string | null;
+  meet_with_name: string | null;
   tags: string[];
   lead_created_at: string | null;
   is_new: boolean;
@@ -328,20 +332,14 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const handleCheckIn = async (leadId: string) => {
     setCheckingIn(leadId);
     try {
-      // Assign first so the check-in promotion logic sees the counselor assignee.
-      if (meetWithId) {
-        const assignRes = await fetch(`/api/v1/leads/${leadId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assigned_to: meetWithId }),
-        });
-        if (!assignRes.ok) {
-          toast.error("Failed to assign lead");
-          setCheckingIn(null);
-          return;
-        }
-      }
-      const res = await fetch(`/api/v1/leads/${leadId}/check-in`, { method: "POST" });
+      // "Meet with" is a per-visit record stored on the check-in note — it does
+      // NOT reassign the lead's counselor (lead.assigned_to). Front-desk picks
+      // never clobber the lead's assignment.
+      const res = await fetch(`/api/v1/leads/${leadId}/check-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meet_with_id: meetWithId || null }),
+      });
       if (!res.ok) {
         toast.error("Failed to check in");
         setCheckingIn(null);
@@ -361,27 +359,50 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   };
 
   const handleAssign = async (record: CheckInRecord, userId: string | null) => {
-    if (!record.lead_id || assigningId) return;
+    if (assigningId) return;
     setAssigningId(record.id);
     try {
-      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ assigned_to: userId }),
-      });
-      if (!res.ok) {
-        toast.error("Failed to assign lead");
-        return;
-      }
       const name = userId ? memberNameById.get(userId) ?? null : null;
-      setCheckIns((prev) =>
-        prev.map((c) =>
-          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
-        ),
-      );
-      toast.success(userId ? "Lead assigned" : "Lead unassigned");
+      if (record.is_new) {
+        // New walk-in student/parent → "Assigned To" is the lead's counselor.
+        // Assigning it updates the lead (and fires auto-promotion server-side).
+        if (!record.lead_id) return;
+        const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assigned_to: userId }),
+        });
+        if (!res.ok) {
+          toast.error("Failed to assign lead");
+          return;
+        }
+        setCheckIns((prev) =>
+          prev.map((c) =>
+            c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+          ),
+        );
+        toast.success(userId ? "Lead assigned" : "Lead unassigned");
+      } else {
+        // Everyone else → "Meet with" is a per-visit record on the check-in
+        // note; editing it never touches the lead's counselor assignment.
+        const res = await fetch(`/api/v1/check-ins/${record.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meet_with_id: userId }),
+        });
+        if (!res.ok) {
+          toast.error("Failed to update meet-with");
+          return;
+        }
+        setCheckIns((prev) =>
+          prev.map((c) =>
+            c.id === record.id ? { ...c, meet_with_id: userId, meet_with_name: name } : c,
+          ),
+        );
+        toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
+      }
     } catch {
-      toast.error("Failed to assign lead");
+      toast.error("Failed to update");
     } finally {
       setAssigningId(null);
     }
@@ -978,9 +999,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     return dashIdx !== -1 ? raw.slice(dashIdx + 3).trim() : "";
                   })();
                   const canAssignThis = canAssignAny || record.checked_in_by_id === currentUserId;
-                  // Don't show checked-in-by person as "Meet with" — treat as unset
-                  const meetWithId = record.assigned_to && record.assigned_to !== record.checked_in_by_id ? record.assigned_to : null;
-                  const meetWithName = meetWithId ? (record.assigned_to_name || memberNameById.get(meetWithId) || null) : null;
+                  // New walk-in student/parent → the column is the lead's assigned
+                  // counselor (assigned_to). Everyone else → the per-visit "meet with"
+                  // person recorded on this note (meet_with_id), independent of the
+                  // lead's assignment — so an unselected visit shows no one.
+                  const meetWithId = record.is_new
+                    ? (record.assigned_to && record.assigned_to !== record.checked_in_by_id ? record.assigned_to : null)
+                    : record.meet_with_id;
+                  const meetWithName = meetWithId
+                    ? (record.is_new
+                        ? (record.assigned_to_name || memberNameById.get(meetWithId) || null)
+                        : (record.meet_with_name || memberNameById.get(meetWithId) || null))
+                    : null;
                   return (
                     <div
                       key={record.id}

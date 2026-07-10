@@ -72,6 +72,8 @@ interface LeadDetailV2Props {
   /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
   revertTargetUserId?: string | null;
   revertTargetName?: string | null;
+  /** Revert assignee options: the previous holder's same-position peers in their branch. */
+  revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
   canManageApplications?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
@@ -144,6 +146,7 @@ export function LeadDetailV2({
   nextPositionMembers,
   revertTargetUserId = null,
   revertTargetName = null,
+  revertTargetMembers = [],
   canManageApplications,
   canEnroll,
   leadLists,
@@ -653,6 +656,7 @@ export function LeadDetailV2({
             nextPositionMembers={nextPositionMembers}
             revertTargetUserId={revertTargetUserId}
             revertTargetName={revertTargetName}
+            revertTargetMembers={revertTargetMembers}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const prevLead = currentLead;
               const prevStageId = stageId;
@@ -689,6 +693,13 @@ export function LeadDetailV2({
                   setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
                 }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
+                // Handed off to someone else (send-to-next / revert to another holder):
+                // the lead leaves this user's control and is now read-only for them, so
+                // close the detail and return to the list it moved out of.
+                if (updated.assigned_to && updated.assigned_to !== userId) {
+                  router.back();
+                  return;
+                }
               } catch {
                 setCurrentLead(prevLead);
                 setStageId(prevStageId);

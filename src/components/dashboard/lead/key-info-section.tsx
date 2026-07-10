@@ -94,6 +94,7 @@ interface KeyInfoSectionProps {
   nextPositionMembers?: { user_id: string; email: string; name?: string | null }[];
   revertTargetUserId?: string | null;
   revertTargetName?: string | null;
+  revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -139,6 +140,7 @@ export function KeyInfoSection({
   nextPositionMembers,
   revertTargetUserId,
   revertTargetName,
+  revertTargetMembers,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -254,6 +256,7 @@ export function KeyInfoSection({
                   nextPositionMembers={nextPositionMembers}
                   revertTargetUserId={revertTargetUserId}
                   revertTargetName={revertTargetName}
+                  revertTargetMembers={revertTargetMembers}
                   canRevertOverride={isAdmin || leadScope === "team"}
                 />
               ) : (

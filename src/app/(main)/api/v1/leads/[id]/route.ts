@@ -308,6 +308,37 @@ export async function PATCH(
     body.status = stage.slug;
   }
 
+  // ── Stage-transition governance: detect a backward (revert) list move up front ──
+  // so the assignee check below applies revert rules (previous holder's team) instead
+  // of the forward chain check, and so the revert is not logged as a new handoff.
+  let isRevert = false;
+  let revertPrevHolderId: string | null = null;
+  {
+    const targetListId = typeof body.list_id === "string" ? body.list_id : null;
+    const curListId = (existingLead as Record<string, unknown>).list_id as string | null;
+    if (auth.industryId === "education_consultancy" && targetListId && targetListId !== curListId) {
+      const { data: targetL } = await supabase
+        .from("lead_lists").select("sort_order, is_archive").eq("id", targetListId).maybeSingle();
+      let curSort: number | null = null;
+      if (curListId) {
+        const { data: curL } = await supabase
+          .from("lead_lists").select("sort_order, is_archive").eq("id", curListId).maybeSingle();
+        curSort = curL && !curL.is_archive ? curL.sort_order : null;
+      }
+      if (targetL && !targetL.is_archive && curSort !== null && targetL.sort_order < curSort) {
+        isRevert = true;
+        const currentHolder = existingLead.assigned_to as string | null;
+        if (currentHolder) {
+          const { data: lh } = await supabase
+            .from("lead_assignment_history").select("from_user_id")
+            .eq("lead_id", id).eq("to_user_id", currentHolder)
+            .order("created_at", { ascending: false }).limit(1).maybeSingle();
+          revertPrevHolderId = (lh as { from_user_id?: string } | null)?.from_user_id ?? null;
+        }
+      }
+    }
+  }
+
   // Validate assigned_to: must be a tenant member
   let newAssigneeBranchId: string | null | undefined = undefined;
   if (body.assigned_to !== undefined && body.assigned_to !== null) {
@@ -326,28 +357,57 @@ export async function PATCH(
 
     newAssigneeBranchId = (memberCheck as unknown as { branch_id: string | null }).branch_id ?? null;
 
-    // Chain check: education chain-position callers (non-admin, non-team-scope) may
-    // only assign to their allowed chain targets.
-    if (
+    // Target's position slug (fall back to role) + branch — used by both the forward
+    // chain check and the revert-peer check.
+    const posEmbed = Array.isArray((memberCheck as unknown as { positions: unknown }).positions)
+      ? ((memberCheck as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+      : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
+    const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+    const targetRole = (memberCheck as unknown as { role?: string }).role ?? null;
+    const effectiveSlug = targetSlug ?? targetRole;
+    const targetBranchId = (memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null;
+
+    const isChainCaller =
       auth.industryId === "education_consultancy" &&
       auth.positionSlug != null &&
       ASSIGN_CHAIN_POSITIONS.has(auth.positionSlug) &&
       auth.permissions.baseTier === "member" &&
-      auth.permissions.leadScope !== "team"
-    ) {
-      const posEmbed = Array.isArray((memberCheck as unknown as { positions: unknown }).positions)
-        ? ((memberCheck as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
-        : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
-      const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
-      // Fall back to role when no position is configured (e.g. role="counselor" with no positions row)
-      const targetRole = (memberCheck as unknown as { role?: string }).role ?? null;
-      const effectiveSlug = targetSlug ?? targetRole;
+      auth.permissions.leadScope !== "team";
+
+    if (isChainCaller && isRevert) {
+      // Revert: the assignee must be the previous holder or a same-position peer in
+      // their branch. First-holder (no prior handoff) may not revert.
+      if (!revertPrevHolderId) {
+        return apiForbidden("First holder cannot revert this lead");
+      }
+      const { data: prevHolder } = await supabase
+        .from("tenant_users")
+        .select("branch_id, role, positions(slug)")
+        .eq("tenant_id", auth.tenantId)
+        .eq("user_id", revertPrevHolderId)
+        .single();
+      const prevEmbed = Array.isArray((prevHolder as unknown as { positions: unknown } | null)?.positions)
+        ? ((prevHolder as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
+        : ((prevHolder as unknown as { positions: { slug: string } | null } | null)?.positions ?? null);
+      const prevSlug = (prevEmbed as { slug?: string } | null)?.slug
+        ?? (prevHolder as unknown as { role?: string } | null)?.role ?? null;
+      const prevBranchId = (prevHolder as unknown as { branch_id?: string | null } | null)?.branch_id ?? null;
+      const okPeer =
+        effectiveSlug != null &&
+        effectiveSlug === prevSlug &&
+        (prevBranchId == null || targetBranchId === prevBranchId);
+      if (!okPeer) {
+        return apiForbidden();
+      }
+    } else if (isChainCaller) {
+      // Forward chain check: education chain-position callers may only assign to their
+      // allowed chain targets.
       // Cross-branch pool grab: restrict to self + same-position peers (no forward-to-next hop).
       // Normal own-scope assign keeps the full chain targets (peer + next position).
       const allowed = new Set(
         isCrossBranchPooledAssign ? peerSlugs(auth.positionSlug) : assignableTargetSlugs(auth.positionSlug),
       );
-      const okBranch = auth.branchId == null || ((memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null) === auth.branchId;
+      const okBranch = auth.branchId == null || targetBranchId === auth.branchId;
       if (!effectiveSlug || !allowed.has(effectiveSlug) || !okBranch) {
         return apiForbidden();
       }
@@ -468,7 +528,8 @@ export async function PATCH(
   // Also resolve list names for the audit log so the activity timeline can render them.
   let newListName: string | null = null;
   let oldListName: string | null = null;
-  let isRevert = false;
+  // isRevert declared earlier (backward-move detection for the assignee check); the
+  // block below still handles the no-explicit-assignee fallback (auto-resolve + origin guard).
   if (updatePayload.list_id !== undefined && updatePayload.list_id !== null) {
     const { data: targetList } = await supabase
       .from("lead_lists")

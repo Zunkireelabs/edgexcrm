@@ -86,8 +86,15 @@ export function getIndustrySidebarItems(
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
 
+  // Always-viewable nav items: visible to every user in the industry regardless of
+  // the position's allowedNavKeys / minRoles restrictions. Editing is still gated
+  // downstream (e.g. classes manage/enroll buttons require canManageClasses), but
+  // the page itself is view-only-accessible to everyone.
+  const ALWAYS_VIEWABLE_HREFS = new Set(["/classes"]);
+
   function isItemAllowed(item: SidebarItem): boolean {
     if (!registeredFeatureIds.has(item.featureId)) return false;
+    if (ALWAYS_VIEWABLE_HREFS.has(item.href)) return true;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
     if (permissions && !canSeeNav(permissions, item.href)) return false;
     return true;

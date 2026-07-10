@@ -51,6 +51,9 @@ interface ListStepperProps {
   /** Who Revert would hand the lead back to (education only). Null = current holder is the lead's origin. */
   revertTargetUserId?: string | null;
   revertTargetName?: string | null;
+  /** Revert assignee options: the previous holder's same-position peers in their branch.
+   *  When non-empty, the Revert dialog shows an assignee picker defaulting to the previous holder. */
+  revertTargetMembers?: NextPositionMember[];
   /** owner/admin/branch-manager — may revert even when they're the lead's origin. */
   canRevertOverride?: boolean;
 }
@@ -73,6 +76,7 @@ export function ListStepper({
   nextPositionMembers = [],
   revertTargetUserId = null,
   revertTargetName = null,
+  revertTargetMembers = [],
   canRevertOverride = false,
 }: ListStepperProps) {
   const [confirmList, setConfirmList] = useState<LeadList | null>(null);
@@ -121,19 +125,25 @@ export function ListStepper({
   function handlePrev() {
     if (!prevList || !canPrev) return;
     setIsNextDirection(false);
-    setSelectedAssignee("");
+    // Default the revert assignee to the previous holder; the picker lets the
+    // reverter switch to any same-position peer on that person's team.
+    setSelectedAssignee(revertTargetUserId ?? "");
     setConfirmList(prevList);
   }
 
+  // Whether the confirm dialog shows an assignee picker for the current direction.
+  const showAssigneePicker = isNextDirection
+    ? nextPositionMembers.length > 0
+    : revertTargetMembers.length > 0;
+  const pickerMembers = isNextDirection ? nextPositionMembers : revertTargetMembers;
+
   async function confirmMove() {
     if (!confirmList) return;
-    // require assignee when moving forward with available next-position members
-    if (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee) return;
+    // Require an assignee whenever the picker is shown (forward or revert).
+    if (showAssigneePicker && !selectedAssignee) return;
     setSaving(true);
     try {
-      const assignTo = isNextDirection && nextPositionMembers.length > 0
-        ? (selectedAssignee || null)
-        : undefined;
+      const assignTo = showAssigneePicker ? (selectedAssignee || null) : undefined;
       await onMove(confirmList.id, assignTo);
       setConfirmList(null);
       setSelectedAssignee("");
@@ -239,7 +249,7 @@ export function ListStepper({
                 <>
                   This lead will move back to{" "}
                   <span className="font-medium text-foreground">{confirmList?.name}</span>.
-                  {revertTargetName && (
+                  {!showAssigneePicker && revertTargetName && (
                     <>
                       {" "}Reassigned to{" "}
                       <span className="font-medium text-foreground">{revertTargetName}</span>.
@@ -268,16 +278,17 @@ export function ListStepper({
             </DialogDescription>
           </DialogHeader>
 
-          {/* Assignee picker — only shown when sending forward and next-position members exist */}
-          {isNextDirection && nextPositionMembers.length > 0 && (
+          {/* Assignee picker — shown when sending forward (next-position members) or
+              reverting (previous holder's team). Revert defaults to the previous holder. */}
+          {showAssigneePicker && (
             <div className="py-2">
               <p className="text-xs text-muted-foreground mb-1.5">Assign to</p>
               <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
                 <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select assignee (optional)" />
+                  <SelectValue placeholder="Select assignee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {nextPositionMembers.map((m) => (
+                  {pickerMembers.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -302,7 +313,7 @@ export function ListStepper({
               Cancel
             </Button>
             <Button
-              disabled={saving || (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee)}
+              disabled={saving || (showAssigneePicker && !selectedAssignee)}
               onClick={confirmMove}
             >
               {saving ? "Moving…" : "Confirm"}
