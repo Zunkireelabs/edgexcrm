@@ -69,11 +69,11 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!(await canAccessApplication(auth, id))) return apiNotFound("Application");
 
   const db = await scopedClient(auth);
-  // application_notes has no tenant_id column of its own (scoped via the
-  // applications join, checked above) — use fromGlobal so scopedClient
-  // doesn't try to inject a tenant_id filter that column doesn't have.
+  // application_notes now has its own tenant_id (mig 141) — scopedClient's
+  // normal .from() auto-applies the tenant filter here as a second layer of
+  // defense, on top of the parent-application ownership check above.
   const { data, error } = await db
-    .fromGlobal("application_notes")
+    .from("application_notes")
     .select("*")
     .eq("application_id", id)
     .order("created_at", { ascending: false });
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (!content) return apiValidationError({ content: ["Note content is required"] });
 
   const { data: note, error } = await db
-    .fromGlobal("application_notes")
+    .from("application_notes")
     .insert({
       application_id: id,
       user_id: auth.userId,

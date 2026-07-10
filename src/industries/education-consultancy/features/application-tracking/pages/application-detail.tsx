@@ -8,8 +8,6 @@ import {
   Pencil,
   X,
   Check,
-  ChevronsUpDown,
-  Plus,
   Loader2,
   Trash2,
   GraduationCap,
@@ -21,7 +19,6 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,97 +40,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
 import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
 import { ApplicationTabs } from "../components/application-tabs";
+import { AutocompleteInput } from "../components/autocomplete-input";
+import { useApplicationReferenceData } from "../hooks/use-application-reference-data";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
-
-interface AutocompleteInputProps {
-  value: string;
-  onChange: (val: string) => void;
-  suggestions: string[];
-  placeholder?: string;
-  id?: string;
-  onCreateNew?: (val: string) => Promise<void>;
-}
-
-function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew }: AutocompleteInputProps) {
-  const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const trimmed = value.trim();
-  const filtered = suggestions.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()));
-  const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
-  const showCreate = onCreateNew && trimmed.length > 0 && !exactMatch;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative">
-          <Input
-            id={id}
-            value={value}
-            onChange={(e) => { onChange(e.target.value); if (!open && e.target.value) setOpen(true); }}
-            onFocus={() => { if (filtered.length > 0 || showCreate) setOpen(true); }}
-            placeholder={placeholder}
-            className="pr-8"
-            autoComplete="off"
-          />
-          <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        </div>
-      </PopoverTrigger>
-      {(filtered.length > 0 || showCreate) && (
-        <PopoverContent
-          className="p-0 w-[--radix-popover-trigger-width]"
-          align="start"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-          onWheel={(e) => e.stopPropagation()}
-        >
-          <Command shouldFilter={false}>
-            <CommandList className="max-h-52 overflow-y-auto">
-              <CommandEmpty>No matches</CommandEmpty>
-              {filtered.slice(0, 20).map((s) => (
-                <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
-                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
-                  {s}
-                </CommandItem>
-              ))}
-              {showCreate && (
-                <CommandItem
-                  value={`__create__${trimmed}`}
-                  disabled={creating}
-                  onSelect={async () => {
-                    if (!onCreateNew) return;
-                    setCreating(true);
-                    await onCreateNew(trimmed);
-                    setCreating(false);
-                    setOpen(false);
-                  }}
-                  className="text-primary font-medium border-t mt-1"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {creating ? "Adding…" : `Create "${trimmed}"`}
-                </CommandItem>
-              )}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      )}
-    </Popover>
-  );
-}
 
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
@@ -206,8 +121,6 @@ export function ApplicationDetailPage({
   // a legacy free-text intake_term (e.g. "Sep 2026", an Excel date serial)
   // that the dropdown pre-fill couldn't cleanly parse back — see startEdit().
   const [intakeTouched, setIntakeTouched] = useState(false);
-  const [intakeMonths, setIntakeMonths] = useState<string[]>([]);
-  const [intakeYears, setIntakeYears] = useState<string[]>([]);
   const [country, setCountry] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
@@ -219,11 +132,10 @@ export function ApplicationDetailPage({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [agents, setAgents] = useState<{ id: string; name: string; agent_type: string }[]>([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
-  const [partnerColleges, setPartnerColleges] = useState<{ name: string; country: string | null }[]>([]);
-  const [countries, setCountries] = useState<string[]>([]);
+  const { agents, partnerColleges, countries, intakeMonths, intakeYears, addPartnerCollege } =
+    useApplicationReferenceData();
 
   // Colleges tagged with the selected country, plus any untagged colleges
   // (safety net so nothing disappears before it's been assigned a country).
@@ -238,39 +150,6 @@ export function ApplicationDetailPage({
   const leadId =
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
-  // Fetch agents for the detail edit dropdown
-  useEffect(() => {
-    fetch("/api/v1/agents")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setAgents(j.data); })
-      .catch(() => {});
-  }, []);
-
-  // Fetch partner colleges + destination countries for the University/Country edit fields
-  useEffect(() => {
-    fetch("/api/v1/partner-colleges")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (j?.data) setPartnerColleges((j.data as { name: string; country: string | null }[]).map((c) => ({ name: c.name, country: c.country })));
-      })
-      .catch(() => {});
-    fetch("/api/v1/countries")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name));
-        else toast.error("Failed to load destination countries — try refreshing the page");
-      })
-      .catch(() => toast.error("Failed to load destination countries — try refreshing the page"));
-    fetch("/api/v1/intake-months")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setIntakeMonths((j.data as { name: string }[]).map((m) => m.name)); })
-      .catch(() => {});
-    fetch("/api/v1/intake-years")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setIntakeYears((j.data as { name: string }[]).map((y) => y.name)); })
-      .catch(() => {});
-  }, []);
-
   async function handleCreateCollege(name: string) {
     try {
       const res = await fetch("/api/v1/partner-colleges", {
@@ -282,7 +161,7 @@ export function ApplicationDetailPage({
         const err = await res.json();
         throw new Error(err.error?.message ?? "Failed to create college");
       }
-      setPartnerColleges((prev) => [...prev, { name, country: country || null }].sort((a, b) => a.name.localeCompare(b.name)));
+      addPartnerCollege(name, country || null);
       setUniversityName(name);
       toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
     } catch (err) {

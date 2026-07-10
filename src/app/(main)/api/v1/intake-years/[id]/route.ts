@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -25,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (auth.role !== "owner" && auth.role !== "admin") return apiForbidden();
+  if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -79,7 +79,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (auth.role !== "owner" && auth.role !== "admin") return apiForbidden();
+  if (!requireAdmin(auth)) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { data: existing } = await db.from("intake_years").select("id").eq("id", id).maybeSingle();

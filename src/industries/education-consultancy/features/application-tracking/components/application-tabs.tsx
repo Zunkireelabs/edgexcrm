@@ -6,7 +6,7 @@ import { Send } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { ApplicationActivityTimeline } from "./application-activity-timeline";
+import { ApplicationActivityTimeline, formatTime } from "./application-activity-timeline";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
 interface ApplicationNote {
@@ -101,15 +101,6 @@ export function ApplicationTabs({
     return teamMemberNames[userId] || teamMemberEmails[userId] || email;
   }
 
-  function formatWhen(dateString: string): string {
-    return new Date(dateString).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    });
-  }
-
   return (
     <div className="space-y-4">
       {/* Sub-tabs — same underline style as the Lead Detail Activity panel */}
@@ -172,7 +163,7 @@ export function ApplicationTabs({
                 <div key={note.id} className="border rounded-lg p-3">
                   <p className="text-sm whitespace-pre-wrap">{note.content}</p>
                   <p className="text-xs text-muted-foreground mt-1.5">
-                    {nameFor(note.user_id, note.user_email)} · {formatWhen(note.created_at)}
+                    {nameFor(note.user_id, note.user_email)} · {formatTime(note.created_at)}
                   </p>
                 </div>
               ))}
