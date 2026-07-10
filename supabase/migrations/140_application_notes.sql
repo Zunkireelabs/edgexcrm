@@ -1,4 +1,4 @@
--- Migration 139: application_notes table
+-- Migration 140: application_notes table
 --
 -- Backs the new "Notes" tab on the Application Detail page. Mirrors lead_notes
 -- (mig 001) exactly, but scoped to applications instead of leads — a note here
@@ -48,7 +48,7 @@ DROP POLICY IF EXISTS "Users can delete own application notes" ON application_no
 CREATE POLICY "Users can delete own application notes" ON application_notes
   FOR DELETE USING (user_id = auth.uid());
 
-INSERT INTO public.schema_migrations (version) VALUES ('139_application_notes.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('140_application_notes.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

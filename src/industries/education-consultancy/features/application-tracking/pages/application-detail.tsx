@@ -201,6 +201,11 @@ export function ApplicationDetailPage({
   const [programName, setProgramName] = useState("");
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
+  // True only once the admin actually changes one of the Month/Year dropdowns
+  // during this edit session. Guards against saveEdit() silently overwriting
+  // a legacy free-text intake_term (e.g. "Sep 2026", an Excel date serial)
+  // that the dropdown pre-fill couldn't cleanly parse back — see startEdit().
+  const [intakeTouched, setIntakeTouched] = useState(false);
   const [intakeMonths, setIntakeMonths] = useState<string[]>([]);
   const [intakeYears, setIntakeYears] = useState<string[]>([]);
   const [country, setCountry] = useState("");
@@ -251,8 +256,11 @@ export function ApplicationDetailPage({
       .catch(() => {});
     fetch("/api/v1/countries")
       .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
-      .catch(() => {});
+      .then((j) => {
+        if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name));
+        else toast.error("Failed to load destination countries — try refreshing the page");
+      })
+      .catch(() => toast.error("Failed to load destination countries — try refreshing the page"));
     fetch("/api/v1/intake-months")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setIntakeMonths((j.data as { name: string }[]).map((m) => m.name)); })
@@ -315,6 +323,7 @@ export function ApplicationDetailPage({
     const matchedYear = raw.match(/\b(20\d{2})\b/)?.[1];
     setIntakeMonth(matchedMonth ?? "");
     setIntakeYear(matchedYear ?? "");
+    setIntakeTouched(false);
     setCountry(application.country ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
@@ -335,10 +344,19 @@ export function ApplicationDetailPage({
     if (!programName.trim()) { toast.error("Program name is required"); return; }
     setSaving(true);
     try {
+      // Only overwrite intake_term if the admin actually changed Month/Year
+      // this session — otherwise preserve the original value untouched, even
+      // if it's legacy free text startEdit() couldn't cleanly parse back into
+      // the dropdowns. Prevents an unrelated field edit (e.g. Deadline) from
+      // silently truncating or nulling a real intake date.
+      const intakeTermPatch = intakeTouched
+        ? [intakeMonth, intakeYear].filter(Boolean).join(" ") || null
+        : application.intake_term;
+
       const patch: Record<string, unknown> = {
         university_name: universityName.trim(),
         program_name: programName.trim(),
-        intake_term: [intakeMonth, intakeYear].filter(Boolean).join(" ") || null,
+        intake_term: intakeTermPatch,
         country: country.trim() || null,
         application_deadline: deadline || null,
         offer_type: offerType || null,
@@ -746,7 +764,10 @@ export function ApplicationDetailPage({
                 <Label className="text-xs text-muted-foreground">Intake</Label>
                 {editing ? (
                   <div className="grid grid-cols-2 gap-2">
-                    <Select value={intakeMonth} onValueChange={setIntakeMonth}>
+                    <Select
+                      value={intakeMonth}
+                      onValueChange={(v) => { setIntakeMonth(v); setIntakeTouched(true); }}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Month" />
                       </SelectTrigger>
@@ -756,7 +777,10 @@ export function ApplicationDetailPage({
                         ))}
                       </SelectContent>
                     </Select>
-                    <Select value={intakeYear} onValueChange={setIntakeYear}>
+                    <Select
+                      value={intakeYear}
+                      onValueChange={(v) => { setIntakeYear(v); setIntakeTouched(true); }}
+                    >
                       <SelectTrigger>
                         <SelectValue placeholder="Year" />
                       </SelectTrigger>

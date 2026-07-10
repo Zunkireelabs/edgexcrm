@@ -1,4 +1,4 @@
--- Migration 137: add a country tag to partner_colleges
+-- Migration 138: add a country tag to partner_colleges
 --
 -- Additive only. Lets each partner college (Settings -> Organization -> Partner
 -- Colleges) be tagged with a destination country, so the Add Application forms
@@ -13,7 +13,7 @@ BEGIN;
 
 ALTER TABLE partner_colleges ADD COLUMN IF NOT EXISTS country TEXT;
 
-INSERT INTO public.schema_migrations (version) VALUES ('137_partner_college_country.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('138_partner_college_country.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

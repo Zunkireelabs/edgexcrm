@@ -1,4 +1,4 @@
--- Migration 138: Intake Months and Intake Years lookup tables (education_consultancy)
+-- Migration 139: Intake Months and Intake Years lookup tables (education_consultancy)
 --
 -- Replaces the free-text "Intake Term" input on the 3 application screens with
 -- two Settings-managed dropdowns (Month, Year), same pattern as migration 124's
@@ -118,10 +118,10 @@ DECLARE v_months int; v_years int;
 BEGIN
   SELECT COUNT(*) INTO v_months FROM intake_months;
   SELECT COUNT(*) INTO v_years FROM intake_years;
-  RAISE NOTICE '138 AFTER: % intake_month rows, % intake_year rows', v_months, v_years;
+  RAISE NOTICE '139 AFTER: % intake_month rows, % intake_year rows', v_months, v_years;
 END$$;
 
-INSERT INTO public.schema_migrations (version) VALUES ('138_intake_months_years.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('139_intake_months_years.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

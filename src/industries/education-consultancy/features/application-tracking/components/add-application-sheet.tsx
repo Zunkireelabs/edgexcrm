@@ -207,8 +207,11 @@ export function AddApplicationSheet({
       .catch(() => {});
     fetch("/api/v1/countries")
       .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
-      .catch(() => {});
+      .then((j) => {
+        if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name));
+        else toast.error("Failed to load destination countries — try reopening this form");
+      })
+      .catch(() => toast.error("Failed to load destination countries — try reopening this form"));
     fetch("/api/v1/intake-months")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setIntakeMonths((j.data as { name: string }[]).map((m) => m.name)); })
