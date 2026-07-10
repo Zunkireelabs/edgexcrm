@@ -56,6 +56,9 @@ interface ListStepperProps {
   revertTargetMembers?: NextPositionMember[];
   /** owner/admin/branch-manager — may revert even when they're the lead's origin. */
   canRevertOverride?: boolean;
+  /** View-only: render the stepper chrome with both direction buttons disabled
+   *  (e.g. the viewer no longer holds this lead). No dialogs, no moves. */
+  readOnly?: boolean;
 }
 
 /**
@@ -78,6 +81,7 @@ export function ListStepper({
   revertTargetName = null,
   revertTargetMembers = [],
   canRevertOverride = false,
+  readOnly = false,
 }: ListStepperProps) {
   const [confirmList, setConfirmList] = useState<LeadList | null>(null);
   const [isNextDirection, setIsNextDirection] = useState(false);
@@ -99,8 +103,8 @@ export function ListStepper({
   // the lead's origin (no prior handoff to fall back to) — admin/team overrides apply.
   const isOriginGated =
     industryId === "education_consultancy" && !canRevertOverride && !revertTargetUserId;
-  const canPrev = !!prevList && accessibleIds.has(prevList.id) && !isOriginGated;
-  const canNext = !!nextList && accessibleIds.has(nextList.id);
+  const canPrev = !readOnly && !!prevList && accessibleIds.has(prevList.id) && !isOriginGated;
+  const canNext = !readOnly && !!nextList && accessibleIds.has(nextList.id);
 
   // The intake → Qualified step keeps its dedicated Qualify dialog (education only).
   const isQualifyStep =
@@ -180,11 +184,13 @@ export function ListStepper({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {canPrev
-                  ? prevList.name
-                  : isOriginGated
-                    ? "You're the first holder — nothing to revert to."
-                    : `No access to ${prevList.name}`}
+                {readOnly
+                  ? "You no longer hold this lead."
+                  : canPrev
+                    ? prevList.name
+                    : isOriginGated
+                      ? "You're the first holder — nothing to revert to."
+                      : `No access to ${prevList.name}`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -215,7 +221,7 @@ export function ListStepper({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {canNext ? nextList.name : `No access to ${nextList.name}`}
+                {readOnly ? "You no longer hold this lead." : canNext ? nextList.name : `No access to ${nextList.name}`}
               </TooltipContent>
             </Tooltip>
           )}
