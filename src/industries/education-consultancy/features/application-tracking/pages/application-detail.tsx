@@ -197,7 +197,10 @@ export function ApplicationDetailPage({
   // Editable detail fields (lifted from application-detail-sheet.tsx)
   const [universityName, setUniversityName] = useState("");
   const [programName, setProgramName] = useState("");
-  const [intakeTerm, setIntakeTerm] = useState("");
+  const [intakeMonth, setIntakeMonth] = useState("");
+  const [intakeYear, setIntakeYear] = useState("");
+  const [intakeMonths, setIntakeMonths] = useState<string[]>([]);
+  const [intakeYears, setIntakeYears] = useState<string[]>([]);
   const [country, setCountry] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
@@ -248,6 +251,14 @@ export function ApplicationDetailPage({
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
       .catch(() => {});
+    fetch("/api/v1/intake-months")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setIntakeMonths((j.data as { name: string }[]).map((m) => m.name)); })
+      .catch(() => {});
+    fetch("/api/v1/intake-years")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setIntakeYears((j.data as { name: string }[]).map((y) => y.name)); })
+      .catch(() => {});
   }, []);
 
   async function handleCreateCollege(name: string) {
@@ -292,7 +303,16 @@ export function ApplicationDetailPage({
   function startEdit() {
     setUniversityName(application.university_name ?? "");
     setProgramName(application.program_name ?? "");
-    setIntakeTerm(application.intake_term ?? "");
+    // Best-effort: existing intake_term values are inconsistent free text
+    // ("Sep 2026", "September", a stray Excel date serial, etc.) from before
+    // this became a dropdown. Only pre-fill Month/Year when the old value
+    // clearly matches a known month name and a 4-digit year; otherwise leave
+    // both blank for the admin to pick fresh rather than guess wrong.
+    const raw = application.intake_term ?? "";
+    const matchedMonth = intakeMonths.find((m) => raw.toLowerCase().includes(m.toLowerCase()));
+    const matchedYear = raw.match(/\b(20\d{2})\b/)?.[1];
+    setIntakeMonth(matchedMonth ?? "");
+    setIntakeYear(matchedYear ?? "");
     setCountry(application.country ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
@@ -316,7 +336,7 @@ export function ApplicationDetailPage({
       const patch: Record<string, unknown> = {
         university_name: universityName.trim(),
         program_name: programName.trim(),
-        intake_term: intakeTerm.trim() || null,
+        intake_term: [intakeMonth, intakeYear].filter(Boolean).join(" ") || null,
         country: country.trim() || null,
         application_deadline: deadline || null,
         offer_type: offerType || null,
@@ -723,7 +743,28 @@ export function ApplicationDetailPage({
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">Intake</Label>
                 {editing ? (
-                  <Input value={intakeTerm} onChange={(e) => setIntakeTerm(e.target.value)} placeholder="e.g. Fall 2026" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select value={intakeMonth} onValueChange={setIntakeMonth}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Month" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {intakeMonths.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Select value={intakeYear} onValueChange={setIntakeYear}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {intakeYears.map((y) => (
+                          <SelectItem key={y} value={y}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 ) : (
                   <p className="text-sm">{application.intake_term ?? "—"}</p>
                 )}

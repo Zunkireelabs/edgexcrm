@@ -8,6 +8,8 @@ import { TenantLocaleManager } from "@/components/dashboard/settings/tenant-loca
 import { PartnerCollegesManager } from "@/components/dashboard/settings/partner-colleges-manager";
 import { CountriesManager } from "@/components/dashboard/settings/countries-manager";
 import { CoursesManager } from "@/components/dashboard/settings/courses-manager";
+import { IntakeMonthsManager } from "@/components/dashboard/settings/intake-months-manager";
+import { IntakeYearsManager } from "@/components/dashboard/settings/intake-years-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -47,6 +49,8 @@ export function OrganizationPanel() {
           {hasPartnerColleges && <PartnerCollegesManager />}
           {hasPartnerColleges && <CountriesManager />}
           {hasPartnerColleges && <CoursesManager />}
+          {hasPartnerColleges && <IntakeMonthsManager />}
+          {hasPartnerColleges && <IntakeYearsManager />}
           <BranchesManager maxBranches={maxBranches} />
           <TenantLocaleManager
             timezone={bootstrapData?.timezone ?? "Asia/Kathmandu"}

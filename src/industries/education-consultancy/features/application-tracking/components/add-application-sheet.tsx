@@ -146,7 +146,10 @@ export function AddApplicationSheet({
   const [selectedLead, setSelectedLead] = useState<LeadOption | null>(null);
   const [universityName, setUniversityName] = useState("");
   const [programName, setProgramName] = useState("");
-  const [intakeTerm, setIntakeTerm] = useState("");
+  const [intakeMonth, setIntakeMonth] = useState("");
+  const [intakeYear, setIntakeYear] = useState("");
+  const [intakeMonths, setIntakeMonths] = useState<string[]>([]);
+  const [intakeYears, setIntakeYears] = useState<string[]>([]);
   const [country, setCountry] = useState("");
   const [stageId, setStageId] = useState(defaultStage?.id ?? "");
   const [deadline, setDeadline] = useState("");
@@ -173,7 +176,8 @@ export function AddApplicationSheet({
       setSelectedLead(null);
       setUniversityName("");
       setProgramName("");
-      setIntakeTerm("");
+      setIntakeMonth("");
+      setIntakeYear("");
       setCountry("");
       setDeadline("");
       setAgentId("");
@@ -204,6 +208,14 @@ export function AddApplicationSheet({
     fetch("/api/v1/countries")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
+      .catch(() => {});
+    fetch("/api/v1/intake-months")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setIntakeMonths((j.data as { name: string }[]).map((m) => m.name)); })
+      .catch(() => {});
+    fetch("/api/v1/intake-years")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setIntakeYears((j.data as { name: string }[]).map((y) => y.name)); })
       .catch(() => {});
   }, [open]);
 
@@ -273,7 +285,8 @@ export function AddApplicationSheet({
         program_name: programName.trim(),
       };
       if (stageId) body.stage_id = stageId;
-      if (intakeTerm.trim()) body.intake_term = intakeTerm.trim();
+      const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
+      if (intakeTerm) body.intake_term = intakeTerm;
       if (country && country !== "__none__") body.country = country;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
@@ -421,13 +434,29 @@ export function AddApplicationSheet({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
-              <Input
-                id="app-intake"
-                value={intakeTerm}
-                onChange={(e) => setIntakeTerm(e.target.value)}
-                placeholder="e.g. Fall 2026"
-              />
+              <Label className="text-xs text-gray-600">Intake Term</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={intakeMonth} onValueChange={setIntakeMonth}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Month" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intakeMonths.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={intakeYear} onValueChange={setIntakeYear}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intakeYears.map((y) => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
