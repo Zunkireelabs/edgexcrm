@@ -43,10 +43,11 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Redirect logged-in users away from login
+  // Redirect logged-in users away from login. Send to "/" so the root route
+  // makes the industry-aware landing choice (education → /home, else /dashboard).
   if (user && request.nextUrl.pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    url.pathname = "/";
     return NextResponse.redirect(url);
   }
 

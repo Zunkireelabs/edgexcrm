@@ -121,11 +121,11 @@ function LoginPageContent() {
           // Only redirect to dashboard if invite acceptance succeeded
           const accepted = await acceptInvite(token);
           if (accepted) {
-            router.push('/dashboard');
+            router.push('/');
           }
           // On failure, stay on page — error is already set by acceptInvite
         } else {
-          router.push('/dashboard');
+          router.push('/');
         }
       }
     };
@@ -222,7 +222,7 @@ function LoginPageContent() {
           if (!accepted) return; // error already shown by acceptInvite
         }
 
-        router.push('/dashboard');
+        router.push('/');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Authentication failed');
