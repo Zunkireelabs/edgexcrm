@@ -28,8 +28,8 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("lead_notes")
     .select(`
-      id, user_id, content, created_at, user_email, checked_out_at,
-      leads!inner(id, first_name, last_name, email, phone, assigned_to, tags, tenant_id, deleted_at,
+      id, user_id, content, created_at, user_email, checked_out_at, meet_with_id,
+      leads!inner(id, first_name, last_name, email, phone, assigned_to, tags, tenant_id, deleted_at, created_at,
         pipeline_stages(name, color),
         pipelines(name)
       )
@@ -91,9 +91,16 @@ export async function GET(request: NextRequest) {
       phone: string | null;
       assigned_to: string | null;
       tags: string[] | null;
+      created_at: string;
       pipeline_stages: { name: string; color: string } | null;
       pipelines: { name: string } | null;
     };
+    const tags = lead?.tags ?? [];
+    const isStudentOrParent = tags.some((t) => t === "student" || t === "parent");
+    const isNew =
+      isStudentOrParent &&
+      !!lead?.created_at &&
+      Math.abs(new Date(note.created_at).getTime() - new Date(lead.created_at).getTime()) <= 60_000;
     return {
       id: note.id,
       lead_id: lead?.id || null,
@@ -102,7 +109,12 @@ export async function GET(request: NextRequest) {
       email: lead?.email || null,
       phone: lead?.phone || null,
       assigned_to: lead?.assigned_to || null,
-      tags: lead?.tags ?? [],
+      // Per-visit "meet with" person recorded on this check-in note — separate
+      // from the lead's assigned counselor (assigned_to).
+      meet_with_id: (note as unknown as { meet_with_id: string | null }).meet_with_id ?? null,
+      tags,
+      lead_created_at: lead?.created_at ?? null,
+      is_new: isNew,
       stage_name: lead?.pipeline_stages?.name || null,
       stage_color: lead?.pipeline_stages?.color || null,
       pipeline_name: lead?.pipelines?.name || null,
@@ -114,11 +126,11 @@ export async function GET(request: NextRequest) {
     };
   });
 
-  // Resolve assignee display names server-side (the full tenant roster, not the
-  // branch-scoped assignable list) so cross-branch assignees still resolve.
-  const hasAssignees = checkIns.some((c) => c.assigned_to);
+  // Resolve display names server-side (the full tenant roster, not the
+  // branch-scoped assignable list) so cross-branch people still resolve.
+  const needsNames = checkIns.some((c) => c.assigned_to || c.meet_with_id);
   const nameById = new Map<string, string>();
-  if (hasAssignees) {
+  if (needsNames) {
     const team = await getTeamMembers(auth.tenantId);
     for (const m of team) nameById.set(m.user_id, m.name);
   }
@@ -126,6 +138,7 @@ export async function GET(request: NextRequest) {
   const withAssignees = checkIns.map((c) => ({
     ...c,
     assigned_to_name: c.assigned_to ? nameById.get(c.assigned_to) ?? null : null,
+    meet_with_name: c.meet_with_id ? nameById.get(c.meet_with_id) ?? null : null,
   }));
 
   return apiSuccess(withAssignees);

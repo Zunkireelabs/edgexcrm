@@ -174,7 +174,7 @@ function SidebarGroupRender({
         className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -196,7 +196,7 @@ function SidebarGroupRender({
                 className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
-                    : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                    : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
                 }`}
               >
                 <ChildIcon className="w-4 h-4" />
@@ -329,7 +329,7 @@ export function DashboardShell({
         className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <item.icon className="w-[18px] h-[18px]" />
@@ -403,7 +403,7 @@ export function DashboardShell({
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>
@@ -436,7 +436,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Leads" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -448,7 +448,7 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 <Suspense key="lead-lists-nav" fallback={
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                     <Users className="w-[18px] h-[18px] shrink-0" />
                     All Leads
                   </div>
@@ -508,7 +508,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Sales" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -522,7 +522,7 @@ export function DashboardShell({
                 {navAllowed("/leads") && (
                   leadLists.length > 0 ? (
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>
@@ -575,7 +575,7 @@ export function DashboardShell({
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
-                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                   <span className="w-[18px] h-[18px] shrink-0" />
                   Leads Organise
                 </div>
@@ -593,7 +593,7 @@ export function DashboardShell({
                 if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>

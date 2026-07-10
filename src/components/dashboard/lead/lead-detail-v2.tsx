@@ -69,6 +69,11 @@ interface LeadDetailV2Props {
   assignableMembers?: TeamMember[];
   /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
   nextPositionMembers?: TeamMember[];
+  /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
+  /** Revert assignee options: the previous holder's same-position peers in their branch. */
+  revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
   canManageApplications?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
@@ -139,6 +144,9 @@ export function LeadDetailV2({
   canEditLeads = false,
   assignableMembers,
   nextPositionMembers,
+  revertTargetUserId = null,
+  revertTargetName = null,
+  revertTargetMembers = [],
   canManageApplications,
   canEnroll,
   leadLists,
@@ -185,6 +193,7 @@ export function LeadDetailV2({
   const [isSaving, setIsSaving] = useState(false);
   const [draft, setDraft] = useState<LeadDraft>(() => makeDraft(lead));
   const [editErrors, setEditErrors] = useState<EditErrors>({});
+  const [leaving, setLeaving] = useState(false);
 
   const isItAgency = tenant.industry_id === "it_agency";
 
@@ -495,6 +504,14 @@ export function LeadDetailV2({
     setCustomFields(newFields);
   };
 
+  if (leaving) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -646,9 +663,17 @@ export function LeadDetailV2({
             leadLists={leadLists}
             activeLeadLists={activeLeadLists}
             nextPositionMembers={nextPositionMembers}
+            revertTargetUserId={revertTargetUserId}
+            revertTargetName={revertTargetName}
+            revertTargetMembers={revertTargetMembers}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const prevLead = currentLead;
               const prevStageId = stageId;
+              const willHandOff =
+                assignToUserId !== undefined &&
+                assignToUserId !== null &&
+                assignToUserId !== userId;
+              if (willHandOff) setLeaving(true);
               const targetList = leadLists?.find((l) => l.id === listId);
               const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
               setCurrentLead((prev) => ({
@@ -675,11 +700,29 @@ export function LeadDetailV2({
                   setStageId(updated.stage_id);
                   setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
                 }
+                // Server may derive a reassignment on revert (stage-transition governance)
+                // even when the client didn't pass assigned_to — sync it back.
+                if (updated.assigned_to !== prevLead.assigned_to) {
+                  setAssignedTo(updated.assigned_to ?? "");
+                  setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
+                }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
+                // Handed off to someone else (send-to-next / revert to another holder):
+                // the lead leaves this user's control and is now read-only for them, so
+                // close the detail and return to the list it moved out of.
+                if (updated.assigned_to && updated.assigned_to !== userId) {
+                  router.back();
+                  router.refresh();
+                  return;
+                }
+                // Predicted a handoff (spinner shown) but the server kept the lead
+                // with us — restore the detail instead of hanging on the spinner.
+                if (willHandOff) setLeaving(false);
               } catch {
                 setCurrentLead(prevLead);
                 setStageId(prevStageId);
                 if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
+                setLeaving(false);
                 toast.error("Failed to move lead");
               }
             }}

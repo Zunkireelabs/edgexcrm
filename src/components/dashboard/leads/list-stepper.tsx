@@ -48,6 +48,17 @@ interface ListStepperProps {
   onQualify?: () => void;
   /** Next-position members to assign when sending to next stage. Empty = no picker shown. */
   nextPositionMembers?: NextPositionMember[];
+  /** Who Revert would hand the lead back to (education only). Null = current holder is the lead's origin. */
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
+  /** Revert assignee options: the previous holder's same-position peers in their branch.
+   *  When non-empty, the Revert dialog shows an assignee picker defaulting to the previous holder. */
+  revertTargetMembers?: NextPositionMember[];
+  /** owner/admin/branch-manager — may revert even when they're the lead's origin. */
+  canRevertOverride?: boolean;
+  /** View-only: render the stepper chrome with both direction buttons disabled
+   *  (e.g. the viewer no longer holds this lead). No dialogs, no moves. */
+  readOnly?: boolean;
 }
 
 /**
@@ -66,6 +77,11 @@ export function ListStepper({
   onMove,
   onQualify,
   nextPositionMembers = [],
+  revertTargetUserId = null,
+  revertTargetName = null,
+  revertTargetMembers = [],
+  canRevertOverride = false,
+  readOnly = false,
 }: ListStepperProps) {
   const [confirmList, setConfirmList] = useState<LeadList | null>(null);
   const [isNextDirection, setIsNextDirection] = useState(false);
@@ -83,8 +99,12 @@ export function ListStepper({
   const nextList = idx >= 0 && idx < chain.length - 1 ? chain[idx + 1] : null;
 
   const accessibleIds = new Set(accessibleLists.map((l) => l.id));
-  const canPrev = !!prevList && accessibleIds.has(prevList.id);
-  const canNext = !!nextList && accessibleIds.has(nextList.id);
+  // First-holder revert gate (education only): the caller may revert unless they're
+  // the lead's origin (no prior handoff to fall back to) — admin/team overrides apply.
+  const isOriginGated =
+    industryId === "education_consultancy" && !canRevertOverride && !revertTargetUserId;
+  const canPrev = !readOnly && !!prevList && accessibleIds.has(prevList.id) && !isOriginGated;
+  const canNext = !readOnly && !!nextList && accessibleIds.has(nextList.id);
 
   // The intake → Qualified step keeps its dedicated Qualify dialog (education only).
   const isQualifyStep =
@@ -109,19 +129,25 @@ export function ListStepper({
   function handlePrev() {
     if (!prevList || !canPrev) return;
     setIsNextDirection(false);
-    setSelectedAssignee("");
+    // Default the revert assignee to the previous holder; the picker lets the
+    // reverter switch to any same-position peer on that person's team.
+    setSelectedAssignee(revertTargetUserId ?? "");
     setConfirmList(prevList);
   }
 
+  // Whether the confirm dialog shows an assignee picker for the current direction.
+  const showAssigneePicker = isNextDirection
+    ? nextPositionMembers.length > 0
+    : revertTargetMembers.length > 0;
+  const pickerMembers = isNextDirection ? nextPositionMembers : revertTargetMembers;
+
   async function confirmMove() {
     if (!confirmList) return;
-    // require assignee when moving forward with available next-position members
-    if (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee) return;
+    // Require an assignee whenever the picker is shown (forward or revert).
+    if (showAssigneePicker && !selectedAssignee) return;
     setSaving(true);
     try {
-      const assignTo = isNextDirection && nextPositionMembers.length > 0
-        ? (selectedAssignee || null)
-        : undefined;
+      const assignTo = showAssigneePicker ? (selectedAssignee || null) : undefined;
       await onMove(confirmList.id, assignTo);
       setConfirmList(null);
       setSelectedAssignee("");
@@ -158,7 +184,13 @@ export function ListStepper({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {canPrev ? prevList.name : `No access to ${prevList.name}`}
+                {readOnly
+                  ? "You no longer hold this lead."
+                  : canPrev
+                    ? prevList.name
+                    : isOriginGated
+                      ? "You're the first holder — nothing to revert to."
+                      : `No access to ${prevList.name}`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -189,7 +221,7 @@ export function ListStepper({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {canNext ? nextList.name : `No access to ${nextList.name}`}
+                {readOnly ? "You no longer hold this lead." : canNext ? nextList.name : `No access to ${nextList.name}`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -212,24 +244,57 @@ export function ListStepper({
               <CornerUpRight className="h-5 w-5" />
             </div>
             <DialogTitle className="pt-1">
-              {confirmList ? moveConfirmMessage(confirmList) : ""}
+              {confirmList
+                ? isNextDirection
+                  ? moveConfirmMessage(confirmList)
+                  : `Revert to ${confirmList.name}`
+                : ""}
             </DialogTitle>
             <DialogDescription>
-              This lead will be moved to the{" "}
-              <span className="font-medium text-foreground">{confirmList?.name}</span> list.
+              {!isNextDirection ? (
+                <>
+                  This lead will move back to{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span>.
+                  {!showAssigneePicker && revertTargetName && (
+                    <>
+                      {" "}Reassigned to{" "}
+                      <span className="font-medium text-foreground">{revertTargetName}</span>.
+                    </>
+                  )}
+                </>
+              ) : selectedAssignee ? (
+                <>
+                  This lead will move to{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span> and be
+                  assigned to{" "}
+                  <span className="font-medium text-foreground">
+                    {(() => {
+                      const m = nextPositionMembers.find((m) => m.user_id === selectedAssignee);
+                      return m?.name || m?.email.split("@")[0] || "";
+                    })()}
+                  </span>
+                  .
+                </>
+              ) : (
+                <>
+                  This lead will be moved to the{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span> list.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          {/* Assignee picker — only shown when sending forward and next-position members exist */}
-          {isNextDirection && nextPositionMembers.length > 0 && (
+          {/* Assignee picker — shown when sending forward (next-position members) or
+              reverting (previous holder's team). Revert defaults to the previous holder. */}
+          {showAssigneePicker && (
             <div className="py-2">
               <p className="text-xs text-muted-foreground mb-1.5">Assign to</p>
               <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
                 <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Select assignee (optional)" />
+                  <SelectValue placeholder="Select assignee" />
                 </SelectTrigger>
                 <SelectContent>
-                  {nextPositionMembers.map((m) => (
+                  {pickerMembers.map((m) => (
                     <SelectItem key={m.user_id} value={m.user_id}>
                       <div className="flex items-center gap-2">
                         <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
@@ -254,7 +319,7 @@ export function ListStepper({
               Cancel
             </Button>
             <Button
-              disabled={saving || (isNextDirection && nextPositionMembers.length > 0 && !selectedAssignee)}
+              disabled={saving || (showAssigneePicker && !selectedAssignee)}
               onClick={confirmMove}
             >
               {saving ? "Moving…" : "Confirm"}

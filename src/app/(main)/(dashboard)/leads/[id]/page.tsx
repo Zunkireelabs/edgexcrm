@@ -185,6 +185,38 @@ export default async function LeadDetailPage({
       )
     : [];
 
+  // Revert target: who the ListStepper's "Revert" would hand the lead back to.
+  // Absence of a prior handoff row means the current holder is the lead's origin
+  // (education_consultancy only — stage-transition governance is education-scoped).
+  let revertTargetUserId: string | null = null;
+  if (tenantData.tenant.industry_id === "education_consultancy" && lead.assigned_to) {
+    const { data: lh } = await serviceClient
+      .from("lead_assignment_history")
+      .select("from_user_id")
+      .eq("lead_id", lead.id)
+      .eq("to_user_id", lead.assigned_to)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    revertTargetUserId = (lh as { from_user_id?: string } | null)?.from_user_id ?? null;
+  }
+  const revertTargetName = revertTargetUserId ? (memberNames[revertTargetUserId] ?? null) : null;
+  // Revert assignee options: the previous holder's same-position peers in their
+  // branch (default-selected = the previous holder). Lets the reverter hand the
+  // lead to anyone on that person's team instead of only the exact prior holder.
+  const revertTargetMember = revertTargetUserId
+    ? roster.find((m) => m.user_id === revertTargetUserId)
+    : null;
+  const revertTargetMembers = revertTargetMember
+    ? roster
+        .filter(
+          (m) =>
+            m.position_slug === revertTargetMember.position_slug &&
+            (revertTargetMember.branch_id == null || m.branch_id === revertTargetMember.branch_id),
+        )
+        .map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
+    : [];
+
   return (
     <LeadDetailV2
       lead={lead}
@@ -204,6 +236,9 @@ export default async function LeadDetailPage({
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}
       nextPositionMembers={nextPositionMembers}
+      revertTargetUserId={revertTargetUserId}
+      revertTargetName={revertTargetName}
+      revertTargetMembers={revertTargetMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}
