@@ -123,6 +123,20 @@ A short list of files are edited by almost every feature. When git flags a confl
 
 Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and prod now **apply them automatically inside the deploy pipeline** via a ledger-diff runner (`scripts/migrate-apply.sh`): **staging** applies on every deploy; **prod** applies behind a **required-reviewer approval gate** (the `production-db` GitHub Environment), *before* the container swaps — so the split-brain is structurally impossible, not just discouraged (see "Applying" below). A **ledger table** (`public.schema_migrations`, mig 123) records what's applied to each DB; each migration **self-records its own filename**. You can still apply by hand (psql / Supabase MCP) for out-of-band or emergency changes — the runner then sees it already in the ledger and no-ops. Treat every migration as a coupled release with its code. Start from **`supabase/migrations/_TEMPLATE.sql`**.
 
+### When do migrations actually run? (trigger reference)
+
+A migration is just a numbered `.sql` file. **Committing or pushing it changes no database** — the file only becomes a DB change at a specific pipeline event:
+
+| Event | What runs against a DB | Which DB |
+|---|---|---|
+| Push to a **feature branch** | nothing | — |
+| **PR** opened to `stage` / `main` | CI only (migration/promotion guards, lint, typecheck, test, build) — **no DB connection** | — |
+| **Merge to `stage`** | `deploy-staging.yml` → `migrate` job → `migrate-apply.sh stage` | **stage** (`dymeudcddasqpomfpjvt`) |
+| **Promote `stage` → `main`** *with* migration file(s) | `deploy.yml` → `migrate` job (paused for `production-db` approval) → `migrate-apply.sh prod` | **prod** (`pirhnklvtjjpuvbvibxf`) |
+| Promote with **no** migration files | `migrate` job skipped (code-only deploy) | — |
+
+So migrations reach a **shared** DB **only on merge** — never on a branch push or an open PR. (This is also why local dev runs against an isolated OrbStack DB — see `LOCAL-DEV-SETUP.md`; nothing your laptop does can touch stage. The old "local changes showed up in stage without a push" behavior came from local pointing at the *shared* stage DB, which is no longer the case.)
+
 ### Authoring
 - **Number:** `ls supabase/migrations/ | sort` → take `<highest + 1>`. **Never reuse a number** (historical dupes `110_*`/`112_*` exist from before this rule — don't add more).
 - **Shape:** wrap in `BEGIN; … COMMIT;`. **Additive only** (add tables/columns/policies). Include a header comment with: what it does, expected **before/after row counts**, and a **rollback** line.
@@ -139,7 +153,7 @@ Migrations are **plain SQL files in `supabase/migrations/`**. Both stage and pro
 
 ### Applying — order matters
 1. **Local first.** Apply the new migration to your **local baseline DB** and verify the feature + RLS as a real logged-in user. Isolated and free — catch the obvious errors before a shared DB ever sees them. (Local doesn't replay history, so you apply just your new file on top of the baseline — see `LOCAL-DEV-SETUP.md` § "testing a new migration".)
-2. **Stage next.** Apply to the stage DB (`dymeudcddasqpomfpjvt`), in a transaction, log before/after counts. Verify tables/policies/seed. Smoke on dev as a **real logged-in user** (not service-role — RLS only shows up under a real JWT).
+2. **Stage next.** Apply to the stage DB (`dymeudcddasqpomfpjvt`), in a transaction, log before/after counts. Verify tables/policies/seed. Smoke on dev as a **real logged-in user** (not service-role — RLS only shows up under a real JWT). (Note: **merging to `stage` already auto-applies the migration** via the `migrate` job — see the trigger table above — so a manual pre-apply here is optional, mainly to verify the migration on stage *before* you merge.)
 3. **Prod — automatic + gated at promotion (no more manual apply-before-merge).** When a stage→main promotion contains migration file(s), the prod deploy (`deploy.yml`) detects them (`migrate-check` job), **pauses at "Apply Pending Migrations" for a required-reviewer approval** (`production-db` environment — reviewers sthasadin/ani-shh, admin-bypass off), applies them to the prod DB **before** the container swaps, then deploys. Migrations always land before the code that needs them → the "new code on old schema = 500s" split-brain can't happen. A code-only promotion skips the migrate job entirely (no approval pause). **So for the normal flow you no longer hand-apply to prod before merging** — you review the migration in the PR, then approve it in the deploy. (Emergency/out-of-band prod SQL can still be applied by hand under per-action approval; the runner then no-ops on it.)
 4. **Check the ledger — don't guess.** `STAGE_DB_URL=… scripts/migrate-status.sh stage` (or `prod`) lists **applied vs pending vs ghost** for that DB. A migration is **not on prod until it shows applied on prod.** Because it self-records, applying it *is* recording it — no separate bookkeeping.
 
