@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
 import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -269,74 +268,78 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-gray-50 border-b border-gray-200">
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("title")}
-              aria-sort={sortKey === "title" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Title <SortIcon col="title" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("project")}
-              aria-sort={sortKey === "project" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Project <SortIcon col="project" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("status")}
-              aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("assignee")}
-              aria-sort={sortKey === "assignee" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Assignee <SortIcon col="assignee" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("priority")}
-              aria-sort={sortKey === "priority" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("due_date")}
-              aria-sort={sortKey === "due_date" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead className="text-xs font-medium text-gray-600">Est.</TableHead>
-            <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
-            <TableHead className="w-24" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              team={team}
-              poolTags={poolTags}
-              onStatusChange={handleStatusChange}
-              onAssigneeChange={handleAssigneeChange}
-              onPriorityChange={handlePriorityChange}
-              onDueDateChange={handleDueDateChange}
-              onEstimateChange={handleEstimateChange}
-              onTagsChange={handleTagsChange}
-              onLogTime={openLogTime}
-            />
-          ))}
-        </TableBody>
-      </Table>
+      <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full text-sm border-collapse">
+            <TableHeader className="sticky top-0 z-10">
+              <TableRow className="bg-gray-50 border-b border-gray-200">
+                <TableHead className="w-0 border-r border-gray-100" />
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("title")}
+                  aria-sort={sortKey === "title" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Title <SortIcon col="title" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("project")}
+                  aria-sort={sortKey === "project" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Project <SortIcon col="project" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("status")}
+                  aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("assignee")}
+                  aria-sort={sortKey === "assignee" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Assignee <SortIcon col="assignee" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("priority")}
+                  aria-sort={sortKey === "priority" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("due_date")}
+                  aria-sort={sortKey === "due_date" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="text-xs font-medium text-gray-600 border-r border-gray-100">Est.</TableHead>
+                <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  team={team}
+                  poolTags={poolTags}
+                  onStatusChange={handleStatusChange}
+                  onAssigneeChange={handleAssigneeChange}
+                  onPriorityChange={handlePriorityChange}
+                  onDueDateChange={handleDueDateChange}
+                  onEstimateChange={handleEstimateChange}
+                  onTagsChange={handleTagsChange}
+                  onLogTime={openLogTime}
+                />
+              ))}
+            </TableBody>
+          </table>
+        </div>
+      </div>
 
       <LogTimeDialog
         open={logTimeOpen}
@@ -399,108 +402,8 @@ function TaskRow({
 
   return (
     <TableRow className="group hover:bg-gray-50">
-      {/* Title */}
-      <TableCell className="max-w-[220px]">
-        <span className="text-sm font-medium text-[#0f0f10] truncate block" title={task.title}>
-          {task.title}
-        </span>
-        {task.projects?.accounts?.name && (
-          <span className="text-[11px] text-muted-foreground">
-            {task.projects.accounts.name}
-          </span>
-        )}
-      </TableCell>
-
-      {/* Project */}
-      <TableCell className="max-w-[160px]">
-        {task.projects ? (
-          <a
-            href={`/projects/${task.projects.id}`}
-            className="text-xs text-[#0f0f10] hover:underline truncate block"
-          >
-            {task.projects.name}
-          </a>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        )}
-      </TableCell>
-
-      {/* Status */}
-      <TableCell>
-        <Select
-          value={task.status}
-          onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
-        >
-          <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 gap-1 w-auto focus:ring-0 shadow-none hover:bg-gray-100 rounded px-1.5">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.entries(TASK_STATUS_LABELS) as [TaskStatus, string][]).map(([v, lbl]) => (
-              <SelectItem key={v} value={v} className="text-xs">{lbl}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </TableCell>
-
-      {/* Assignee */}
-      <TableCell>
-        <AssigneePicker
-          assigneeId={task.assignee_id}
-          team={team}
-          onChange={(uid) => onAssigneeChange(task.id, uid)}
-        />
-      </TableCell>
-
-      {/* Priority */}
-      <TableCell>
-        <PriorityPill
-          priority={task.priority}
-          onChange={(p) => onPriorityChange(task.id, p)}
-        />
-      </TableCell>
-
-      {/* Due date */}
-      <TableCell>
-        <input
-          type="date"
-          value={task.due_date ?? ""}
-          onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
-          aria-label="Due date"
-          className={[
-            "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
-            isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
-          ].join(" ")}
-        />
-      </TableCell>
-
-      {/* Estimate (hours) */}
-      <TableCell>
-        <input
-          type="number"
-          min="0"
-          step="0.25"
-          value={estimateInput}
-          onChange={(e) => setEstimateInput(e.target.value)}
-          onBlur={commitEstimate}
-          placeholder="—"
-          aria-label="Estimated hours"
-          className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
-        />
-      </TableCell>
-
-      {/* Tags */}
-      <TableCell className="max-w-[200px]">
-        <TagMultiPicker
-          size="sm"
-          value={task.tags}
-          onChange={(next) => onTagsChange(task.id, next)}
-          allTags={poolTags}
-          placeholder="+ tag"
-        />
-      </TableCell>
-
       {/* Timer + log time actions */}
-      <TableCell>
+      <TableCell className="border-r border-gray-100">
         <div className="flex items-center gap-1">
           <TooltipProvider>
             <Tooltip>
@@ -512,10 +415,7 @@ function TaskRow({
                     disabled={!task.projects || timerPending}
                     title={running ? "Stop timer" : "Start timer"}
                     aria-label={running ? "Stop timer" : "Start timer"}
-                    className={[
-                      "flex items-center gap-1 p-1 rounded hover:bg-gray-100 transition-opacity",
-                      running ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-                    ].join(" ")}
+                    className="flex items-center gap-1 p-1 rounded hover:bg-gray-100"
                   >
                     {timerPending ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -543,12 +443,112 @@ function TaskRow({
               onClick={() => onLogTime(task)}
               title="Log time for this task"
               aria-label="Log time for this task"
-              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100"
+              className="p-1 rounded hover:bg-gray-100"
             >
               <Timer className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           )}
         </div>
+      </TableCell>
+
+      {/* Title */}
+      <TableCell className="max-w-[220px] border-r border-gray-100">
+        <span className="text-sm font-medium text-[#0f0f10] truncate block" title={task.title}>
+          {task.title}
+        </span>
+        {task.projects?.accounts?.name && (
+          <span className="text-[11px] text-muted-foreground">
+            {task.projects.accounts.name}
+          </span>
+        )}
+      </TableCell>
+
+      {/* Project */}
+      <TableCell className="max-w-[160px] border-r border-gray-100">
+        {task.projects ? (
+          <a
+            href={`/projects/${task.projects.id}`}
+            className="text-xs text-[#0f0f10] hover:underline truncate block"
+          >
+            {task.projects.name}
+          </a>
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        )}
+      </TableCell>
+
+      {/* Status */}
+      <TableCell className="border-r border-gray-100">
+        <Select
+          value={task.status}
+          onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
+        >
+          <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 gap-1 w-auto focus:ring-0 shadow-none hover:bg-gray-100 rounded px-1.5">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.entries(TASK_STATUS_LABELS) as [TaskStatus, string][]).map(([v, lbl]) => (
+              <SelectItem key={v} value={v} className="text-xs">{lbl}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </TableCell>
+
+      {/* Assignee */}
+      <TableCell className="border-r border-gray-100">
+        <AssigneePicker
+          assigneeId={task.assignee_id}
+          team={team}
+          onChange={(uid) => onAssigneeChange(task.id, uid)}
+        />
+      </TableCell>
+
+      {/* Priority */}
+      <TableCell className="border-r border-gray-100">
+        <PriorityPill
+          priority={task.priority}
+          onChange={(p) => onPriorityChange(task.id, p)}
+        />
+      </TableCell>
+
+      {/* Due date */}
+      <TableCell className="border-r border-gray-100">
+        <input
+          type="date"
+          value={task.due_date ?? ""}
+          onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
+          aria-label="Due date"
+          className={[
+            "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
+            isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
+          ].join(" ")}
+        />
+      </TableCell>
+
+      {/* Estimate (hours) */}
+      <TableCell className="border-r border-gray-100">
+        <input
+          type="number"
+          min="0"
+          step="0.25"
+          value={estimateInput}
+          onChange={(e) => setEstimateInput(e.target.value)}
+          onBlur={commitEstimate}
+          placeholder="—"
+          aria-label="Estimated hours"
+          className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
+        />
+      </TableCell>
+
+      {/* Tags */}
+      <TableCell className="max-w-[200px]">
+        <TagMultiPicker
+          size="sm"
+          value={task.tags}
+          onChange={(next) => onTagsChange(task.id, next)}
+          allTags={poolTags}
+          placeholder="+ tag"
+        />
       </TableCell>
     </TableRow>
   );
