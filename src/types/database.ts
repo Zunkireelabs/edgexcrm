@@ -889,8 +889,19 @@ export interface TimeEntry {
   approved_by: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
+  source: "manual" | "timer";
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveTimer {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  task_id: string;
+  project_id: string;
+  started_at: string;
+  created_at: string;
 }
 
 // ============================================================

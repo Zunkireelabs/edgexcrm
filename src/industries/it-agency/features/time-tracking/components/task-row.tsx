@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Loader2, Clock } from "lucide-react";
+import { Pencil, Trash2, Loader2, Clock, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,8 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TaskStatusBadge } from "./status-badge";
 import { AssigneePicker } from "../../project-board/components/assignee-picker";
+import { useActiveTimersContext, formatElapsed } from "../hooks/use-active-timers";
 import type { TeamMember } from "../../project-board/hooks/use-projects";
 import type { Task, TaskStatus } from "@/types/database";
 
@@ -47,6 +49,11 @@ interface TaskRowProps {
 }
 
 export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRowProps) {
+  const { isTaskRunning, isPending, startTimer, stopTimer, now } = useActiveTimersContext();
+  const running = isTaskRunning(task.id);
+  const timerPending = isPending(task.id);
+  const noProject = task.project_id == null;
+
   const [editOpen, setEditOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -155,6 +162,37 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
           onChange={handleAssigneeChange}
           disabled={!isAdmin}
         />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 px-2 gap-1.5 ${running ? "text-red-600 hover:text-red-600" : ""}`}
+                  disabled={noProject || timerPending}
+                  onClick={() => (running ? stopTimer(running.id) : startTimer(task.id))}
+                  title={running ? "Stop timer" : "Start timer"}
+                  aria-label={running ? "Stop timer" : "Start timer"}
+                >
+                  {timerPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : running ? (
+                    <Square className="h-3.5 w-3.5" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                  {running && (
+                    <span className="text-xs tabular-nums">
+                      {formatElapsed(now - Date.parse(running.started_at))}
+                    </span>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {noProject && <TooltipContent>Task must be attached to a project to track time</TooltipContent>}
+          </Tooltip>
+        </TooltipProvider>
         {isAdmin && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button

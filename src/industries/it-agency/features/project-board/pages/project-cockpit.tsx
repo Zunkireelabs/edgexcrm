@@ -17,6 +17,7 @@ import { AiSummaryCard } from "../components/cockpit/ai-summary-card";
 import { StatusPill } from "../components/status-pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { AI_SYNTH_PREVIEW } from "../lib/ai-preview";
+import { ActiveTimersProvider } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import type { ProjectStatus } from "@/types/database";
 
 interface ProjectCockpitPageProps {
@@ -101,7 +102,9 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
             <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
           )}
           <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
-          <TasksSection projectId={projectId} isAdmin={isAdmin} />
+          <ActiveTimersProvider>
+            <TasksSection projectId={projectId} isAdmin={isAdmin} />
+          </ActiveTimersProvider>
         </TabsContent>
         <TabsContent value="delivery" className="mt-4">
           <DeliveryTab

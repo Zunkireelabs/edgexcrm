@@ -21,6 +21,22 @@ export function calculateCostAmount(entries: TimeEntry[]): number {
     .reduce((sum, e) => sum + (e.minutes / 60) * (e.cost_rate_snapshot ?? 0), 0);
 }
 
+export interface MinutesBySource {
+  timer: number;
+  manual: number;
+  total: number;
+}
+
+export function calculateMinutesBySource(entries: TimeEntry[]): MinutesBySource {
+  let timer = 0;
+  let manual = 0;
+  for (const e of entries) {
+    if (e.source === "timer") timer += e.minutes;
+    else manual += e.minutes;
+  }
+  return { timer, manual, total: timer + manual };
+}
+
 export interface MarginResult {
   margin: number;
   marginPct: number | null;
