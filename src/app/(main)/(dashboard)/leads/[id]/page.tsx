@@ -201,6 +201,21 @@ export default async function LeadDetailPage({
     revertTargetUserId = (lh as { from_user_id?: string } | null)?.from_user_id ?? null;
   }
   const revertTargetName = revertTargetUserId ? (memberNames[revertTargetUserId] ?? null) : null;
+  // Revert assignee options: the previous holder's same-position peers in their
+  // branch (default-selected = the previous holder). Lets the reverter hand the
+  // lead to anyone on that person's team instead of only the exact prior holder.
+  const revertTargetMember = revertTargetUserId
+    ? roster.find((m) => m.user_id === revertTargetUserId)
+    : null;
+  const revertTargetMembers = revertTargetMember
+    ? roster
+        .filter(
+          (m) =>
+            m.position_slug === revertTargetMember.position_slug &&
+            (revertTargetMember.branch_id == null || m.branch_id === revertTargetMember.branch_id),
+        )
+        .map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
+    : [];
 
   return (
     <LeadDetailV2
@@ -223,6 +238,7 @@ export default async function LeadDetailPage({
       nextPositionMembers={nextPositionMembers}
       revertTargetUserId={revertTargetUserId}
       revertTargetName={revertTargetName}
+      revertTargetMembers={revertTargetMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}

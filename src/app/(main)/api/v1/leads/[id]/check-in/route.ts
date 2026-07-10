@@ -40,9 +40,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!lead) return apiNotFound("Lead");
 
   let reason = "";
+  let meetWithId: string | null = null;
   try {
     const body = await request.json();
     reason = (body.reason as string) || "";
+    // Per-visit "meet with" person, stored on THIS check-in note — distinct from
+    // lead.assigned_to (the counselor). Optional.
+    meetWithId = (body.meet_with_id as string) || null;
   } catch {
     // No body is fine
   }
@@ -67,6 +71,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     user_id: auth.userId,
     user_email: auth.email || "unknown",
     content,
+    meet_with_id: meetWithId,
   });
 
   if (error) {
