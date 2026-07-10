@@ -124,6 +124,8 @@ interface LeadsTableProps {
   isTeamScoped?: boolean;
   /** All pipeline lists (non-archive, non-staging) — used for assignAutoListId routing regardless of position access. */
   allLeadLists?: LeadList[];
+  /** Current user's position slug — threaded to AddLeadSheet for the education assignment cascade. */
+  currentUserPositionSlug?: string | null;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -167,6 +169,7 @@ export function LeadsTable({
   hasListPipeline = false,
   isTeamScoped = false,
   allLeadLists,
+  currentUserPositionSlug = null,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -1961,6 +1964,7 @@ export function LeadsTable({
           branches={branches}
           selectedBranchId={selectedBranchId}
           userBranchId={userBranchId}
+          currentUserPositionSlug={currentUserPositionSlug}
         />
       )}
 
