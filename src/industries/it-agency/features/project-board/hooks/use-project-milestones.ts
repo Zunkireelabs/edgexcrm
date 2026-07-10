@@ -65,5 +65,20 @@ export function useProjectMilestones(projectId: string) {
     return true;
   }
 
-  return { milestones, loading, createMilestone, acceptMilestone, rejectMilestone, refetch: load };
+  async function transitionMilestone(milestoneId: string, to: string): Promise<boolean> {
+    const res = await fetch(`/api/v1/milestones/${milestoneId}/transition`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      toast.error(json.error?.message ?? "Failed to update milestone");
+      return false;
+    }
+    await load();
+    return true;
+  }
+
+  return { milestones, loading, createMilestone, acceptMilestone, rejectMilestone, transitionMilestone, refetch: load };
 }

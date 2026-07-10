@@ -108,6 +108,7 @@ export interface TenantUser {
   user_id: string;
   role: UserRole;
   default_hourly_rate: number | null;
+  cost_rate: number | null;
   branch_id: string | null;
   created_at: string;
 }
@@ -669,6 +670,8 @@ export interface Project {
   health_note: string | null;
   qualified_at: string | null;
   qualified_by: string | null;
+  // Deal/Proposal -> Project handoff (mig 134)
+  currency: string | null;
   // Derived, only present on GET responses that compute them
   pct_complete?: number;
   health?: ProjectHealth;
@@ -677,6 +680,7 @@ export interface Project {
 
 export type ProjectEventType =
   | "brief_captured"
+  | "baseline_seeded_from_proposal"
   | "scope_baseline_set"
   | "plan_committed"
   | "change_request_proposed"
@@ -685,10 +689,19 @@ export type ProjectEventType =
   | "task_reconciled"
   | "milestone_accepted"
   | "milestone_rejected"
+  | "milestone_submitted"
+  | "milestone_started"
   | "issue_raised"
   | "issue_resolved"
   | "status_published"
   | "retro_lesson"
+  | "invoice_generated"
+  | "invoice_sent"
+  | "invoice_paid"
+  | "invoice_voided"
+  | "risk_raised"
+  | "risk_closed"
+  | "risk_occurred"
   | string;
 
 export interface ProjectEvent {
@@ -722,6 +735,48 @@ export interface ProjectMilestone {
   rejection_reason: string | null;
   created_at: string;
   updated_at: string;
+  // Invoicing spine (mig 133) — stamped when a generated invoice captures this milestone.
+  invoiced_at: string | null;
+}
+
+export type InvoiceStatus = "draft" | "sent" | "paid" | "void";
+
+export interface Invoice {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  account_id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  currency: string;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  issue_date: string | null;
+  due_date: string | null;
+  notes: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined (from API)
+  line_items?: InvoiceLineItem[];
+  projects?: { id: string; name: string } | null;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  milestone_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  sort_order: number;
+  created_at: string;
 }
 
 export type IssueKind = "query" | "issue" | "blocker";
@@ -742,6 +797,27 @@ export interface ProjectIssue {
   raised_by_label: string | null;
   raised_by_contact_id: string | null;
   assigned_to: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RiskLevel = "low" | "medium" | "high";
+export type RiskStatus = "open" | "mitigating" | "closed" | "occurred";
+
+export interface ProjectRisk {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  probability: RiskLevel;
+  impact: RiskLevel;
+  mitigation: string | null;
+  owner_id: string | null;
+  status: RiskStatus;
+  review_date: string | null;
   opened_at: string;
   resolved_at: string | null;
   created_at: string;
@@ -778,10 +854,16 @@ export interface ProjectStatusReport {
   period_end: string | null;
   health_snapshot: ProjectHealth | null;
   summary: string | null;
+  accomplishments: string | null;
+  in_progress: string | null;
+  risks: string | null;
+  asks: string | null;
+  client_message: string | null;
   pct_complete_snapshot: number | null;
   hours_actual_snapshot: number | null;
   hours_estimate_snapshot: number | null;
   is_client_visible: boolean;
+  public_token: string | null;
   published_at: string | null;
   published_by: string | null;
   created_at: string;
@@ -826,12 +908,24 @@ export interface TimeEntry {
   notes: string | null;
   is_billable: boolean;
   rate_snapshot: number | null;
+  cost_rate_snapshot: number | null;
   approval_status: ApprovalStatus;
   approved_by: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
+  source: "manual" | "timer";
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveTimer {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  task_id: string;
+  project_id: string;
+  started_at: string;
+  created_at: string;
 }
 
 // ============================================================
@@ -1093,6 +1187,8 @@ export interface Proposal {
   deleted_at: string | null;
   public_token: string | null;
   public_enabled: boolean;
+  // Deal/Proposal -> Project handoff (mig 134) — set once this proposal seeds a project.
+  project_id: string | null;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;
   line_items?: ProposalLineItem[];

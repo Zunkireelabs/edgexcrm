@@ -2,14 +2,17 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Plus, Loader2 } from "lucide-react";
+import Link from "next/link";
+import { Plus, Loader2, ClipboardCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TimesheetFilters, type TimesheetFilterValues } from "../components/timesheet-filters";
 import { TimesheetStatsCards } from "../components/timesheet-stats-cards";
 import { TimesheetTable } from "../components/timesheet-table";
 import { LogTimeDialog } from "../components/log-time-dialog";
 import { TimeEntryAddForm } from "../components/time-entry-add-form";
+import { RunningTimersPanel } from "../components/running-timers-panel";
 import { useTimeEntries } from "../hooks/use-time-entries";
+import { ActiveTimersProvider } from "../hooks/use-active-timers";
 import { toLocalDateString } from "@/lib/date";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 import type { Project } from "@/types/database";
@@ -129,8 +132,8 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
   }
 
   function exportCSV() {
-    const adminHeaders = ["Date", "Day", "Member", "Account", "Project", "Task", "Notes", "Minutes", "Hours", "Status"];
-    const memberHeaders = ["Date", "Day", "Account", "Project", "Task", "Notes", "Minutes", "Hours", "Status"];
+    const adminHeaders = ["Date", "Day", "Member", "Account", "Project", "Task", "Notes", "Minutes", "Hours", "Status", "Source"];
+    const memberHeaders = ["Date", "Day", "Account", "Project", "Task", "Notes", "Minutes", "Hours", "Status", "Source"];
     const headers = isAdmin ? adminHeaders : memberHeaders;
 
     const rows = displayedEntries.map((e) => {
@@ -149,6 +152,7 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
         String(e.minutes),
         hours,
         e.approval_status,
+        e.source === "timer" ? "System-logged" : "Manual",
       ];
       if (isAdmin) {
         common.splice(2, 0, member);
@@ -169,6 +173,7 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
   }
 
   return (
+    <ActiveTimersProvider>
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
@@ -179,10 +184,18 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
           </p>
         </div>
         {isAdmin ? (
-          <Button onClick={() => setLogTimeOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Log time
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" asChild>
+              <Link href="/time-tracking/compliance">
+                <ClipboardCheck className="h-4 w-4 mr-2" />
+                Team compliance
+              </Link>
+            </Button>
+            <Button onClick={() => setLogTimeOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Log time
+            </Button>
+          </div>
         ) : (
           !showInlineForm && (
             <Button onClick={() => setShowInlineForm(true)}>
@@ -200,6 +213,9 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
           onCancel={() => setShowInlineForm(false)}
         />
       )}
+
+      {/* Running timers */}
+      <RunningTimersPanel onStopped={addEntry} />
 
       {/* Stats */}
       <TimesheetStatsCards entries={displayedEntries} isAdmin={isAdmin} />
@@ -241,5 +257,6 @@ export function TimesheetPage({ role }: TimesheetPageProps) {
         />
       )}
     </div>
+    </ActiveTimersProvider>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -18,7 +18,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LogTimeDialog } from "@/industries/it-agency/features/time-tracking/components/log-time-dialog";
+import { useActiveTimersContext, formatElapsed } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import { AssigneePicker } from "../assignee-picker";
 import { PriorityPill } from "../priority-pill";
 import { TagMultiPicker } from "../tag-multi-picker";
@@ -211,6 +213,15 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
     }
   }
 
+  async function handleEstimateChange(taskId: string, estimated_minutes: number | null) {
+    try {
+      const updated = await patchTask(taskId, { estimated_minutes });
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
+    } catch {
+      toast.error("Failed to update estimate");
+    }
+  }
+
   async function handleTagsChange(taskId: string, newTags: string[]) {
     const prevTags = tasks.find((t) => t.id === taskId)?.tags ?? [];
     setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: newTags } : t)));
@@ -303,8 +314,9 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
             >
               <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
             </TableHead>
+            <TableHead className="text-xs font-medium text-gray-600">Est.</TableHead>
             <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
-            <TableHead className="w-10" />
+            <TableHead className="w-24" />
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -318,6 +330,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
               onAssigneeChange={handleAssigneeChange}
               onPriorityChange={handlePriorityChange}
               onDueDateChange={handleDueDateChange}
+              onEstimateChange={handleEstimateChange}
               onTagsChange={handleTagsChange}
               onLogTime={openLogTime}
             />
@@ -346,6 +359,7 @@ interface TaskRowProps {
   onAssigneeChange: (id: string, uid: string | null) => void;
   onPriorityChange: (id: string, p: TaskPriority) => void;
   onDueDateChange: (id: string, d: string | null) => void;
+  onEstimateChange: (id: string, estimated_minutes: number | null) => void;
   onTagsChange: (id: string, tags: string[]) => void;
   onLogTime: (task: TaskWithProject) => void;
 }
@@ -358,6 +372,7 @@ function TaskRow({
   onAssigneeChange,
   onPriorityChange,
   onDueDateChange,
+  onEstimateChange,
   onTagsChange,
   onLogTime,
 }: TaskRowProps) {
@@ -365,6 +380,22 @@ function TaskRow({
     task.due_date != null &&
     task.status !== "done" &&
     task.due_date < new Date().toISOString().split("T")[0];
+
+  const { isTaskRunning, isPending, startTimer, stopTimer, now } = useActiveTimersContext();
+  const running = isTaskRunning(task.id);
+  const timerPending = isPending(task.id);
+
+  const [estimateInput, setEstimateInput] = useState(
+    task.estimated_minutes != null ? String(Math.round((task.estimated_minutes / 60) * 100) / 100) : ""
+  );
+
+  function commitEstimate() {
+    const trimmed = estimateInput.trim();
+    const minutes = trimmed ? Math.round(parseFloat(trimmed) * 60) : null;
+    if (minutes != null && Number.isNaN(minutes)) return;
+    if (minutes === (task.estimated_minutes ?? null)) return;
+    onEstimateChange(task.id, minutes);
+  }
 
   return (
     <TableRow className="group hover:bg-gray-50">
@@ -442,6 +473,21 @@ function TaskRow({
         />
       </TableCell>
 
+      {/* Estimate (hours) */}
+      <TableCell>
+        <input
+          type="number"
+          min="0"
+          step="0.25"
+          value={estimateInput}
+          onChange={(e) => setEstimateInput(e.target.value)}
+          onBlur={commitEstimate}
+          placeholder="—"
+          aria-label="Estimated hours"
+          className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
+        />
+      </TableCell>
+
       {/* Tags */}
       <TableCell className="max-w-[200px]">
         <TagMultiPicker
@@ -453,19 +499,56 @@ function TaskRow({
         />
       </TableCell>
 
-      {/* Log time action */}
+      {/* Timer + log time actions */}
       <TableCell>
-        {task.projects && (
-          <button
-            type="button"
-            onClick={() => onLogTime(task)}
-            title="Log time for this task"
-            aria-label="Log time for this task"
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100"
-          >
-            <Timer className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        )}
+        <div className="flex items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <button
+                    type="button"
+                    onClick={() => (running ? stopTimer(running.id) : startTimer(task.id))}
+                    disabled={!task.projects || timerPending}
+                    title={running ? "Stop timer" : "Start timer"}
+                    aria-label={running ? "Stop timer" : "Start timer"}
+                    className={[
+                      "flex items-center gap-1 p-1 rounded hover:bg-gray-100 transition-opacity",
+                      running ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    ].join(" ")}
+                  >
+                    {timerPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    ) : running ? (
+                      <Square className="h-3.5 w-3.5 text-red-600" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    {running && (
+                      <span className="text-[11px] tabular-nums text-red-600">
+                        {formatElapsed(now - Date.parse(running.started_at))}
+                      </span>
+                    )}
+                  </button>
+                </span>
+              </TooltipTrigger>
+              {!task.projects && (
+                <TooltipContent>Task must be attached to a project to track time</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          {task.projects && (
+            <button
+              type="button"
+              onClick={() => onLogTime(task)}
+              title="Log time for this task"
+              aria-label="Log time for this task"
+              className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100"
+            >
+              <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
       </TableCell>
     </TableRow>
   );

@@ -31,6 +31,7 @@ interface TeamMember {
   name?: string | null;
   email: string;
   default_hourly_rate: number | null;
+  cost_rate: number | null;
   created_at: string;
 }
 
@@ -81,6 +82,11 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
   const [editingRateFor, setEditingRateFor] = useState<string | null>(null);
   const [rateInput, setRateInput] = useState("");
   const [savingRate, setSavingRate] = useState(false);
+
+  // Cost rate editing state (IT agency, admin-only — staff-cost info, not just billing)
+  const [editingCostRateFor, setEditingCostRateFor] = useState<string | null>(null);
+  const [costRateInput, setCostRateInput] = useState("");
+  const [savingCostRate, setSavingCostRate] = useState(false);
 
   // Position editing state
   const [editingPositionFor, setEditingPositionFor] = useState<string | null>(null);
@@ -276,6 +282,35 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
     }
   }
 
+  function startEditingCostRate(member: TeamMember) {
+    setEditingCostRateFor(member.user_id);
+    setCostRateInput(member.cost_rate != null ? String(member.cost_rate) : "");
+  }
+
+  async function saveCostRate(memberUserId: string) {
+    setSavingCostRate(true);
+    try {
+      const rate = costRateInput.trim() === "" ? null : parseFloat(costRateInput);
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, cost_rate: rate }),
+      });
+      if (!res.ok) throw new Error("Failed to update cost rate");
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.user_id === memberUserId ? { ...m, cost_rate: rate } : m
+        )
+      );
+      toast.success("Cost rate updated");
+      setEditingCostRateFor(null);
+    } catch {
+      toast.error("Failed to update cost rate");
+    } finally {
+      setSavingCostRate(false);
+    }
+  }
+
   function copyInviteLink(token: string) {
     const link = `${window.location.origin}/register?token=${token}`;
     navigator.clipboard.writeText(link);
@@ -380,6 +415,65 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                             <Pencil className="h-3 w-3 text-muted-foreground" />
                           </Button>
                         )}
+                      </div>
+                    )
+                  )}
+                  {/* Cost rate — IT agency, admin-only (staff-cost info, unlike the billing rate above) */}
+                  {showRates && isAdmin && (
+                    editingCostRateFor === member.user_id ? (
+                      <div className="flex items-center gap-1">
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs pointer-events-none">$</span>
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={costRateInput}
+                            onChange={(e) => setCostRateInput(e.target.value)}
+                            placeholder="0.00"
+                            className="h-7 w-24 rounded border px-2 pl-5 text-xs"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveCostRate(member.user_id);
+                              if (e.key === "Escape") setEditingCostRateFor(null);
+                            }}
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => saveCostRate(member.user_id)}
+                          disabled={savingCostRate}
+                        >
+                          <Check className="h-3.5 w-3.5 text-green-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => setEditingCostRateFor(null)}
+                          disabled={savingCostRate}
+                        >
+                          <X className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <span className="text-xs text-muted-foreground" title="Cost rate">
+                          {member.cost_rate != null
+                            ? `$${member.cost_rate}/hr cost`
+                            : "No cost rate"}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6"
+                          onClick={() => startEditingCostRate(member)}
+                          title="Edit cost rate"
+                        >
+                          <Pencil className="h-3 w-3 text-muted-foreground" />
+                        </Button>
                       </div>
                     )
                   )}

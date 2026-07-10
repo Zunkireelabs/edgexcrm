@@ -57,7 +57,14 @@ export async function POST(request: NextRequest, { params }: Props) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
-  const { valid, errors } = validate(body, { summary: [optionalMaxLength(5000)] });
+  const { valid, errors } = validate(body, {
+    summary: [optionalMaxLength(5000)],
+    accomplishments: [optionalMaxLength(5000)],
+    in_progress: [optionalMaxLength(5000)],
+    risks: [optionalMaxLength(5000)],
+    asks: [optionalMaxLength(5000)],
+    client_message: [optionalMaxLength(5000)],
+  });
   const validationErrors: Record<string, string[]> = { ...errors };
   for (const field of ["report_date", "period_start", "period_end"] as const) {
     const value = body[field];
@@ -79,6 +86,11 @@ export async function POST(request: NextRequest, { params }: Props) {
       period_start: body.period_start ?? null,
       period_end: body.period_end ?? null,
       summary: body.summary ? String(body.summary).trim() : null,
+      accomplishments: body.accomplishments ? String(body.accomplishments).trim() : null,
+      in_progress: body.in_progress ? String(body.in_progress).trim() : null,
+      risks: body.risks ? String(body.risks).trim() : null,
+      asks: body.asks ? String(body.asks).trim() : null,
+      client_message: body.client_message ? String(body.client_message).trim() : null,
     })
     .select()
     .single();

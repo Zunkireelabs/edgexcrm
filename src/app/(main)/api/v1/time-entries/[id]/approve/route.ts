@@ -64,16 +64,22 @@ export async function POST(_request: NextRequest, { params }: Props) {
       .maybeSingle(),
     db
       .from("tenant_users")
-      .select("default_hourly_rate")
+      .select("default_hourly_rate, cost_rate")
       .eq("user_id", row.user_id)
       .maybeSingle(),
   ]);
 
   const project = (projectRes.data as unknown as { id: string; default_rate: number | null } | null) ?? null;
-  const member = (memberRes.data as unknown as { default_hourly_rate: number | null } | null) ?? { default_hourly_rate: null };
+  const member = (memberRes.data as unknown as { default_hourly_rate: number | null; cost_rate: number | null } | null) ?? {
+    default_hourly_rate: null,
+    cost_rate: null,
+  };
 
   // 3. Compute rate snapshot in app code (before the atomic UPDATE)
   const rateSnapshot = resolveEffectiveRate(project, member);
+  // Cost is per-person only (no project-level override) — freeze whatever the
+  // member's cost rate is right now, billable or not (you pay for non-billable time).
+  const costRateSnapshot = member.cost_rate ?? null;
 
   // 4. Atomic UPDATE: approval status + rate_snapshot in one write.
   //    .eq("approval_status", "pending") is the TOCTOU precondition — if the
@@ -85,6 +91,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
       approved_by: auth.userId,
       approved_at: new Date().toISOString(),
       rate_snapshot: rateSnapshot,
+      cost_rate_snapshot: costRateSnapshot,
     })
     .eq("id", id)
     .eq("approval_status", "pending")
@@ -109,6 +116,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
       changes: {
         approval_status: { old: "pending", new: "approved" },
         rate_snapshot: { old: null, new: rateSnapshot },
+        cost_rate_snapshot: { old: null, new: costRateSnapshot },
       },
       requestId,
     }),
@@ -125,6 +133,6 @@ export async function POST(_request: NextRequest, { params }: Props) {
     }),
   ]);
 
-  log.info({ entryId: id, rateSnapshot }, "Time entry approved");
+  log.info({ entryId: id, rateSnapshot, costRateSnapshot }, "Time entry approved");
   return apiSuccess(updated);
 }

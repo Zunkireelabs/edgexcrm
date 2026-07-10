@@ -44,7 +44,7 @@ export async function GET(request: Request) {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at, positions(permissions, name)")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at, positions(permissions, name)")
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -60,9 +60,15 @@ export async function GET(request: Request) {
     position_id: string | null;
     branch_id: string | null;
     default_hourly_rate: number | null;
+    cost_rate: number | null;
     created_at: string;
     positions: { permissions: PositionPermissions | null; name: string | null } | { permissions: PositionPermissions | null; name: string | null }[] | null;
   }>;
+
+  // cost_rate is staff-cost information (what the agency pays, not what it bills) —
+  // stricter than default_hourly_rate: only admins/owners ever see it, even though
+  // any member who can see /team sees billing rates.
+  const isAdmin = requireAdmin(auth);
 
   // Fetch user emails + names from auth.users — uses raw() escape hatch since
   // auth.admin is a service-only API not covered by the tenant scope.
@@ -97,6 +103,7 @@ export async function GET(request: Request) {
       name: nameMap.get(m.user_id) ?? null,
       email: userMap.get(m.user_id) || "Unknown",
       default_hourly_rate: m.default_hourly_rate,
+      cost_rate: isAdmin ? m.cost_rate : null,
       created_at: m.created_at,
       canEditLeads,
       position_name: positionData?.name ?? null,
@@ -165,7 +172,13 @@ export async function PATCH(request: Request) {
   if (!auth) return apiUnauthorized();
   if (!requireAdmin(auth)) return apiForbidden();
 
-  let body: { user_id: string; default_hourly_rate?: number | null; position_id?: string | null; branch_id?: string | null };
+  let body: {
+    user_id: string;
+    default_hourly_rate?: number | null;
+    cost_rate?: number | null;
+    position_id?: string | null;
+    branch_id?: string | null;
+  };
   try {
     body = await request.json();
   } catch {
@@ -184,6 +197,14 @@ export async function PATCH(request: Request) {
     return apiServiceUnavailable("default_hourly_rate must be a non-negative number or null");
   }
 
+  if (
+    body.cost_rate !== undefined &&
+    body.cost_rate !== null &&
+    (typeof body.cost_rate !== "number" || body.cost_rate < 0)
+  ) {
+    return apiServiceUnavailable("cost_rate must be a non-negative number or null");
+  }
+
   const db = await scopedClient(auth);
 
   const { data: existingMember } = await db
@@ -200,6 +221,10 @@ export async function PATCH(request: Request) {
 
   if (body.default_hourly_rate !== undefined) {
     patch.default_hourly_rate = body.default_hourly_rate;
+  }
+
+  if (body.cost_rate !== undefined) {
+    patch.cost_rate = body.cost_rate;
   }
 
   if (body.position_id !== undefined) {
@@ -274,7 +299,7 @@ export async function PATCH(request: Request) {
     .from("tenant_users")
     .update(patch)
     .eq("user_id", body.user_id)
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at")
     .single();
 
   if (error) {

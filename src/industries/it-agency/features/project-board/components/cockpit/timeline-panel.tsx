@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   FileText,
+  Sprout,
   ShieldCheck,
   ClipboardList,
   GitPullRequestArrow,
@@ -15,6 +16,9 @@ import {
   Lightbulb,
   Circle,
   Plus,
+  Play,
+  ShieldAlert,
+  Flame,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +27,7 @@ import type { ProjectEvent } from "@/types/database";
 
 const EVENT_ICON: Record<string, typeof Circle> = {
   brief_captured: FileText,
+  baseline_seeded_from_proposal: Sprout,
   scope_baseline_set: ShieldCheck,
   plan_committed: ClipboardList,
   change_request_proposed: GitPullRequestArrow,
@@ -31,10 +36,15 @@ const EVENT_ICON: Record<string, typeof Circle> = {
   task_reconciled: Scale,
   milestone_accepted: Milestone,
   milestone_rejected: XCircle,
+  milestone_submitted: Send,
+  milestone_started: Play,
   issue_raised: AlertCircle,
   issue_resolved: CheckCircle2,
   status_published: Send,
   retro_lesson: Lightbulb,
+  risk_raised: ShieldAlert,
+  risk_closed: ShieldCheck,
+  risk_occurred: Flame,
 };
 
 function relativeTime(iso: string): string {

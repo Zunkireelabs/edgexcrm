@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiValidationError } from "@/lib/api/response";
+import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError, apiValidationError, apiConflict } from "@/lib/api/response";
 import { validate, optionalMaxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -35,14 +35,19 @@ export async function POST(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("project_milestones")
-    .select("id, project_id, title")
+    .select("id, project_id, title, status")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Milestone");
-  const existingRow = existing as unknown as { project_id: string; title: string };
+  const existingRow = existing as unknown as { project_id: string; title: string; status: string };
+  if (existingRow.status === "accepted" || existingRow.status === "rejected") {
+    return apiConflict(`Milestone already ${existingRow.status}`);
+  }
 
   const reason = body.reason ? String(body.reason).trim() : null;
 
+  // TOCTOU guard: mirrors accept/route.ts — a concurrent double-action
+  // affects 0 rows and bails out below instead of double-recording an event.
   const { data: updated, error } = await db
     .from("project_milestones")
     .update({
@@ -52,12 +57,16 @@ export async function POST(request: NextRequest, { params }: Props) {
       accepted_by: null,
     })
     .eq("id", id)
+    .in("status", ["pending", "in_progress", "submitted"])
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
     log.error({ error }, "Failed to reject milestone");
     return apiError("DB_ERROR", "Failed to reject milestone", 500);
+  }
+  if (!updated) {
+    return apiConflict("Milestone already decided");
   }
 
   await recordProjectEvent(db, {
