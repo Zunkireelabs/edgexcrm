@@ -110,7 +110,7 @@ function RegisterPageContent() {
         if (tokenStatus === 'valid' && token) {
           router.push(`/login?token=${token}&action=accept`);
         } else {
-          router.push('/dashboard');
+          router.push('/');
         }
       }
     };
@@ -178,7 +178,7 @@ function RegisterPageContent() {
       }
 
       // Redirect to dashboard
-      router.push('/dashboard');
+      router.push('/');
     } catch {
       setError('An unexpected error occurred. Please try again.');
     } finally {

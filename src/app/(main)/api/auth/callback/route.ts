@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get("code");
-  const next = searchParams.get("next") ?? "/home";
+  // Default to "/" so the root route makes the industry-aware landing choice
+  // (education → /home, else /dashboard). An explicit ?next= still wins.
+  const next = searchParams.get("next") ?? "/";
 
   if (code) {
     const supabase = await createClient();
