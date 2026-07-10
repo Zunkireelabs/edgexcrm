@@ -8,6 +8,7 @@ export default async function ApprovalsTimeEntriesRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.TIME_TRACKING)) notFound();
+  if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
 
   return (
     <ApprovalsQueuePage

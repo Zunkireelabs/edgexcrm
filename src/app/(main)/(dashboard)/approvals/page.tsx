@@ -8,6 +8,7 @@ export default async function ApprovalsInboxRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD)) notFound();
+  if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
 
   return <ApprovalsInboxPage role={tenantData.role} />;
 }
