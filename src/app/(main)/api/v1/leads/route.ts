@@ -44,6 +44,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
@@ -573,7 +574,7 @@ async function handlePost(request: NextRequest) {
     if (explicitListId) {
       const { data: listCheck } = await supabase
         .from("lead_lists")
-        .select("id, is_archive")
+        .select("id, is_archive, pipeline_id")
         .eq("tenant_id", tenantId)
         .eq("id", explicitListId)
         .maybeSingle();
@@ -583,9 +584,78 @@ async function handlePost(request: NextRequest) {
       if (listCheck.is_archive && !body.archive_reason) {
         return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
       }
+      // Align pipeline/stage/status to the chosen list's pipeline default (first) stage.
+      // Without this the lead keeps the default-pipeline stage resolved above, whose slug
+      // matches no stage in the list's pipeline → blank Status in lead detail.
+      if (listCheck.pipeline_id) {
+        const { data: defaultStage } = await supabase
+          .from("pipeline_stages")
+          .select("id, slug")
+          .eq("pipeline_id", listCheck.pipeline_id)
+          .order("is_default", { ascending: false })
+          .order("position", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (defaultStage) {
+          leadPayload.pipeline_id = listCheck.pipeline_id;
+          leadPayload.stage_id = defaultStage.id;
+          leadPayload.status = defaultStage.slug;
+        }
+      }
     }
     leadPayload.list_id = explicitListId;
     if (body.archive_reason) leadPayload.archive_reason = body.archive_reason as string;
+  }
+
+  // Education defense-in-depth: mirror the Add-Lead cascade server-side. On manual dashboard
+  // creates by an admin/owner or branch-manager, an explicit assignee must hold a position
+  // allowed for the chosen Stage — or be the manager of the lead's branch. Scoped to exactly
+  // the creators who get the cascade UI, so counselor/lead-caller self-creation is untouched.
+  const creatorGetsCascade =
+    dashAuth?.role === "owner" ||
+    dashAuth?.role === "admin" ||
+    dashAuth?.positionSlug === "branch-manager";
+  if (
+    tenant.industry_id === "education_consultancy" &&
+    body.intake_medium === "dashboard" &&
+    creatorGetsCascade &&
+    leadPayload.assigned_to &&
+    leadPayload.list_id
+  ) {
+    const [{ data: listRow }, { data: assigneeRow }] = await Promise.all([
+      supabase
+        .from("lead_lists")
+        .select("slug")
+        .eq("id", leadPayload.list_id as string)
+        .eq("tenant_id", tenantId)
+        .maybeSingle(),
+      supabase
+        .from("tenant_users")
+        .select("positions(slug)")
+        .eq("user_id", leadPayload.assigned_to as string)
+        .eq("tenant_id", tenantId)
+        .maybeSingle(),
+    ]);
+    const allowed = STAGE_TEAM_MAP[listRow?.slug ?? ""] ?? [];
+    const posEmbed = Array.isArray(assigneeRow?.positions)
+      ? (assigneeRow?.positions[0] ?? null)
+      : assigneeRow?.positions;
+    const assigneeSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
+    let permitted = !!assigneeSlug && allowed.includes(assigneeSlug);
+    if (!permitted && creationBranchId) {
+      const { data: branchRow } = await supabase
+        .from("branches")
+        .select("manager_user_id")
+        .eq("id", creationBranchId)
+        .maybeSingle();
+      permitted = branchRow?.manager_user_id === leadPayload.assigned_to;
+    }
+    // Only reject a known, mismatched funnel position; unknown positions fall through unblocked.
+    if (assigneeSlug && !permitted) {
+      return apiValidationError({
+        assigned_to: [`Assignee is not permitted for the "${listRow?.slug ?? "selected"}" stage`],
+      });
+    }
   }
 
   // Set branch on insert path only; stripped from the update destructure below.

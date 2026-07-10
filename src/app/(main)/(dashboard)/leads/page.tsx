@@ -50,6 +50,7 @@ export default async function LeadsPage({
   }
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const isAdminOrOwner = tenantData.role === "owner" || tenantData.role === "admin";
 
   // Resolve list slug → list object (and archive exclusion for master view)
   let activeList: LeadList | null = null;
@@ -59,6 +60,8 @@ export default async function LeadsPage({
     if (listSlug) {
       const found = allLists.find((l) => l.slug === listSlug);
       if (found) {
+        // Staging lists (e.g. New Leads) are admin/owner only — block direct ?list= URL bypass.
+        if (found.is_staging && !isAdminOrOwner) notFound();
         const accessible = canAccessList(
           tenantData.permissions,
           found.access as { mode: string; positionIds?: string[] },
@@ -72,7 +75,6 @@ export default async function LeadsPage({
     // "All Leads" (no ?list=): admin/owner see the global view; everyone else lands
     // on their position's home list. Falls back to first accessible list if no mapping.
     if (!listSlug) {
-      const isAdminOrOwner = tenantData.role === "owner" || tenantData.role === "admin";
       if (!isAdminOrOwner) {
         const homeSlug = tenantData.positionSlug ? POSITION_HOME_LIST[tenantData.positionSlug] : null;
         const homeList = homeSlug
@@ -267,6 +269,7 @@ export default async function LeadsPage({
         roleMap={roleMap}
         positionSlugMap={positionSlugMap}
         allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
+        currentUserPositionSlug={tenantData.positionSlug}
       />
     </div>
   );
