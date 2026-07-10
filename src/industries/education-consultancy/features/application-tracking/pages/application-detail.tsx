@@ -57,8 +57,8 @@ import {
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
-import { StageStepper } from "../components/stage-stepper";
-import { ApplicationActivityTimeline } from "../components/application-activity-timeline";
+import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
+import { ApplicationTabs } from "../components/application-tabs";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
@@ -166,6 +166,7 @@ interface ApplicationDetailPageProps {
   activityTimeline: LeadActivity[];
   canEdit: boolean;
   canDelete: boolean;
+  currentUserId: string;
 }
 
 export function ApplicationDetailPage({
@@ -175,6 +176,7 @@ export function ApplicationDetailPage({
   activityTimeline,
   canEdit,
   canDelete,
+  currentUserId,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -422,6 +424,22 @@ export function ApplicationDetailPage({
         </Link>
       </Button>
 
+      {/* Application Stage — horizontal stepper */}
+      <Card className="border shadow-none rounded-lg">
+        <CardContent className="p-5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Application Stage
+          </p>
+          <StageStepperHorizontal
+            stages={stages}
+            currentStageId={application.stage_id}
+            applicationId={application.id}
+            canManage={canEdit}
+            onStageChange={handleStageChange}
+          />
+        </CardContent>
+      </Card>
+
       {/* 3-column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(320px,380px)] gap-6 items-start">
 
@@ -591,31 +609,15 @@ export function ApplicationDetailPage({
             </CardContent>
           </Card>
 
-          {/* Stage stepper */}
+          {/* Activity / Notes / Emails / Calls / Tasks / Meetings */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                Application Stage
-              </p>
-              <StageStepper
-                stages={stages}
-                currentStageId={application.stage_id}
+              <ApplicationTabs
                 applicationId={application.id}
-                canManage={canEdit}
-                onStageChange={handleStageChange}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Activity timeline */}
-          <Card className="border shadow-none rounded-lg">
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                Activity
-              </p>
-              <ApplicationActivityTimeline
                 timeline={activityTimeline}
                 teamMemberEmails={teamMemberEmails}
+                teamMemberNames={teamMemberNames}
+                currentUserId={currentUserId}
               />
             </CardContent>
           </Card>
