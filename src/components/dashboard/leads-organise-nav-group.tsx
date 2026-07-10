@@ -30,10 +30,10 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
         <Link
           href="/leads-organise"
           onClick={onNavigate}
-          className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+          className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
             parentActive || hasActiveChild
               ? "bg-[#ebebeb] text-gray-900"
-              : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+              : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
           }`}
         >
           <PackageOpen className="w-[18px] h-[18px] shrink-0" />
@@ -60,10 +60,10 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
                 key={list.id}
                 href={`/leads-organise/${list.slug}`}
                 onClick={onNavigate}
-                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
-                    : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                    : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
                 }`}
               >
                 {list.name}
