@@ -36,6 +36,7 @@ import {
   Stamp,
   Network,
   ListChecks,
+  ListTodo,
   GitCompare,
   Plane,
   MapPin,
@@ -115,6 +116,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LayoutGrid,
   Kanban,
+  ListTodo,
   MessageSquare,
   Stamp,
   Users,
@@ -491,9 +493,6 @@ export function DashboardShell({
               industrySidebarItems.find(
                 (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
               );
-            const pmGroup = industrySidebarItems.find(
-              (e): e is SidebarGroup => "children" in e && e.id === "project-management"
-            );
             return (
               <>
                 {/* Home — standalone, no section header */}
@@ -555,7 +554,10 @@ export function DashboardShell({
 
                 {/* Delivery */}
                 <NavSectionHeader label="Delivery" />
-                {pmGroup && renderIndustryEntry(pmGroup)}
+                {itItem("/projects") && renderIndustryEntry(itItem("/projects")!)}
+                {itItem("/tasks") && renderIndustryEntry(itItem("/tasks")!)}
+                {itItem("/time-tracking") && renderIndustryEntry(itItem("/time-tracking")!)}
+                {itItem("/approvals") && renderIndustryEntry(itItem("/approvals")!)}
 
                 {/* Communication */}
                 <NavSectionHeader label="Communication" />

@@ -4,13 +4,9 @@ import { useMemo, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 import { useProjects, type ProjectWithMetrics } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
-import { useTaskTags } from "../hooks/use-task-tags";
 import { WorkspaceHeader } from "../components/workspace-header";
 import { BoardView } from "../components/views/board-view";
 import { TableView } from "../components/views/table-view";
-import { TasksView } from "../components/views/tasks-view";
-import { MembersView } from "../components/views/members-view";
-import { ActiveTimersProvider } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import type { ProjectWithAccount } from "../components/project-card";
 import type { ProjectStatus } from "@/types/database";
 
@@ -23,7 +19,6 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
   const { projects, accounts, team, accountMap, teamMap, hoursMap, loading, refetch, setProjects } =
     useProjects();
   const { filters, setFilters } = useWorkspaceFilters();
-  const { tags: poolTags, refetchTags } = useTaskTags();
 
   const filtered: ProjectWithAccount[] = useMemo(() => {
     const q = filters.q.toLowerCase();
@@ -58,11 +53,6 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
       owner: "__all__",
       showCancelled: false,
       statuses: [],
-      assignee: "__all__",
-      taskStatuses: [],
-      priorities: [],
-      tags: [],
-      due: "__all__",
     });
   }
 
@@ -81,22 +71,11 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
         onFilterChange={setFilters}
         accounts={accounts}
         team={team}
-        poolTags={poolTags}
         projectCount={filtered.length}
         onClearFilters={handleClearFilters}
       />
 
-      {filters.view === "board" ? (
-        <BoardView
-          projects={filtered}
-          filters={filters}
-          teamMap={teamMap}
-          hoursMap={hoursMap}
-          onProjectUpdated={handleProjectUpdated}
-          onRefetch={refetch}
-          onClearFilters={handleClearFilters}
-        />
-      ) : filters.view === "table" ? (
+      {filters.view === "table" ? (
         <TableView
           projects={filtered}
           team={team}
@@ -104,23 +83,14 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           onProjectUpdated={handleProjectUpdated}
           onClearFilters={handleClearFilters}
         />
-      ) : filters.view === "tasks" ? (
-        <ActiveTimersProvider>
-          <TasksView
-            filters={filters}
-            team={team}
-            teamMap={teamMap}
-            poolTags={poolTags}
-            refetchTags={refetchTags}
-            onClearFilters={handleClearFilters}
-          />
-        </ActiveTimersProvider>
       ) : (
-        <MembersView
+        <BoardView
+          projects={filtered}
           filters={filters}
-          team={team}
-          projects={projects}
-          accountMap={accountMap}
+          teamMap={teamMap}
+          hoursMap={hoursMap}
+          onProjectUpdated={handleProjectUpdated}
+          onRefetch={refetch}
           onClearFilters={handleClearFilters}
         />
       )}
