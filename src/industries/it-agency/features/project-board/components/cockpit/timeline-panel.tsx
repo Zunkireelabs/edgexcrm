@@ -16,6 +16,7 @@ import {
   Lightbulb,
   Circle,
   Plus,
+  Play,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -33,6 +34,8 @@ const EVENT_ICON: Record<string, typeof Circle> = {
   task_reconciled: Scale,
   milestone_accepted: Milestone,
   milestone_rejected: XCircle,
+  milestone_submitted: Send,
+  milestone_started: Play,
   issue_raised: AlertCircle,
   issue_resolved: CheckCircle2,
   status_published: Send,

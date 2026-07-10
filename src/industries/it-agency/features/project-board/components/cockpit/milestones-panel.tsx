@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Check, X } from "lucide-react";
+import { Plus, Check, X, Play, Send, Undo2, RotateCcw, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,6 +15,19 @@ const STATUS_CONFIG: Record<MilestoneStatus, { label: string; className: string 
   rejected: { label: "Rejected", className: "bg-red-100 text-red-600" },
 };
 
+// Lifecycle moves shown per status (Accept/Reject are handled separately —
+// they stay wired to onAccept/onReject exactly as before).
+const LIFECYCLE_ACTIONS: Record<MilestoneStatus, Array<{ to: MilestoneStatus; label: string; icon: typeof Play }>> = {
+  pending: [
+    { to: "in_progress", label: "Start", icon: Play },
+    { to: "submitted", label: "Submit", icon: Send },
+  ],
+  in_progress: [{ to: "submitted", label: "Submit", icon: Send }],
+  submitted: [{ to: "in_progress", label: "Pull back", icon: Undo2 }],
+  rejected: [{ to: "in_progress", label: "Reopen", icon: RotateCcw }],
+  accepted: [],
+};
+
 interface MilestonesPanelProps {
   milestones: ProjectMilestone[];
   loading: boolean;
@@ -22,14 +35,22 @@ interface MilestonesPanelProps {
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onAccept: (milestoneId: string) => Promise<boolean>;
   onReject: (milestoneId: string) => Promise<boolean>;
+  onTransition: (milestoneId: string, to: string) => Promise<boolean>;
 }
 
-export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAccept, onReject }: MilestonesPanelProps) {
+export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAccept, onReject, onTransition }: MilestonesPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [amount, setAmount] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [transitioningId, setTransitioningId] = useState<string | null>(null);
+
+  async function handleTransition(milestoneId: string, to: MilestoneStatus) {
+    setTransitioningId(milestoneId);
+    await onTransition(milestoneId, to);
+    setTransitioningId(null);
+  }
 
   async function handleAdd() {
     setSubmitting(true);
@@ -89,7 +110,8 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
 
         {milestones.map((m) => {
           const cfg = STATUS_CONFIG[m.status];
-          const pendingDecision = m.status === "pending" || m.status === "in_progress" || m.status === "submitted";
+          const lifecycleActions = LIFECYCLE_ACTIONS[m.status];
+          const isTransitioning = transitioningId === m.id;
           return (
             <div key={m.id} className="flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-0">
               <div className="min-w-0">
@@ -98,21 +120,50 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
                   {m.due_date && `Due ${m.due_date}`}
                   {m.amount != null && ` · $${m.amount.toLocaleString()}`}
                 </p>
+                {m.status === "rejected" && m.rejection_reason && (
+                  <p className="text-xs text-red-600 mt-0.5">{m.rejection_reason}</p>
+                )}
+                {m.status === "accepted" && m.invoiced_at && (
+                  <p className="text-xs text-muted-foreground mt-0.5 italic">Invoiced</p>
+                )}
               </div>
               <div className="flex items-center gap-2 flex-shrink-0">
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
                   {cfg.label}
                 </span>
-                {pendingDecision && isAdmin && (
+                {isAdmin && m.status === "submitted" && (
                   <>
-                    <Button variant="ghost" size="sm" onClick={() => onAccept(m.id)} title="Accept">
+                    <Button variant="ghost" size="sm" onClick={() => onAccept(m.id)} disabled={isTransitioning} title="Accept">
                       <Check className="h-3.5 w-3.5 text-green-600" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => onReject(m.id)} title="Reject">
+                    <Button variant="ghost" size="sm" onClick={() => onReject(m.id)} disabled={isTransitioning} title="Reject">
                       <X className="h-3.5 w-3.5 text-red-600" />
                     </Button>
                   </>
                 )}
+                {isAdmin &&
+                  lifecycleActions.map((action) => {
+                    const Icon = action.icon;
+                    const subtle = m.status === "submitted"; // "Pull back" reads as secondary next to Accept/Reject
+                    return (
+                      <Button
+                        key={action.to}
+                        variant={subtle ? "ghost" : "outline"}
+                        size="sm"
+                        className="text-xs"
+                        onClick={() => handleTransition(m.id, action.to)}
+                        disabled={isTransitioning}
+                        title={action.label}
+                      >
+                        {isTransitioning ? (
+                          <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                        ) : (
+                          <Icon className="h-3.5 w-3.5 mr-1" />
+                        )}
+                        {action.label}
+                      </Button>
+                    );
+                  })}
               </div>
             </div>
           );

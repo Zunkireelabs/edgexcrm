@@ -52,6 +52,12 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
     return ok;
   }
 
+  async function handleTransitionMilestone(id: string, to: string) {
+    const ok = await milestonesState.transitionMilestone(id, to);
+    if (ok) onEventRecorded();
+    return ok;
+  }
+
   async function handleApproveCr(id: string, clientApproved: boolean) {
     const ok = await changeRequestsState.approveChangeRequest(id, clientApproved);
     if (ok) onProjectChanged();
@@ -94,6 +100,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
           onCreate={milestonesState.createMilestone}
           onAccept={handleAcceptMilestone}
           onReject={(id) => milestonesState.rejectMilestone(id)}
+          onTransition={handleTransitionMilestone}
         />
         <div className="md:col-span-2">
           <ChangeRequestsPanel

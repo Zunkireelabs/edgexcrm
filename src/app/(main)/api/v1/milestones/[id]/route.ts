@@ -8,13 +8,12 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, maxLength, optionalMaxLength, isIn } from "@/lib/api/validation";
+import { validate, maxLength, optionalMaxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 
-const MILESTONE_STATUSES = ["pending", "in_progress", "submitted", "accepted", "rejected"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface Props {
@@ -41,7 +40,6 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const { valid, errors } = validate(body, {
     title: [maxLength(255)],
     description: [optionalMaxLength(2000)],
-    status: [isIn(MILESTONE_STATUSES)],
   });
   const validationErrors: Record<string, string[]> = { ...errors };
   if (body.due_date !== undefined && body.due_date !== null && !DATE_RE.test(String(body.due_date))) {
@@ -59,7 +57,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   if (body.due_date !== undefined) patch.due_date = body.due_date ?? null;
   if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order);
   if (body.amount !== undefined) patch.amount = body.amount != null ? Number(body.amount) : null;
-  if (body.status !== undefined) patch.status = String(body.status);
+  // Status changes flow exclusively through /transition, /accept, /reject —
+  // this generic field-editor deliberately ignores a `status` in the body.
 
   if (Object.keys(patch).length === 0) {
     const { data: current } = await db.from("project_milestones").select("*").eq("id", id).maybeSingle();
