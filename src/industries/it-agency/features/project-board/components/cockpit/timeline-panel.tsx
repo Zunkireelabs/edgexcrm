@@ -17,6 +17,8 @@ import {
   Circle,
   Plus,
   Play,
+  ShieldAlert,
+  Flame,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -40,6 +42,9 @@ const EVENT_ICON: Record<string, typeof Circle> = {
   issue_resolved: CheckCircle2,
   status_published: Send,
   retro_lesson: Lightbulb,
+  risk_raised: ShieldAlert,
+  risk_closed: ShieldCheck,
+  risk_occurred: Flame,
 };
 
 function relativeTime(iso: string): string {

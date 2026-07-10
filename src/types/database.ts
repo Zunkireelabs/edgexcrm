@@ -699,6 +699,9 @@ export type ProjectEventType =
   | "invoice_sent"
   | "invoice_paid"
   | "invoice_voided"
+  | "risk_raised"
+  | "risk_closed"
+  | "risk_occurred"
   | string;
 
 export interface ProjectEvent {
@@ -794,6 +797,27 @@ export interface ProjectIssue {
   raised_by_label: string | null;
   raised_by_contact_id: string | null;
   assigned_to: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RiskLevel = "low" | "medium" | "high";
+export type RiskStatus = "open" | "mitigating" | "closed" | "occurred";
+
+export interface ProjectRisk {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  probability: RiskLevel;
+  impact: RiskLevel;
+  mitigation: string | null;
+  owner_id: string | null;
+  status: RiskStatus;
+  review_date: string | null;
   opened_at: string;
   resolved_at: string | null;
   created_at: string;
