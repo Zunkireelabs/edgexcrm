@@ -20,6 +20,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { BranchesBlock } from "./branches-block";
@@ -84,6 +92,8 @@ interface KeyInfoSectionProps {
   onLeadTypeChange?: (newType: string) => void;
   onListChange?: (listId: string, archiveReason?: string, assignToUserId?: string | null) => Promise<void>;
   nextPositionMembers?: { user_id: string; email: string; name?: string | null }[];
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -127,9 +137,12 @@ export function KeyInfoSection({
   userBranchId,
   leadScope,
   nextPositionMembers,
+  revertTargetUserId,
+  revertTargetName,
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
+  const [pendingStageId, setPendingStageId] = useState<string | null>(null);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
@@ -191,7 +204,7 @@ export function KeyInfoSection({
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-              <Select value={effectiveStageId} onValueChange={onStageChange}>
+              <Select value={effectiveStageId} onValueChange={setPendingStageId}>
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
@@ -239,6 +252,9 @@ export function KeyInfoSection({
                   onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
                   onQualify={onQualify}
                   nextPositionMembers={nextPositionMembers}
+                  revertTargetUserId={revertTargetUserId}
+                  revertTargetName={revertTargetName}
+                  canRevertOverride={isAdmin || leadScope === "team"}
                 />
               ) : (
                 <div className="flex gap-1.5">
@@ -265,7 +281,7 @@ export function KeyInfoSection({
           {/* Assigned To */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin || canAssign ? (
+            {isAdmin || leadScope === "team" || (canAssign && (!assignedTo || userId === assignedTo)) ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -560,6 +576,37 @@ export function KeyInfoSection({
           )}
         </div>
       )}
+
+      {/* Status-change confirmation */}
+      <Dialog
+        open={!!pendingStageId}
+        onOpenChange={(v) => { if (!v) setPendingStageId(null); }}
+      >
+        <DialogContent className="max-w-md sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Change status to{" "}
+              {pipelineStages.find((s) => s.id === pendingStageId)?.name ?? ""}?
+            </DialogTitle>
+            <DialogDescription>
+              This updates the lead&apos;s pipeline stage.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingStageId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingStageId) onStageChange(pendingStageId);
+                setPendingStageId(null);
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

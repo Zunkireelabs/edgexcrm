@@ -48,6 +48,11 @@ interface ListStepperProps {
   onQualify?: () => void;
   /** Next-position members to assign when sending to next stage. Empty = no picker shown. */
   nextPositionMembers?: NextPositionMember[];
+  /** Who Revert would hand the lead back to (education only). Null = current holder is the lead's origin. */
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
+  /** owner/admin/branch-manager — may revert even when they're the lead's origin. */
+  canRevertOverride?: boolean;
 }
 
 /**
@@ -66,6 +71,9 @@ export function ListStepper({
   onMove,
   onQualify,
   nextPositionMembers = [],
+  revertTargetUserId = null,
+  revertTargetName = null,
+  canRevertOverride = false,
 }: ListStepperProps) {
   const [confirmList, setConfirmList] = useState<LeadList | null>(null);
   const [isNextDirection, setIsNextDirection] = useState(false);
@@ -83,7 +91,11 @@ export function ListStepper({
   const nextList = idx >= 0 && idx < chain.length - 1 ? chain[idx + 1] : null;
 
   const accessibleIds = new Set(accessibleLists.map((l) => l.id));
-  const canPrev = !!prevList && accessibleIds.has(prevList.id);
+  // First-holder revert gate (education only): the caller may revert unless they're
+  // the lead's origin (no prior handoff to fall back to) — admin/team overrides apply.
+  const isOriginGated =
+    industryId === "education_consultancy" && !canRevertOverride && !revertTargetUserId;
+  const canPrev = !!prevList && accessibleIds.has(prevList.id) && !isOriginGated;
   const canNext = !!nextList && accessibleIds.has(nextList.id);
 
   // The intake → Qualified step keeps its dedicated Qualify dialog (education only).
@@ -158,7 +170,11 @@ export function ListStepper({
                 </button>
               </TooltipTrigger>
               <TooltipContent>
-                {canPrev ? prevList.name : `No access to ${prevList.name}`}
+                {canPrev
+                  ? prevList.name
+                  : isOriginGated
+                    ? "You're the first holder — nothing to revert to."
+                    : `No access to ${prevList.name}`}
               </TooltipContent>
             </Tooltip>
           )}
@@ -212,11 +228,43 @@ export function ListStepper({
               <CornerUpRight className="h-5 w-5" />
             </div>
             <DialogTitle className="pt-1">
-              {confirmList ? moveConfirmMessage(confirmList) : ""}
+              {confirmList
+                ? isNextDirection
+                  ? moveConfirmMessage(confirmList)
+                  : `Revert to ${confirmList.name}`
+                : ""}
             </DialogTitle>
             <DialogDescription>
-              This lead will be moved to the{" "}
-              <span className="font-medium text-foreground">{confirmList?.name}</span> list.
+              {!isNextDirection ? (
+                <>
+                  This lead will move back to{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span>.
+                  {revertTargetName && (
+                    <>
+                      {" "}Reassigned to{" "}
+                      <span className="font-medium text-foreground">{revertTargetName}</span>.
+                    </>
+                  )}
+                </>
+              ) : selectedAssignee ? (
+                <>
+                  This lead will move to{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span> and be
+                  assigned to{" "}
+                  <span className="font-medium text-foreground">
+                    {(() => {
+                      const m = nextPositionMembers.find((m) => m.user_id === selectedAssignee);
+                      return m?.name || m?.email.split("@")[0] || "";
+                    })()}
+                  </span>
+                  .
+                </>
+              ) : (
+                <>
+                  This lead will be moved to the{" "}
+                  <span className="font-medium text-foreground">{confirmList?.name}</span> list.
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
 
