@@ -69,6 +69,9 @@ interface LeadDetailV2Props {
   assignableMembers?: TeamMember[];
   /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
   nextPositionMembers?: TeamMember[];
+  /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
   canManageApplications?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
@@ -139,6 +142,8 @@ export function LeadDetailV2({
   canEditLeads = false,
   assignableMembers,
   nextPositionMembers,
+  revertTargetUserId = null,
+  revertTargetName = null,
   canManageApplications,
   canEnroll,
   leadLists,
@@ -646,6 +651,8 @@ export function LeadDetailV2({
             leadLists={leadLists}
             activeLeadLists={activeLeadLists}
             nextPositionMembers={nextPositionMembers}
+            revertTargetUserId={revertTargetUserId}
+            revertTargetName={revertTargetName}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const prevLead = currentLead;
               const prevStageId = stageId;
@@ -674,6 +681,12 @@ export function LeadDetailV2({
                 if (updated.stage_id !== stageId) {
                   setStageId(updated.stage_id);
                   setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
+                }
+                // Server may derive a reassignment on revert (stage-transition governance)
+                // even when the client didn't pass assigned_to — sync it back.
+                if (updated.assigned_to !== prevLead.assigned_to) {
+                  setAssignedTo(updated.assigned_to ?? "");
+                  setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
                 }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
               } catch {
