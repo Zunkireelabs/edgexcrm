@@ -39,6 +39,7 @@ import {
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { COUNTRY_CODES } from "@/lib/country-codes";
 import { parseStoredPhone } from "@/lib/phone-utils";
@@ -49,6 +50,8 @@ interface TeamMember {
   role: string;
   name: string;
   canEditLeads?: boolean;
+  position_slug?: string | null;
+  branch_id?: string | null;
 }
 
 interface AddLeadSheetProps {
@@ -67,6 +70,8 @@ interface AddLeadSheetProps {
   branches?: Branch[];
   selectedBranchId?: string | null;
   userBranchId?: string | null;
+  /** Current user's position slug — gates the education stage→team assignment cascade. */
+  currentUserPositionSlug?: string | null;
 }
 
 interface FormData {
@@ -210,6 +215,7 @@ export function AddLeadSheet({
   branches = [],
   selectedBranchId = null,
   userBranchId = null,
+  currentUserPositionSlug = null,
 }: AddLeadSheetProps) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
@@ -359,6 +365,64 @@ export function AddLeadSheet({
   // Caller passes a pre-chain-filtered set; keep canEditLeads guard as a safety net.
   const assignableMembers = teamMembers.filter((m) => m.canEditLeads !== false);
 
+  // ── Education: stage-cascaded, branch-scoped assignment ──────────────────
+  // For education tenants the "Assigned To" options are driven by the chosen Stage
+  // (which positions handle that stage) intersected with the selected Branch, plus that
+  // branch's manager. Admin picks Branch first; a branch-manager creates within their own
+  // branch (no Branch field). All of this is gated to education — it_agency is untouched.
+  const isEducation = industryId === "education_consultancy";
+  const isBranchManager = currentUserPositionSlug === "branch-manager";
+  const canPickAssignee = isAdmin || (isEducation && isBranchManager);
+  // Whose branch scopes the assignee list: admin uses the picked branch, others their own.
+  const effectiveBranchId = isAdmin ? (formData.branchId || null) : (userBranchId || null);
+  const selectedStageSlug = formData.listId
+    ? (leadLists.find((l) => l.id === formData.listId)?.slug ?? null)
+    : null;
+  const eduAllowedPositions = positionsForStage(selectedStageSlug);
+  const selectedBranch = effectiveBranchId
+    ? branches.find((b) => b.id === effectiveBranchId) ?? null
+    : null;
+
+  const eduAssignableMembers = !isEducation
+    ? assignableMembers
+    : !selectedStageSlug
+      ? [] // no Stage chosen yet → nothing to assign to
+      : assignableMembers.filter((m) => {
+          const inBranch = !effectiveBranchId || m.branch_id === effectiveBranchId;
+          const positionAllowed =
+            !!m.position_slug && eduAllowedPositions.includes(m.position_slug);
+          const isSelectedBranchMgr =
+            !!selectedBranch && m.user_id === selectedBranch.manager_user_id;
+          // Branch manager of the selected branch is always assignable; everyone else must
+          // both hold an allowed position AND belong to the selected branch.
+          return isSelectedBranchMgr || (positionAllowed && inBranch);
+        });
+
+  const assigneeOptions = isEducation ? eduAssignableMembers : assignableMembers;
+  const assigneeDisabled =
+    isSubmitting || !canPickAssignee || (isEducation && !formData.listId);
+
+  // Clearing a stale assignee when Stage/Branch changes (education cascade only).
+  const updateListId = (value: string) => {
+    if (isEducation) {
+      setFormData((prev) => ({ ...prev, listId: value, assignedTo: "" }));
+      setIsDirty(true);
+    } else {
+      updateField("listId", value);
+    }
+  };
+  const updateBranchId = (value: string) => {
+    if (isEducation) {
+      setFormData((prev) => ({ ...prev, branchId: value, assignedTo: "" }));
+      setIsDirty(true);
+    } else {
+      updateField("branchId", value);
+    }
+  };
+
+  // Education admin always sees a Branch field (Admizz is multi-branch); it comes first.
+  const showEduBranchField = isEducation && isAdmin && branches.length >= 1;
+
   // ── Shared render helpers ────────────────────────────────────────────────
 
   const renderEmailPhoneRow = () => (
@@ -416,6 +480,32 @@ export function AddLeadSheet({
     <div className="space-y-4">
       <h3 className="text-sm font-medium text-gray-900">Assignment &amp; Status</h3>
 
+      {/* Education admin: Branch is chosen first and scopes the assignee list */}
+      {showEduBranchField && (
+        <div className="space-y-1.5">
+          <Label htmlFor="branchId" className="text-xs text-gray-600">
+            Branch
+          </Label>
+          <Select
+            value={formData.branchId || "__none__"}
+            onValueChange={(v) => updateBranchId(v === "__none__" ? "" : v)}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select branch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No branch</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
@@ -423,7 +513,7 @@ export function AddLeadSheet({
           </Label>
           <Select
             value={formData.listId}
-            onValueChange={(v) => updateField("listId", v)}
+            onValueChange={updateListId}
             disabled={isSubmitting}
           >
             <SelectTrigger className="w-full">
@@ -444,21 +534,25 @@ export function AddLeadSheet({
         <div className="space-y-1.5">
           <Label htmlFor="assignedTo" className="text-xs text-gray-600">
             Assigned To
-            {!isAdmin && (
+            {!canPickAssignee && (
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
           <Select
             value={formData.assignedTo || "__none__"}
             onValueChange={(v) => updateField("assignedTo", v === "__none__" ? "" : v)}
-            disabled={isSubmitting || !isAdmin}
+            disabled={assigneeDisabled}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select team member" />
+              <SelectValue
+                placeholder={
+                  isEducation && !formData.listId ? "Select a stage first" : "Select team member"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">Unassigned</SelectItem>
-              {assignableMembers.map((member) => (
+              {assigneeOptions.map((member) => (
                 <SelectItem key={member.user_id} value={member.user_id}>
                   {member.name}
                   {member.user_id === currentUserId && " (You)"}
@@ -469,8 +563,8 @@ export function AddLeadSheet({
         </div>
       </div>
 
-      {/* Branch picker — only for tenants with >1 branch */}
-      {branches.length > 1 && (
+      {/* Branch picker — non-education tenants with >1 branch (original behavior) */}
+      {!isEducation && branches.length > 1 && (
         <div className="space-y-1.5">
           <Label htmlFor="branchId" className="text-xs text-gray-600">
             Branch
