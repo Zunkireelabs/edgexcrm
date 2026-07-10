@@ -36,23 +36,6 @@ import {
 } from "@/components/ui/command";
 import type { ApplicationStage } from "@/types/database";
 
-const COUNTRIES = [
-  "Australia",
-  "Canada",
-  "China",
-  "France",
-  "Germany",
-  "India",
-  "Japan",
-  "Nepal",
-  "New Zealand",
-  "Singapore",
-  "UAE",
-  "United Kingdom",
-  "United States",
-  "Other",
-];
-
 interface AutocompleteInputProps {
   value: string;
   onChange: (val: string) => void;
@@ -86,9 +69,14 @@ function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCr
         </div>
       </PopoverTrigger>
       {(filtered.length > 0 || showCreate) && (
-        <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+        <PopoverContent
+          className="p-0 w-[--radix-popover-trigger-width]"
+          align="start"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onWheel={(e) => e.stopPropagation()}
+        >
           <Command shouldFilter={false}>
-            <CommandList>
+            <CommandList className="max-h-52 overflow-y-auto">
               <CommandEmpty>No matches</CommandEmpty>
               {filtered.slice(0, 20).map((s) => (
                 <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
@@ -166,9 +154,17 @@ export function AddApplicationSheet({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
-  const [partnerColleges, setPartnerColleges] = useState<string[]>([]);
+  const [partnerColleges, setPartnerColleges] = useState<{ name: string; country: string | null }[]>([]);
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
+  const [countries, setCountries] = useState<string[]>([]);
+
+  // Colleges tagged with the selected country, plus any untagged colleges
+  // (safety net so nothing disappears before it's been assigned a country).
+  // No country selected yet -> show everything, same as before this change.
+  const collegeSuggestions = country
+    ? partnerColleges.filter((c) => c.country === country || !c.country).map((c) => c.name)
+    : partnerColleges.map((c) => c.name);
 
   useEffect(() => {
     if (!open) {
@@ -198,12 +194,16 @@ export function AddApplicationSheet({
     fetch("/api/v1/partner-colleges")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => {
-        if (j?.data) setPartnerColleges((j.data as { name: string }[]).map((c) => c.name));
+        if (j?.data) setPartnerColleges((j.data as { name: string; country: string | null }[]).map((c) => ({ name: c.name, country: c.country })));
       })
       .catch(() => {});
     fetch("/api/v1/applications/suggestions")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setProgramSuggestions(j.data.programs ?? []); })
+      .catch(() => {});
+    fetch("/api/v1/countries")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
       .catch(() => {});
   }, [open]);
 
@@ -246,15 +246,15 @@ export function AddApplicationSheet({
       const res = await fetch("/api/v1/partner-colleges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, country: country || null }),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error?.message ?? "Failed to create college");
       }
-      setPartnerColleges((prev) => [...prev, name].sort());
+      setPartnerColleges((prev) => [...prev, { name, country: country || null }].sort((a, b) => a.name.localeCompare(b.name)));
       setUniversityName(name);
-      toast.success(`"${name}" added to partner colleges`);
+      toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create college");
     }
@@ -378,6 +378,20 @@ export function AddApplicationSheet({
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-gray-900">Application Details</h3>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Country</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="app-university" className="text-xs text-gray-600">
@@ -387,7 +401,7 @@ export function AddApplicationSheet({
                   id="app-university"
                   value={universityName}
                   onChange={setUniversityName}
-                  suggestions={partnerColleges}
+                  suggestions={collegeSuggestions}
                   placeholder="e.g. Univ. of Melbourne"
                   onCreateNew={handleCreateCollege}
                 />
@@ -406,29 +420,14 @@ export function AddApplicationSheet({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
-                <Input
-                  id="app-intake"
-                  value={intakeTerm}
-                  onChange={(e) => setIntakeTerm(e.target.value)}
-                  placeholder="e.g. Fall 2026"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-gray-600">Country</Label>
-                <Select value={country} onValueChange={setCountry}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select country" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
+              <Input
+                id="app-intake"
+                value={intakeTerm}
+                onChange={(e) => setIntakeTerm(e.target.value)}
+                placeholder="e.g. Fall 2026"
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">

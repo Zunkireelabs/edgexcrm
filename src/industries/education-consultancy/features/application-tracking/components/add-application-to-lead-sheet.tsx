@@ -153,9 +153,16 @@ export function AddApplicationToLeadSheet({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [agents, setAgents] = useState<AgentOption[]>([]);
-  const [partnerColleges, setPartnerColleges] = useState<string[]>([]);
+  const [partnerColleges, setPartnerColleges] = useState<{ name: string; country: string | null }[]>([]);
   const [courses, setCourses] = useState<string[]>([]);
   const [countries, setCountries] = useState<string[]>([]);
+
+  // Colleges tagged with the selected country, plus any untagged colleges
+  // (safety net so nothing disappears before it's been assigned a country).
+  // No country selected yet -> show everything, same as before this change.
+  const collegeSuggestions = country
+    ? partnerColleges.filter((c) => c.country === country || !c.country).map((c) => c.name)
+    : partnerColleges.map((c) => c.name);
 
   const defaultStage = stages.find((s) => s.is_default) ?? stages[0];
 
@@ -182,7 +189,7 @@ export function AddApplicationToLeadSheet({
     fetch("/api/v1/partner-colleges")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => {
-        if (j?.data) setPartnerColleges((j.data as { name: string }[]).map((c) => c.name));
+        if (j?.data) setPartnerColleges((j.data as { name: string; country: string | null }[]).map((c) => ({ name: c.name, country: c.country })));
       })
       .catch(() => {});
     fetch("/api/v1/courses")
@@ -204,15 +211,15 @@ export function AddApplicationToLeadSheet({
       const res = await fetch("/api/v1/partner-colleges", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
+        body: JSON.stringify({ name, country: country || null }),
       });
       if (!res.ok) {
         const err = await res.json();
         throw new Error(err.error?.message ?? "Failed to create college");
       }
-      setPartnerColleges((prev) => [...prev, name].sort());
+      setPartnerColleges((prev) => [...prev, { name, country: country || null }].sort((a, b) => a.name.localeCompare(b.name)));
       setUniversityName(name);
-      toast.success(`"${name}" added to partner colleges`);
+      toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create college");
     }
@@ -268,6 +275,20 @@ export function AddApplicationToLeadSheet({
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Country</Label>
+            <Select value={country} onValueChange={setCountry}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select country" />
+              </SelectTrigger>
+              <SelectContent>
+                {countries.map((c) => (
+                  <SelectItem key={c} value={c}>{c}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
             <Label htmlFor="app-university" className="text-xs text-gray-600">
               University <span className="text-destructive">*</span>
             </Label>
@@ -275,7 +296,7 @@ export function AddApplicationToLeadSheet({
               id="app-university"
               value={universityName}
               onChange={setUniversityName}
-              suggestions={partnerColleges}
+              suggestions={collegeSuggestions}
               placeholder="e.g. University of Melbourne"
               onCreateNew={handleCreateCollege}
             />
@@ -294,29 +315,14 @@ export function AddApplicationToLeadSheet({
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
-              <Input
-                id="app-intake"
-                value={intakeTerm}
-                onChange={(e) => setIntakeTerm(e.target.value)}
-                placeholder="e.g. Fall 2026"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Country</Label>
-              <Select value={country} onValueChange={setCountry}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
-                </SelectTrigger>
-                <SelectContent>
-                  {countries.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
+            <Input
+              id="app-intake"
+              value={intakeTerm}
+              onChange={(e) => setIntakeTerm(e.target.value)}
+              placeholder="e.g. Fall 2026"
+            />
           </div>
 
           <div className="space-y-1.5">

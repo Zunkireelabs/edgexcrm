@@ -8,6 +8,8 @@ import {
   Pencil,
   X,
   Check,
+  ChevronsUpDown,
+  Plus,
   Loader2,
   Trash2,
   GraduationCap,
@@ -19,6 +21,7 @@ import {
   Clock,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +43,17 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
@@ -48,10 +62,78 @@ import { ApplicationActivityTimeline } from "../components/application-activity-
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
-const COUNTRIES = [
-  "Australia", "Canada", "China", "France", "Germany", "India", "Japan",
-  "Nepal", "New Zealand", "Singapore", "UAE", "United Kingdom", "United States", "Other",
-];
+interface AutocompleteInputProps {
+  value: string;
+  onChange: (val: string) => void;
+  suggestions: string[];
+  placeholder?: string;
+  id?: string;
+  onCreateNew?: (val: string) => Promise<void>;
+}
+
+function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew }: AutocompleteInputProps) {
+  const [open, setOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const trimmed = value.trim();
+  const filtered = suggestions.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()));
+  const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+  const showCreate = onCreateNew && trimmed.length > 0 && !exactMatch;
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <div className="relative">
+          <Input
+            id={id}
+            value={value}
+            onChange={(e) => { onChange(e.target.value); if (!open && e.target.value) setOpen(true); }}
+            onFocus={() => { if (filtered.length > 0 || showCreate) setOpen(true); }}
+            placeholder={placeholder}
+            className="pr-8"
+            autoComplete="off"
+          />
+          <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+        </div>
+      </PopoverTrigger>
+      {(filtered.length > 0 || showCreate) && (
+        <PopoverContent
+          className="p-0 w-[--radix-popover-trigger-width]"
+          align="start"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+          onWheel={(e) => e.stopPropagation()}
+        >
+          <Command shouldFilter={false}>
+            <CommandList className="max-h-52 overflow-y-auto">
+              <CommandEmpty>No matches</CommandEmpty>
+              {filtered.slice(0, 20).map((s) => (
+                <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
+                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
+                  {s}
+                </CommandItem>
+              ))}
+              {showCreate && (
+                <CommandItem
+                  value={`__create__${trimmed}`}
+                  disabled={creating}
+                  onSelect={async () => {
+                    if (!onCreateNew) return;
+                    setCreating(true);
+                    await onCreateNew(trimmed);
+                    setCreating(false);
+                    setOpen(false);
+                  }}
+                  className="text-primary font-medium border-t mt-1"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  {creating ? "Adding…" : `Create "${trimmed}"`}
+                </CommandItem>
+              )}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      )}
+    </Popover>
+  );
+}
 
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
@@ -130,6 +212,15 @@ export function ApplicationDetailPage({
   const [agents, setAgents] = useState<{ id: string; name: string; agent_type: string }[]>([]);
   const [assignedTo, setAssignedTo] = useState("");
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
+  const [partnerColleges, setPartnerColleges] = useState<{ name: string; country: string | null }[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
+
+  // Colleges tagged with the selected country, plus any untagged colleges
+  // (safety net so nothing disappears before it's been assigned a country).
+  // No country selected yet -> show everything, same as before this change.
+  const collegeSuggestions = country
+    ? partnerColleges.filter((c) => c.country === country || !c.country).map((c) => c.name)
+    : partnerColleges.map((c) => c.name);
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
   const progress = computeProgress(stages, application.stage_id);
@@ -144,6 +235,39 @@ export function ApplicationDetailPage({
       .then((j) => { if (j?.data) setAgents(j.data); })
       .catch(() => {});
   }, []);
+
+  // Fetch partner colleges + destination countries for the University/Country edit fields
+  useEffect(() => {
+    fetch("/api/v1/partner-colleges")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => {
+        if (j?.data) setPartnerColleges((j.data as { name: string; country: string | null }[]).map((c) => ({ name: c.name, country: c.country })));
+      })
+      .catch(() => {});
+    fetch("/api/v1/countries")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
+      .catch(() => {});
+  }, []);
+
+  async function handleCreateCollege(name: string) {
+    try {
+      const res = await fetch("/api/v1/partner-colleges", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, country: country || null }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message ?? "Failed to create college");
+      }
+      setPartnerColleges((prev) => [...prev, { name, country: country || null }].sort((a, b) => a.name.localeCompare(b.name)));
+      setUniversityName(name);
+      toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create college");
+    }
+  }
 
   // Fetch team member emails for timeline display
   useEffect(() => {
@@ -550,11 +674,36 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
+              {/* Country */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Country</Label>
+                {editing ? (
+                  <Select value={country} onValueChange={setCountry}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select country" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {countries.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.country ?? "—"}</p>
+                )}
+              </div>
+
               {/* University */}
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">University</Label>
                 {editing ? (
-                  <Input value={universityName} onChange={(e) => setUniversityName(e.target.value)} />
+                  <AutocompleteInput
+                    value={universityName}
+                    onChange={setUniversityName}
+                    suggestions={collegeSuggestions}
+                    placeholder="e.g. University of Melbourne"
+                    onCreateNew={handleCreateCollege}
+                  />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
                 )}
@@ -570,33 +719,14 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Intake + Country */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Intake</Label>
-                  {editing ? (
-                    <Input value={intakeTerm} onChange={(e) => setIntakeTerm(e.target.value)} placeholder="e.g. Fall 2026" />
-                  ) : (
-                    <p className="text-sm">{application.intake_term ?? "—"}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Country</Label>
-                  {editing ? (
-                    <Select value={country} onValueChange={setCountry}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select country" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {COUNTRIES.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-sm">{application.country ?? "—"}</p>
-                  )}
-                </div>
+              {/* Intake */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Intake</Label>
+                {editing ? (
+                  <Input value={intakeTerm} onChange={(e) => setIntakeTerm(e.target.value)} placeholder="e.g. Fall 2026" />
+                ) : (
+                  <p className="text-sm">{application.intake_term ?? "—"}</p>
+                )}
               </div>
 
               {/* Deadline */}

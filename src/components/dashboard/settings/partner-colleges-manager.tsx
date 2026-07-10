@@ -20,6 +20,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { GraduationCap, Pencil, Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,20 +34,25 @@ interface CollegeRow {
   id: string;
   name: string;
   description: string | null;
+  country: string | null;
   is_active: boolean;
 }
 
 interface CollegeFormState {
   name: string;
   description: string;
+  country: string;
 }
 
+const NO_COUNTRY = "__none__";
+
 function buildDefaultForm(): CollegeFormState {
-  return { name: "", description: "" };
+  return { name: "", description: "", country: "" };
 }
 
 export function PartnerCollegesManager() {
   const [colleges, setColleges] = useState<CollegeRow[]>([]);
+  const [countries, setCountries] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingCollege, setEditingCollege] = useState<CollegeRow | null>(null);
@@ -64,6 +76,13 @@ export function PartnerCollegesManager() {
 
   useEffect(() => { fetchColleges(); }, [fetchColleges]);
 
+  useEffect(() => {
+    fetch("/api/v1/countries")
+      .then((r) => r.ok ? r.json() : null)
+      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
+      .catch(() => {});
+  }, []);
+
   function openCreate() {
     setEditingCollege(null);
     setForm(buildDefaultForm());
@@ -72,7 +91,7 @@ export function PartnerCollegesManager() {
 
   function openEdit(college: CollegeRow) {
     setEditingCollege(college);
-    setForm({ name: college.name, description: college.description ?? "" });
+    setForm({ name: college.name, description: college.description ?? "", country: college.country ?? "" });
     setDialogOpen(true);
   }
 
@@ -89,6 +108,7 @@ export function PartnerCollegesManager() {
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || null,
+          country: form.country || null,
         }),
       });
 
@@ -186,6 +206,15 @@ export function PartnerCollegesManager() {
                     {college.description && (
                       <p className="text-xs text-muted-foreground mt-0.5">{college.description}</p>
                     )}
+                    {college.country ? (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 mt-0.5">
+                        {college.country}
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 mt-0.5">
+                        No country set
+                      </Badge>
+                    )}
                     {!college.is_active && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground mt-0.5">
                         Inactive
@@ -251,6 +280,28 @@ export function PartnerCollegesManager() {
                 placeholder="e.g. University of Melbourne"
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Country</Label>
+              <Select
+                value={form.country || NO_COUNTRY}
+                onValueChange={(v) => setForm((f) => ({ ...f, country: v === NO_COUNTRY ? "" : v }))}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_COUNTRY}>
+                    <span className="text-muted-foreground">No country set</span>
+                  </SelectItem>
+                  {countries.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Used to filter this college in the Add Application form. Add more countries under Destination Countries above.
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Description</Label>
