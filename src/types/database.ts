@@ -670,7 +670,7 @@ export interface Project {
   health_note: string | null;
   qualified_at: string | null;
   qualified_by: string | null;
-  // Deal/Proposal -> Project handoff (mig 129)
+  // Deal/Proposal -> Project handoff (mig 134)
   currency: string | null;
   // Derived, only present on GET responses that compute them
   pct_complete?: number;
@@ -1187,7 +1187,7 @@ export interface Proposal {
   deleted_at: string | null;
   public_token: string | null;
   public_enabled: boolean;
-  // Deal/Proposal -> Project handoff (mig 129) — set once this proposal seeds a project.
+  // Deal/Proposal -> Project handoff (mig 134) — set once this proposal seeds a project.
   project_id: string | null;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;

@@ -14,7 +14,7 @@ Converting a won deal to a project **drops the accepted proposal entirely**. Tod
 
 ---
 
-## Migration 129 (additive, transactional, self-recording)
+## Migration 134 (was 129 — renumbered at rebase onto stage; additive, transactional, self-recording)
 
 ```sql
 BEGIN;
@@ -30,7 +30,7 @@ CREATE INDEX IF NOT EXISTS idx_proposals_project_id ON proposals(project_id);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS currency TEXT;
 
 -- REQUIRED self-record (Migration Guard, mig 123 convention)
-INSERT INTO public.schema_migrations (version) VALUES ('129_deal_project_handoff.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('134_deal_project_handoff.sql')  -- renamed 129→134 at rebase
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
@@ -97,7 +97,7 @@ Now that `proposals.project_id` links them, add a small **"Source proposal"** re
 
 ## Acceptance checklist (Opus reviews)
 
-- [ ] Migration 129 applied dev-first; additive; self-record line present; passes Migration Guard.
+- [ ] Migration 134 applied dev-first; additive; self-record line present; passes Migration Guard.
 - [ ] Convert a won deal **with** an accepted proposal → new project has: brief (from SOW notes), baseline & current estimate = round(Σ hours × 60), budget = proposal total, default_rate = total÷hours, currency set, deal contacts copied (incl. billing), `proposals.project_id` bound, and a `baseline_seeded_from_proposal` ledger event on the Timeline.
 - [ ] The seeded project is **NOT** auto-qualified (`qualified_at` still NULL — human commits at Qualify).
 - [ ] Convert a deal with **no** accepted proposal → falls back to today's behavior, conversion succeeds, no crash.

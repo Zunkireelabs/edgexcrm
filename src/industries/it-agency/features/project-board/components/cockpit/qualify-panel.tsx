@@ -30,7 +30,7 @@ interface QualifyPanelProps {
 }
 
 export function QualifyPanel({ project, isAdmin, onQualify }: QualifyPanelProps) {
-  // Seeded from the deal/proposal handoff (mig 129), if any — an editable
+  // Seeded from the deal/proposal handoff (mig 134), if any — an editable
   // draft the PM confirms or overrides, not a fait accompli. startDate /
   // targetEndDate have no seed source and stay blank.
   const [dod, setDod] = useState(project.definition_of_done ?? "");

@@ -6,8 +6,8 @@
 -- (open -> mitigating -> closed / occurred). Mirrors `project_issues`
 -- (128_delivery_workflow.sql) shape + RLS exactly.
 --
--- 134 is reserved for the pending 129_deal_project_handoff rename — NOT used
--- here. 133 = invoicing, 135 = task timers, this is 136.
+-- 134 = deal_project_handoff (renamed from 129 at rebase); 133 = invoicing,
+-- 135 = task timers — this is 136.
 --
 -- Expected before/after row counts: project_risks 0 -> 0 rows (new table, no seed).
 --

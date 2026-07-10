@@ -29,7 +29,7 @@ RAID = Risks / Assumptions / Issues / Dependencies. **v1 builds the Risk registe
 
 ## 2. Migration — `supabase/migrations/136_project_risks.sql`
 
-> **136 is correct.** Local chain: 133 invoicing, 135 timer; **134 is reserved** for the pending `129_deal_project_handoff` rename — do NOT use 134. Additive, transactional, idempotent, with the `schema_migrations` self-record line (mirror `128_delivery_workflow.sql`'s `project_issues` block + any migration ≥123 for the self-record convention). **Apply locally only** via `scripts/migrate-apply.sh local`.
+> **136 is correct.** Local chain: 133 invoicing, 134 handoff (renamed from 129 at rebase), 135 timer. Additive, transactional, idempotent, with the `schema_migrations` self-record line (mirror `128_delivery_workflow.sql`'s `project_issues` block + any migration ≥123 for the self-record convention). **Apply locally only** via `scripts/migrate-apply.sh local`.
 
 Model it **exactly** on the `project_issues` DDL in `128_delivery_workflow.sql` (lines ~154–197): same tenant/project FKs (CASCADE), same RLS (SELECT = `tenant_id IN (SELECT get_user_tenant_ids())`; INSERT/UPDATE/DELETE = `is_tenant_admin(tenant_id)`), same `updated_at` trigger, same index shape.
 

@@ -1,4 +1,6 @@
--- Migration 129: Deal/Proposal -> Project handoff — bind proposals to the
+-- Migration 134: Deal/Proposal -> Project handoff — bind proposals to the
+-- (renumbered from 129 at merge: origin/stage independently took 129 with
+--  129_fix_lead_branches_assigned_desync.sql while this branch was in flight.)
 -- project they seeded, and give projects a currency to make budget_amount /
 -- default_rate unambiguous.
 --
@@ -23,7 +25,7 @@ CREATE INDEX IF NOT EXISTS idx_proposals_project_id ON proposals(project_id);
 ALTER TABLE projects ADD COLUMN IF NOT EXISTS currency TEXT;
 
 -- REQUIRED self-record (Migration Guard, mig 123 convention)
-INSERT INTO public.schema_migrations (version) VALUES ('129_deal_project_handoff.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('134_deal_project_handoff.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
