@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { createClient } from "@/lib/supabase/client";
 import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
@@ -55,6 +56,7 @@ interface LeadDetailV2Props {
   notes: LeadNote[];
   checklists: LeadChecklist[];
   activities: LeadActivity[];
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   tenant: Tenant;
   role: string;
@@ -132,6 +134,7 @@ export function LeadDetailV2({
   notes: initialNotes,
   checklists: initialChecklists,
   activities,
+  submissionHistory,
   stages,
   tenant,
   role,
@@ -641,6 +644,7 @@ export function LeadDetailV2({
             entity={entity}
             industry={industry}
             industryId={tenant.industry_id}
+            submissionHistory={submissionHistory}
             isEditing={isEditing}
             draft={draft}
             editErrors={editErrors}

@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
+import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
@@ -69,6 +70,7 @@ interface LeadDraftSubset {
 
 interface KeyInfoSectionProps {
   lead: Lead;
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   currentStage?: PipelineStage;
   stageId: string | null;
@@ -108,6 +110,7 @@ interface KeyInfoSectionProps {
 
 export function KeyInfoSection({
   lead,
+  submissionHistory,
   stages,
   currentStage,
   stageId,
@@ -351,10 +354,11 @@ export function KeyInfoSection({
               lead={lead}
               isAdmin={isAdmin}
               onSave={onSaveStudyFields}
+              submissionHistory={submissionHistory}
             />
           )}
 
-          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} />
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -621,9 +625,10 @@ interface StudyInterestPanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) {
+function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyInterestPanelProps) {
   const leadWithEdu = lead as {
     destinations?: string[] | null;
     field_of_study?: string | null;
@@ -631,15 +636,20 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
   };
   const cf = (lead.custom_fields || {}) as Record<string, unknown>;
 
-  // Fall back to custom_fields for form-submitted leads where dedicated columns are null
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
   const effectiveDestinations: string[] =
     (leadWithEdu.destinations?.length ?? 0) > 0
       ? (leadWithEdu.destinations ?? [])
-      : cf.countries
-      ? [cf.countries as string]
-      : [];
-  const effectiveFieldOfStudy = leadWithEdu.field_of_study || (cf.field_of_study as string) || null;
-  const effectiveDegreeLevel = leadWithEdu.degree_level || (cf.education_level as string) || null;
+      : getDistinctFormValues(cf, submissionHistory, "countries");
+  const effectiveFieldOfStudy =
+    leadWithEdu.field_of_study ||
+    getDistinctFormValues(cf, submissionHistory, "field_of_study").join(", ") ||
+    null;
+  const effectiveDegreeLevel =
+    leadWithEdu.degree_level ||
+    getDistinctFormValues(cf, submissionHistory, "education_level").join(", ") ||
+    null;
 
   const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
@@ -822,9 +832,10 @@ interface LeadSourcePanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
+function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourcePanelProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
@@ -944,10 +955,16 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
           {(() => {
             const cf = (lead.custom_fields || {}) as Record<string, unknown>;
             const sourceCategory = lead.intake_source || "—";
-            const sourceChannel = lead.intake_medium || (cf.source as string) || "—";
+            const sourceChannel =
+              lead.intake_medium ||
+              getDistinctFormValues(cf, submissionHistory, "source").join(", ") ||
+              "—";
             const sourcePage = lead.intake_account || "—";
             const campaign = lead.intake_campaign || "—";
-            const refCode = lead.ref_code || (cf.ref_code as string) || null;
+            const refCode =
+              lead.ref_code ||
+              getDistinctFormValues(cf, submissionHistory, "ref_code").join(", ") ||
+              null;
             return (
               <>
                 <InfoRow label="Source Category" value={sourceCategory} />
