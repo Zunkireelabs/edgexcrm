@@ -4,14 +4,18 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { ProjectWorkspacePage } from "@/industries/it-agency/features/project-board/pages/workspace";
 
-export default async function ProjectsRoute() {
+interface ProjectsRouteProps {
+  searchParams: Promise<{ view?: string }>;
+}
+
+export default async function ProjectsRoute({ searchParams }: ProjectsRouteProps) {
+  const params = await searchParams;
+  if (params.view === "tasks") redirect("/tasks");
+  if (params.view === "members") redirect("/tasks?view=members");
+
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD)) notFound();
-
-  // Workspace is admin-only in v1; non-admins continue using /time-tracking
-  const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
-  if (!isAdmin) notFound();
 
   return (
     <ProjectWorkspacePage
