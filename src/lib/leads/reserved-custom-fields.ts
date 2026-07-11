@@ -11,17 +11,21 @@ const PROMOTED_KEYS = new Set([
   "program_category",
   "interested_country",
   "campaign",
-  // form-submission keys — have dedicated UI in Lead Source / Study Interest panels
+  // form-submission keys — have dedicated UI in the (universal) Lead Source panel
   "source",
   "ref_code",
-  "field_of_study",
-  "education_level",
-  "countries",
   // NOTE: "hear_about" deliberately NOT reserved — no dedicated panel exists
   // for it, so it must stay in the generic Additional Info list to remain
   // visible at all.
 ]);
 
-export function isReservedCustomField(key: string): boolean {
-  return key === "itinerary" || key.startsWith("trip_") || PROMOTED_KEYS.has(key);
+// Keys whose only dedicated UI is StudyInterestPanel, which is
+// education_consultancy-only (see key-info-section.tsx). Reserving these for
+// every industry would hide the data with nowhere else to show it, so they're
+// only reserved when the lead actually belongs to that industry.
+const EDUCATION_ONLY_PROMOTED_KEYS = new Set(["field_of_study", "education_level", "countries"]);
+
+export function isReservedCustomField(key: string, industryId?: string | null): boolean {
+  if (key === "itinerary" || key.startsWith("trip_") || PROMOTED_KEYS.has(key)) return true;
+  return industryId === "education_consultancy" && EDUCATION_ONLY_PROMOTED_KEYS.has(key);
 }

@@ -716,6 +716,10 @@ export function LeadDetailV2({
                 if (updated.assigned_to !== prevLead.assigned_to) {
                   setAssignedTo(updated.assigned_to ?? "");
                   setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
+                  // Same staleness issue as handleAssignmentChange: refresh so
+                  // revertTargetUserId/Name (computed server-side) reflect the
+                  // new assignee, not whoever it was when the page first loaded.
+                  router.refresh();
                 }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
                 // Handed off to someone else (send-to-next / revert to another holder):

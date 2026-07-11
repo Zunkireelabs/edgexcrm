@@ -347,6 +347,12 @@ export async function PATCH(request: NextRequest) {
           .eq("tenant_id", auth.tenantId)
           .eq("lead_id", lid)
           .eq("is_origin", false);
+        // A branch-scoped (non-admin) manager can only ever assign within
+        // their own branch (validated above), so only mirror into their own
+        // branch's pool row — not other branches they have no visibility into.
+        if (isTeamScoped && auth.branchId) {
+          mirrorQuery = mirrorQuery.eq("branch_id", auth.branchId);
+        }
         mirrorQuery = prevAssignedTo
           ? mirrorQuery.or(`assigned_to.is.null,assigned_to.eq.${prevAssignedTo}`)
           : mirrorQuery.is("assigned_to", null);

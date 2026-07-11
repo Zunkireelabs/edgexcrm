@@ -583,16 +583,26 @@ export async function PATCH(
               // holder may have since left the tenant.
               const { data: handoffMemberCheck } = await supabase
                 .from("tenant_users")
-                .select("user_id")
+                .select("user_id, branch_id")
                 .eq("tenant_id", auth.tenantId)
                 .eq("user_id", lastHandoffFromUserId)
                 .maybeSingle();
-              if (handoffMemberCheck) {
+              const handoffBranchId = (handoffMemberCheck as { branch_id: string | null } | null)?.branch_id ?? null;
+              // Same branch boundary as the §4.2 guard above — this path sets
+              // assigned_to directly (body.assigned_to is never set here), so
+              // that guard never runs on its own; re-check it explicitly.
+              const isBranchScopedManager =
+                auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
+              const crossBranchForManager =
+                isBranchScopedManager && auth.branchId && handoffBranchId !== auth.branchId;
+              if (handoffMemberCheck && !crossBranchForManager) {
                 updatePayload.assigned_to = lastHandoffFromUserId;
-              } else if (!isExempt) {
+              } else if (!handoffMemberCheck && !isExempt) {
                 return apiForbidden("Previous holder is no longer a member of this tenant");
               }
-              // Exempt caller when the prior holder has left: allow the move, leave assigned_to as-is.
+              // Exempt caller when the prior holder has left, or a branch
+              // manager reverting to someone outside their branch: allow the
+              // move, leave assigned_to as-is.
             } else if (!isExempt) {
               // No prior handoff recorded → this holder is the lead's origin.
               return apiForbidden("First holder cannot revert this lead");
@@ -759,6 +769,15 @@ export async function PATCH(
       .eq("tenant_id", auth.tenantId)
       .eq("lead_id", id)
       .eq("is_origin", false);
+    // A branch-scoped (non-admin) manager can only ever assign within their
+    // own branch (enforced by the §4.2 guard above), so only mirror into
+    // their own branch's pool row — their action shouldn't ripple into
+    // other branches they have no visibility into. Admin/owner/unrestricted
+    // callers keep the tenant-wide mirror (they can already assign anyone
+    // tenant-wide via the normal validation above).
+    if (auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member" && auth.branchId) {
+      mirrorQuery = mirrorQuery.eq("branch_id", auth.branchId);
+    }
     mirrorQuery = prevAssignedTo
       ? mirrorQuery.or(`assigned_to.is.null,assigned_to.eq.${prevAssignedTo}`)
       : mirrorQuery.is("assigned_to", null);

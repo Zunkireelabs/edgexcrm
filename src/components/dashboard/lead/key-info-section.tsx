@@ -180,7 +180,7 @@ export function KeyInfoSection({
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
-    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
+    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key, industryId)
   );
 
   return (
@@ -762,6 +762,12 @@ function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyI
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select field</span>
                 </SelectItem>
+                {/* Free-text answer from a form submission that isn't one of
+                    the canonical options — show it as-is so the trigger
+                    doesn't look blank for a lead that actually has data. */}
+                {draftField && !fieldsOfStudy.includes(draftField) && (
+                  <SelectItem value={draftField}>{draftField}</SelectItem>
+                )}
                 {fieldsOfStudy.map((f) => (
                   <SelectItem key={f} value={f}>{f}</SelectItem>
                 ))}
@@ -782,6 +788,10 @@ function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyI
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select level</span>
                 </SelectItem>
+                {/* Same free-text fallback as Field of Study above. */}
+                {draftDegree && !DEGREE_LEVELS.some((d) => d.value === draftDegree) && (
+                  <SelectItem value={draftDegree}>{draftDegree}</SelectItem>
+                )}
                 {DEGREE_LEVELS.map((d) => (
                   <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                 ))}
@@ -858,17 +868,22 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
   const distinctRefCode = getDistinctFormValues(cf, submissionHistory, "ref_code");
   const sourceChannel = lead.intake_medium || distinctSourceChannel.join(", ") || "—";
   const refCode = lead.ref_code || distinctRefCode.join(", ") || null;
+  // Affiliate lookup needs one concrete code to match against — the raw
+  // column, or the single distinct value from submission history. A lead
+  // with multiple *different* ref codes across submissions has no single
+  // affiliate to resolve, so it's skipped rather than guessed at.
+  const singleRefCode = lead.ref_code || (distinctRefCode.length === 1 ? distinctRefCode[0] : null);
 
   useEffect(() => {
-    if (!lead.ref_code) return;
+    if (!singleRefCode) return;
     fetch("/api/v1/affiliates")
       .then((r) => r.json())
       .then((json) => {
-        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === lead.ref_code);
+        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === singleRefCode);
         if (match) setAffiliateName(match.name);
       })
       .catch(() => null);
-  }, [lead.ref_code]);
+  }, [singleRefCode]);
 
   function openEdit() {
     setDraftSource(lead.intake_source ?? "");
