@@ -159,6 +159,11 @@ export async function PATCH(
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
 
+  // A non-admin, branch-restricted caller (§4.2) — reused by every branch
+  // boundary check in this handler so they stay in sync with each other.
+  const isBranchScopedManager =
+    auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -465,7 +470,7 @@ export async function PATCH(
   // §4.2 Branch-manager assignment guard: a team-scoped non-admin can only set
   // assigned_to / branch_id when the lead is already in their branch, and the
   // target user (if assigning) must also be in their branch. Admins bypass.
-  if (auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member") {
+  if (isBranchScopedManager) {
     const touchingBranchFields =
       body.assigned_to !== undefined || body.branch_id !== undefined;
     if (touchingBranchFields) {
@@ -591,8 +596,6 @@ export async function PATCH(
               // Same branch boundary as the §4.2 guard above — this path sets
               // assigned_to directly (body.assigned_to is never set here), so
               // that guard never runs on its own; re-check it explicitly.
-              const isBranchScopedManager =
-                auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
               const crossBranchForManager =
                 isBranchScopedManager && auth.branchId && handoffBranchId !== auth.branchId;
               if (handoffMemberCheck && !crossBranchForManager) {
@@ -775,7 +778,7 @@ export async function PATCH(
     // other branches they have no visibility into. Admin/owner/unrestricted
     // callers keep the tenant-wide mirror (they can already assign anyone
     // tenant-wide via the normal validation above).
-    if (auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member" && auth.branchId) {
+    if (isBranchScopedManager && auth.branchId) {
       mirrorQuery = mirrorQuery.eq("branch_id", auth.branchId);
     }
     mirrorQuery = prevAssignedTo
