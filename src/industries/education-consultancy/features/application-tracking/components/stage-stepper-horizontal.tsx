@@ -96,7 +96,7 @@ export function StageStepperHorizontal({
                         ? { backgroundColor: `${stage.color}40`, borderColor: stage.color }
                         : {}
                     }
-                    title={stage.name}
+                    title={isClickable ? `Move to ${stage.name}` : stage.name}
                   >
                     {isLoading ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />

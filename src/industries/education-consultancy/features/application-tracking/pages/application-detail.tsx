@@ -134,7 +134,7 @@ export function ApplicationDetailPage({
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
   const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, addPartnerCollege } =
+  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
     useApplicationReferenceData();
 
   // Colleges tagged with the selected country, plus any untagged colleges
@@ -151,22 +151,8 @@ export function ApplicationDetailPage({
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
   async function handleCreateCollege(name: string) {
-    try {
-      const res = await fetch("/api/v1/partner-colleges", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, country: country || null }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message ?? "Failed to create college");
-      }
-      addPartnerCollege(name, country || null);
-      setUniversityName(name);
-      toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create college");
-    }
+    const ok = await createPartnerCollege(name, country || null);
+    if (ok) setUniversityName(name);
   }
 
   // Fetch team member emails for timeline display
@@ -199,7 +185,11 @@ export function ApplicationDetailPage({
     // both blank for the admin to pick fresh rather than guess wrong.
     const raw = application.intake_term ?? "";
     const matchedMonth = intakeMonths.find((m) => raw.toLowerCase().includes(m.toLowerCase()));
-    const matchedYear = raw.match(/\b(20\d{2})\b/)?.[1];
+    const rawYear = raw.match(/\b(20\d{2})\b/)?.[1];
+    // Only pre-fill if the parsed year is actually one of the dropdown's
+    // options — otherwise it'd sit invisibly in state (not shown in the
+    // Year field, since it's out of range) and get silently re-saved.
+    const matchedYear = rawYear && intakeYears.includes(rawYear) ? rawYear : undefined;
     setIntakeMonth(matchedMonth ?? "");
     setIntakeYear(matchedYear ?? "");
     setIntakeTouched(false);
@@ -602,9 +592,15 @@ export function ApplicationDetailPage({
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
-                      {countries.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
+                      {countries.length === 0 ? (
+                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                          No countries configured — add some in Settings
+                        </div>
+                      ) : (
+                        countries.map((c) => (
+                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -644,26 +640,28 @@ export function ApplicationDetailPage({
                 {editing ? (
                   <div className="grid grid-cols-2 gap-2">
                     <Select
-                      value={intakeMonth}
-                      onValueChange={(v) => { setIntakeMonth(v); setIntakeTouched(true); }}
+                      value={intakeMonth || "__none__"}
+                      onValueChange={(v) => { setIntakeMonth(v === "__none__" ? "" : v); setIntakeTouched(true); }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Month" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
                         {intakeMonths.map((m) => (
                           <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                     <Select
-                      value={intakeYear}
-                      onValueChange={(v) => { setIntakeYear(v); setIntakeTouched(true); }}
+                      value={intakeYear || "__none__"}
+                      onValueChange={(v) => { setIntakeYear(v === "__none__" ? "" : v); setIntakeTouched(true); }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Year" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
                         {intakeYears.map((y) => (
                           <SelectItem key={y} value={y}>{y}</SelectItem>
                         ))}

@@ -66,7 +66,7 @@ export function AddApplicationSheet({
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, addPartnerCollege } =
+  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
     useApplicationReferenceData(open);
 
   // Colleges tagged with the selected country, plus any untagged colleges
@@ -143,22 +143,8 @@ export function AddApplicationSheet({
   if (!canManageApplications) return null;
 
   async function handleCreateCollege(name: string) {
-    try {
-      const res = await fetch("/api/v1/partner-colleges", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, country: country || null }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message ?? "Failed to create college");
-      }
-      addPartnerCollege(name, country || null);
-      setUniversityName(name);
-      toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create college");
-    }
+    const ok = await createPartnerCollege(name, country || null);
+    if (ok) setUniversityName(name);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -287,9 +273,15 @@ export function AddApplicationSheet({
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {countries.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
+                  {countries.length === 0 ? (
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                      No countries configured — add some in Settings
+                    </div>
+                  ) : (
+                    countries.map((c) => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
