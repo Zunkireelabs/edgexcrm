@@ -414,6 +414,10 @@ export function LeadDetailV2({
       });
       if (!res.ok) throw new Error();
       toast.success("Assignment updated");
+      // revertTargetUserId/Name are computed server-side from the lead's
+      // assignment history — refresh so the Revert confirm dialog reflects
+      // the new assignee, not whoever it was when the page first loaded.
+      router.refresh();
     } catch {
       toast.error("Failed to update assignment");
       setAssignedTo(lead.assigned_to || "");
@@ -696,7 +700,10 @@ export function LeadDetailV2({
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(body),
                 });
-                if (!res.ok) throw new Error("Failed to move lead");
+                if (!res.ok) {
+                  const errJson = await res.json().catch(() => null);
+                  throw new Error(errJson?.error?.message || "Failed to move lead");
+                }
                 const json = await res.json();
                 const updated = json.data as Lead;
                 // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
@@ -722,12 +729,12 @@ export function LeadDetailV2({
                 // Predicted a handoff (spinner shown) but the server kept the lead
                 // with us — restore the detail instead of hanging on the spinner.
                 if (willHandOff) setLeaving(false);
-              } catch {
+              } catch (err) {
                 setCurrentLead(prevLead);
                 setStageId(prevStageId);
                 if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
                 setLeaving(false);
-                toast.error("Failed to move lead");
+                toast.error(err instanceof Error ? err.message : "Failed to move lead");
               }
             }}
             onSaveTripFields={async (fields) => {

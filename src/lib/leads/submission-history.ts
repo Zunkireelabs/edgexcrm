@@ -32,11 +32,12 @@ export function getDistinctFormValues(
     values.push(v);
   };
 
-  if (history.length > 0) {
-    for (const snapshot of history) push(snapshot.custom_fields?.[key]);
-  } else {
-    push((currentCustomFields ?? {})[key]);
-  }
+  // Always scan both sources — submission history isn't guaranteed to cover
+  // every key (e.g. a value set via CSV import or another non-form path), so
+  // skipping the live column whenever any history exists silently dropped
+  // those values. `push` already dedupes, so scanning both is safe.
+  for (const snapshot of history) push(snapshot.custom_fields?.[key]);
+  push((currentCustomFields ?? {})[key]);
 
   return values;
 }

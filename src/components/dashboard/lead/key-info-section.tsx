@@ -209,7 +209,10 @@ export function KeyInfoSection({
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-              <Select value={effectiveStageId} onValueChange={setPendingStageId}>
+              <Select
+                value={effectiveStageId}
+                onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
+              >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
@@ -288,7 +291,11 @@ export function KeyInfoSection({
           {/* Assigned To */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin || leadScope === "team" || (canAssign && (!assignedTo || userId === assignedTo)) ? (
+            {isAdmin ||
+            leadScope === "team" ||
+            (industryId === "education_consultancy"
+              ? canAssign && (!assignedTo || userId === assignedTo)
+              : canAssign) ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -638,18 +645,14 @@ function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyI
 
   // Fall back to every distinct answer this lead has given across repeat form
   // submissions when the dedicated column is empty (form-submitted leads).
+  const distinctFieldOfStudy = getDistinctFormValues(cf, submissionHistory, "field_of_study");
+  const distinctDegreeLevel = getDistinctFormValues(cf, submissionHistory, "education_level");
   const effectiveDestinations: string[] =
     (leadWithEdu.destinations?.length ?? 0) > 0
       ? (leadWithEdu.destinations ?? [])
       : getDistinctFormValues(cf, submissionHistory, "countries");
-  const effectiveFieldOfStudy =
-    leadWithEdu.field_of_study ||
-    getDistinctFormValues(cf, submissionHistory, "field_of_study").join(", ") ||
-    null;
-  const effectiveDegreeLevel =
-    leadWithEdu.degree_level ||
-    getDistinctFormValues(cf, submissionHistory, "education_level").join(", ") ||
-    null;
+  const effectiveFieldOfStudy = leadWithEdu.field_of_study || distinctFieldOfStudy.join(", ") || null;
+  const effectiveDegreeLevel = leadWithEdu.degree_level || distinctDegreeLevel.join(", ") || null;
 
   const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
@@ -659,10 +662,14 @@ function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyI
   const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
   const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
 
+  // Seed the draft from the values actually shown on screen (effective*),
+  // not the raw columns — those are often empty on form-submitted leads,
+  // whose real answers only exist via the submission-history fallback above.
+  // Seeding from the empty raw columns meant Save silently erased them.
   function openEdit() {
-    setDraftDests(leadWithEdu.destinations ?? []);
-    setDraftField(leadWithEdu.field_of_study ?? "");
-    setDraftDegree(leadWithEdu.degree_level ?? "");
+    setDraftDests(effectiveDestinations);
+    setDraftField(leadWithEdu.field_of_study || distinctFieldOfStudy[0] || "");
+    setDraftDegree(leadWithEdu.degree_level || distinctDegreeLevel[0] || "");
     setDestOpen(false);
     setEditing(true);
   }
@@ -844,6 +851,14 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
   const [draftCampaign, setDraftCampaign] = useState(lead.intake_campaign ?? "");
   const [affiliateName, setAffiliateName] = useState<string | null>(null);
 
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+  const distinctSourceChannel = getDistinctFormValues(cf, submissionHistory, "source");
+  const distinctRefCode = getDistinctFormValues(cf, submissionHistory, "ref_code");
+  const sourceChannel = lead.intake_medium || distinctSourceChannel.join(", ") || "—";
+  const refCode = lead.ref_code || distinctRefCode.join(", ") || null;
+
   useEffect(() => {
     if (!lead.ref_code) return;
     fetch("/api/v1/affiliates")
@@ -857,7 +872,7 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
 
   function openEdit() {
     setDraftSource(lead.intake_source ?? "");
-    setDraftMedium(lead.intake_medium ?? "");
+    setDraftMedium(lead.intake_medium || distinctSourceChannel[0] || "");
     setDraftAccount(lead.intake_account ?? "");
     setDraftCampaign(lead.intake_campaign ?? "");
     setEditing(true);
@@ -952,35 +967,17 @@ function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourc
         </div>
       ) : (
         <div className="space-y-2">
-          {(() => {
-            const cf = (lead.custom_fields || {}) as Record<string, unknown>;
-            const sourceCategory = lead.intake_source || "—";
-            const sourceChannel =
-              lead.intake_medium ||
-              getDistinctFormValues(cf, submissionHistory, "source").join(", ") ||
-              "—";
-            const sourcePage = lead.intake_account || "—";
-            const campaign = lead.intake_campaign || "—";
-            const refCode =
-              lead.ref_code ||
-              getDistinctFormValues(cf, submissionHistory, "ref_code").join(", ") ||
-              null;
-            return (
-              <>
-                <InfoRow label="Source Category" value={sourceCategory} />
-                <InfoRow label="Source Channel" value={sourceChannel} />
-                <InfoRow label="Source Page / Account" value={sourcePage} />
-                <InfoRow label="Campaign" value={campaign} />
-                {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
-                {refCode && (
-                  <InfoRow
-                    label="Ref Code"
-                    value={affiliateName ? `${refCode} · ${affiliateName}` : refCode}
-                  />
-                )}
-              </>
-            );
-          })()}
+          <InfoRow label="Source Category" value={lead.intake_source || "—"} />
+          <InfoRow label="Source Channel" value={sourceChannel} />
+          <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
+          <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
+          {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
+          {refCode && (
+            <InfoRow
+              label="Ref Code"
+              value={affiliateName ? `${refCode} · ${affiliateName}` : refCode}
+            />
+          )}
         </div>
       )}
     </>

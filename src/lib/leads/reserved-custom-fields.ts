@@ -17,7 +17,9 @@ const PROMOTED_KEYS = new Set([
   "field_of_study",
   "education_level",
   "countries",
-  "hear_about",
+  // NOTE: "hear_about" deliberately NOT reserved — no dedicated panel exists
+  // for it, so it must stay in the generic Additional Info list to remain
+  // visible at all.
 ]);
 
 export function isReservedCustomField(key: string): boolean {
