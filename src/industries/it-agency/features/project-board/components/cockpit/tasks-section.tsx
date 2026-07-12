@@ -25,6 +25,7 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
   const [addingTask, setAddingTask] = useState(false);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskAssigneeId, setNewTaskAssigneeId] = useState<string | null>(null);
+  const [newTaskEstimate, setNewTaskEstimate] = useState("");
   const [savingTask, setSavingTask] = useState(false);
 
   useEffect(() => {
@@ -46,10 +47,15 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
     if (!newTaskTitle.trim()) return;
     setSavingTask(true);
     try {
+      const hours = newTaskEstimate.trim() ? parseFloat(newTaskEstimate) : null;
       const res = await fetch(`/api/v1/projects/${projectId}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newTaskTitle.trim(), assignee_id: newTaskAssigneeId }),
+        body: JSON.stringify({
+          title: newTaskTitle.trim(),
+          assignee_id: newTaskAssigneeId,
+          ...(hours != null && !Number.isNaN(hours) ? { estimated_minutes: Math.round(hours * 60) } : {}),
+        }),
       });
       if (!res.ok) throw new Error("Failed to create task");
       const { data } = await res.json();
@@ -57,6 +63,7 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
       setTasks((prev) => [...prev, data as Task]);
       setNewTaskTitle("");
       setNewTaskAssigneeId(null);
+      setNewTaskEstimate("");
       setAddingTask(false);
     } catch {
       toast.error("Failed to create task");
@@ -140,6 +147,20 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
                     />
                   </div>
                   <AssigneePicker assigneeId={newTaskAssigneeId} team={team} onChange={setNewTaskAssigneeId} />
+                  <div className="w-24 space-y-1.5">
+                    <Label htmlFor="new-task-est" className="sr-only">
+                      Est. hours
+                    </Label>
+                    <Input
+                      id="new-task-est"
+                      type="number"
+                      min="0"
+                      step="0.25"
+                      value={newTaskEstimate}
+                      onChange={(e) => setNewTaskEstimate(e.target.value)}
+                      placeholder="Est. hrs"
+                    />
+                  </div>
                   <Button type="submit" size="sm" disabled={savingTask || !newTaskTitle.trim()}>
                     {savingTask && <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />}
                     Add
@@ -152,6 +173,7 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
                       setAddingTask(false);
                       setNewTaskTitle("");
                       setNewTaskAssigneeId(null);
+                      setNewTaskEstimate("");
                     }}
                   >
                     Cancel

@@ -1,18 +1,5 @@
-import { redirect, notFound } from "next/navigation";
-import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { getFeatureAccess } from "@/industries/_loader";
-import { FEATURES } from "@/industries/_registry";
-import { ApprovalsQueuePage } from "@/industries/it-agency/features/time-tracking/pages/approvals-queue";
+import { redirect } from "next/navigation";
 
-export default async function ApprovalsRoute() {
-  const tenantData = await getCurrentUserTenant();
-  if (!tenantData) redirect("/login");
-  if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.TIME_TRACKING)) notFound();
-
-  return (
-    <ApprovalsQueuePage
-      tenantId={tenantData.tenant.id}
-      role={tenantData.role}
-    />
-  );
+export default function LegacyTimeTrackingApprovalsRoute() {
+  redirect("/approvals/time-entries");
 }

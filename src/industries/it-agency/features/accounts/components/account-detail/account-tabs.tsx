@@ -1,16 +1,12 @@
 "use client";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { OverviewTab } from "./overview-tab";
 import { ProjectsTab } from "./projects-tab";
 import { ContactsTab } from "./contacts-tab";
 import { ActivityTab } from "./activity-tab";
+import { BillingTab } from "./billing-tab";
 import type { ActivityItem } from "./activity-row";
 import type { Project, ProjectStatus } from "@/types/database";
 
@@ -75,16 +71,7 @@ export function AccountTabs({
           <TabsTrigger value="projects">Projects</TabsTrigger>
           <TabsTrigger value="contacts">Contacts</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span>
-                <TabsTrigger value="billing" disabled>
-                  Billing
-                </TabsTrigger>
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>Coming soon — invoices, retainer, billable totals v3</TooltipContent>
-          </Tooltip>
+          <TabsTrigger value="billing">Billing</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-0">
@@ -116,6 +103,10 @@ export function AccountTabs({
 
         <TabsContent value="activity" className="mt-0">
           <ActivityTab accountId={accountId} initialData={initialActivity ?? null} />
+        </TabsContent>
+
+        <TabsContent value="billing" className="mt-0">
+          <BillingTab accountId={accountId} isAdmin={isAdmin} />
         </TabsContent>
       </Tabs>
     </TooltipProvider>

@@ -35,7 +35,7 @@ const ALL_PROJECT_STATUSES: ProjectStatus[] = [
 const ALL_TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
 const ALL_PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
 
-export function useWorkspaceFilters() {
+export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -59,7 +59,7 @@ export function useWorkspaceFilters() {
   const parsedTags: string[] = rawTags ? rawTags.split(",").filter(Boolean) : [];
 
   const filters: WorkspaceFilters = {
-    view: (searchParams.get("view") as WorkspaceView) || "board",
+    view: (searchParams.get("view") as WorkspaceView) || defaultView,
     account: searchParams.get("account") || "__all__",
     q: searchParams.get("q") || "",
     owner: searchParams.get("owner") || "__all__",

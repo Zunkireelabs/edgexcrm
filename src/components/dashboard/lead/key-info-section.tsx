@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
+import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
@@ -69,6 +70,7 @@ interface LeadDraftSubset {
 
 interface KeyInfoSectionProps {
   lead: Lead;
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   currentStage?: PipelineStage;
   stageId: string | null;
@@ -108,6 +110,7 @@ interface KeyInfoSectionProps {
 
 export function KeyInfoSection({
   lead,
+  submissionHistory,
   stages,
   currentStage,
   stageId,
@@ -177,7 +180,7 @@ export function KeyInfoSection({
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
-    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
+    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key, industryId)
   );
 
   return (
@@ -206,7 +209,10 @@ export function KeyInfoSection({
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-              <Select value={effectiveStageId} onValueChange={setPendingStageId}>
+              <Select
+                value={effectiveStageId}
+                onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
+              >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
@@ -285,7 +291,11 @@ export function KeyInfoSection({
           {/* Assigned To */}
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin || leadScope === "team" || (canAssign && (!assignedTo || userId === assignedTo)) ? (
+            {isAdmin ||
+            leadScope === "team" ||
+            (industryId === "education_consultancy"
+              ? canAssign && (!assignedTo || userId === assignedTo)
+              : canAssign) ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -351,10 +361,11 @@ export function KeyInfoSection({
               lead={lead}
               isAdmin={isAdmin}
               onSave={onSaveStudyFields}
+              submissionHistory={submissionHistory}
             />
           )}
 
-          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} />
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -621,14 +632,27 @@ interface StudyInterestPanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) {
+function StudyInterestPanel({ lead, isAdmin, onSave, submissionHistory }: StudyInterestPanelProps) {
   const leadWithEdu = lead as {
     destinations?: string[] | null;
     field_of_study?: string | null;
     degree_level?: string | null;
   };
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
+  const distinctFieldOfStudy = getDistinctFormValues(cf, submissionHistory, "field_of_study");
+  const distinctDegreeLevel = getDistinctFormValues(cf, submissionHistory, "education_level");
+  const effectiveDestinations: string[] =
+    (leadWithEdu.destinations?.length ?? 0) > 0
+      ? (leadWithEdu.destinations ?? [])
+      : getDistinctFormValues(cf, submissionHistory, "countries");
+  const effectiveFieldOfStudy = leadWithEdu.field_of_study || distinctFieldOfStudy.join(", ") || null;
+  const effectiveDegreeLevel = leadWithEdu.degree_level || distinctDegreeLevel.join(", ") || null;
 
   const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
@@ -638,10 +662,14 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
   const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
   const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
 
+  // Seed the draft from the values actually shown on screen (effective*),
+  // not the raw columns — those are often empty on form-submitted leads,
+  // whose real answers only exist via the submission-history fallback above.
+  // Seeding from the empty raw columns meant Save silently erased them.
   function openEdit() {
-    setDraftDests(leadWithEdu.destinations ?? []);
-    setDraftField(leadWithEdu.field_of_study ?? "");
-    setDraftDegree(leadWithEdu.degree_level ?? "");
+    setDraftDests(effectiveDestinations);
+    setDraftField(leadWithEdu.field_of_study || distinctFieldOfStudy[0] || "");
+    setDraftDegree(leadWithEdu.degree_level || distinctDegreeLevel[0] || "");
     setDestOpen(false);
     setEditing(true);
   }
@@ -668,9 +696,9 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
   }
 
   const hasAny =
-    (leadWithEdu.destinations?.length ?? 0) > 0 ||
-    leadWithEdu.field_of_study ||
-    leadWithEdu.degree_level;
+    effectiveDestinations.length > 0 ||
+    effectiveFieldOfStudy ||
+    effectiveDegreeLevel;
 
   return (
     <>
@@ -734,6 +762,12 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select field</span>
                 </SelectItem>
+                {/* Free-text answer from a form submission that isn't one of
+                    the canonical options — show it as-is so the trigger
+                    doesn't look blank for a lead that actually has data. */}
+                {draftField && !fieldsOfStudy.includes(draftField) && (
+                  <SelectItem value={draftField}>{draftField}</SelectItem>
+                )}
                 {fieldsOfStudy.map((f) => (
                   <SelectItem key={f} value={f}>{f}</SelectItem>
                 ))}
@@ -754,6 +788,10 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select level</span>
                 </SelectItem>
+                {/* Same free-text fallback as Field of Study above. */}
+                {draftDegree && !DEGREE_LEVELS.some((d) => d.value === draftDegree) && (
+                  <SelectItem value={draftDegree}>{draftDegree}</SelectItem>
+                )}
                 {DEGREE_LEVELS.map((d) => (
                   <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
                 ))}
@@ -777,11 +815,11 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         </div>
       ) : hasAny ? (
         <div className="space-y-2">
-          {(leadWithEdu.destinations?.length ?? 0) > 0 && (
+          {effectiveDestinations.length > 0 && (
             <div>
               <p className="text-xs text-muted-foreground">Destinations</p>
               <div className="flex flex-wrap gap-1 mt-0.5">
-                {(leadWithEdu.destinations ?? []).map((d) => (
+                {effectiveDestinations.map((d) => (
                   <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">
                     {d}
                   </span>
@@ -789,11 +827,11 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
               </div>
             </div>
           )}
-          {leadWithEdu.field_of_study && (
-            <InfoRow label="Field of Study" value={leadWithEdu.field_of_study} />
+          {effectiveFieldOfStudy && (
+            <InfoRow label="Field of Study" value={effectiveFieldOfStudy} />
           )}
-          {leadWithEdu.degree_level && (
-            <InfoRow label="Degree Level" value={leadWithEdu.degree_level} />
+          {effectiveDegreeLevel && (
+            <InfoRow label="Degree Level" value={effectiveDegreeLevel} />
           )}
         </div>
       ) : (
@@ -811,9 +849,10 @@ interface LeadSourcePanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
+function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourcePanelProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
@@ -822,20 +861,33 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
   const [draftCampaign, setDraftCampaign] = useState(lead.intake_campaign ?? "");
   const [affiliateName, setAffiliateName] = useState<string | null>(null);
 
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+  const distinctSourceChannel = getDistinctFormValues(cf, submissionHistory, "source");
+  const distinctRefCode = getDistinctFormValues(cf, submissionHistory, "ref_code");
+  const sourceChannel = lead.intake_medium || distinctSourceChannel.join(", ") || "—";
+  const refCode = lead.ref_code || distinctRefCode.join(", ") || null;
+  // Affiliate lookup needs one concrete code to match against — the raw
+  // column, or the single distinct value from submission history. A lead
+  // with multiple *different* ref codes across submissions has no single
+  // affiliate to resolve, so it's skipped rather than guessed at.
+  const singleRefCode = lead.ref_code || (distinctRefCode.length === 1 ? distinctRefCode[0] : null);
+
   useEffect(() => {
-    if (!lead.ref_code) return;
+    if (!singleRefCode) return;
     fetch("/api/v1/affiliates")
       .then((r) => r.json())
       .then((json) => {
-        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === lead.ref_code);
+        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === singleRefCode);
         if (match) setAffiliateName(match.name);
       })
       .catch(() => null);
-  }, [lead.ref_code]);
+  }, [singleRefCode]);
 
   function openEdit() {
     setDraftSource(lead.intake_source ?? "");
-    setDraftMedium(lead.intake_medium ?? "");
+    setDraftMedium(lead.intake_medium || distinctSourceChannel[0] || "");
     setDraftAccount(lead.intake_account ?? "");
     setDraftCampaign(lead.intake_campaign ?? "");
     setEditing(true);
@@ -931,14 +983,14 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
       ) : (
         <div className="space-y-2">
           <InfoRow label="Source Category" value={lead.intake_source || "—"} />
-          <InfoRow label="Source Channel" value={lead.intake_medium || "—"} />
+          <InfoRow label="Source Channel" value={sourceChannel} />
           <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
           <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
           {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
-          {lead.ref_code && (
+          {refCode && (
             <InfoRow
               label="Ref Code"
-              value={affiliateName ? `${lead.ref_code} · ${affiliateName}` : lead.ref_code}
+              value={affiliateName ? `${refCode} · ${affiliateName}` : refCode}
             />
           )}
         </div>

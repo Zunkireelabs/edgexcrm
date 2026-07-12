@@ -1,16 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { ClipboardList, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useProjectIssues } from "../../hooks/use-project-issues";
 import { useProjectMilestones } from "../../hooks/use-project-milestones";
 import { useProjectChangeRequests } from "../../hooks/use-project-change-requests";
+import { useProjectRisks } from "../../hooks/use-project-risks";
 import { IssuesPanel } from "./issues-panel";
 import { MilestonesPanel } from "./milestones-panel";
 import { ChangeRequestsPanel, type ChangeRequestPrefill } from "./change-requests-panel";
+import { RisksPanel } from "./risks-panel";
 import type { ProjectIssue } from "@/types/database";
+import type { TeamMember } from "../../hooks/use-projects";
 
 interface DeliveryTabProps {
   projectId: string;
@@ -23,8 +26,17 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
   const issuesState = useProjectIssues(projectId);
   const milestonesState = useProjectMilestones(projectId);
   const changeRequestsState = useProjectChangeRequests(projectId);
+  const risksState = useProjectRisks(projectId);
+  const [team, setTeam] = useState<TeamMember[]>([]);
   const [crPrefill, setCrPrefill] = useState<ChangeRequestPrefill | null>(null);
   const [committingPlan, setCommittingPlan] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/v1/team")
+      .then((r) => r.json())
+      .then((json) => setTeam(json.data ?? []))
+      .catch(() => toast.error("Failed to load team"));
+  }, []);
 
   async function handleCommitPlan() {
     setCommittingPlan(true);
@@ -52,6 +64,12 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
     return ok;
   }
 
+  async function handleTransitionMilestone(id: string, to: string) {
+    const ok = await milestonesState.transitionMilestone(id, to);
+    if (ok) onEventRecorded();
+    return ok;
+  }
+
   async function handleApproveCr(id: string, clientApproved: boolean) {
     const ok = await changeRequestsState.approveChangeRequest(id, clientApproved);
     if (ok) onProjectChanged();
@@ -61,6 +79,18 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
   async function handleRejectCr(id: string) {
     const ok = await changeRequestsState.rejectChangeRequest(id);
     if (ok) onProjectChanged();
+    return ok;
+  }
+
+  async function handleCreateRisk(payload: Record<string, unknown>) {
+    const ok = await risksState.createRisk(payload);
+    if (ok) onEventRecorded();
+    return ok;
+  }
+
+  async function handleUpdateRisk(id: string, patch: Record<string, unknown>) {
+    const ok = await risksState.updateRisk(id, patch);
+    if (ok) onEventRecorded();
     return ok;
   }
 
@@ -87,6 +117,14 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
           onResolve={(id) => issuesState.updateIssue(id, { status: "resolved" })}
           onPromoteToChangeRequest={handlePromoteToChangeRequest}
         />
+        <RisksPanel
+          risks={risksState.risks}
+          loading={risksState.loading}
+          isAdmin={isAdmin}
+          team={team}
+          onCreate={handleCreateRisk}
+          onUpdate={handleUpdateRisk}
+        />
         <MilestonesPanel
           milestones={milestonesState.milestones}
           loading={milestonesState.loading}
@@ -94,6 +132,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
           onCreate={milestonesState.createMilestone}
           onAccept={handleAcceptMilestone}
           onReject={(id) => milestonesState.rejectMilestone(id)}
+          onTransition={handleTransitionMilestone}
         />
         <div className="md:col-span-2">
           <ChangeRequestsPanel

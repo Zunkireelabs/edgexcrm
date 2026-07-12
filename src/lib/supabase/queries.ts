@@ -4,6 +4,7 @@ import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissi
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -661,6 +662,25 @@ export async function getLeadActivity(leadId: string, tenantId: string): Promise
 
   if (error) throw error;
   return (data as LeadActivity[]) || [];
+}
+
+// Every raw form submission this lead has ever made, oldest first — the source
+// of truth for "what distinct answers has this person given across repeat
+// submissions" (see src/lib/leads/submission-history.ts).
+export async function getLeadSubmissionHistory(
+  leadId: string,
+  tenantId: string
+): Promise<LeadSubmissionSnapshot[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("lead_submissions")
+    .select("custom_fields")
+    .eq("lead_id", leadId)
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return (data as LeadSubmissionSnapshot[]) || [];
 }
 
 export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {

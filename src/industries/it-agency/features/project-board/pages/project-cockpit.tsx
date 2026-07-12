@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, Loader2 } from "lucide-react";
 import { useProjectCockpit } from "../hooks/use-project-cockpit";
@@ -7,22 +8,31 @@ import { HealthBanner } from "../components/cockpit/health-banner";
 import { BriefEditor } from "../components/cockpit/brief-editor";
 import { QualifyPanel } from "../components/cockpit/qualify-panel";
 import { BillableSummary } from "../components/cockpit/billable-summary";
+import { InvoicesPanel } from "../components/cockpit/invoices-panel";
 import { ContactsSection } from "../components/cockpit/contacts-section";
 import { TasksSection } from "../components/cockpit/tasks-section";
+import { TasksSummaryCard } from "../components/cockpit/tasks-summary-card";
 import { DeliveryTab } from "../components/cockpit/delivery-tab";
 import { ReportsTab } from "../components/cockpit/reports-tab";
 import { TimelinePanel } from "../components/cockpit/timeline-panel";
+import { AiSummaryCard } from "../components/cockpit/ai-summary-card";
 import { StatusPill } from "../components/status-pill";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AI_SYNTH_PREVIEW } from "../lib/ai-preview";
+import { ActiveTimersProvider } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import type { ProjectStatus } from "@/types/database";
 
 interface ProjectCockpitPageProps {
   projectId: string;
   role: string;
+  // Tenant slug, for the AI-synth vision-preview flag (lib/ai-preview.ts).
+  tenantSlug: string | null;
 }
 
-export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps) {
+export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockpitPageProps) {
   const isAdmin = role === "owner" || role === "admin";
+  const aiPreviewEnabled = AI_SYNTH_PREVIEW.enabledFor(tenantSlug, isAdmin);
+  const [activeTab, setActiveTab] = useState("overview");
   const {
     project,
     events,
@@ -56,7 +66,7 @@ export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps)
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-4xl">
+    <div className="flex flex-col gap-4 max-w-6xl">
       <div>
         <Link
           href="/projects"
@@ -77,37 +87,60 @@ export function ProjectCockpitPage({ projectId, role }: ProjectCockpitPageProps)
         </div>
       </div>
 
-      <HealthBanner project={project} />
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_340px] gap-6 items-start">
+        <div className="min-w-0">
+          <HealthBanner project={project} />
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-4">
+            <TabsList>
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="delivery">Delivery</TabsTrigger>
+              <TabsTrigger value="tasks">Tasks</TabsTrigger>
+              <TabsTrigger value="reports">Reconciliation &amp; Reports</TabsTrigger>
+              <TabsTrigger value="timeline">Timeline</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
+              {aiPreviewEnabled && <AiSummaryCard />}
+              <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
+              <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
+              <TasksSummaryCard projectId={projectId} onViewAllTasks={() => setActiveTab("tasks")} />
+            </TabsContent>
+            <TabsContent value="delivery" className="mt-4">
+              <DeliveryTab
+                projectId={projectId}
+                isAdmin={isAdmin}
+                onProjectChanged={refetch}
+                onEventRecorded={refetchEvents}
+              />
+            </TabsContent>
+            <TabsContent value="tasks" className="mt-4">
+              <ActiveTimersProvider>
+                <TasksSection projectId={projectId} isAdmin={isAdmin} />
+              </ActiveTimersProvider>
+            </TabsContent>
+            <TabsContent value="reports" className="mt-4">
+              <ReportsTab
+                projectId={projectId}
+                isAdmin={isAdmin}
+                onEventRecorded={refetchEvents}
+                project={project}
+                events={events}
+                aiPreviewEnabled={aiPreviewEnabled}
+              />
+            </TabsContent>
+            <TabsContent value="timeline" className="mt-4">
+              <TimelinePanel events={events} loading={loading} isAdmin={isAdmin} onAddRetroLesson={addRetroLesson} />
+            </TabsContent>
+          </Tabs>
+        </div>
 
-      <Tabs defaultValue="overview">
-        <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="delivery">Delivery</TabsTrigger>
-          <TabsTrigger value="reports">Reconciliation &amp; Reports</TabsTrigger>
-          <TabsTrigger value="timeline">Timeline</TabsTrigger>
-        </TabsList>
-        <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
-          <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
-          <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
-          {project.is_billable && <BillableSummary projectId={projectId} />}
+        <aside className="space-y-4 lg:sticky lg:top-4 self-start">
+          {project.is_billable && <BillableSummary projectId={projectId} isAdmin={isAdmin} />}
+          {isAdmin && project.is_billable && (
+            <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
+          )}
           <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
-          <TasksSection projectId={projectId} isAdmin={isAdmin} />
-        </TabsContent>
-        <TabsContent value="delivery" className="mt-4">
-          <DeliveryTab
-            projectId={projectId}
-            isAdmin={isAdmin}
-            onProjectChanged={refetch}
-            onEventRecorded={refetchEvents}
-          />
-        </TabsContent>
-        <TabsContent value="reports" className="mt-4">
-          <ReportsTab projectId={projectId} isAdmin={isAdmin} onEventRecorded={refetchEvents} />
-        </TabsContent>
-        <TabsContent value="timeline" className="mt-4">
-          <TimelinePanel events={events} loading={loading} isAdmin={isAdmin} onAddRetroLesson={addRetroLesson} />
-        </TabsContent>
-      </Tabs>
+        </aside>
+      </div>
     </div>
   );
 }

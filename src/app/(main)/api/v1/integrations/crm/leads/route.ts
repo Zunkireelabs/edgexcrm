@@ -241,6 +241,7 @@ export const POST = withIntegrationErrorBoundary(async function POST(request: Ne
     intake_source: (body.intake_source as string) || "integration",
     intake_medium: (body.intake_medium as string) || null,
     intake_campaign: (body.intake_campaign as string) || null,
+    intake_account: (body.intake_account as string) || null,
     preferred_contact_method: (body.preferred_contact_method as string) || null,
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };

@@ -1,0 +1,707 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>EdgeX CRM — Project Atlas</title>
+<style>
+  :root {
+    --bg: #ffffff; --panel: #f6f7f9; --border: #e3e6ea; --text: #1b1f24;
+    --muted: #5c6672; --accent: #3b6ef5; --accent-soft: #e8eefe; --code: #eef1f4;
+    --ai: #7a3ff5; --ai-soft: #f0e9fe;
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f1216; --panel: #171b21; --border: #262c34; --text: #e6e9ed;
+    --muted: #9aa4b0; --accent: #6c9bff; --accent-soft: #1c2637; --code: #1a1f26;
+    --ai: #b191ff; --ai-soft: #241b3a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f1216; --panel: #171b21; --border: #262c34; --text: #e6e9ed;
+      --muted: #9aa4b0; --accent: #6c9bff; --accent-soft: #1c2637; --code: #1a1f26;
+      --ai: #b191ff; --ai-soft: #241b3a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    font: 15px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    color: var(--text); background: var(--bg); display: flex; min-height: 100vh;
+  }
+  aside {
+    width: 300px; flex: 0 0 300px; background: var(--panel); border-right: 1px solid var(--border);
+    padding: 20px 16px; overflow-y: auto; position: sticky; top: 0; height: 100vh;
+  }
+  aside h1 { font-size: 16px; margin: 0 0 2px; }
+  aside .sub { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+  /* Global mode toggle (sidebar) */
+  .modebar { display: flex; background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+    padding: 4px; gap: 4px; margin-bottom: 6px; }
+  .modebtn { flex: 1; border: none; background: transparent; color: var(--muted); font-size: 12.5px;
+    font-weight: 600; padding: 8px 6px; border-radius: 7px; cursor: pointer; display: flex;
+    align-items: center; justify-content: center; gap: 5px; }
+  .modebtn.active { color: #fff; }
+  .modebtn.biz.active { background: var(--ai); }
+  .modebtn.eng.active { background: var(--accent); }
+  .modehint { font-size: 11px; color: var(--muted); margin: 0 2px 12px; line-height: 1.4; }
+  .group { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+    margin: 16px 0 6px; font-weight: 600; }
+  .group.domains { color: var(--ai); }
+  nav a { display: block; padding: 7px 10px; border-radius: 7px; color: var(--text);
+    text-decoration: none; font-size: 13.5px; cursor: pointer; }
+  nav a:hover { background: var(--accent-soft); }
+  nav a.active { background: var(--accent); color: #fff; }
+  body[data-mode="biz"] nav a.active { background: var(--ai); }
+  main { flex: 1; padding: 32px 40px 80px; overflow-x: hidden; max-width: 100%; }
+  header.topbar { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 6px; gap: 16px; }
+  .badge { display: inline-block; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+    padding: 3px 9px; border-radius: 20px; margin-bottom: 8px; }
+  .badge.biz { background: var(--ai-soft); color: var(--ai); }
+  .badge.eng { background: var(--accent-soft); color: var(--accent); }
+  h2 { font-size: 22px; margin: 0 0 4px; }
+  .desc { color: var(--muted); margin: 0 0 20px; max-width: 74ch; }
+  button.theme { background: var(--panel); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 12px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+  button.theme:hover { border-color: var(--accent); }
+  .diagram { background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 20px; margin: 0 0 22px; overflow-x: auto; }
+  .diagram svg { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  .blocktitle { font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase;
+    letter-spacing: .04em; margin: 26px 0 10px; }
+  .ftable { width: 100%; border-collapse: collapse; margin: 0 0 22px; font-size: 13.5px;
+    border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .ftable th, .ftable td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .ftable th { background: var(--panel); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .ftable td:first-child { font-weight: 600; white-space: nowrap; }
+  .ftable tr:last-child td { border-bottom: none; }
+  .ftable .who { color: var(--muted); white-space: nowrap; }
+  .ai-panel { background: var(--ai-soft); border: 1px solid var(--ai); border-radius: 12px; padding: 18px 20px; margin: 6px 0 22px; }
+  .ai-panel h4 { margin: 0 0 10px; color: var(--ai); font-size: 15px; }
+  .ai-panel ul { margin: 0; padding-left: 20px; }
+  .ai-panel li { margin: 5px 0; }
+  .ai-panel b { color: var(--text); }
+  .ai-panel code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  .anchors { font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+  .anchors code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 26px; border-top: 1px solid var(--border); padding-top: 14px; }
+  @media (max-width: 820px) {
+    body { flex-direction: column; }
+    aside { width: 100%; flex: none; height: auto; position: static; }
+    main { padding: 24px 18px 60px; }
+  }
+</style>
+</head>
+<body data-start="eng">
+<aside>
+  <h1>EdgeX CRM</h1>
+  <div class="sub">Project Atlas — auto-generated</div>
+  <div class="modebar">
+    <button class="modebtn biz" data-mode="biz">💼 Business</button>
+    <button class="modebtn eng" data-mode="eng">⚙️ Engineering</button>
+  </div>
+  <div class="modehint" id="modehint"></div>
+  <nav id="nav"></nav>
+</aside>
+<main>
+  <header class="topbar">
+    <div>
+      <span class="badge" id="badge"></span>
+      <h2 id="title"></h2>
+    </div>
+    <button class="theme" id="themeBtn">◐ Theme</button>
+  </header>
+  <p class="desc" id="desc"></p>
+  <div id="content"></div>
+  <div class="hint">Rendered with Mermaid. Toggle <b>Business / Engineering</b> in the sidebar to switch the whole atlas. Source lives in <code>docs/atlas/*.md</code> — re-run the <code>project-atlas</code> skill to refresh.</div>
+</main>
+
+<script type="module">
+import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+const M = (title, code) => ({ t: 'md', title, code });
+const H = (title, html) => ({ t: 'html', title, html });
+
+// ══════════ ENGINEERING sections (technical atlas) ══════════
+const ENG_SECTIONS = [
+  { id: 'architecture', title: 'Architecture', group: 'System',
+    desc: 'One Next.js app in route groups, an auth-refresh middleware, Supabase as the whole backend, an industry-module registry that gates features, cron workers, and a Docker/Traefik deploy.',
+    anchors: 'src/app/(main|widget)/, src/middleware.ts, src/industries/_registry.ts, src/lib/supabase/*',
+    blocks: [M(null, `flowchart TB
+    subgraph clients["Clients"]
+        browser["Dashboard user"]
+        embed["Embedded public form"]
+        agent["AI agent / integration (API key)"]
+    end
+    mw["Auth middleware<br/>src/middleware.ts"]
+    subgraph app["Next.js App Router — src/app"]
+        gmain["(main) — authenticated app"]
+        gwidget["(widget) — public, no auth"]
+        gapi["api/ — public + machine"]
+    end
+    subgraph domain["Libs — src/lib"]
+        apilib["api/ — auth, permissions, response"]
+        featlib["leads · deals · projects · hr · email"]
+        sb["supabase/ — client · server · scoped"]
+    end
+    subgraph industries["Industry modules"]
+        registry["_registry + _loader<br/>getFeatureAccess()"]
+        manifests["8 manifest.ts"]
+    end
+    pg[("Postgres — RLS by tenant_id")]
+    browser --> mw --> gmain
+    embed --> gwidget
+    agent --> gapi
+    gmain --> apilib
+    gapi --> apilib
+    apilib --> sb --> pg
+    gmain -.gate.-> registry --> manifests`)] },
+  { id: 'data-model', title: 'Data Model', group: 'Data',
+    desc: 'Core entities in three readable views. Source: src/types/database.ts + supabase/migrations/. UI labels LeadList as "Stage".',
+    anchors: 'src/types/database.ts, supabase/migrations/',
+    blocks: [
+      M('Tenancy spine', `erDiagram
+    TENANT ||--o{ TENANT_USER : "has members"
+    TENANT }o--|| INDUSTRY : "is one industry"
+    TENANT ||--o{ BRANCH : "has"
+    BRANCH ||--o{ TENANT_USER : "employs"
+    TENANT_USER {
+        uuid user_id FK
+        string role "owner/admin/viewer/counselor"
+        uuid branch_id FK
+    }
+    INDUSTRY { string id PK }`),
+      M('Leads core', `erDiagram
+    TENANT ||--o{ LEAD : "owns"
+    PIPELINE_STAGE ||--o{ LEAD : "holds"
+    LEAD_LIST ||--o{ LEAD : "buckets (Stage)"
+    FORM_CONFIG ||--o{ LEAD : "captures"
+    LEAD ||--o{ LEAD_SUBMISSION : "submits"
+    LEAD ||--o| LEAD : "merged_into"
+    LEAD {
+        uuid id PK
+        uuid stage_id FK
+        string normalized_email
+        int ai_score
+    }`),
+      M('Delivery chain', `erDiagram
+    ACCOUNT ||--o{ DEAL : "has"
+    DEAL ||--o{ PROPOSAL : "receives"
+    DEAL ||--o| PROJECT : "converts to"
+    PROPOSAL ||--o| PROJECT : "seeds"
+    PROJECT ||--o{ TASK : "has"
+    TASK ||--o{ TIME_ENTRY : "logs"
+    DEAL { string status "open/won/lost" }
+    PROJECT { int baseline_estimate_minutes }`)] },
+  { id: 'flow-auth', title: 'Flow — Login', group: 'User Flows',
+    desc: 'Email/password or OAuth via Supabase. Middleware refreshes the session; the dashboard layout resolves tenant + permissions before rendering.',
+    anchors: '(auth)/login/page.tsx, lib/supabase/middleware.ts, lib/api/auth.ts',
+    blocks: [M(null, `sequenceDiagram
+    actor User
+    participant Login as login/page.tsx
+    participant SB as Supabase Auth
+    participant Layout as (dashboard)/layout.tsx
+    participant Auth as lib/api/auth.ts
+    User->>Login: email + password
+    Login->>SB: signInWithPassword()
+    SB-->>Login: session cookie
+    Login->>Layout: redirect /home
+    Layout->>SB: auth.getUser()
+    Layout->>Auth: authenticateRequest()
+    Auth-->>Layout: AuthContext + permissions
+    Layout-->>User: dashboard shell`)] },
+  { id: 'flow-lead', title: 'Flow — Lead Capture', group: 'User Flows',
+    desc: 'Embedded form → public submit endpoint: API-key auth, rate-limit, origin check, pipeline resolution, dedup, then update-canonical or insert-new with non-blocking side effects.',
+    anchors: 'api/public/submit/.../route.ts, lib/leads/{dedup,pipeline-resolution}.ts',
+    blocks: [M(null, `sequenceDiagram
+    participant Form as public-form.tsx
+    participant API as api/public/submit
+    participant Dedup as lib/leads/dedup.ts
+    participant DB as Postgres
+    Form->>API: POST submission (API key)
+    API->>API: rate-limit + origin + write checks
+    API->>DB: lookup tenant + form_config
+    API->>Dedup: resolveLeadIdentity(email, phone)
+    alt email matches
+        API->>DB: update canonical lead
+        API-->>Form: 200 deduped
+    else new
+        API->>DB: insert lead
+        API-->>Form: 201 lead_id
+    end
+    API-)DB: audit · events · notify (async)`)] },
+  { id: 'flow-deal', title: 'Flow — Deal → Project', group: 'User Flows',
+    desc: 'Converting a won deal seeds a project from the latest accepted proposal (hours, budget, brief), binds the proposal, copies contacts, logs an event. Guards double-conversion (409).',
+    anchors: 'api/v1/deals/[id]/convert-to-project/route.ts, lib/projects/events.ts',
+    blocks: [M(null, `sequenceDiagram
+    actor Admin
+    participant API as convert-to-project
+    participant DB as Postgres
+    Admin->>API: POST convert-to-project
+    API->>API: auth + feature gate + admin
+    API->>DB: check existing project
+    alt already converted
+        API-->>Admin: 409 ALREADY_CONVERTED
+    else convert
+        API->>DB: findProposalSeed (accepted proposal)
+        API->>DB: insert project (seeded, deal_id)
+        API->>DB: bind proposal + copy contacts
+        API-->>Admin: 201 project
+    end`)] },
+  { id: 'app-logic', title: 'App Logic', group: 'Logic',
+    desc: 'The API route pattern and the three-layer permission model (role → position/RBAC → branch), all under Row-Level Security.',
+    anchors: 'src/lib/api/{auth,permissions,response}.ts, src/lib/supabase/scoped.ts',
+    blocks: [
+      M('API route pattern', `flowchart TB
+    start(["Request → route.ts"]) --> auth{"authenticateRequest()"}
+    auth -- no --> u401["401"]
+    auth -- yes --> feat{"getFeatureAccess()"}
+    feat -- no --> f403["403"]
+    feat -- yes --> role{"role check"}
+    role -- no --> f403
+    role -- yes --> scoped["scopedClient(auth)<br/>tenant-scoped"]
+    scoped --> work["work via lib/&lt;domain&gt;"]
+    work --> ok["apiSuccess()"]`),
+      M('Three-layer permissions', `flowchart TB
+    role["Layer 1 — role"] --> pos["Layer 2 — position/RBAC"]
+    pos --> branch["Layer 3 — branch scope"]
+    branch --> result{"requireLeadAccess()"}
+    result -- owner/admin --> all["all leads"]
+    result -- own --> own["assigned to self"]
+    result -- team --> team["own branch roster"]
+    all -.-> rls[("RLS: get_user_tenant_ids()")]`)] },
+  { id: 'components', title: 'Component Map', group: 'Frontend',
+    desc: 'Layout chain → industry-driven shell → feature pages → components. State is React Context. The feature-gate is one truth enforced in three places.',
+    anchors: 'src/components/dashboard/shell.tsx, src/contexts/*, src/industries/_loader.ts',
+    blocks: [
+      M('Composition', `graph TB
+    mainLayout["(main)/layout.tsx"] --> dashLayout["(dashboard)/layout.tsx<br/>auth + tenant gate"]
+    dashLayout --> providers["Providers: AI · Search · Settings"]
+    providers --> shell["shell.tsx — sidebar hub"]
+    shell --> industryNav["getIndustrySidebarItems()"]
+    shell --> pages["Feature pages"]
+    pages --> comps["components/dashboard/* + ui/"]`),
+      M('Feature gate — one truth, three points', `graph LR
+    truth["getFeatureAccess()"]
+    truth --> nav["1 Sidebar — hide item"]
+    truth --> route["2 Page — notFound()"]
+    truth --> api["3 API — apiForbidden()"]`)] }
+];
+
+// ══════════ BUSINESS overview (plain language landing) ══════════
+const BIZ_OVERVIEW = {
+  id: 'platform-overview', title: 'Platform Overview', group: 'Overview',
+  desc: 'What EdgeX is, in plain language — for clients, PMs, and stakeholders.',
+  anchors: 'src/industries/_registry.ts, docs/FEATURE-CATALOG.md',
+  blocks: [
+    H(null, `<p style="max-width:74ch">EdgeX is <b>one platform that becomes a different product per industry</b>. Each client is a <b>tenant</b> locked to one industry, and an industry "manifest" decides which features they see. Two industries are built out today — <b>Education Consultancy</b> (Admizz) and <b>IT Agency</b> (Zunkiree Labs) — with six more scaffolded. Every tenant's data is fully isolated (row-level security), so clients never see each other's data.</p>`),
+    M('One platform, many industry products', `flowchart TB
+    edgex["EdgeX platform<br/>(multi-tenant CRM)"]
+    edgex --> gate["Industry manifest<br/>decides features per client"]
+    gate --> edu["Education Consultancy<br/>(Admizz)"]
+    gate --> it["IT Agency<br/>(Zunkiree Labs)"]
+    gate --> more["+ 6 more<br/>(scaffolded)"]
+    edu --> eduf["Leads · Applications ·<br/>Classes · Campaigns"]
+    it --> itf["Deals · Proposals ·<br/>Projects · HR"]`),
+    H('How to read this atlas', `<div class="ai-panel"><h4>💡 Two views, one toggle</h4><ul>
+    <li><b>Business</b> (this view) — plain-language feature maps, UX journeys, and AI opportunities per industry. For clients, PMs, product, and QC.</li>
+    <li><b>Engineering</b> — system design, DB schemas, and code relations. For developers.</li>
+    <li>Switch anytime with the toggle at the top of the sidebar.</li>
+    </ul></div>`)]
+};
+
+// ══════════ Feature tables ══════════
+const FEATURES_EDU = [
+  ['Forms / Form Builder', 'Visual multi-step capture forms — templates, autoresponder, UTM links, per-form routing', 'Marketing, admin'],
+  ['Leads', 'Every prospective student — contact, source, status, funnel position', 'Counselor, telecaller'],
+  ['Lead Lists (funnel)', 'The funnel buckets: Pre-qualified → Qualified → Prospects → Archived', 'Counselor, manager'],
+  ['Application Tracking', 'One student → many university applications, each on an 11-stage pipeline', 'Counselor, app. executive'],
+  ['Consent gate', 'e-sign / upload student consent before processing an application', 'App. executive, admin'],
+  ['Classes & Enrollments', 'Test-prep catalog (IELTS/PTE) + per-student fee-paid tracking', 'Academic team'],
+  ['Campaigns', 'Prediction-contest leaderboard to harvest & rank leads (auto-scored)', 'Owner/admin, telecaller'],
+  ['Follow-ups', 'A worklist so a lead handed to a peer never gets dropped', 'Counselor, executive'],
+  ['Affiliates & Agents', 'Referral partners (ref_code) and sub-agents who source students', 'Admin, owner'],
+  ['Countries / Courses', 'Reference data: destinations, fields of study, partner colleges', 'Admin'],
+  ['Check-In', 'Front-desk walk-in logging → routes into the funnel', 'Front desk (lead exec)'],
+  ['Email / Inbox', 'Send/receive Gmail against a lead, threaded, multi-inbox', 'Counselor'],
+  ['Insights / Dashboards', 'Build-your-own analytics: widgets by status/source/counselor/UTM', 'Owner, admin, manager']
+];
+const FEATURES_IT = [
+  ['Leads', 'Universal inbound prospects before they convert', 'Sales'],
+  ['CRM Contacts', 'People at client companies (leads convert into contacts)', 'Sales, PM'],
+  ['Accounts', 'Client companies — a 360° workspace (projects, team, billable, health)', 'Sales, delivery'],
+  ['Deals', 'Sales opportunities on a multi-pipeline kanban; won/lost from stage', 'Sales'],
+  ['Services', 'Reusable priced service/package catalog feeding proposals', 'Sales, finance'],
+  ['Proposals', 'Priced SOW anchored to a deal; accept syncs deal amount; public share link', 'Sales, founder'],
+  ['Convert + Qualify', 'Accepted proposal seeds the project baseline; human commits scope', 'Delivery lead, PM'],
+  ['Projects (cockpit)', 'Delivery cockpit: milestones, issues, change-requests, RAG health', 'PM, delivery lead'],
+  ['Tasks + Time + Approvals', 'Assignable work, logged hours, approval with rate snapshot', 'Team, PM, finance'],
+  ['Resourcing / Utilization', 'Allocate people to projects; billable hours ÷ capacity', 'Delivery lead, COO'],
+  ['Status Reports', 'Structured client report (accomplishments/risks/asks) + public share', 'PM → client'],
+  ['People / Leave / Attendance', 'HR layer: directory, skills, leave balances, clock in/out', 'HR, everyone']
+];
+function featureTable(rows) {
+  const body = rows.map(r => `<tr><td>${r[0]}</td><td>${r[1]}</td><td class="who">${r[2]}</td></tr>`).join('');
+  return `<table class="ftable"><thead><tr><th>Feature</th><th>What it does</th><th>Who uses it</th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+// ══════════ Domain (industry) sections — mode picks eng vs biz ══════════
+const DOMAINS = [
+  {
+    id: 'domain-education', title: 'Education Consultancy', group: 'Domains (Industries)', domain: true,
+    biz: {
+      desc: 'For PMs, product, QC, and clients: what an admissions consultancy (Admizz) does in EdgeX, in plain language.',
+      anchors: 'src/industries/education-consultancy/manifest.ts, docs/FEATURE-CATALOG.md',
+      blocks: [
+        H('Feature map', featureTable(FEATURES_EDU)),
+        M('Student journey (UX flow)', `flowchart LR
+    ad["Ad / website / QR"] --> form["Multi-step form"]
+    walkin["Walk-in"] --> checkin["Check-In desk"]
+    form -.creates.-> lead["Lead in funnel<br/>(Pre-qualified)"]
+    checkin -.creates.-> lead
+    lead --> route["Position routing<br/>lead-caller to counselor"]
+    route --> nurture["Calls / emails<br/>(logged)"]
+    nurture --> qualify{"Qualified?"}
+    qualify -- no --> back["Follow-ups worklist"]
+    back --> nurture
+    qualify -- yes --> app["Add Application<br/>(promotes to Prospect)"]
+    app --> consent["Consent gate<br/>(e-sign)"]
+    consent --> board["11-stage board:<br/>Shortlisted to Visa"]
+    board --> enroll["Enrolled<br/>+ class / test prep"]`),
+        M('Admissions workflow', `flowchart TB
+    subgraph capture["1 - Capture"]
+        c1["Form / walk-in / campaign"] --> c2["Dedup email/phone"] --> c3["Lead + display ID + routing"]
+    end
+    subgraph funnel["2 - Funnel (lead lists)"]
+        n1["Pre-qualified"] --> n2["Qualified"] --> n3["Prospects"]
+        n3 -.dropped.-> n4["Archived"]
+    end
+    subgraph apply["3 - Apply (per application, 11 stages)"]
+        a1["Shortlisted to Applied"] --> a2["Offer to Accepted"]
+        a2 --> a3["Visa Applied to Approved"]
+    end
+    subgraph convert["4 - Convert"]
+        v1["Enrolled (won)"]
+        v2["Class enrollment + fee tracking"]
+    end
+    capture --> funnel --> apply --> convert`),
+        H('AI & automation opportunities', `<div class="ai-panel"><h4>🤖 Where AI agents & automation fit</h4>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Today the seams exist but AI is <b>not yet wired</b>: lead scoring is rule-based, the industry AI config is an empty stub, and Orca / Knowledge-Base embeddings are future-ready hooks. Highest-value insertions:</p>
+    <ul>
+    <li><b>Lead scoring</b> — replace the rule engine (<code>scoring-engine.ts</code>) with an ML/LLM model; the LeadInsights contract already exists.</li>
+    <li><b>Autoresponders</b> — merge-tag today; swap for AI-personalized replies per destination/program.</li>
+    <li><b>Application nudges</b> — auto-detect missing documents / deadlines and message the student.</li>
+    <li><b>Status updates</b> — AI drafts "your application moved to X" from the 11-stage board.</li>
+    <li><b>Smart routing</b> — the position-routing maps are deterministic; AI could assign the best counselor.</li>
+    <li><b>Orca assistant</b> — answer counselor/student questions from the Knowledge Base.</li>
+    </ul></div>`)]
+    },
+    eng: {
+      desc: 'For devs: system design, DB schema, and component/logic relations of the education module.',
+      anchors: 'src/industries/education-consultancy/manifest.ts, src/lib/leads/*, api/v1/applications/*',
+      blocks: [
+        M('System design', `flowchart TB
+    subgraph capture["Capture"]
+        form["(widget)/form/[slug]"] --> submit["api/public/submit"]
+        walkin["Check-In api/v1/check-ins"]
+    end
+    subgraph services["Shared lead services — lib/leads"]
+        dedup["dedup.ts"]
+        pipe["pipeline-resolution.ts"]
+        ids["assign-display-ids.ts"]
+    end
+    subgraph edu["Education features"]
+        leads["Leads api/v1/leads"]
+        apps["Applications api/v1/applications"]
+        classes["Classes / campaigns"]
+    end
+    loader["_loader.ts getFeatureAccess()"]
+    db[("Postgres RLS")]
+    submit --> dedup
+    submit --> pipe
+    submit --> ids
+    walkin --> leads
+    leads --> apps --> classes
+    apps -.gated.-> loader
+    dedup --> db
+    apps --> db`),
+        M('DB schema (education slice)', `erDiagram
+    LEAD ||--o{ APPLICATION : "applies"
+    APPLICATION_STAGE ||--o{ APPLICATION : "11 stages"
+    LEAD_LIST ||--o{ LEAD : "funnel bucket"
+    FORM_CONFIG ||--o{ LEAD : "captures"
+    LEAD ||--o{ LEAD_CONSENT : "consents"
+    LEAD }o--o{ TEST_PREP_CLASS : "enrollments"
+    AGENT ||--o{ APPLICATION : "sources"
+    LEAD {
+        uuid id PK
+        uuid list_id FK
+        string lead_type "lead or prospect"
+        int ai_score
+    }
+    APPLICATION {
+        uuid lead_id FK
+        uuid stage_id FK
+        string university_name
+        string intake_term
+        string offer_type "cond or uncond"
+    }
+    APPLICATION_STAGE {
+        string name "Shortlisted..Enrolled"
+        string terminal_type "won or lost"
+    }`),
+        M('Component / logic relations', `graph TB
+    p1["leads/page.tsx"] --> c1["leads-table / kanban"]
+    p2["applications/page.tsx"] --> c2["application board"]
+    c1 --> a1["api/v1/leads/*"]
+    c2 --> a2["api/v1/applications/*"]
+    a1 --> svc["lib/leads/*"]
+    svc --> q["lib/supabase/queries.ts"] --> db[("Postgres")]`)]
+    }
+  },
+  {
+    id: 'domain-it-agency', title: 'IT Agency (Zunkiree Labs)', group: 'Domains (Industries)', domain: true,
+    biz: {
+      desc: 'For sales, PMs, delivery leads, finance, HR, and clients: how a software agency (Zunkiree Labs) runs on EdgeX, sales → delivery.',
+      anchors: 'src/industries/it-agency/manifest.ts, docs/FEATURE-CATALOG.md',
+      blocks: [
+        H('Feature map', featureTable(FEATURES_IT)),
+        M('Agency journey (UX flow)', `flowchart LR
+    lead["Inbound lead"] --> conv["Convert to<br/>Contact + Account"]
+    conv --> deal["Deal (pipeline)"]
+    deal --> prop["Proposal<br/>(services catalog)"]
+    prop --> share["Share public link"]
+    share --> accept{"Accepts?"}
+    accept -- no --> revise["Revise"]
+    revise --> share
+    accept -- yes --> proj["Convert to Project<br/>(baseline seeded)"]
+    proj --> qualify["Qualify:<br/>commit scope + estimate"]
+    qualify --> deliver["Cockpit:<br/>milestones · tasks · time"]
+    deliver --> report["Status reports<br/>(public share)"]
+    report --> done["Delivered"]`),
+        M('Sales-to-delivery workflow', `flowchart TB
+    subgraph sales["1 - Sales"]
+        s1["Lead to Contact/Account"] --> s2["Deal through pipeline stages"]
+    end
+    subgraph quote["2 - Quote"]
+        q1["Proposal from services catalog"] --> q2["Public link"] --> q3["Accept syncs deal amount"]
+    end
+    subgraph handoff["3 - Handoff (agent drafts, human commits)"]
+        h1["Convert deal to project<br/>seeds hours, budget, brief"] --> h2["Qualify: commit scope + baseline"]
+    end
+    subgraph deliver["4 - Deliver"]
+        d1["Milestones + tasks + time"] --> d2["Issues + change-requests amend budget"]
+        d2 --> d3["Reconciliation: estimate vs actual"] --> d4["RAG health to status report"]
+    end
+    sales --> quote --> handoff --> deliver`),
+        H('AI & automation opportunities', `<div class="ai-panel"><h4>🤖 Where AI agents & automation fit</h4>
+    <p style="margin:0 0 10px;color:var(--muted);font-size:13px">Important: <b>no real LLM is wired yet</b> — the AI config is an empty stub, Orca and AI-chat are mocks, and the project "pulse" card shows hardcoded sample text. But the workflow captures <b>clean structured signal</b> (an append-only decision ledger, <code>project_events</code>) so AI can read it. Highest-value insertions:</p>
+    <ul>
+    <li><b>Proposal drafting</b> — generate line items + scope from the deal context and services catalog.</li>
+    <li><b>Baseline / qualify assist</b> — the accepted-proposal seed already computes hours/budget; AI drafts, human commits.</li>
+    <li><b>Project health / risk</b> — reads <code>project_events</code> + reconciliation; the RAG health engine is deterministic today.</li>
+    <li><b>Status-report generation</b> — draft the 5 sections from events since the last report.</li>
+    <li><b>Timesheet nudges</b> — flag gaps vs allocations (reminders cron exists).</li>
+    <li><b>Resource allocation</b> — match skills + capacity to fill the bench.</li>
+    </ul></div>`)]
+    },
+    eng: {
+      desc: 'For devs: system design, DB schema, and component/logic relations of the it-agency module.',
+      anchors: 'src/industries/it-agency/manifest.ts, src/lib/{deals,projects,hr}/*',
+      blocks: [
+        M('System design', `flowchart TB
+    subgraph sales["Sales — lib/deals"]
+        deals["Deals api/v1/deals"]
+        props["Proposals api/v1/proposals"]
+        svc["Services catalog"]
+    end
+    subgraph handoff["Handoff"]
+        conv["convert-to-project<br/>seeds baseline"]
+        qual["qualify (commit scope)"]
+        evt["lib/projects/events.ts (ledger)"]
+    end
+    subgraph delivery["Delivery — lib/projects"]
+        proj["Projects cockpit"]
+        tasks["Tasks + Time entries"]
+        health["health.ts (RAG)"]
+        reports["Status reports"]
+    end
+    hr["HR — lib/hr"]
+    db[("Postgres RLS")]
+    svc --> props
+    deals --> props --> conv --> qual --> proj
+    conv --> evt
+    proj --> tasks
+    proj --> health
+    proj --> reports
+    props --> db
+    proj --> db
+    hr --> db`),
+        M('DB schema (it-agency slice)', `erDiagram
+    ACCOUNT ||--o{ CONTACT : "has"
+    ACCOUNT ||--o{ DEAL : "has"
+    SERVICE ||--o{ PROPOSAL_LINE_ITEM : "priced as"
+    DEAL ||--o{ PROPOSAL : "receives"
+    PROPOSAL ||--o{ PROPOSAL_LINE_ITEM : "itemizes"
+    DEAL ||--o| PROJECT : "converts to"
+    PROPOSAL ||--o| PROJECT : "seeds"
+    PROJECT ||--o{ MILESTONE : "has"
+    PROJECT ||--o{ ISSUE : "has"
+    PROJECT ||--o{ CHANGE_REQUEST : "amends budget"
+    PROJECT ||--o{ STATUS_REPORT : "has"
+    PROJECT ||--o{ PROJECT_EVENT : "ledger"
+    PROJECT ||--o{ TASK : "has"
+    TASK ||--o{ TIME_ENTRY : "logs"
+    DEAL { string status "open/won/lost" }
+    PROPOSAL { string status "draft/sent/accepted" }
+    PROJECT {
+        uuid deal_id FK
+        int baseline_estimate_minutes
+        timestamp qualified_at
+    }
+    TIME_ENTRY { string approval_status }`),
+        M('Component / logic relations', `graph TB
+    p1["deals/[id]/page.tsx"] --> c1["deal + proposal UI"]
+    p2["projects/[id]/page.tsx"] --> c2["milestones · tasks · time"]
+    c1 --> a1["api/v1/deals · proposals"]
+    c2 --> a2["api/v1/projects · tasks"]
+    a1 --> conv["convert-to-project → lib/projects/events"]
+    a2 --> lproj["lib/projects/*"]
+    conv --> db[("Postgres")]
+    lproj --> db`)]
+    }
+  }
+];
+
+// ══════════ Render machinery ══════════
+const nav = document.getElementById('nav');
+const content = document.getElementById('content');
+const titleEl = document.getElementById('title');
+const descEl = document.getElementById('desc');
+const badgeEl = document.getElementById('badge');
+const modehint = document.getElementById('modehint');
+let mode = 'eng';   // 'eng' | 'biz'
+let current = null;
+
+const MODE_HINT = {
+  eng: 'System design, DB schemas & code relations — for developers.',
+  biz: 'Plain-language features, UX journeys & AI opportunities — for clients & PMs.'
+};
+
+function visibleSections() {
+  if (mode === 'biz') return [BIZ_OVERVIEW, ...DOMAINS];
+  return [...ENG_SECTIONS, ...DOMAINS];
+}
+function blocksFor(section) {
+  if (section.domain) return section[mode].blocks;
+  return section.blocks;
+}
+function descFor(section) {
+  if (section.domain) return section[mode].desc;
+  return section.desc;
+}
+function anchorsFor(section) {
+  if (section.domain) return section[mode].anchors;
+  return section.anchors;
+}
+
+function buildNav() {
+  nav.innerHTML = '';
+  const secs = visibleSections();
+  const groups = {};
+  secs.forEach(s => { (groups[s.group] ||= []).push(s); });
+  Object.entries(groups).forEach(([g, items]) => {
+    const h = document.createElement('div');
+    h.className = 'group' + (g.startsWith('Domains') ? ' domains' : '');
+    h.textContent = g; nav.appendChild(h);
+    items.forEach(s => {
+      const a = document.createElement('a');
+      a.textContent = s.title; a.dataset.id = s.id;
+      a.onclick = () => select(s.id); nav.appendChild(a);
+    });
+  });
+}
+
+function currentTheme() {
+  const attr = document.documentElement.getAttribute('data-theme');
+  if (attr) return attr;
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+function initMermaid() {
+  mermaid.initialize({
+    startOnLoad: false, theme: currentTheme() === 'dark' ? 'dark' : 'default',
+    securityLevel: 'loose', er: { useMaxWidth: true },
+    flowchart: { useMaxWidth: true, htmlLabels: true }, sequence: { useMaxWidth: true }
+  });
+}
+
+async function renderBlocks(blocks, keyPrefix) {
+  content.innerHTML = '';
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.title) {
+      const t = document.createElement('div'); t.className = 'blocktitle'; t.textContent = b.title;
+      content.appendChild(t);
+    }
+    if (b.t === 'md') {
+      const box = document.createElement('div'); box.className = 'diagram'; content.appendChild(box);
+      try {
+        const { svg } = await mermaid.render(`d-${keyPrefix}-${i}`, b.code);
+        box.innerHTML = svg;
+      } catch (e) {
+        box.innerHTML = `<pre style="color:#c0392b;white-space:pre-wrap">Diagram failed:\n${(e && e.message) || e}</pre>`;
+      }
+    } else {
+      const wrap = document.createElement('div'); wrap.innerHTML = b.html; content.appendChild(wrap);
+    }
+  }
+}
+
+async function select(id) {
+  const secs = visibleSections();
+  let section = secs.find(s => s.id === id) || secs[0];
+  current = section.id;
+  document.querySelectorAll('nav a').forEach(a => a.classList.toggle('active', a.dataset.id === section.id));
+  titleEl.textContent = section.title;
+  badgeEl.textContent = mode === 'biz' ? '💼 Business' : '⚙️ Engineering';
+  badgeEl.className = 'badge ' + mode;
+  descEl.textContent = descFor(section);
+  await renderBlocks(blocksFor(section), section.id + '-' + mode);
+  const anchors = anchorsFor(section);
+  if (anchors) {
+    const a = document.createElement('div'); a.className = 'anchors';
+    a.innerHTML = 'Anchors: <code>' + anchors + '</code>'; content.appendChild(a);
+  }
+  location.hash = mode + ':' + section.id;
+}
+
+function setMode(next, keepSection) {
+  mode = next;
+  document.body.dataset.mode = mode;
+  document.querySelectorAll('.modebtn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  modehint.textContent = MODE_HINT[mode];
+  buildNav();
+  // keep the same domain section across a mode switch if it exists in the new mode
+  const secs = visibleSections();
+  const target = (keepSection && secs.find(s => s.id === keepSection)) ? keepSection : secs[0].id;
+  select(target);
+}
+
+document.querySelectorAll('.modebtn').forEach(b => {
+  b.onclick = () => setMode(b.dataset.mode, current);
+});
+document.getElementById('themeBtn').onclick = () => {
+  const next = currentTheme() === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  initMermaid();
+  if (current) select(current);
+};
+
+// boot — honor hash "mode:id"
+initMermaid();
+const hash = location.hash.slice(1);
+const [hMode, hId] = hash.includes(':') ? hash.split(':') : ['eng', hash];
+mode = (hMode === 'biz') ? 'biz' : 'eng';
+setMode(mode, hId || null);
+</script>
+</body>
+</html>

@@ -1,59 +1,22 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Search, LayoutGrid, TableProperties, ListTodo, Users } from "lucide-react";
-import { TagMultiPicker } from "./tag-multi-picker";
+import { Search, LayoutGrid, TableProperties } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type FilterOption } from "@/components/ui/filter-dropdown";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { Account, ProjectStatus, TaskStatus, TaskPriority } from "@/types/database";
+import type { Account, ProjectStatus } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
 import type { WorkspaceFilters } from "../hooks/use-workspace-filters";
-
-const ALL_SENTINEL = "__all__";
-
-const STATUS_CHIPS: { value: ProjectStatus; label: string }[] = [
-  { value: "planning",  label: "Discovery" },
-  { value: "active",    label: "In Progress" },
-  { value: "in_review", label: "Review" },
-  { value: "delivered", label: "Delivered" },
-  { value: "on_hold",   label: "On Hold" },
-];
-
-const CANCELLED_CHIP: { value: ProjectStatus; label: string } = {
-  value: "cancelled",
-  label: "Cancelled",
-};
-
-const TASK_STATUS_CHIPS: { value: TaskStatus; label: string }[] = [
-  { value: "todo",        label: "To Do" },
-  { value: "in_progress", label: "In Progress" },
-  { value: "done",        label: "Done" },
-];
-
-const PRIORITY_CHIPS: { value: TaskPriority; label: string; cls: string }[] = [
-  { value: "low",    label: "Low",    cls: "bg-gray-100 text-gray-600 border-gray-200" },
-  { value: "normal", label: "Normal", cls: "bg-blue-50 text-blue-600 border-blue-200" },
-  { value: "high",   label: "High",   cls: "bg-amber-50 text-amber-700 border-amber-200" },
-  { value: "urgent", label: "Urgent", cls: "bg-red-50 text-red-600 border-red-200" },
-];
-
-const DUE_OPTIONS: FilterOption[] = [
-  { value: ALL_SENTINEL, label: "All due dates" },
-  { value: "overdue",    label: "Overdue" },
-  { value: "today",      label: "Today" },
-  { value: "this_week",  label: "This week" },
-  { value: "none",       label: "No due date" },
-];
+import { ALL_SENTINEL, STATUS_CHIPS, CANCELLED_CHIP } from "../lib/filter-options";
 
 interface WorkspaceHeaderProps {
   filters: WorkspaceFilters;
   onFilterChange: (next: Partial<WorkspaceFilters>) => void;
   accounts: Account[];
   team: TeamMember[];
-  poolTags: string[];
   projectCount: number;
   onClearFilters: () => void;
 }
@@ -63,7 +26,6 @@ export function WorkspaceHeader({
   onFilterChange,
   accounts,
   team,
-  poolTags,
   projectCount,
   onClearFilters,
 }: WorkspaceHeaderProps) {
@@ -105,8 +67,6 @@ export function WorkspaceHeader({
       switch (e.key) {
         case "b": onFilterChangeRef.current({ view: "board" }); break;
         case "t": onFilterChangeRef.current({ view: "table" }); break;
-        case "k": onFilterChangeRef.current({ view: "tasks" }); break;
-        case "m": onFilterChangeRef.current({ view: "members" }); break;
       }
     }
 
@@ -124,11 +84,6 @@ export function WorkspaceHeader({
     ...team.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
   ];
 
-  const assigneeOptions: FilterOption[] = [
-    { value: ALL_SENTINEL, label: "All assignees" },
-    ...team.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
-  ];
-
   const availableChips = filters.showCancelled
     ? [...STATUS_CHIPS, CANCELLED_CHIP]
     : STATUS_CHIPS;
@@ -138,42 +93,11 @@ export function WorkspaceHeader({
     label: chip.label,
   }));
 
-  function toggleTaskStatus(value: TaskStatus) {
-    const current = filters.taskStatuses;
-    const next = current.includes(value)
-      ? current.filter((s) => s !== value)
-      : [...current, value];
-    onFilterChange({ taskStatuses: next });
-  }
-
-  function isTaskStatusActive(value: TaskStatus): boolean {
-    return filters.taskStatuses.length === 0 || filters.taskStatuses.includes(value);
-  }
-
-  function togglePriority(value: TaskPriority) {
-    const current = filters.priorities;
-    const next = current.includes(value)
-      ? current.filter((p) => p !== value)
-      : [...current, value];
-    onFilterChange({ priorities: next });
-  }
-
-  function isPriorityActive(value: TaskPriority): boolean {
-    return filters.priorities.length === 0 || filters.priorities.includes(value);
-  }
-
-  const isTasksView = filters.view === "tasks";
-  const isBoardOrTable = filters.view === "board" || filters.view === "table";
-  const isMembersView = filters.view === "members";
-  const isTasksOrMembersView = isTasksView || isMembersView;
-
   const activeFiltersCount = [
     !!filters.q,
     filters.account !== ALL_SENTINEL,
     filters.owner !== ALL_SENTINEL,
     filters.statuses.length > 0,
-    isTasksOrMembersView && filters.assignee !== ALL_SENTINEL,
-    isTasksOrMembersView && filters.due !== ALL_SENTINEL,
   ].filter(Boolean).length;
 
   const filterDefs: FilterDef[] = [
@@ -186,55 +110,24 @@ export function WorkspaceHeader({
       onChange: (v: string) => onFilterChange({ account: v }),
       options: accountOptions,
     },
-    ...(isBoardOrTable || isMembersView
-      ? [
-          {
-            id: "owner",
-            label: "Owner",
-            multiple: false,
-            defaultValue: ALL_SENTINEL,
-            value: filters.owner,
-            onChange: (v: string) => onFilterChange({ owner: v }),
-            options: ownerOptions,
-          } satisfies FilterDef,
-        ]
-      : []),
-    ...(isBoardOrTable
-      ? [
-          {
-            id: "status",
-            label: "Status",
-            multiple: true,
-            searchable: false,
-            value: filters.statuses,
-            onChange: (next: string[]) => onFilterChange({ statuses: next as ProjectStatus[] }),
-            options: statusOptions,
-          } satisfies FilterDef,
-        ]
-      : []),
-    ...(isTasksOrMembersView
-      ? [
-          {
-            id: "assignee",
-            label: "Assignee",
-            multiple: false,
-            defaultValue: ALL_SENTINEL,
-            value: filters.assignee,
-            onChange: (v: string) => onFilterChange({ assignee: v }),
-            options: assigneeOptions,
-          } satisfies FilterDef,
-          {
-            id: "due",
-            label: "Due",
-            multiple: false,
-            searchable: false,
-            defaultValue: ALL_SENTINEL,
-            value: filters.due,
-            onChange: (v: string) => onFilterChange({ due: v }),
-            options: DUE_OPTIONS,
-          } satisfies FilterDef,
-        ]
-      : []),
+    {
+      id: "owner",
+      label: "Owner",
+      multiple: false,
+      defaultValue: ALL_SENTINEL,
+      value: filters.owner,
+      onChange: (v: string) => onFilterChange({ owner: v }),
+      options: ownerOptions,
+    },
+    {
+      id: "status",
+      label: "Status",
+      multiple: true,
+      searchable: false,
+      value: filters.statuses,
+      onChange: (next: string[]) => onFilterChange({ statuses: next as ProjectStatus[] }),
+      options: statusOptions,
+    },
   ];
 
   return (
@@ -255,14 +148,6 @@ export function WorkspaceHeader({
               <TableProperties className="h-3.5 w-3.5" />
               Table
             </TabsTrigger>
-            <TabsTrigger value="tasks" className="gap-1.5 text-xs">
-              <ListTodo className="h-3.5 w-3.5" />
-              Tasks
-            </TabsTrigger>
-            <TabsTrigger value="members" className="gap-1.5 text-xs">
-              <Users className="h-3.5 w-3.5" />
-              Members
-            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -281,126 +166,35 @@ export function WorkspaceHeader({
               type="text"
               value={filters.q}
               onChange={(e) => onFilterChange({ q: e.target.value })}
-              placeholder={isTasksView ? "Search tasks…" : isMembersView ? "Search projects & tasks…" : "Search projects…"}
+              placeholder="Search projects…"
               aria-label="Search"
               className="w-full h-9 pl-9 pr-3 rounded-md border border-input bg-background text-sm outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
           <div className="flex-1" />
-          {filterDefs.length > 0 && (
-            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={onClearFilters} />
-          )}
+          <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={onClearFilters} />
         </div>
 
-        {/* Show cancelled toggle — Board + Table only */}
-        {isBoardOrTable && (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-            <Checkbox
-              id="show-cancelled"
-              checked={filters.showCancelled}
-              onCheckedChange={(checked) => {
-                const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
-                if (!checked && filters.statuses.includes("cancelled")) {
-                  next.statuses = filters.statuses.filter((s) => s !== "cancelled");
-                }
-                onFilterChange(next);
-              }}
-            />
-            <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
-              Show cancelled
-            </Label>
-          </div>
-        )}
+        {/* Show cancelled toggle */}
+        <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+          <Checkbox
+            id="show-cancelled"
+            checked={filters.showCancelled}
+            onCheckedChange={(checked) => {
+              const next: Partial<WorkspaceFilters> = { showCancelled: Boolean(checked) };
+              if (!checked && filters.statuses.includes("cancelled")) {
+                next.statuses = filters.statuses.filter((s) => s !== "cancelled");
+              }
+              onFilterChange(next);
+            }}
+          />
+          <Label htmlFor="show-cancelled" className="text-xs text-gray-500 cursor-pointer">
+            Show cancelled
+          </Label>
+        </div>
 
         {activeFiltersCount > 0 && <FilterChips filters={filterDefs} onClearAll={onClearFilters} />}
       </div>
-
-      {/* Task status chips — Tasks view only */}
-      {isTasksView && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Status:</span>
-          {TASK_STATUS_CHIPS.map((chip) => {
-            const active = isTaskStatusActive(chip.value);
-            return (
-              <button
-                key={chip.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => toggleTaskStatus(chip.value)}
-                className={[
-                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                  active
-                    ? "bg-blue-600 text-white border-blue-600"
-                    : "bg-white text-gray-500 border-gray-300 hover:border-gray-400",
-                ].join(" ")}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-          {filters.taskStatuses.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onFilterChange({ taskStatuses: [] })}
-              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Priority chips — Tasks + Members views */}
-      {isTasksOrMembersView && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Priority:</span>
-          {PRIORITY_CHIPS.map((chip) => {
-            const active = isPriorityActive(chip.value);
-            return (
-              <button
-                key={chip.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => togglePriority(chip.value)}
-                className={[
-                  "px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors",
-                  active
-                    ? `${chip.cls}`
-                    : "bg-white text-gray-400 border-gray-200 hover:border-gray-300",
-                  filters.priorities.length > 0 && !filters.priorities.includes(chip.value)
-                    ? "opacity-40"
-                    : "",
-                ].join(" ")}
-              >
-                {chip.label}
-              </button>
-            );
-          })}
-          {filters.priorities.length > 0 && (
-            <button
-              type="button"
-              onClick={() => onFilterChange({ priorities: [] })}
-              className="px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground underline"
-            >
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Tags filter — Tasks view only */}
-      {isTasksView && (
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Tags:</span>
-          <TagMultiPicker
-            value={filters.tags}
-            onChange={(next) => onFilterChange({ tags: next })}
-            allTags={poolTags}
-            placeholder="Filter by tag…"
-            size="md"
-          />
-        </div>
-      )}
     </div>
   );
 }
