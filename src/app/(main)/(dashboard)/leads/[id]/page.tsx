@@ -5,6 +5,7 @@ import {
   getLeadNotes,
   getLeadChecklists,
   getLeadActivity,
+  getLeadSubmissionHistory,
   getPipelineStages,
   getLeadListsByTenant,
   getListPipeline,
@@ -40,10 +41,11 @@ export default async function LeadDetailPage({
   const checkInActive = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN);
 
   const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
-  const [notes, checklists, activities, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
+  const [notes, checklists, activities, submissionHistory, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
+    getLeadSubmissionHistory(lead.id, tenantData.tenant.id),
     // Load this lead's list-pipeline stages (preferred); fallback to all tenant stages
     leadListId ? getListPipeline(leadListId, tenantData.tenant.id) : Promise.resolve(null),
     getPipelineStages(tenantData.tenant.id),
@@ -224,6 +226,7 @@ export default async function LeadDetailPage({
       notes={notes}
       checklists={checklists}
       activities={activities}
+      submissionHistory={submissionHistory}
       stages={stages}
       tenant={tenantData.tenant}
       role={tenantData.role}
