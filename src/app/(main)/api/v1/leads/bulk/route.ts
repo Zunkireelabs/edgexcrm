@@ -332,33 +332,14 @@ export async function PATCH(request: NextRequest) {
     );
   }
 
-  // Mirror the new assignee onto non-origin pool rows so the cross-branch pool
+  // Mirror the new assignee onto every non-origin pool row so the cross-branch pool
   // (unassignedCrossBranchLeadIds) never treats an assigned lead as unclaimed.
-  // Scoped per-lead to rows that were tracking that lead's overall assignment
-  // (unclaimed, or already matching its previous assignee) — never overwrites
-  // a row independently claimed for a *different* user via the per-branch
-  // assignment endpoint (PATCH /leads/[id]/branches/[branchId]).
   if (body.assigned_to !== undefined) {
-    await Promise.all(
-      idsToUpdate.map((lid) => {
-        const prevAssignedTo = existingMap.get(lid)?.assigned_to ?? null;
-        let mirrorQuery = supabase.from("lead_branches")
-          .update({ assigned_to: body.assigned_to ?? null })
-          .eq("tenant_id", auth.tenantId)
-          .eq("lead_id", lid)
-          .eq("is_origin", false);
-        // A branch-scoped (non-admin) manager can only ever assign within
-        // their own branch (validated above), so only mirror into their own
-        // branch's pool row — not other branches they have no visibility into.
-        if (isTeamScoped && auth.branchId) {
-          mirrorQuery = mirrorQuery.eq("branch_id", auth.branchId);
-        }
-        mirrorQuery = prevAssignedTo
-          ? mirrorQuery.or(`assigned_to.is.null,assigned_to.eq.${prevAssignedTo}`)
-          : mirrorQuery.is("assigned_to", null);
-        return mirrorQuery;
-      })
-    );
+    await supabase.from("lead_branches")
+      .update({ assigned_to: body.assigned_to ?? null })
+      .eq("tenant_id", auth.tenantId)
+      .in("lead_id", idsToUpdate)
+      .eq("is_origin", false);
   }
 
   // Resolve old list names for human-readable audit entries
