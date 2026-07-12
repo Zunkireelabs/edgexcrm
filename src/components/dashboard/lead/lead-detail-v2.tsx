@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { createClient } from "@/lib/supabase/client";
 import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
@@ -55,6 +56,7 @@ interface LeadDetailV2Props {
   notes: LeadNote[];
   checklists: LeadChecklist[];
   activities: LeadActivity[];
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   tenant: Tenant;
   role: string;
@@ -132,6 +134,7 @@ export function LeadDetailV2({
   notes: initialNotes,
   checklists: initialChecklists,
   activities,
+  submissionHistory,
   stages,
   tenant,
   role,
@@ -411,6 +414,10 @@ export function LeadDetailV2({
       });
       if (!res.ok) throw new Error();
       toast.success("Assignment updated");
+      // revertTargetUserId/Name are computed server-side from the lead's
+      // assignment history — refresh so the Revert confirm dialog reflects
+      // the new assignee, not whoever it was when the page first loaded.
+      router.refresh();
     } catch {
       toast.error("Failed to update assignment");
       setAssignedTo(lead.assigned_to || "");
@@ -641,6 +648,7 @@ export function LeadDetailV2({
             entity={entity}
             industry={industry}
             industryId={tenant.industry_id}
+            submissionHistory={submissionHistory}
             isEditing={isEditing}
             draft={draft}
             editErrors={editErrors}
@@ -692,7 +700,10 @@ export function LeadDetailV2({
                   headers: { "Content-Type": "application/json" },
                   body: JSON.stringify(body),
                 });
-                if (!res.ok) throw new Error("Failed to move lead");
+                if (!res.ok) {
+                  const errJson = await res.json().catch(() => null);
+                  throw new Error(errJson?.error?.message || "Failed to move lead");
+                }
                 const json = await res.json();
                 const updated = json.data as Lead;
                 // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
@@ -705,6 +716,10 @@ export function LeadDetailV2({
                 if (updated.assigned_to !== prevLead.assigned_to) {
                   setAssignedTo(updated.assigned_to ?? "");
                   setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
+                  // Same staleness issue as handleAssignmentChange: refresh so
+                  // revertTargetUserId/Name (computed server-side) reflect the
+                  // new assignee, not whoever it was when the page first loaded.
+                  router.refresh();
                 }
                 toast.success(`Moved to ${targetList?.name ?? "list"}`);
                 // Handed off to someone else (send-to-next / revert to another holder):
@@ -718,12 +733,12 @@ export function LeadDetailV2({
                 // Predicted a handoff (spinner shown) but the server kept the lead
                 // with us — restore the detail instead of hanging on the spinner.
                 if (willHandOff) setLeaving(false);
-              } catch {
+              } catch (err) {
                 setCurrentLead(prevLead);
                 setStageId(prevStageId);
                 if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
                 setLeaving(false);
-                toast.error("Failed to move lead");
+                toast.error(err instanceof Error ? err.message : "Failed to move lead");
               }
             }}
             onSaveTripFields={async (fields) => {

@@ -136,6 +136,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             customFields={customFields}
             onFieldsUpdate={onCustomFieldsChange}
             isAdmin={isAdmin}
+            industryId={industryId}
           />
 
           {/* Recent Notes Preview */}

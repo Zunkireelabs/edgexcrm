@@ -21,6 +21,7 @@ interface ProfessionalDetailsCardProps {
   customFields: Record<string, unknown>;
   onFieldsUpdate: (fields: Record<string, unknown>) => void;
   isAdmin: boolean;
+  industryId?: string | null;
 }
 
 export function ProfessionalDetailsCard({
@@ -28,6 +29,7 @@ export function ProfessionalDetailsCard({
   customFields,
   onFieldsUpdate,
   isAdmin,
+  industryId,
 }: ProfessionalDetailsCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -40,7 +42,7 @@ export function ProfessionalDetailsCard({
       !professionalFieldKeys.includes(key) &&
       value != null &&
       value !== "" &&
-      !isReservedCustomField(key)
+      !isReservedCustomField(key, industryId)
   );
 
   // Check if any professional fields have values

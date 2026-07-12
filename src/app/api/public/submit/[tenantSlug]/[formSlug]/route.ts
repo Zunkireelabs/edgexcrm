@@ -428,13 +428,14 @@ export async function POST(
     entity_id: body.entity_id || null,
     intake_source: body.intake_source
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_source : null)
-      || "api",
+      || "Website",
     intake_medium: body.intake_medium
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_medium : null)
       || null,
     intake_campaign: body.intake_campaign
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_campaign : null)
       || null,
+    intake_account: body.intake_account || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
     branch_id: publicFormBranchId,
