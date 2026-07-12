@@ -128,10 +128,16 @@ export function requireLeadBranchAccess(
 ): boolean {
   if (auth.permissions.leadScope !== "team") return true;
   if (!auth.branchId) return membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId; // §4.1
-  // Unassigned lead (e.g. just created via walk-in Check-In): fall back to a
-  // branch match, since there's no assignee yet to check against.
-  if (lead.assigned_to === null) return lead.branch_id === auth.branchId;
-  return auth.branchMemberIds.includes(lead.assigned_to);
+  // A team manager may read any lead in their branch — via the lead_branches
+  // roster, a direct branch_id, or an assignee who is a branch member. Mirrors
+  // requireLeadAccess + the getLeads list scope so detail/sub-resource reads
+  // match exactly what the manager already sees in their list (no list-shows /
+  // detail-404 split).
+  return (
+    membership.some((m) => m.branch_id === auth.branchId) ||
+    lead.branch_id === auth.branchId ||
+    (lead.assigned_to !== null && auth.branchMemberIds.includes(lead.assigned_to))
+  );
 }
 
 // Walk-in "other" contacts (the education Contacts page) are branch-shared: any
