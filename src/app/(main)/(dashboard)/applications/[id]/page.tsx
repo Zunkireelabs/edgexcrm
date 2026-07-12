@@ -68,12 +68,15 @@ export default async function ApplicationDetailRoute({ params }: Props) {
         notFound();
       }
     } else {
-      // Mirror requireLeadBranchAccess (auth.ts) + the applications LIST scope:
-      // a team-scoped manager may view a lead assigned to a member of their branch.
+      // Mirror requireLeadBranchAccess (auth.ts) + the applications LIST scope: a
+      // team-scoped manager may view any lead in their branch — via the
+      // lead_branches roster, a direct branch_id, or a branch-member assignee.
       const branchMembers = await branchMemberIds(supabase, tenantData.tenant.id, branchId);
-      if (!(parentLead.assigned_to !== null && branchMembers.includes(parentLead.assigned_to))) {
-        notFound();
-      }
+      const inBranch =
+        membership.some((m) => m.branch_id === branchId) ||
+        parentLead.branch_id === branchId ||
+        (parentLead.assigned_to !== null && branchMembers.includes(parentLead.assigned_to));
+      if (!inBranch) notFound();
     }
   }
 
