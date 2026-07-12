@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -39,9 +40,16 @@ export async function GET(
     return apiNotFound("Lead");
   }
 
-  // Counselor: own-only; branch-manager: membership-based
+  // Counselor: own-only; branch-manager: membership-based.
+  // Own-scope holders keep read access as collaborators (mirrors getLead / notes),
+  // so a counsellor handed the lead — or any collaborator — sees the same System
+  // Activity feed (calls/meetings/logged emails) as the assignee and admin.
   const getMembership = await getLeadMembership(supabase, auth.tenantId, leadId);
-  if (shouldRestrictToSelf(auth.permissions) && !(getMembership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) return apiNotFound("Lead");
+  if (
+    shouldRestrictToSelf(auth.permissions) &&
+    !(getMembership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId) &&
+    !(await isLeadCollaborator(supabase, auth.tenantId, leadId, auth.userId))
+  ) return apiNotFound("Lead");
   if (!requireLeadBranchAccess(auth, lead, getMembership)) return apiNotFound("Lead");
 
   // Get query params for filtering
