@@ -670,8 +670,8 @@ export function DashboardShell({
                 </span>
               </div>
 
-              {/* Settings (ops mode only) */}
-              {navMode === "ops" && navAllowed("/settings") && (
+              {/* Settings (ops mode only) — owner/admin only; route + bootstrap API also hard-gate to these roles */}
+              {navMode === "ops" && (role === "owner" || role === "admin") && (
                 <div className="py-1">
                   <button
                     type="button"
