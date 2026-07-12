@@ -30,6 +30,46 @@ const EMPTY: ReferenceData = {
   intakeYears: [],
 };
 
+// A brand-new (or not-yet-configured) tenant has zero rows in Settings'
+// destination-countries list. Without a fallback, the Country picker on all
+// 3 Add Application screens goes dead — no options, can't tag a country,
+// can't country-filter the university picker. This is the same 14-country
+// list every screen hardcoded before Settings-managed countries existed.
+const FALLBACK_COUNTRIES = [
+  "Australia",
+  "Canada",
+  "China",
+  "France",
+  "Germany",
+  "India",
+  "Japan",
+  "Nepal",
+  "New Zealand",
+  "Singapore",
+  "UAE",
+  "United Kingdom",
+  "United States",
+  "Other",
+];
+
+// Shared by all 3 Add Application screens. Ranks colleges tagged to the
+// selected country (plus untagged colleges) first, but — unlike a hard
+// filter — NEVER drops a college from the list outright. A college tagged to
+// a different country must stay selectable/dedupe-able here, or the
+// AutocompleteInput's exact-match check can't see it, offers "Create" for a
+// name that already exists, and the create POST 409s on the tenant+name
+// unique constraint with no way to recover.
+export function getCollegeSuggestions(colleges: PartnerCollegeOption[], country: string): string[] {
+  if (!country) return colleges.map((c) => c.name);
+  return [...colleges]
+    .sort((a, b) => {
+      const aMatch = a.country === country || !a.country;
+      const bMatch = b.country === country || !b.country;
+      return aMatch === bMatch ? 0 : aMatch ? -1 : 1;
+    })
+    .map((c) => c.name);
+}
+
 // Module-level cache + in-flight promise, shared across every component
 // instance for the lifetime of the page. This data (agents, partner colleges,
 // destination countries, intake months/years) is identical across all 3 Add
@@ -44,6 +84,15 @@ let inFlight: Promise<ReferenceData> | null = null;
 // Bumped by any local mutation (addPartnerCollege) so a slow background load
 // that resolves afterward can tell it's stale and must not clobber the cache.
 let cacheVersion = 0;
+// Every mounted hook instance's setData, so a mutation from ANY one of them
+// (e.g. the "Create college" flow on the standalone board's sheet) repaints
+// every other co-mounted screen (e.g. the lead-scoped sheet open at the same
+// time) immediately, instead of only the instance that made the change —
+// the others would otherwise show the new college only after next remount.
+const subscribers = new Set<(data: ReferenceData) => void>();
+function broadcast(data: ReferenceData) {
+  subscribers.forEach((setter) => setter(data));
+}
 
 async function fetchReferenceData(): Promise<{ data: ReferenceData; failed: string[] }> {
   const [agentsRes, collegesRes, countriesRes, monthsRes, yearsRes] = await Promise.all([
@@ -109,6 +158,19 @@ export function invalidateApplicationReferenceData() {
 // moment they mount off-screen. The always-visible detail page passes `true`.
 export function useApplicationReferenceData(enabled: boolean = true) {
   const [data, setData] = useState<ReferenceData>(cache ?? EMPTY);
+  // Distinct from "data is EMPTY" — EMPTY is also the shape of a tenant that
+  // genuinely has zero countries/months/years configured. `loaded` only
+  // becomes true once a real fetch (or an already-populated cache) has been
+  // observed, so the Country fallback below can tell "still loading" apart
+  // from "confirmed empty" instead of treating both the same.
+  const [loaded, setLoaded] = useState(cache !== null);
+
+  useEffect(() => {
+    subscribers.add(setData);
+    return () => {
+      subscribers.delete(setData);
+    };
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;
@@ -120,7 +182,10 @@ export function useApplicationReferenceData(enabled: boolean = true) {
     const promise = cache ? Promise.resolve(cache) : (inFlight ?? loadReferenceData());
     let cancelled = false;
     promise.then((result) => {
-      if (!cancelled) setData(result);
+      if (!cancelled) {
+        setData(result);
+        setLoaded(true);
+      }
     });
     return () => {
       cancelled = true;
@@ -128,16 +193,30 @@ export function useApplicationReferenceData(enabled: boolean = true) {
   }, [enabled]);
 
   // Called after creating a new partner college inline (the "Create '...'"
-  // flow) so every screen sees it immediately, not just the one that made it.
-  function addPartnerCollege(name: string, country: string | null) {
-    const base = cache ?? data;
+  // flow) so every screen sees it immediately, not just the one that made it —
+  // broadcasts to every mounted hook instance, not only this one's own state.
+  // Always merges onto the REAL loaded reference data, never a synthesized-
+  // from-EMPTY snapshot — writing an incomplete object into `cache` here
+  // would permanently block the real, in-flight fetch result from ever
+  // landing (the same failure mode loadReferenceData's cacheVersion guard
+  // exists to prevent for a stale write).
+  async function addPartnerCollege(name: string, country: string | null) {
+    const loadedData = cache ?? (await (inFlight ?? loadReferenceData()));
     const updated: ReferenceData = {
-      ...base,
-      partnerColleges: [...base.partnerColleges, { name, country }].sort((a, b) => a.name.localeCompare(b.name)),
+      ...loadedData,
+      partnerColleges: [...loadedData.partnerColleges, { name, country }].sort((a, b) => a.name.localeCompare(b.name)),
     };
-    cache = updated;
-    cacheVersion++;
-    setData(updated);
+    // Only persist to the shared cache if the underlying load actually
+    // succeeded in full (cache is non-null after the await) — a
+    // partial-failure load deliberately leaves `cache` null so the next
+    // mount retries; don't make that failure permanent by caching an
+    // incomplete object here. Every currently-mounted screen still sees the
+    // new college immediately via broadcast either way.
+    if (cache) {
+      cache = updated;
+      cacheVersion++;
+    }
+    broadcast(updated);
   }
 
   // Creates a partner college on the server, then applies it to the shared
@@ -154,7 +233,7 @@ export function useApplicationReferenceData(enabled: boolean = true) {
         const err = await res.json();
         throw new Error(err.error?.message ?? "Failed to create college");
       }
-      addPartnerCollege(name, country);
+      await addPartnerCollege(name, country);
       toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
       return true;
     } catch (err) {
@@ -163,5 +242,14 @@ export function useApplicationReferenceData(enabled: boolean = true) {
     }
   }
 
-  return { ...data, addPartnerCollege, createPartnerCollege };
+  return {
+    ...data,
+    // Only substitute the generic fallback once a real fetch has confirmed
+    // the tenant's list is actually empty — not during the loading window,
+    // where a tenant with real configured countries would otherwise
+    // transiently show (and let an admin pick from) the wrong list.
+    countries: !loaded ? [] : data.countries.length > 0 ? data.countries : FALLBACK_COUNTRIES,
+    addPartnerCollege,
+    createPartnerCollege,
+  };
 }

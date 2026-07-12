@@ -23,6 +23,15 @@ interface LookupTableConfig {
   routePath: string;
   /** Extra sort column applied before name, e.g. "sort_order" (intake_months only) */
   sortColumn?: string;
+  /**
+   * Optional self-heal hook run before every GET's SELECT — for a table
+   * whose valid values keep changing over time (e.g. intake_years) rather
+   * than a fixed set (intake_months' 12 names never need this). Best-effort:
+   * errors are swallowed so a self-heal failure never breaks the read.
+   * Gated to admin callers only (see GET below) — non-admins still read
+   * freely, they just never trigger the write themselves.
+   */
+  ensureFreshRows?: (db: Awaited<ReturnType<typeof scopedClient>>) => Promise<void>;
 }
 
 interface RouteParams {
@@ -33,7 +42,7 @@ interface RouteParams {
 // months, intake years, ...) all share the exact same CRUD shape. This
 // factory is the single implementation both intake-months and intake-years
 // routes delegate to, so a fix to one applies to both automatically.
-export function createLookupTableListRoutes({ table, itemLabel, routePath, sortColumn }: LookupTableConfig) {
+export function createLookupTableListRoutes({ table, itemLabel, routePath, sortColumn, ensureFreshRows }: LookupTableConfig) {
   async function GET(request: NextRequest) {
     const auth = await authenticateRequest();
     if (!auth) return apiUnauthorized();
@@ -43,6 +52,19 @@ export function createLookupTableListRoutes({ table, itemLabel, routePath, sortC
     const includeInactive = searchParams.get("all") === "true";
 
     const db = await scopedClient(auth);
+    // Only an admin request triggers the self-heal write — every other
+    // tenant member (viewer/counselor) still reads this table freely, they
+    // just never cause the write themselves. Fire-and-forget: nothing in
+    // this response depends on it completing, so it must never add latency
+    // to the read. A failure is logged (not silently swallowed) so a broken
+    // top-up doesn't go unnoticed until someone reports "I can't select next
+    // year" long after the fact.
+    if (ensureFreshRows && requireAdmin(auth)) {
+      const log = createRequestLogger({ requestId: crypto.randomUUID(), method: "GET", path: routePath });
+      ensureFreshRows(db).catch((error) => {
+        log.warn({ error }, `Self-heal failed for ${itemLabel}s`);
+      });
+    }
     let query = db.from(table).select("id, name, description, is_active, created_at");
     if (sortColumn) query = query.order(sortColumn, { ascending: true, nullsFirst: false });
     query = query.order("name", { ascending: true });
@@ -60,6 +82,7 @@ export function createLookupTableListRoutes({ table, itemLabel, routePath, sortC
     const auth = await authenticateRequest();
     if (!auth) return apiUnauthorized();
     if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
+    if (!requireAdmin(auth)) return apiForbidden();
 
     let body: Record<string, unknown>;
     try {

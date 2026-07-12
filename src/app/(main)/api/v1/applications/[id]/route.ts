@@ -26,17 +26,16 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
 
-  const db = await scopedClient(auth);
-  const { data, error } = await db
-    .from("applications")
-    .select("*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) return apiError("DB_ERROR", "Failed to fetch application", 500);
-  if (!data) return apiNotFound("Application");
-  return apiSuccess(data);
+  const { allowed, application, dbError } = await getApplicationWithAccess<
+    Record<string, unknown> & { lead_id: string }
+  >(
+    auth,
+    id,
+    "*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)"
+  );
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
+  if (!application || !allowed) return apiNotFound("Application");
+  return apiSuccess(application);
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
@@ -68,9 +67,10 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     body.program_name = trimmed;
   }
 
-  const { allowed, application: existing } = await getApplicationWithAccess<
+  const { allowed, application: existing, dbError } = await getApplicationWithAccess<
     Record<string, unknown> & { lead_id: string; stage_id: string }
   >(auth, id, "*");
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!existing || !allowed) return apiNotFound("Application");
   const existingRow = existing;
 
@@ -174,11 +174,12 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
   if (!canDeleteApplication(auth.permissions)) return apiForbidden();
 
-  const { allowed, application: existing } = await getApplicationWithAccess<{ id: string; lead_id: string }>(
+  const { allowed, application: existing, dbError } = await getApplicationWithAccess<{ id: string; lead_id: string }>(
     auth,
     id,
     "id, lead_id"
   );
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!existing || !allowed) return apiNotFound("Application");
 
   const db = await scopedClient(auth);

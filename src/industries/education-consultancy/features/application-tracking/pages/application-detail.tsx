@@ -46,12 +46,20 @@ import { StatusBadge } from "../components/status-badge";
 import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
 import { ApplicationTabs } from "../components/application-tabs";
 import { AutocompleteInput } from "../components/autocomplete-input";
-import { useApplicationReferenceData } from "../hooks/use-application-reference-data";
+import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
+
+// Settings-managed lookup values (intake month/year names) are admin-editable
+// free text, not developer-controlled constants — they must be escaped
+// before being interpolated into a RegExp pattern, or a name containing a
+// metacharacter (e.g. "*Fall*") throws SyntaxError at match time.
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "—";
@@ -121,6 +129,19 @@ export function ApplicationDetailPage({
   // a legacy free-text intake_term (e.g. "Sep 2026", an Excel date serial)
   // that the dropdown pre-fill couldn't cleanly parse back — see startEdit().
   const [intakeTouched, setIntakeTouched] = useState(false);
+  // True when the original intake_term had real content but startEdit()
+  // couldn't confidently parse BOTH Month and Year out of it (e.g. "Sep 2026"
+  // — abbreviated month, only the year matches). In this case touching just
+  // one dropdown must not be allowed to synthesize a value that silently
+  // drops the half that never made it into the UI — see saveEdit().
+  const [intakeLegacyAmbiguous, setIntakeLegacyAmbiguous] = useState(false);
+  // Set when the legacy intake_term's year parses cleanly but predates the
+  // Settings-managed intake_years rolling window (e.g. a migrated "September
+  // 2019" record). We still know the exact value — there's no need to guess
+  // or block forever — so it's injected as an extra selectable Year option
+  // for this edit session instead of being unrepresentable, which would
+  // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
+  const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
   const [country, setCountry] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
@@ -137,12 +158,19 @@ export function ApplicationDetailPage({
   const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
     useApplicationReferenceData();
 
-  // Colleges tagged with the selected country, plus any untagged colleges
-  // (safety net so nothing disappears before it's been assigned a country).
-  // No country selected yet -> show everything, same as before this change.
-  const collegeSuggestions = country
-    ? partnerColleges.filter((c) => c.country === country || !c.country).map((c) => c.name)
-    : partnerColleges.map((c) => c.name);
+  // Colleges tagged to the selected country (+ untagged) rank first; every
+  // college stays selectable so the autocomplete's dedupe check never misses
+  // one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
+
+  // Settings' normal rolling window, plus the current application's own
+  // out-of-window legacy year if it has one — so it's an actual selectable
+  // option (see intakeYearLegacyOutOfRange above) instead of silently unable
+  // to satisfy the save guard.
+  const yearOptions =
+    intakeYearLegacyOutOfRange && !intakeYears.includes(intakeYearLegacyOutOfRange)
+      ? [intakeYearLegacyOutOfRange, ...intakeYears]
+      : intakeYears;
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
   const progress = computeProgress(stages, application.stage_id);
@@ -179,20 +207,38 @@ export function ApplicationDetailPage({
     setUniversityName(application.university_name ?? "");
     setProgramName(application.program_name ?? "");
     // Best-effort: existing intake_term values are inconsistent free text
-    // ("Sep 2026", "September", a stray Excel date serial, etc.) from before
-    // this became a dropdown. Only pre-fill Month/Year when the old value
-    // clearly matches a known month name and a 4-digit year; otherwise leave
-    // both blank for the admin to pick fresh rather than guess wrong.
+    // ("Sep 2026", "September", "SEP-2026", a stray Excel date serial, etc.)
+    // from before this became a dropdown. Only pre-fill Month/Year when the
+    // old value clearly matches a known month (full name OR standard
+    // 3-letter abbreviation — real prod data is full of the latter) and a
+    // 4-digit year; otherwise leave both blank for the admin to pick fresh
+    // rather than guess wrong.
     const raw = application.intake_term ?? "";
-    const matchedMonth = intakeMonths.find((m) => raw.toLowerCase().includes(m.toLowerCase()));
+    const matchedMonth = intakeMonths.find((m) => {
+      // Word-boundary-based, not a plain substring test — a bare full name
+      // OR its 3-letter abbreviation can otherwise false-positive inside an
+      // unrelated word ("Marching Band Fee" contains "march" as a literal
+      // substring), which would wrongly mark a genuinely-unmatched legacy
+      // value as a trustworthy, unambiguous parse. `intakeMonths` entries are
+      // admin-editable free text (only required+maxLength validated), so
+      // they're escaped before being interpolated into the pattern — an
+      // unescaped regex metacharacter in a custom month name would otherwise
+      // throw here and break the Edit button for every application.
+      const escaped = escapeRegExp(m);
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(raw)) return true;
+      return new RegExp(`\\b${escapeRegExp(m.slice(0, 3))}\\b`, "i").test(raw);
+    });
     const rawYear = raw.match(/\b(20\d{2})\b/)?.[1];
-    // Only pre-fill if the parsed year is actually one of the dropdown's
-    // options — otherwise it'd sit invisibly in state (not shown in the
-    // Year field, since it's out of range) and get silently re-saved.
-    const matchedYear = rawYear && intakeYears.includes(rawYear) ? rawYear : undefined;
+    // A cleanly-parsed year outside Settings' rolling window (e.g. a
+    // migrated record's "2019") is still a known, exact value — pre-fill it
+    // and inject it as an extra Year option (see yearOptions above) rather
+    // than leaving it blank and unrepresentable, which would otherwise make
+    // the ambiguity guard below permanently unsatisfiable for this record.
     setIntakeMonth(matchedMonth ?? "");
-    setIntakeYear(matchedYear ?? "");
+    setIntakeYear(rawYear ?? "");
+    setIntakeYearLegacyOutOfRange(rawYear && !intakeYears.includes(rawYear) ? rawYear : null);
     setIntakeTouched(false);
+    setIntakeLegacyAmbiguous(raw.trim() !== "" && (matchedMonth == null || rawYear == null));
     setCountry(application.country ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
@@ -211,6 +257,15 @@ export function ApplicationDetailPage({
   async function saveEdit() {
     if (!universityName.trim()) { toast.error("University name is required"); return; }
     if (!programName.trim()) { toast.error("Program name is required"); return; }
+    // The original intake_term had content that couldn't be fully split into
+    // Month + Year (e.g. "Sep 2026" — abbreviated month). Touching only one
+    // of the two dropdowns is not enough information to safely replace it:
+    // saving now would silently drop whichever half never got parsed. Block
+    // until both are set, instead of quietly truncating real application data.
+    if (intakeTouched && intakeLegacyAmbiguous && !(intakeMonth && intakeYear)) {
+      toast.error("Original Intake Term (\"" + (application.intake_term ?? "") + "\") couldn't be fully read into Month + Year — please set both before saving.");
+      return;
+    }
     setSaving(true);
     try {
       // Only overwrite intake_term if the admin actually changed Month/Year
@@ -592,15 +647,9 @@ export function ApplicationDetailPage({
                       <SelectValue placeholder="Select country" />
                     </SelectTrigger>
                     <SelectContent>
-                      {countries.length === 0 ? (
-                        <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                          No countries configured — add some in Settings
-                        </div>
-                      ) : (
-                        countries.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))
-                      )}
+                      {countries.map((c) => (
+                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 ) : (
@@ -662,7 +711,7 @@ export function ApplicationDetailPage({
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="__none__">None</SelectItem>
-                        {intakeYears.map((y) => (
+                        {yearOptions.map((y) => (
                           <SelectItem key={y} value={y}>{y}</SelectItem>
                         ))}
                       </SelectContent>

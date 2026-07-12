@@ -8,6 +8,14 @@ import { createServiceClient } from "@/lib/supabase/server";
 interface ApplicationAccessResult<T> {
   allowed: boolean;
   application: T | null;
+  /**
+   * True only when the initial applications query itself failed (a genuine
+   * DB/backend error) — distinct from "row doesn't exist" or "not allowed",
+   * both of which also leave `application: null`. Callers should return a
+   * 500 (not a 404) when this is true, or a real backend failure gets
+   * reported to the client as "not found," masking the actual cause.
+   */
+  dbError?: boolean;
 }
 
 // Shared parent-lead scope check for every /api/v1/applications/[id]* route
@@ -20,12 +28,13 @@ export async function getApplicationWithAccess<T extends { lead_id: string }>(
   selectColumns: string
 ): Promise<ApplicationAccessResult<T>> {
   const db = await scopedClient(auth);
-  const { data: application } = await db
+  const { data: application, error } = await db
     .from("applications")
     .select(selectColumns)
     .eq("id", applicationId)
     .is("deleted_at", null)
     .maybeSingle();
+  if (error) return { allowed: false, application: null, dbError: true };
   if (!application) return { allowed: false, application: null };
   const appRow = application as unknown as T;
 

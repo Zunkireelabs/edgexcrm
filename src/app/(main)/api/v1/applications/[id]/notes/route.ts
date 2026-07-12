@@ -23,7 +23,8 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  const { allowed } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
+  const { allowed, dbError } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!allowed) return apiNotFound("Application");
 
   const db = await scopedClient(auth);
@@ -48,7 +49,8 @@ export async function POST(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  const { allowed } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
+  const { allowed, dbError } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!allowed) return apiNotFound("Application");
 
   const db = await scopedClient(auth);

@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
-import { useApplicationReferenceData } from "../hooks/use-application-reference-data";
+import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import type { ApplicationStage } from "@/types/database";
 
 interface LeadOption {
@@ -69,12 +69,10 @@ export function AddApplicationSheet({
   const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
     useApplicationReferenceData(open);
 
-  // Colleges tagged with the selected country, plus any untagged colleges
-  // (safety net so nothing disappears before it's been assigned a country).
-  // No country selected yet -> show everything, same as before this change.
-  const collegeSuggestions = country
-    ? partnerColleges.filter((c) => c.country === country || !c.country).map((c) => c.name)
-    : partnerColleges.map((c) => c.name);
+  // Colleges tagged to the selected country (+ untagged) rank first; every
+  // college stays selectable so the autocomplete's dedupe check never misses
+  // one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
 
   useEffect(() => {
     if (!open) {
@@ -273,15 +271,9 @@ export function AddApplicationSheet({
                   <SelectValue placeholder="Select country" />
                 </SelectTrigger>
                 <SelectContent>
-                  {countries.length === 0 ? (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No countries configured — add some in Settings
-                    </div>
-                  ) : (
-                    countries.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))
-                  )}
+                  {countries.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
