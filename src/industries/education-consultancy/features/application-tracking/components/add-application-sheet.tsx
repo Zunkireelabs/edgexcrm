@@ -2,8 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
-import { Loader2, Search, ChevronsUpDown, Check, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Loader2, Search } from "lucide-react";
 import {
   Sheet,
   SheetContent,
@@ -22,116 +21,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandEmpty,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { AutocompleteInput } from "./autocomplete-input";
+import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import type { ApplicationStage } from "@/types/database";
-
-const COUNTRIES = [
-  "Australia",
-  "Canada",
-  "China",
-  "France",
-  "Germany",
-  "India",
-  "Japan",
-  "Nepal",
-  "New Zealand",
-  "Singapore",
-  "UAE",
-  "United Kingdom",
-  "United States",
-  "Other",
-];
-
-interface AutocompleteInputProps {
-  value: string;
-  onChange: (val: string) => void;
-  suggestions: string[];
-  placeholder?: string;
-  id?: string;
-  onCreateNew?: (val: string) => Promise<void>;
-}
-
-function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew }: AutocompleteInputProps) {
-  const [open, setOpen] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const trimmed = value.trim();
-  const filtered = suggestions.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()));
-  const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
-  const showCreate = onCreateNew && trimmed.length > 0 && !exactMatch;
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <div className="relative">
-          <Input
-            id={id}
-            value={value}
-            onChange={(e) => { onChange(e.target.value); if (!open && e.target.value) setOpen(true); }}
-            onFocus={() => { if (filtered.length > 0 || showCreate) setOpen(true); }}
-            placeholder={placeholder}
-            className="pr-8"
-            autoComplete="off"
-          />
-          <ChevronsUpDown className="absolute right-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-        </div>
-      </PopoverTrigger>
-      {(filtered.length > 0 || showCreate) && (
-        <PopoverContent className="p-0 w-[--radix-popover-trigger-width]" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-          <Command shouldFilter={false}>
-            <CommandList>
-              <CommandEmpty>No matches</CommandEmpty>
-              {filtered.slice(0, 20).map((s) => (
-                <CommandItem key={s} value={s} onSelect={() => { onChange(s); setOpen(false); }}>
-                  <Check className={cn("mr-2 h-4 w-4", value === s ? "opacity-100" : "opacity-0")} />
-                  {s}
-                </CommandItem>
-              ))}
-              {showCreate && (
-                <CommandItem
-                  value={`__create__${trimmed}`}
-                  disabled={creating}
-                  onSelect={async () => {
-                    if (!onCreateNew) return;
-                    setCreating(true);
-                    await onCreateNew(trimmed);
-                    setCreating(false);
-                    setOpen(false);
-                  }}
-                  className="text-primary font-medium border-t mt-1"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  {creating ? "Adding…" : `Create "${trimmed}"`}
-                </CommandItem>
-              )}
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      )}
-    </Popover>
-  );
-}
 
 interface LeadOption {
   id: string;
   first_name: string | null;
   last_name: string | null;
   email: string | null;
-}
-
-interface AgentOption {
-  id: string;
-  name: string;
-  agent_type: "agent" | "super_agent";
 }
 
 interface AddApplicationSheetProps {
@@ -158,17 +56,23 @@ export function AddApplicationSheet({
   const [selectedLead, setSelectedLead] = useState<LeadOption | null>(null);
   const [universityName, setUniversityName] = useState("");
   const [programName, setProgramName] = useState("");
-  const [intakeTerm, setIntakeTerm] = useState("");
+  const [intakeMonth, setIntakeMonth] = useState("");
+  const [intakeYear, setIntakeYear] = useState("");
   const [country, setCountry] = useState("");
   const [stageId, setStageId] = useState(defaultStage?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [agents, setAgents] = useState<AgentOption[]>([]);
-  const [partnerColleges, setPartnerColleges] = useState<string[]>([]);
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
+  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
+    useApplicationReferenceData(open);
+
+  // Colleges tagged to the selected country (+ untagged) rank first; every
+  // college stays selectable so the autocomplete's dedupe check never misses
+  // one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
 
   useEffect(() => {
     if (!open) {
@@ -177,7 +81,8 @@ export function AddApplicationSheet({
       setSelectedLead(null);
       setUniversityName("");
       setProgramName("");
-      setIntakeTerm("");
+      setIntakeMonth("");
+      setIntakeYear("");
       setCountry("");
       setDeadline("");
       setAgentId("");
@@ -188,19 +93,13 @@ export function AddApplicationSheet({
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
 
-  // Fetch active agents, partner colleges, and program suggestions
+  // Program suggestions are the one dataset here NOT shared with the other
+  // Add Application screens — this reads real past-application university/
+  // program pairs, while the lead-scoped sheet reads Settings' Fields of
+  // Study instead. See use-application-reference-data.ts for the datasets
+  // that ARE shared (agents, partner colleges, countries, intake months/years).
   useEffect(() => {
     if (!open) return;
-    fetch("/api/v1/agents")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setAgents(j.data); })
-      .catch(() => {});
-    fetch("/api/v1/partner-colleges")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (j?.data) setPartnerColleges((j.data as { name: string }[]).map((c) => c.name));
-      })
-      .catch(() => {});
     fetch("/api/v1/applications/suggestions")
       .then((r) => r.ok ? r.json() : null)
       .then((j) => { if (j?.data) setProgramSuggestions(j.data.programs ?? []); })
@@ -242,22 +141,8 @@ export function AddApplicationSheet({
   if (!canManageApplications) return null;
 
   async function handleCreateCollege(name: string) {
-    try {
-      const res = await fetch("/api/v1/partner-colleges", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error?.message ?? "Failed to create college");
-      }
-      setPartnerColleges((prev) => [...prev, name].sort());
-      setUniversityName(name);
-      toast.success(`"${name}" added to partner colleges`);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create college");
-    }
+    const ok = await createPartnerCollege(name, country || null);
+    if (ok) setUniversityName(name);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -273,7 +158,8 @@ export function AddApplicationSheet({
         program_name: programName.trim(),
       };
       if (stageId) body.stage_id = stageId;
-      if (intakeTerm.trim()) body.intake_term = intakeTerm.trim();
+      const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
+      if (intakeTerm) body.intake_term = intakeTerm;
       if (country && country !== "__none__") body.country = country;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
@@ -378,6 +264,20 @@ export function AddApplicationSheet({
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-gray-900">Application Details</h3>
 
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Country</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {countries.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <Label htmlFor="app-university" className="text-xs text-gray-600">
@@ -387,7 +287,7 @@ export function AddApplicationSheet({
                   id="app-university"
                   value={universityName}
                   onChange={setUniversityName}
-                  suggestions={partnerColleges}
+                  suggestions={collegeSuggestions}
                   placeholder="e.g. Univ. of Melbourne"
                   onCreateNew={handleCreateCollege}
                 />
@@ -406,25 +306,26 @@ export function AddApplicationSheet({
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="app-intake" className="text-xs text-gray-600">Intake Term</Label>
-                <Input
-                  id="app-intake"
-                  value={intakeTerm}
-                  onChange={(e) => setIntakeTerm(e.target.value)}
-                  placeholder="e.g. Fall 2026"
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs text-gray-600">Country</Label>
-                <Select value={country} onValueChange={setCountry}>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Intake Term</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Select value={intakeMonth} onValueChange={setIntakeMonth}>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select country" />
+                    <SelectValue placeholder="Month" />
                   </SelectTrigger>
                   <SelectContent>
-                    {COUNTRIES.map((c) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    {intakeMonths.map((m) => (
+                      <SelectItem key={m} value={m}>{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={intakeYear} onValueChange={setIntakeYear}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Year" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {intakeYears.map((y) => (
+                      <SelectItem key={y} value={y}>{y}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

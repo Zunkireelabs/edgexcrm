@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const db = await scopedClient(auth);
   let query = db
     .from("partner_colleges")
-    .select("id, name, description, is_active, created_at")
+    .select("id, name, description, country, is_active, created_at")
     .order("name", { ascending: true });
   if (!includeInactive) query = query.eq("is_active", true);
 
@@ -59,8 +59,9 @@ export async function POST(request: NextRequest) {
     .insert({
       name: String(body.name).trim(),
       description: body.description ? String(body.description).trim() : null,
+      country: body.country ? String(body.country).trim() : null,
     })
-    .select("id, name, description, is_active, created_at")
+    .select("id, name, description, country, is_active, created_at")
     .single();
 
   if (error) {
