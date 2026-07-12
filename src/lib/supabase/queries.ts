@@ -247,11 +247,14 @@ export async function getLead(
       // Service client: tenant_users RLS hides other users' rows from the RLS client.
       const svc = await createServiceClient();
       const memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
-      // Unassigned lead (e.g. a walk-in just created via Check-In): fall back to a
-      // branch match, same as requireLeadBranchAccess in src/lib/api/auth.ts.
-      const branchOk = data.assigned_to
-        ? memberIds.includes(data.assigned_to)
-        : data.branch_id === scope.branchId;
+      // In-branch via the lead_branches roster, a direct branch_id, or a
+      // branch-member assignee. Mirrors requireLeadBranchAccess / requireLeadAccess
+      // and the getLeads list scope so the detail page matches the list — a lead a
+      // branch manager sees in their list must open, not 404.
+      const branchOk =
+        membership.some((m) => m.branch_id === scope.branchId) ||
+        data.branch_id === scope.branchId ||
+        (data.assigned_to !== null && memberIds.includes(data.assigned_to));
       if (!branchOk) return null;
     }
   }
