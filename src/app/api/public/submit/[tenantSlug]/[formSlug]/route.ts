@@ -435,6 +435,7 @@ export async function POST(
     intake_campaign: body.intake_campaign
       || (tenant.industry_id === "education_consultancy" ? formConfig.attribution?.default_campaign : null)
       || null,
+    intake_account: body.intake_account || null,
     preferred_contact_method: body.preferred_contact_method || null,
     tags: Array.isArray(body.tags) ? body.tags : ["student"],
     branch_id: publicFormBranchId,
