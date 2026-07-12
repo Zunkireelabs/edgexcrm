@@ -109,6 +109,7 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       activityTimeline={activityTimeline}
       canEdit={canEditApplication(tenantData.permissions, tenantData.positionSlug)}
       canDelete={canDeleteApplication(tenantData.permissions)}
+      currentUserId={tenantData.userId}
     />
   );
 }

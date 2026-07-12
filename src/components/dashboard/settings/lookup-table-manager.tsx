@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,78 +21,90 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { GraduationCap, Pencil, Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
+import { Pencil, Trash2, Plus, ToggleLeft, ToggleRight } from "lucide-react";
 import { toast } from "sonner";
 
-interface CollegeRow {
+interface LookupRow {
   id: string;
   name: string;
   description: string | null;
-  country: string | null;
   is_active: boolean;
 }
 
-interface CollegeFormState {
+interface LookupFormState {
   name: string;
   description: string;
-  country: string;
 }
 
-const NO_COUNTRY = "__none__";
-
-function buildDefaultForm(): CollegeFormState {
-  return { name: "", description: "", country: "" };
+function buildDefaultForm(): LookupFormState {
+  return { name: "", description: "" };
 }
 
-export function PartnerCollegesManager() {
-  const [colleges, setColleges] = useState<CollegeRow[]>([]);
-  const [countries, setCountries] = useState<string[]>([]);
+export interface LookupTableManagerProps {
+  /** Card anchor id, e.g. "countries", "courses", "intake-months". */
+  id: string;
+  /** Card title, e.g. "Destination Countries". */
+  title: string;
+  icon: LucideIcon;
+  /** e.g. "/api/v1/countries" — GET/POST at this path, PATCH/DELETE at `${apiPath}/${id}`. */
+  apiPath: string;
+  /** Singular item name, e.g. "Country" — used in "Add Country", dialog titles, delete confirm. */
+  itemLabel: string;
+  description: string;
+  namePlaceholder: string;
+  descriptionPlaceholder: string;
+  emptyMessage: string;
+}
+
+// Shared by every simple tenant-managed lookup list in Settings > Organization
+// (Destination Countries, Fields of Study, Intake Months, Intake Years) — same
+// add/edit/toggle-active/delete CRUD shape, just different labels/endpoints.
+// Partner Colleges is NOT built on this — it has an extra Country field that
+// doesn't fit this generic name+description+is_active shape.
+export function LookupTableManager({
+  id,
+  title,
+  icon: Icon,
+  apiPath,
+  itemLabel,
+  description,
+  namePlaceholder,
+  descriptionPlaceholder,
+  emptyMessage,
+}: LookupTableManagerProps) {
+  const [items, setItems] = useState<LookupRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingCollege, setEditingCollege] = useState<CollegeRow | null>(null);
-  const [form, setForm] = useState<CollegeFormState>(buildDefaultForm);
+  const [editingItem, setEditingItem] = useState<LookupRow | null>(null);
+  const [form, setForm] = useState<LookupFormState>(buildDefaultForm);
   const [saving, setSaving] = useState(false);
 
-  const fetchColleges = useCallback(async () => {
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/v1/partner-colleges?all=true");
+      const res = await fetch(`${apiPath}?all=true`);
       if (res.ok) {
         const json = await res.json();
-        setColleges(json.data ?? []);
+        setItems(json.data ?? []);
       }
     } catch {
-      toast.error("Failed to load partner colleges");
+      toast.error(`Failed to load ${itemLabel.toLowerCase()}s`);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [apiPath, itemLabel]);
 
-  useEffect(() => { fetchColleges(); }, [fetchColleges]);
-
-  useEffect(() => {
-    fetch("/api/v1/countries")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setCountries((j.data as { name: string }[]).map((c) => c.name)); })
-      .catch(() => {});
-  }, []);
+  useEffect(() => { fetchItems(); }, [fetchItems]);
 
   function openCreate() {
-    setEditingCollege(null);
+    setEditingItem(null);
     setForm(buildDefaultForm());
     setDialogOpen(true);
   }
 
-  function openEdit(college: CollegeRow) {
-    setEditingCollege(college);
-    setForm({ name: college.name, description: college.description ?? "", country: college.country ?? "" });
+  function openEdit(item: LookupRow) {
+    setEditingItem(item);
+    setForm({ name: item.name, description: item.description ?? "" });
     setDialogOpen(true);
   }
 
@@ -99,8 +112,8 @@ export function PartnerCollegesManager() {
     if (!form.name.trim()) { toast.error("Name is required"); return; }
     setSaving(true);
     try {
-      const url = editingCollege ? `/api/v1/partner-colleges/${editingCollege.id}` : "/api/v1/partner-colleges";
-      const method = editingCollege ? "PATCH" : "POST";
+      const url = editingItem ? `${apiPath}/${editingItem.id}` : apiPath;
+      const method = editingItem ? "PATCH" : "POST";
 
       const res = await fetch(url, {
         method,
@@ -108,63 +121,62 @@ export function PartnerCollegesManager() {
         body: JSON.stringify({
           name: form.name.trim(),
           description: form.description.trim() || null,
-          country: form.country || null,
         }),
       });
 
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || "Failed to save college");
+        throw new Error(err.error?.message || `Failed to save ${itemLabel.toLowerCase()}`);
       }
 
-      toast.success(editingCollege ? "College updated" : "College added");
+      toast.success(editingItem ? `${itemLabel} updated` : `${itemLabel} added`);
       setDialogOpen(false);
-      fetchColleges();
+      fetchItems();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save college");
+      toast.error(err instanceof Error ? err.message : `Failed to save ${itemLabel.toLowerCase()}`);
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleDelete(college: CollegeRow) {
-    if (!confirm(`Delete "${college.name}"?`)) return;
+  async function handleDelete(item: LookupRow) {
+    if (!confirm(`Delete "${item.name}"?`)) return;
     try {
-      const res = await fetch(`/api/v1/partner-colleges/${college.id}`, { method: "DELETE" });
+      const res = await fetch(`${apiPath}/${item.id}`, { method: "DELETE" });
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || "Failed to delete college");
+        throw new Error(err.error?.message || `Failed to delete ${itemLabel.toLowerCase()}`);
       }
-      toast.success("College deleted");
-      fetchColleges();
+      toast.success(`${itemLabel} deleted`);
+      fetchItems();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete");
     }
   }
 
-  async function handleToggleActive(college: CollegeRow) {
+  async function handleToggleActive(item: LookupRow) {
     try {
-      const res = await fetch(`/api/v1/partner-colleges/${college.id}`, {
+      const res = await fetch(`${apiPath}/${item.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_active: !college.is_active }),
+        body: JSON.stringify({ is_active: !item.is_active }),
       });
-      if (!res.ok) throw new Error("Failed to update college");
-      fetchColleges();
+      if (!res.ok) throw new Error(`Failed to update ${itemLabel.toLowerCase()}`);
+      fetchItems();
     } catch {
-      toast.error("Failed to update college");
+      toast.error(`Failed to update ${itemLabel.toLowerCase()}`);
     }
   }
 
-  const activeCount = colleges.filter((c) => c.is_active).length;
+  const activeCount = items.filter((i) => i.is_active).length;
 
   if (loading) {
     return (
-      <Card id="partner-colleges">
+      <Card id={id}>
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
-            <GraduationCap className="h-5 w-5" />
-            Partner Colleges
+            <Icon className="h-5 w-5" />
+            {title}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -176,46 +188,36 @@ export function PartnerCollegesManager() {
 
   return (
     <>
-      <Card id="partner-colleges">
+      <Card id={id}>
         <CardHeader className="flex flex-row items-start justify-between">
           <div>
             <CardTitle className="text-lg flex items-center gap-2">
-              <GraduationCap className="h-5 w-5" />
-              Partner Colleges
+              <Icon className="h-5 w-5" />
+              {title}
             </CardTitle>
             <CardDescription>
-              Add and manage partner colleges that appear in your lead forms.{" "}
-              {activeCount} active, {colleges.length} total
+              {description} {activeCount} active, {items.length} total
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" />
-            Add College
+            Add {itemLabel}
           </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {colleges.map((college) => (
+            {items.map((item) => (
               <div
-                key={college.id}
+                key={item.id}
                 className="flex items-center justify-between py-2 border-b last:border-0"
               >
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-sm font-medium">{college.name}</p>
-                    {college.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{college.description}</p>
+                    <p className="text-sm font-medium">{item.name}</p>
+                    {item.description && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{item.description}</p>
                     )}
-                    {college.country ? (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 mt-0.5">
-                        {college.country}
-                      </Badge>
-                    ) : (
-                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-amber-600 border-amber-300 mt-0.5">
-                        No country set
-                      </Badge>
-                    )}
-                    {!college.is_active && (
+                    {!item.is_active && (
                       <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground mt-0.5">
                         Inactive
                       </Badge>
@@ -227,10 +229,10 @@ export function PartnerCollegesManager() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground"
-                    title={college.is_active ? "Deactivate" : "Activate"}
-                    onClick={() => handleToggleActive(college)}
+                    title={item.is_active ? "Deactivate" : "Activate"}
+                    onClick={() => handleToggleActive(item)}
                   >
-                    {college.is_active
+                    {item.is_active
                       ? <ToggleRight className="h-4 w-4 text-green-600" />
                       : <ToggleLeft className="h-4 w-4" />
                     }
@@ -239,7 +241,7 @@ export function PartnerCollegesManager() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8"
-                    onClick={() => openEdit(college)}
+                    onClick={() => openEdit(item)}
                   >
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -247,16 +249,16 @@ export function PartnerCollegesManager() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                    onClick={() => handleDelete(college)}
+                    onClick={() => handleDelete(item)}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </div>
             ))}
-            {colleges.length === 0 && (
+            {items.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
-                No partner colleges yet. Add colleges to use them in applications.
+                {emptyMessage}
               </p>
             )}
           </div>
@@ -267,7 +269,7 @@ export function PartnerCollegesManager() {
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>
-              {editingCollege ? `Edit "${editingCollege.name}"` : "Add College"}
+              {editingItem ? `Edit "${editingItem.name}"` : `Add ${itemLabel}`}
             </DialogTitle>
           </DialogHeader>
 
@@ -277,38 +279,16 @@ export function PartnerCollegesManager() {
               <Input
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                placeholder="e.g. University of Melbourne"
+                placeholder={namePlaceholder}
                 onKeyDown={(e) => { if (e.key === "Enter") handleSave(); }}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Country</Label>
-              <Select
-                value={form.country || NO_COUNTRY}
-                onValueChange={(v) => setForm((f) => ({ ...f, country: v === NO_COUNTRY ? "" : v }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_COUNTRY}>
-                    <span className="text-muted-foreground">No country set</span>
-                  </SelectItem>
-                  {countries.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-xs text-muted-foreground">
-                Used to filter this college in the Add Application form. Add more countries under Destination Countries above.
-              </p>
             </div>
             <div className="space-y-1.5">
               <Label>Description</Label>
               <Textarea
                 value={form.description}
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                placeholder="Optional notes about this college"
+                placeholder={descriptionPlaceholder}
                 rows={2}
               />
             </div>
@@ -317,7 +297,7 @@ export function PartnerCollegesManager() {
           <DialogFooter className="pt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>
-              {saving ? "Saving…" : editingCollege ? "Save changes" : "Add College"}
+              {saving ? "Saving…" : editingItem ? "Save changes" : `Add ${itemLabel}`}
             </Button>
           </DialogFooter>
         </DialogContent>

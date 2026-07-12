@@ -33,6 +33,12 @@
  *   await db.raw().auth.admin.listUsers();
  *   //  ^ escape hatch for service-level operations (auth.admin etc.)
  *
+ *   await db
+ *     .from("intake_years")
+ *     .upsert({ name: "2036" }, { onConflict: "tenant_id,name", ignoreDuplicates: true });
+ *   //   ^ tenant_id auto-injected/stripped same as insert(); ON CONFLICT-aware
+ *   //     for idempotent "make sure this row exists" writes
+ *
  * ## Discipline constraints (not enforced by the wrapper)
  *
  * - `.update()` and `.delete()` chain `.eq("tenant_id", auth.tenantId)`
@@ -41,9 +47,18 @@
  *   targets every row in the tenant. The wrapper cannot prevent this
  *   at compile time; PR review is the only guard.
  *
- * - `tenant_id` is stripped from `update()` and `insert()` payloads
- *   before forwarding. A caller cannot move a row to a different
+ * - `tenant_id` is stripped from `update()`, `insert()`, and `upsert()`
+ *   payloads before forwarding. A caller cannot move a row to a different
  *   tenant via the wrapper.
+ *
+ * - `.upsert()`'s caller-supplied `onConflict` MUST include `tenant_id`
+ *   as one of the conflict columns (e.g. `"tenant_id,name"`, never just
+ *   `"name"`). `tenant_id` is stripped from the payload and re-injected
+ *   as the CURRENT caller's tenant — so if the conflict target omits it,
+ *   `ON CONFLICT DO UPDATE`-style upserts could match and silently
+ *   reassign another tenant's existing row to the caller's tenant. The
+ *   wrapper cannot enforce this at compile time; PR review is the only
+ *   guard, same as the `.update()`/`.delete()` filter requirement above.
  *
  * - For cross-tenant operations (admin backfills, support tooling),
  *   use `db.raw()` — the naming makes the escape hatch obvious in
@@ -99,6 +114,19 @@ export async function scopedClient(auth: AuthContext) {
           ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: auth.tenantId }))
           : { ...stripTenantId(rows), tenant_id: auth.tenantId };
         return raw.from(table).insert(withTenant);
+      },
+      // Same tenant_id injection/stripping as insert(), but ON CONFLICT-aware —
+      // for idempotent "make sure these rows exist" writes (e.g. a lookup
+      // table topping itself up) where a plain insert() would abort the whole
+      // batch the moment any one row collides with an existing unique key.
+      upsert(
+        rows: Record<string, unknown> | Record<string, unknown>[],
+        options: { onConflict: string; ignoreDuplicates?: boolean }
+      ) {
+        const withTenant = Array.isArray(rows)
+          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: auth.tenantId }))
+          : { ...stripTenantId(rows), tenant_id: auth.tenantId };
+        return raw.from(table).upsert(withTenant, options);
       },
     };
   }

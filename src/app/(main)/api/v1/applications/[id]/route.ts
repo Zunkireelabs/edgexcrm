@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
+import { getApplicationWithAccess } from "@/lib/api/applications";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -10,12 +11,10 @@ import {
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { shouldRestrictToSelf, canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
-import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -27,17 +26,16 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
 
-  const db = await scopedClient(auth);
-  const { data, error } = await db
-    .from("applications")
-    .select("*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
-
-  if (error) return apiError("DB_ERROR", "Failed to fetch application", 500);
-  if (!data) return apiNotFound("Application");
-  return apiSuccess(data);
+  const { allowed, application, dbError } = await getApplicationWithAccess<
+    Record<string, unknown> & { lead_id: string }
+  >(
+    auth,
+    id,
+    "*, leads!applications_lead_id_fkey(id,first_name,last_name,email), application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)"
+  );
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
+  if (!application || !allowed) return apiNotFound("Application");
+  return apiSuccess(application);
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
@@ -69,40 +67,14 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     body.program_name = trimmed;
   }
 
-  const supabase = await createServiceClient();
+  const { allowed, application: existing, dbError } = await getApplicationWithAccess<
+    Record<string, unknown> & { lead_id: string; stage_id: string }
+  >(auth, id, "*");
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
+  if (!existing || !allowed) return apiNotFound("Application");
+  const existingRow = existing;
+
   const db = await scopedClient(auth);
-
-  const { data: existing } = await db
-    .from("applications")
-    .select("*")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!existing) return apiNotFound("Application");
-
-  const existingRow = existing as unknown as Record<string, unknown>;
-
-  // Parent-lead scope check: load the parent lead and verify actor can access it
-  const { data: parentLead } = await supabase
-    .from("leads")
-    .select("id, assigned_to, branch_id")
-    .eq("id", existingRow.lead_id as string)
-    .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!parentLead) return apiNotFound("Application");
-  const parentLeadRow = parentLead as unknown as { id: string; assigned_to: string | null; branch_id: string | null };
-  const membership = await getLeadMembership(supabase, auth.tenantId, parentLeadRow.id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      parentLeadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiNotFound("Application");
-  }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiNotFound("Application");
   const patch: Record<string, unknown> = {};
 
   // Stage change: sync status slug from the new stage
@@ -202,40 +174,15 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
   if (!canDeleteApplication(auth.permissions)) return apiForbidden();
 
-  const supabase = await createServiceClient();
+  const { allowed, application: existing, dbError } = await getApplicationWithAccess<{ id: string; lead_id: string }>(
+    auth,
+    id,
+    "id, lead_id"
+  );
+  if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
+  if (!existing || !allowed) return apiNotFound("Application");
+
   const db = await scopedClient(auth);
-
-  const { data: existing } = await db
-    .from("applications")
-    .select("id, lead_id")
-    .eq("id", id)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!existing) return apiNotFound("Application");
-
-  // Parent-lead scope check
-  const existingApp = existing as unknown as { id: string; lead_id: string };
-  const { data: parentLead } = await supabase
-    .from("leads")
-    .select("id, assigned_to, branch_id")
-    .eq("id", existingApp.lead_id)
-    .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!parentLead) return apiNotFound("Application");
-  const parentLeadRow = parentLead as unknown as { id: string; assigned_to: string | null; branch_id: string | null };
-  const membership = await getLeadMembership(supabase, auth.tenantId, parentLeadRow.id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !(
-      parentLeadRow.assigned_to === auth.userId ||
-      membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId)
-    )
-  ) {
-    return apiNotFound("Application");
-  }
-  if (!requireLeadBranchAccess(auth, parentLeadRow, membership)) return apiNotFound("Application");
-
   const { error } = await db
     .from("applications")
     .update({ deleted_at: new Date().toISOString() })
