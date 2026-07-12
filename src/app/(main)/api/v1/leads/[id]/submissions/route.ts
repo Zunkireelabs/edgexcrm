@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import {
   apiSuccess,
@@ -40,7 +41,11 @@ export async function GET(
 
   // Counselor: own-only; branch-manager: membership-based
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (shouldRestrictToSelf(auth.permissions) && !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId)) return apiNotFound("Lead");
+  if (
+    shouldRestrictToSelf(auth.permissions) &&
+    !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId) &&
+    !(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))
+  ) return apiNotFound("Lead");
   if (!requireLeadBranchAccess(auth, lead, membership)) return apiNotFound("Lead");
 
   const { data, error } = await supabase
