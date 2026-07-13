@@ -11,12 +11,14 @@ interface DashboardSwitcherProps {
   dashboards: Dashboard[];
   currentDashboard: Dashboard;
   canManage: boolean;
+  industryId: string | null;
 }
 
 export function DashboardSwitcher({
   dashboards,
   currentDashboard,
   canManage,
+  industryId,
 }: DashboardSwitcherProps) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -188,6 +190,7 @@ export function DashboardSwitcher({
         onClose={handleBuilderClose}
         editing={editMode ? currentDashboard : null}
         onCreated={handleCreated}
+        industryId={industryId}
       />
     </>
   );

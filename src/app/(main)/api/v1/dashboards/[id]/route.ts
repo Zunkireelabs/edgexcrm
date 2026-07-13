@@ -12,7 +12,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { WIDGET_KEYS } from "@/industries/education-consultancy/features/insights/lib/widget-catalog";
+import { WIDGET_KEYS } from "@/industries/_shared/features/insights/lib/widget-catalog";
 import type { Dashboard } from "@/types/database";
 
 // GET /api/v1/dashboards/[id]

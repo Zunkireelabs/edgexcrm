@@ -4,7 +4,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
-import { DashboardsEmpty } from "@/industries/education-consultancy/features/insights/pages/dashboards-empty";
+import { DashboardsEmpty } from "@/industries/_shared/features/insights/pages/dashboards-empty";
 import type { Dashboard } from "@/types/database";
 
 export default async function InsightsDashboardsPage() {
@@ -37,5 +37,5 @@ export default async function InsightsDashboardsPage() {
     redirect(`/insights/dashboards/${visibleDashboards[0].id}`);
   }
 
-  return <DashboardsEmpty canManage={isAdmin} />;
+  return <DashboardsEmpty canManage={isAdmin} industryId={tenantData.tenant.industry_id} />;
 }
