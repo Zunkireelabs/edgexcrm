@@ -2,6 +2,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { apiUnauthorized, apiSuccess } from "@/lib/api/response";
 import { logger } from "@/lib/logger";
 import { pollOneAccount } from "./lib";
+import { emailMeta } from "@/industries/_shared/features/email/meta";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 const CONCURRENCY = 5;
@@ -21,12 +22,16 @@ export async function POST(request: Request) {
 
   const supabase = await createServiceClient();
 
-  // Load connected accounts for education_consultancy tenants only
-  // Join through tenants to filter by industry_id so non-education tenants aren't polled
+  // Load connected accounts for tenants whose industry the email feature is
+  // actually registered for (emailMeta.industries — the same list the
+  // feature gate itself checks), not a hardcoded single industry. This was
+  // previously hardcoded to "education_consultancy" only, so when the email
+  // feature was later opened to travel_agency tenants too, their accounts
+  // could connect and send but were silently never polled for replies.
   const { data: accounts, error: accountsErr } = await supabase
     .from("connected_email_accounts")
     .select("*, tenants!inner(industry_id)")
-    .eq("tenants.industry_id", "education_consultancy")
+    .in("tenants.industry_id", [...emailMeta.industries])
     .order("created_at");
 
   if (accountsErr) {
