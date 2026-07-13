@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Mail, Loader2 } from "lucide-react";
+import { Mail, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useConnectedInboxes } from "../hooks/use-connected-inboxes";
 
 export function InboxConnector() {
@@ -102,34 +103,66 @@ export function InboxConnector() {
         </p>
       ) : (
         <ul className="space-y-2">
-          {inboxes.map((inbox) => (
-            <li
-              key={inbox.id}
-              className="flex items-center justify-between rounded-md border border-border px-3 py-2"
-            >
-              <div className="flex items-center gap-2 min-w-0">
-                <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium truncate">{inbox.email}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {inbox.provider} · Connected{" "}
-                    {new Date(inbox.created_at).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="destructive"
-                size="sm"
-                disabled={disconnecting === inbox.id}
-                onClick={() => handleDisconnect(inbox.id)}
+          {inboxes.map((inbox) => {
+            const broken = inbox.health === "error";
+            return (
+              <li
+                key={inbox.id}
+                className={`flex items-center justify-between rounded-md border px-3 py-2 ${
+                  broken ? "border-amber-200 bg-amber-50" : "border-border"
+                }`}
               >
-                {disconnecting === inbox.id && (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                )}
-                Disconnect
-              </Button>
-            </li>
-          ))}
+                <div className="flex items-center gap-2 min-w-0">
+                  {broken ? (
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  ) : (
+                    <Mail className="h-4 w-4 text-muted-foreground shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-sm font-medium truncate">{inbox.email}</p>
+                      {broken && (
+                        <Badge
+                          variant="secondary"
+                          className="bg-amber-100 text-amber-800 hover:bg-amber-100"
+                        >
+                          Needs reconnect
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {broken
+                        ? "Connection broken — reconnect this Gmail account to resume sending and receiving replies."
+                        : `${inbox.provider} · Connected ${new Date(inbox.created_at).toLocaleDateString()}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {broken && (
+                    <Button
+                      size="sm"
+                      onClick={handleConnect}
+                      disabled={connecting}
+                      className="bg-primary text-primary-foreground hover:bg-primary/90"
+                    >
+                      Reconnect
+                    </Button>
+                  )}
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={disconnecting === inbox.id}
+                    onClick={() => handleDisconnect(inbox.id)}
+                  >
+                    {disconnecting === inbox.id && (
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                    )}
+                    Disconnect
+                  </Button>
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

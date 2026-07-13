@@ -133,6 +133,14 @@ export async function GET(request: NextRequest) {
         })
         .eq("id", existing.id);
 
+      // Clear any error streak immediately so the "needs reconnect" badge
+      // drops right away instead of waiting for the next poll cycle to
+      // notice the connection is healthy again.
+      await supabase
+        .from("email_sync_state")
+        .update({ consecutive_error_count: 0, last_error: null })
+        .eq("connected_email_account_id", existing.id);
+
       log.info({ email, userId: auth.userId }, "Updated existing inbox Gmail connection");
     } else {
       await supabase.from("connected_email_accounts").insert({
