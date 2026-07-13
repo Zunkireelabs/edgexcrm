@@ -12,8 +12,10 @@
 // re-encrypted on their next token write (refresh or reconnect). No data
 // migration required.
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ConnectedEmailAccount } from "@/types/database";
 import { encryptToken, decryptToken } from "@/lib/inbox/crypto";
+import { logger } from "@/lib/logger";
 
 const PREFIX = "enc:v1:";
 
@@ -43,4 +45,31 @@ export function decryptAccountTokens<T extends Pick<ConnectedEmailAccount, "refr
     refresh_token: decryptAccountToken(account.refresh_token),
     access_token: account.access_token ? decryptAccountToken(account.access_token) : account.access_token,
   };
+}
+
+/**
+ * Best-effort persist of a freshly-refreshed access token. Never throws —
+ * an encrypt failure here must not abort the caller (a send that already
+ * delivered via Gmail, or a poll cycle for other accounts); it's logged
+ * and the caller proceeds using the in-memory refreshed token regardless.
+ */
+export async function persistRefreshedToken(
+  supabase: SupabaseClient,
+  accountId: string,
+  refreshed: { access_token: string; expiry_date: number },
+): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("connected_email_accounts")
+      .update({
+        access_token: encryptAccountToken(refreshed.access_token),
+        token_expiry: new Date(refreshed.expiry_date).toISOString(),
+      })
+      .eq("id", accountId);
+    if (error) {
+      logger.warn({ error, accountId }, "Failed to persist refreshed token (non-fatal)");
+    }
+  } catch (err) {
+    logger.warn({ err, accountId }, "Failed to encrypt/persist refreshed token (non-fatal)");
+  }
 }
