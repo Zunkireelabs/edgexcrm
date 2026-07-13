@@ -19,6 +19,9 @@ UPDATE applications a SET position = o.rn FROM ordered o WHERE a.id = o.id;
 
 CREATE INDEX IF NOT EXISTS idx_applications_lead_position ON applications (lead_id, position);
 
+INSERT INTO public.schema_migrations (version) VALUES ('143_application_position.sql')
+  ON CONFLICT (version) DO NOTHING;
+
 COMMIT;
 
 -- Rollback:
