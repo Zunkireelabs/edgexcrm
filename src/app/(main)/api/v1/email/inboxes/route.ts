@@ -13,7 +13,6 @@ import { scopedClient } from "@/lib/supabase/scoped";
 const ERROR_STREAK_THRESHOLD = 3;
 
 interface SyncStateRow {
-  connected_email_account_id: string;
   consecutive_error_count: number;
   last_error: string | null;
   last_synced_at: string | null;
@@ -25,6 +24,10 @@ interface AccountRow {
   display_name: string | null;
   provider: string;
   created_at: string;
+  // email_sync_state.connected_email_account_id is both PK and FK to this
+  // table, so PostgREST embeds it as a single object — stay defensive in
+  // case the client library ever returns a single-element array instead.
+  email_sync_state: SyncStateRow | SyncStateRow[] | null;
 }
 
 export async function GET() {
@@ -35,33 +38,25 @@ export async function GET() {
   const db = await scopedClient(auth);
   const { data, error } = await db
     .from("connected_email_accounts")
-    .select("id, email, display_name, provider, created_at")
+    .select(
+      "id, email, display_name, provider, created_at, email_sync_state(consecutive_error_count, last_error, last_synced_at)",
+    )
     .eq("user_id", auth.userId);
 
   if (error) return apiInternalError();
 
   const accounts = (data ?? []) as unknown as AccountRow[];
-  if (accounts.length === 0) return apiSuccess([]);
-
-  // email_sync_state has no tenant_id column (it's keyed 1:1 on
-  // connected_email_account_id), so it can't go through scopedClient's
-  // auto tenant-filter — use fromGlobal() and filter explicitly to this
-  // user's own account ids instead.
-  const accountIds = accounts.map((a) => a.id);
-  const { data: syncStates } = await db
-    .fromGlobal("email_sync_state")
-    .select("connected_email_account_id, consecutive_error_count, last_error, last_synced_at")
-    .in("connected_email_account_id", accountIds);
-
-  const stateByAccountId = new Map<string, SyncStateRow>(
-    ((syncStates ?? []) as SyncStateRow[]).map((s) => [s.connected_email_account_id, s]),
-  );
 
   const enriched = accounts.map((account) => {
-    const state = stateByAccountId.get(account.id);
+    const rawState = account.email_sync_state;
+    const state = Array.isArray(rawState) ? rawState[0] : rawState;
     const needsReconnect = (state?.consecutive_error_count ?? 0) >= ERROR_STREAK_THRESHOLD;
     return {
-      ...account,
+      id: account.id,
+      email: account.email,
+      display_name: account.display_name,
+      provider: account.provider,
+      created_at: account.created_at,
       health: needsReconnect ? ("error" as const) : ("ok" as const),
       last_synced_at: state?.last_synced_at ?? null,
       last_error: needsReconnect ? state?.last_error ?? null : null,
