@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
 import { authenticateRequest } from "@/lib/api/auth";
+import { encryptAccountToken } from "@/industries/_shared/features/email/lib/token-crypto";
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
@@ -107,14 +108,19 @@ export async function GET(request: NextRequest) {
       .eq("email", email)
       .single();
 
+    const encryptedRefreshToken = encryptAccountToken(tokenData.refresh_token);
+    const encryptedAccessToken = tokenData.access_token
+      ? encryptAccountToken(tokenData.access_token)
+      : null;
+
     if (existing) {
       // Update existing account with new tokens
       await supabase
         .from("connected_email_accounts")
         .update({
           user_id: auth.userId,
-          refresh_token: tokenData.refresh_token,
-          access_token: tokenData.access_token,
+          refresh_token: encryptedRefreshToken,
+          access_token: encryptedAccessToken,
           token_expiry: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
         })
         .eq("id", existing.id);
@@ -127,8 +133,8 @@ export async function GET(request: NextRequest) {
         user_id: auth.userId,
         provider: "gmail",
         email,
-        refresh_token: tokenData.refresh_token,
-        access_token: tokenData.access_token,
+        refresh_token: encryptedRefreshToken,
+        access_token: encryptedAccessToken,
         token_expiry: new Date(Date.now() + tokenData.expires_in * 1000).toISOString(),
       });
 

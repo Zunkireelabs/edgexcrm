@@ -18,6 +18,7 @@ import { validate, required, maxLength, isUUID } from "@/lib/api/validation";
 import { emitEvent } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
+import { encryptAccountToken, decryptAccountTokens } from "@/industries/_shared/features/email/lib/token-crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
@@ -45,13 +46,14 @@ export async function POST(request: Request) {
   const db = await scopedClient(auth);
 
   // Verify user owns the from_account — 403 rather than 404 to never leak existence of another user's account
-  const { data: account, error: acctErr } = await db
+  const { data: rawAccount, error: acctErr } = await db
     .from("connected_email_accounts")
     .select("*")
     .eq("id", body.from_account_id)
     .eq("user_id", auth.userId)
     .single<ConnectedEmailAccount>();
-  if (acctErr || !account) return apiForbidden();
+  if (acctErr || !rawAccount) return apiForbidden();
+  const account = decryptAccountTokens(rawAccount);
 
   // Phase 3: validate reply_context if provided
   let thread: {
@@ -170,7 +172,7 @@ export async function POST(request: Request) {
     const { access_token, expiry_date } = result.refreshed_credentials;
     db.from("connected_email_accounts")
       .update({
-        access_token,
+        access_token: encryptAccountToken(access_token),
         token_expiry: new Date(expiry_date).toISOString(),
       })
       .eq("id", account.id)

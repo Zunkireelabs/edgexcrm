@@ -5,6 +5,7 @@ import { emitEvent } from "@/lib/api/audit";
 import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
 import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/_shared/features/email/lib/gmail-client";
 import type { ParsedMessage } from "@/industries/_shared/features/email/lib/gmail-client";
+import { encryptAccountToken, decryptAccountTokens } from "@/industries/_shared/features/email/lib/token-crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 interface EmailThread {
@@ -25,7 +26,7 @@ export async function persistRefreshedToken(
   const { error } = await supabase
     .from("connected_email_accounts")
     .update({
-      access_token: refreshed.access_token,
+      access_token: encryptAccountToken(refreshed.access_token),
       token_expiry: new Date(refreshed.expiry_date).toISOString(),
     })
     .eq("id", accountId);
@@ -89,8 +90,12 @@ async function matchInboundToThread(
 
 export async function pollOneAccount(
   supabase: SupabaseClient,
-  account: ConnectedEmailAccount,
+  rawAccount: ConnectedEmailAccount,
 ): Promise<{ newInboundCount: number }> {
+  // Decrypt once here so every downstream call (refresh, history, get-message)
+  // sees plaintext tokens without needing to know about encryption.
+  const account = decryptAccountTokens(rawAccount);
+
   // Load sync state (create baseline if first poll)
   const { data: existingState } = await supabase
     .from("email_sync_state")
