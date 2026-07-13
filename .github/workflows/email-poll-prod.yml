@@ -2,8 +2,17 @@ name: Email Poll (prod)
 
 on:
   schedule:
-    - cron: '*/2 * * * *'   # every 2 min — matches the cadence of the VPS cron this replaces
+    # GitHub Actions scheduled workflows have a documented ~5-minute floor
+    # (and can run later still under platform load) — a shorter interval
+    # like the */2 the VPS cron this replaces used would just be silently
+    # throttled to the same real cadence, so this is written honestly at
+    # the floor rather than implying a freshness GH Actions can't deliver.
+    - cron: '*/5 * * * *'
   workflow_dispatch:          # manual trigger for testing
+
+concurrency:
+  group: email-poll-prod
+  cancel-in-progress: true
 
 jobs:
   poll:

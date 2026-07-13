@@ -4,9 +4,12 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { scopedClient } from "@/lib/supabase/scoped";
 
-// 3+ consecutive poll failures (~6-15 min at current cron cadence) before we
-// flag an inbox as broken — enough to ride out a single transient Google API
-// blip without false-positiving, since a successful poll resets the count to 0.
+// 3+ consecutive poll failures (~15+ min at the prod cron's real cadence —
+// GitHub Actions scheduled workflows have a ~5-minute floor regardless of
+// what the cron expression requests, and can run later still under platform
+// load) before we flag an inbox as broken — enough to ride out a single
+// transient Google API blip without false-positiving, since a successful
+// poll resets the count to 0.
 const ERROR_STREAK_THRESHOLD = 3;
 
 interface SyncStateRow {
