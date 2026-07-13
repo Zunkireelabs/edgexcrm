@@ -165,6 +165,24 @@ When closing a session, push this block's content into a new dated session entry
 
 ---
 
+## Applications panel access-control + drag-reorder & lead pipeline/stage sync (blank-Status fix) PROMOTED TO PRODUCTION — 2026-07-13
+
+`main` @ `9785929` (merge commit, PR #195). Two `education_consultancy` features; **it_agency (Zunkiree/Mobilise) byte-for-byte untouched** — verified: applications feature is industry-gated; the landing-stage helper is inert for them (all their list-pipelines have a default stage); the 2 universal bits were gated to `education_consultancy`.
+
+**Feature 1 — Applications panel access control + drag-reorder** (PR #192): the lead-detail APPLICATIONS card (`applications-card.tsx`) now enforces branch/assignee access + supports drag-reorder. **VIEW** = anyone who sees the lead incl. lead collaborators (view-only). **CREATE/REORDER** = owner/admin · branch-manager of the lead's assigned branch (`lead.branch_id`) · lead assignee. **EDIT/DELETE** = owner/admin · branch-manager of assigned branch · the application's assignee (`applications.assigned_to`). No auto-assign on create. New truth fns `canManageApplicationForLead` + `canCreateOrReorderApplications` (`src/lib/api/applications.ts`); `getApplicationWithAccess` now returns `{parentLead, membership, viaCollaborator}`; the collaborator VIEW bypass is **read-only** (notes POST rejects `viaCollaborator`). Removed dead `canEditApplication`/`canDeleteApplication`/`APP_EDIT_POSITIONS`. Drag = @dnd-kit sortable (grip handle, body stays a click-link, optimistic + revert/toast). **Migration 143** (`applications.position` INTEGER, backfilled per-lead by `created_at`, index `(lead_id, position)`) + new `PATCH /api/v1/leads/[id]/applications/reorder` (validates `orderedIds` is a complete permutation). Standalone Applications board create gate left on `canManageApplications` (out of scope). Collaborator app-detail **page** 404 fixed separately (PR #194) — that page had its own inline scope guard missing the collaborator bypass.
+
+**Feature 2 — lead pipeline/stage sync (blank-Status fix)** (PR #192): root cause — a lead moved into a list whose pipeline differs from `lead.pipeline_id` kept a stale pipeline → the lead-detail "Status" dropdown filters the list-pipeline's stages by the stale `pipeline_id` → empty → blank + un-editable. Fix: `getPipelineLandingStage()` (`src/lib/leads/pipeline-stage.ts` — `is_default` stage else lowest `position`) applied at **every** write site that lands a lead in a list's pipeline: check-in create, explicit-list create, list-move (stepper), cross-branch reassign, promote-on-check-in, and **bulk** list-move. UI self-heal: `key-info-section.tsx` falls back to the list-pipeline stages when drifted; `lead-detail-v2.tsx` `handleStageChange` sends `pipeline_id` for cross-pipeline picks. **Education-gated:** the incoming-`pipeline_id` tenant-validation + "prefer `body.pipeline_id` in stage validation" run only for `education_consultancy` (it_agency's leads PATCH unchanged). Side effect: the multi-pipeline **"Move to Pipeline"** modal (was 400-ing because stage validation scoped to the OLD pipeline) now works — education-only.
+
+**Prod DB (per-action gated):** mig 143 applied to prod (125 applications backfilled, 0 null, index + ledger). **5 drifted Admizz leads repaired** to the Prospects landing stage (`pipeline 06848a71` / `stage 3a247214` / `prospect-ready` / `prospect`): the original 3 (Amar/Apsara/Sujan) + 2 that appeared mid-deploy (Parmita/Dharmendra) — drift 3→5→**0**. Admizz tenant `febeb37c-521c-4f29-adbb-0195b2eede88`.
+
+**Review:** 3 adversarial passes on #192 + `/code-reviewer` on #194. No Critical/High; no cross-tenant leak. One Medium (unvalidated `pipeline_id`) fixed then education-gated. Lows deferred: reorder-revert stale-closure (`applications-card.tsx:165`), reorder update doesn't filter `deleted_at`, helper + one `lead_lists` query lack explicit `tenant_id` (mitigated today).
+
+**Git:** PRs #192/#194 → `stage`; #195 `stage → main` as **merge commit** (never squash — preserves ancestry; `stage` now 0 ahead of `main`). 4 merged branches deleted from origin. Prod live, healthy (307 → /login).
+
+**Open:** prod smoke test (education tenant) — collaborator opens application read-only (no 404), reorder persists, Status never blank after check-in/list-move/qualify/bulk/cross-branch, Move-to-Pipeline works. Optional: apply the 3 Low follow-ups.
+
+---
+
 ## Global Search command palette (⌘K) shipped to stage — 2026-06-26
 
 Global/universal UI feature. Replaced the non-functional top-header search box with a sidebar-anchored command palette.
