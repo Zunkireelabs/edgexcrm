@@ -77,6 +77,8 @@ interface LeadDetailV2Props {
   /** Revert assignee options: the previous holder's same-position peers in their branch. */
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
   canManageApplications?: boolean;
+  /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
+  canManageApplicationPanel?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
@@ -151,6 +153,7 @@ export function LeadDetailV2({
   revertTargetName = null,
   revertTargetMembers = [],
   canManageApplications,
+  canManageApplicationPanel,
   canEnroll,
   leadLists,
   activeLeadLists,
@@ -839,7 +842,7 @@ export function LeadDetailV2({
                   )}
                   <ApplicationsCard
                     leadId={currentLead.id}
-                    canManage={canManageApplications ?? isAdmin}
+                    canManage={canManageApplicationPanel ?? canManageApplications ?? isAdmin}
                     disabled={consentEnabled && !consentSignedState}
                   />
                 </>

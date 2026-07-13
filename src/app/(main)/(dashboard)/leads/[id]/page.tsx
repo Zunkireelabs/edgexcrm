@@ -14,6 +14,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
@@ -243,6 +244,7 @@ export default async function LeadDetailPage({
       revertTargetName={revertTargetName}
       revertTargetMembers={revertTargetMembers}
       canManageApplications={tenantData.permissions.canManageApplications}
+      canManageApplicationPanel={canCreateOrReorderApplications(tenantData, lead)}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}
       activeLeadLists={activeLeadLists}
