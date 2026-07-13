@@ -9,6 +9,7 @@ import {
   Edit,
   Trash2,
   Clock,
+  ArrowUpCircle,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -180,6 +181,25 @@ function getActivityDisplay(
         description: "Unassigned",
       };
     }
+  }
+
+  // it_agency: Lead Processing → Sales Leads graduation
+  if (action === "lead.graduated") {
+    const newListName = changes.list?.new;
+    return {
+      icon: <ArrowUpCircle className="h-4 w-4" />,
+      color: "bg-emerald-100 text-emerald-600",
+      description: `Graduated to Sales Leads${newListName ? ` · ${formatValue(newListName)}` : ""}`,
+    };
+  }
+
+  // Moved between stage-lists (bulk move-to-list, outside of graduation)
+  if (changes.list) {
+    return {
+      icon: <GitBranch className="h-4 w-4" />,
+      color: "bg-blue-100 text-blue-600",
+      description: `Moved to ${formatValue(changes.list.new)}`,
+    };
   }
 
   // Submission (dedup-aware: first = created, subsequent = resubmission)

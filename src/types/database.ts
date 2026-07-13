@@ -220,6 +220,8 @@ export interface LeadList {
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
   pipeline_id: string | null;
+  /** Groups this list under a sidebar funnel (it_agency only). Null = ungrouped. */
+  funnel_key: string | null;
   created_at: string;
   updated_at: string;
   count?: number;

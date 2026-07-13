@@ -1,9 +1,10 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
+import { FunnelKanbanBoard } from "@/components/dashboard/leads/funnel-kanban-board";
 import { canSeeNav, canAccessList, leadQueryScope, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -11,16 +12,21 @@ import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
+const FUNNEL_LABELS: Record<string, string> = {
+  lead_processing: "Lead Processing",
+  sales_leads: "Sales Leads",
+};
+
 export default async function LeadsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string; view?: string }>;
+  searchParams: Promise<{ list?: string; view?: string; funnel?: string }>;
 }) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!canSeeNav(tenantData.permissions, "/leads")) redirect("/dashboard");
 
-  const { list: listSlug, view } = await searchParams;
+  const { list: listSlug, view, funnel: funnelParam } = await searchParams;
   const viewMode2 = view === "kanban" ? "kanban" : "list";
 
   const [serviceClient, cookieStore] = await Promise.all([
@@ -55,8 +61,26 @@ export default async function LeadsPage({
   // Resolve list slug → list object (and archive exclusion for master view)
   let activeList: LeadList | null = null;
   let allLists: LeadList[] = [];
+  let activeFunnelLists: LeadList[] = [];
   if (hasLeadLists) {
     allLists = await getLeadListsByTenant(tenantData.tenant.id);
+
+    // it_agency funnel workspace (?funnel=lead_processing|sales_leads, no ?list=): all
+    // of the funnel's stage-lists at once. Access-filtered same as any other list.
+    if (!listSlug && funnelParam) {
+      activeFunnelLists = allLists
+        .filter((l) => l.funnel_key === funnelParam)
+        .filter((l) =>
+          canAccessList(
+            tenantData.permissions,
+            l.access as { mode: string; positionIds?: string[] },
+            tenantData.positionId,
+            l.id,
+          ),
+        )
+        .sort((a, b) => a.sort_order - b.sort_order);
+    }
+
     if (listSlug) {
       const found = allLists.find((l) => l.slug === listSlug);
       if (found) {
@@ -74,7 +98,8 @@ export default async function LeadsPage({
     }
     // "All Leads" (no ?list=): admin/owner see the global view; everyone else lands
     // on their position's home list. Falls back to first accessible list if no mapping.
-    if (!listSlug) {
+    // Skipped when a valid funnel workspace is requested — that's a deliberate view choice.
+    if (!listSlug && activeFunnelLists.length === 0) {
       if (!isAdminOrOwner) {
         const homeSlug = tenantData.positionSlug ? POSITION_HOME_LIST[tenantData.positionSlug] : null;
         const homeList = homeSlug
@@ -116,6 +141,8 @@ export default async function LeadsPage({
         scope.restrictToSelf = false;
         scope.branchId = tenantData.branchId;
       }
+    } else if (activeFunnelLists.length > 0) {
+      scope.listIds = activeFunnelLists.map((l) => l.id);
     } else {
       scope.excludeListIds = excludeIds;
     }
@@ -131,6 +158,9 @@ export default async function LeadsPage({
     viewMode2 === "kanban" &&
     activeList !== null &&
     tableViewMode === "normal";
+
+  // Funnel-level kanban: columns are the funnel's stages (lists), not one list's statuses.
+  const canShowFunnelKanban = viewMode2 === "kanban" && activeList === null && activeFunnelLists.length > 0;
 
   // Load the list's pipeline when kanban is requested
   const listPipelineResult =
@@ -175,7 +205,11 @@ export default async function LeadsPage({
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
 
-  const pageHeading = activeList ? activeList.name : "All Leads";
+  const pageHeading = activeList
+    ? activeList.name
+    : activeFunnelLists.length > 0
+    ? FUNNEL_LABELS[funnelParam as string] ?? "All Leads"
+    : "All Leads";
 
   // Pass lead lists (accessible ones) for the move-to-list selector
   const accessibleLists = hasLeadLists
@@ -230,14 +264,38 @@ export default async function LeadsPage({
     );
   }
 
+  // Funnel-level kanban: columns = the funnel's stages (lists)
+  if (canShowFunnelKanban) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <FunnelKanbanBoard
+          lists={activeFunnelLists}
+          leads={leads}
+          canEdit={tenantData.permissions.canEditLeads ?? tenantData.role !== "viewer"}
+          restrictToSelf={tenantData.permissions.leadScope === "own"}
+          userId={tenantData.userId}
+        />
+      </div>
+    );
+  }
+
   // Default: list view
-  const hasListPipeline = !!(activeList && activeList.pipeline_id);
+  const hasListPipeline = !!(activeList && activeList.pipeline_id) || activeFunnelLists.length > 0;
+
+  // it_agency "no next task" signal (Sales Leads) — cheap at today's volumes; scoped to
+  // this render's lead set, not the whole tenant.
+  const openTaskLeadIds =
+    tenantData.tenant.industry_id === "it_agency" && leads.length > 0
+      ? await getOpenTaskLeadIds(tenantData.tenant.id, leads.map((l) => l.id))
+      : undefined;
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
       <LeadsTable
         leads={leads}
+        openTaskLeadIds={openTaskLeadIds}
         memberMap={memberMap}
         memberNames={memberNames}
         stages={stages}
@@ -264,6 +322,7 @@ export default async function LeadsPage({
         assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
         activeListSlug={activeList?.slug ?? null}
+        activeFunnelKey={activeFunnelLists.length > 0 ? funnelParam ?? null : null}
         hasListPipeline={hasListPipeline}
         isTeamScoped={tenantData.permissions.leadScope === "team"}
         roleMap={roleMap}

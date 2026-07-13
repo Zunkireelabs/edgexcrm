@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant, getLeadListCounts } from "@/lib/supabase/queries";
 import { createClient } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
@@ -69,6 +69,13 @@ export default async function DashboardLayout({
   // Leads Organise staging buckets are admin-only; counselors/viewers never see them in the nav
   const stagingLists = isLayoutAdmin ? accessibleLists.filter((l) => !!l.is_staging) : [];
 
+  // it_agency funnel sidebar rows show a live lead count. Scoped to funnel-tagged
+  // lists only (not the whole tenant) to keep this off the hot path for every page nav.
+  const funnelListIds = leadLists.filter((l) => l.funnel_key != null).map((l) => l.id);
+  const funnelListCounts =
+    funnelListIds.length > 0 ? await getLeadListCounts(tenantData.tenant.id, funnelListIds) : {};
+  const leadListsWithCounts = leadLists.map((l) => ({ ...l, count: funnelListCounts[l.id] }));
+
   const industrySidebarItems = getIndustrySidebarItems(
     tenantData.tenant.industry_id,
     tenantData.role,
@@ -116,7 +123,7 @@ export default async function DashboardLayout({
             userBranchId={tenantData.branchId}
             leadScope={tenantData.permissions.leadScope}
             selectedBranchId={selectedBranchId}
-            leadLists={leadLists}
+            leadLists={leadListsWithCounts}
             stagingLists={stagingLists}
             archiveLists={archiveLists}
           >
