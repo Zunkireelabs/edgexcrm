@@ -390,11 +390,19 @@ export function LeadDetailV2({
     setStageId(newStageId);
     setStatus(newStage.slug);
 
+    // When the chosen stage belongs to a different pipeline than the lead's current
+    // pipeline_id (data-drift fallback in KeyInfoSection), send pipeline_id too so the
+    // PATCH validates against — and re-syncs to — the correct pipeline.
+    const body: Record<string, unknown> =
+      newStage.pipeline_id && newStage.pipeline_id !== lead.pipeline_id
+        ? { stage_id: newStageId, pipeline_id: newStage.pipeline_id }
+        : { stage_id: newStageId };
+
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_id: newStageId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to update stage");
       toast.success("Stage updated");

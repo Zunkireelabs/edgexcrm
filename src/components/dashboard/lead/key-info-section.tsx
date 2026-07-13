@@ -169,10 +169,16 @@ export function KeyInfoSection({
   );
   const isInIntakeList = currentLeadList?.is_intake ?? false;
 
-  // Stages scoped to this lead's pipeline, sorted by position.
-  const pipelineStages = stages
+  // Stages scoped to this lead's pipeline, sorted by position. When the lead's
+  // pipeline_id doesn't match any provided stage (data drift — e.g. a lead whose
+  // pipeline_id was never synced to its list's pipeline), fall back to the full
+  // stages prop (the lead's list-pipeline stages) so the Status control is never
+  // dead. Picking a stage then re-syncs pipeline_id via onStageChange.
+  const scopedStages = stages
     .filter((s) => s.pipeline_id === lead.pipeline_id)
     .sort((a, b) => a.position - b.position);
+  const pipelineStages =
+    scopedStages.length > 0 ? scopedStages : [...stages].sort((a, b) => a.position - b.position);
   const defaultPipelineStage =
     pipelineStages.find((s) => s.is_default) ?? pipelineStages[0];
   // When lead has no stage_id yet, show the pipeline's default/first stage.
