@@ -11,6 +11,7 @@ interface SummaryRow {
   minutes: number;
   billable_minutes: number;
   billable_amount: number;
+  currency: string;
 }
 
 // Monday-Sunday range containing "now", in the browser's local timezone —
@@ -50,7 +51,7 @@ export default function MyTimeWidget({ currentUserId }: DeliveryWidgetProps) {
         <div className="space-y-1">
           <div className="text-3xl font-bold">{(mine.minutes / 60).toFixed(1)}h</div>
           <div className="text-xs text-muted-foreground">
-            {(mine.billable_minutes / 60).toFixed(1)}h billable · {formatMoney(mine.billable_amount)}
+            {(mine.billable_minutes / 60).toFixed(1)}h billable · {formatMoney(mine.billable_amount, mine.currency)}
           </div>
         </div>
       )}

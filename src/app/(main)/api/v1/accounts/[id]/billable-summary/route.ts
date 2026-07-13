@@ -52,11 +52,15 @@ export async function GET(_request: NextRequest, { params }: Props) {
   const projectIds = ((projectRows ?? []) as unknown as { id: string }[]).map((p) => p.id);
   const zero = { billable_minutes: 0, billable_amount: 0 };
 
+  const { data: tenantRow } = await db.raw().from("tenants").select("default_currency").eq("id", auth.tenantId).single();
+  const currency = (tenantRow as { default_currency: string } | null)?.default_currency ?? "NPR";
+
   if (projectIds.length === 0) {
     return apiSuccess({
       this_month: zero,
       last_month: zero,
       lifetime: zero,
+      currency,
     });
   }
 
@@ -97,5 +101,6 @@ export async function GET(_request: NextRequest, { params }: Props) {
     this_month: sumEntries((thisMonthRes.data ?? []) as unknown as BillableRow[]),
     last_month: sumEntries((lastMonthRes.data ?? []) as unknown as BillableRow[]),
     lifetime: sumEntries((lifetimeRes.data ?? []) as unknown as BillableRow[]),
+    currency,
   });
 }

@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBillableDelta, formatCurrency } from "@/lib/format-billable-delta";
+import { formatBillableDelta } from "@/lib/format-billable-delta";
+import { formatMoney } from "@/lib/currency";
 import type { ProjectStatus } from "@/types/database";
 
 interface AccountContact {
@@ -17,6 +18,7 @@ interface BillableSummary {
   this_month: { billable_minutes: number; billable_amount: number };
   last_month: { billable_minutes: number; billable_amount: number };
   lifetime: { billable_minutes: number; billable_amount: number };
+  currency: string;
 }
 
 interface AccountKeyInfoSectionProps {
@@ -159,7 +161,7 @@ export function AccountKeyInfoSection({
                 value={
                   billableSummary ? (
                     <span>
-                      {formatCurrency(billableSummary.this_month.billable_amount)}
+                      {formatMoney(billableSummary.this_month.billable_amount, billableSummary.currency)}
                       {(() => {
                         const delta = formatBillableDelta(
                           billableSummary.this_month.billable_amount,
@@ -187,7 +189,7 @@ export function AccountKeyInfoSection({
                 label="Lifetime billable"
                 value={
                   billableSummary ? (
-                    formatCurrency(billableSummary.lifetime.billable_amount)
+                    formatMoney(billableSummary.lifetime.billable_amount, billableSummary.currency)
                   ) : (
                     <span className="text-muted-foreground">—</span>
                   )

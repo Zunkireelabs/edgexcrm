@@ -29,11 +29,14 @@ function projectOf(embed: ProjectEmbed | ProjectEmbed[] | null): ProjectEmbed | 
   return Array.isArray(embed) ? (embed[0] ?? null) : embed;
 }
 
+function toUTCMidnightMs(dateISO: string): number {
+  const [year, month, day] = dateISO.split("-").map(Number);
+  return Date.UTC(year, month - 1, day);
+}
+
 function daysOverdue(dueDate: string): number {
-  const due = new Date(`${dueDate}T00:00:00Z`);
-  const today = new Date();
-  today.setUTCHours(0, 0, 0, 0);
-  return Math.round((today.getTime() - due.getTime()) / (1000 * 60 * 60 * 24));
+  const todayISO = new Intl.DateTimeFormat("en-CA").format(new Date());
+  return Math.round((toUTCMidnightMs(todayISO) - toUTCMidnightMs(dueDate)) / (1000 * 60 * 60 * 24));
 }
 
 export default function DeliveryOverdueTasksWidget() {

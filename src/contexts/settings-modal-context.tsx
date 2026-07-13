@@ -21,6 +21,7 @@ export interface BootstrapData {
   maxBranches: number;
   timezone: string;
   weekendDays: number[];
+  defaultCurrency: string;
 }
 
 interface SettingsModalContextValue {

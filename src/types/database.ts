@@ -56,6 +56,7 @@ export interface Tenant {
   entitlement_overrides: Record<string, unknown>;
   timezone: string;
   weekend_days: number[];
+  default_currency: string;
   created_at: string;
   updated_at: string;
 }
