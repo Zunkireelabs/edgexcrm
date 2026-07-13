@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { Dashboard } from "@/types/database";
-import { WIDGET_CATALOG } from "../lib/widget-catalog";
+import { getWidgetCatalog } from "../lib/widget-catalog";
 
 interface SimplePosition {
   id: string;
@@ -26,6 +26,7 @@ interface DashboardBuilderDialogProps {
   onClose: () => void;
   editing?: Dashboard | null;
   onCreated?: (id: string) => void;
+  industryId: string | null;
 }
 
 export function DashboardBuilderDialog({
@@ -33,7 +34,9 @@ export function DashboardBuilderDialog({
   onClose,
   editing,
   onCreated,
+  industryId,
 }: DashboardBuilderDialogProps) {
+  const widgetCatalog = getWidgetCatalog(industryId);
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -157,7 +160,7 @@ export function DashboardBuilderDialog({
           <div className="space-y-2">
             <Label>Widgets</Label>
             <div className="space-y-2 border rounded-md p-3">
-              {WIDGET_CATALOG.map((w) => (
+              {widgetCatalog.map((w) => (
                 <label
                   key={w.key}
                   className="flex items-start gap-3 cursor-pointer"

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
   getCurrentUserTenant,
   getLeads,
@@ -24,15 +24,24 @@ export default async function HomePage() {
 
   const { tenant, userId, permissions } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
+  const isItAgency = tenant.industry_id === "it_agency";
 
-  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary] = await Promise.all([
-    getMySchedule(tenant.id, userId),
-    getMyTasks(tenant.id, userId),
-    getLeads(tenant.id, { restrictToSelf: true, userId, limit: 50 }),
-    getMyRecentActivity(tenant.id, userId),
-    getMyInboxSnapshot(tenant.id, userId),
-    getLeaveForHome(tenant.id, userId, canManageHR(permissions)),
-  ]);
+  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, tenantUserResult] =
+    await Promise.all([
+      getMySchedule(tenant.id, userId),
+      getMyTasks(tenant.id, userId),
+      getLeads(tenant.id, { restrictToSelf: true, userId, limit: 50 }),
+      getMyRecentActivity(tenant.id, userId),
+      getMyInboxSnapshot(tenant.id, userId),
+      getLeaveForHome(tenant.id, userId, canManageHR(permissions)),
+      (await createServiceClient())
+        .from("tenant_users")
+        .select("id")
+        .eq("tenant_id", tenant.id)
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ]);
+  const currentTenantUserId = tenantUserResult.data?.id ?? null;
 
   const userName =
     (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
@@ -49,6 +58,8 @@ export default async function HomePage() {
       recentActivity={recentActivity}
       inboxSnapshot={inboxSnapshot}
       isEducation={isEducation}
+      isItAgency={isItAgency}
+      currentTenantUserId={currentTenantUserId}
       leaveSummary={leaveSummary}
     />
   );

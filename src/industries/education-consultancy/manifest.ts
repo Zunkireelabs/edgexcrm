@@ -4,7 +4,7 @@ import { checkInMeta } from "../_shared/features/check-in/meta";
 import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 import { contactsMeta } from "./features/contacts/meta";
 import { emailMeta } from "../_shared/features/email/meta";
-import { insightsMeta } from "./features/insights/meta";
+import { insightsMeta } from "../_shared/features/insights/meta";
 import { campaignsMeta } from "./features/campaigns/meta";
 import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";

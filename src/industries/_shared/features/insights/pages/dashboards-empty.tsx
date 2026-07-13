@@ -6,7 +6,13 @@ import { Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "../components/dashboard-builder-dialog";
 
-export function DashboardsEmpty({ canManage }: { canManage: boolean }) {
+export function DashboardsEmpty({
+  canManage,
+  industryId,
+}: {
+  canManage: boolean;
+  industryId: string | null;
+}) {
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -36,6 +42,7 @@ export function DashboardsEmpty({ canManage }: { canManage: boolean }) {
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
         onCreated={handleCreated}
+        industryId={industryId}
       />
     </div>
   );

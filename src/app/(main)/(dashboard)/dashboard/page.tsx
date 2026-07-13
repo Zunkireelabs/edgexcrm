@@ -9,11 +9,13 @@ export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  // Education tenants have their own Insights → Dashboards surface — but only send
-  // users who can actually see it. Redirecting a user without insights nav access
-  // creates an infinite loop: /insights/dashboards bounces them straight back here.
+  // Education and IT-agency tenants have their own Insights → Dashboards surface —
+  // but only send users who can actually see it. Redirecting a user without insights
+  // nav access creates an infinite loop: /insights/dashboards bounces them straight
+  // back here.
   if (
-    tenantData.tenant.industry_id === "education_consultancy" &&
+    (tenantData.tenant.industry_id === "education_consultancy" ||
+      tenantData.tenant.industry_id === "it_agency") &&
     canSeeNav(tenantData.permissions, "/insights/dashboards")
   ) {
     redirect("/insights/dashboards");
