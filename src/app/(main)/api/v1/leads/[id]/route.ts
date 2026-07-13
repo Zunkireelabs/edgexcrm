@@ -260,6 +260,21 @@ export async function PATCH(
     }
   }
 
+  // Validate an incoming pipeline_id belongs to this tenant before it can be
+  // written (pipeline_id is in UPDATABLE_FIELDS, and the drift self-heal sends it).
+  // Stops a crafted request from stamping a lead with another tenant's pipeline.
+  if (body.pipeline_id !== undefined && body.pipeline_id !== null) {
+    const { data: pipelineCheck } = await supabase
+      .from("pipelines")
+      .select("id")
+      .eq("id", body.pipeline_id as string)
+      .eq("tenant_id", auth.tenantId)
+      .maybeSingle();
+    if (!pipelineCheck) {
+      return apiValidationError({ pipeline_id: ["Pipeline not found in this tenant"] });
+    }
+  }
+
   // Dual-mode status/stage_id resolution
   if (body.status !== undefined && body.stage_id !== undefined) {
     return apiValidationError({
