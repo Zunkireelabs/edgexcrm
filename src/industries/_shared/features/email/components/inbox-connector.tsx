@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Mail, Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { formatRelativeTime } from "@/lib/format-relative-time";
 import { useConnectedInboxes } from "../hooks/use-connected-inboxes";
 
 export function InboxConnector() {
@@ -139,6 +140,16 @@ export function InboxConnector() {
                         ? "Connection broken — reconnect this Gmail account to resume sending and receiving replies."
                         : `${inbox.provider} · Connected ${new Date(inbox.created_at).toLocaleDateString()}`}
                     </p>
+                    {broken && inbox.last_error && (
+                      <p className="text-xs text-amber-700/80 font-mono truncate mt-0.5" title={inbox.last_error}>
+                        {inbox.last_error}
+                      </p>
+                    )}
+                    {inbox.last_synced_at && (
+                      <p className="text-[11px] text-muted-foreground/70 mt-0.5">
+                        Last synced {formatRelativeTime(inbox.last_synced_at)}
+                      </p>
+                    )}
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
