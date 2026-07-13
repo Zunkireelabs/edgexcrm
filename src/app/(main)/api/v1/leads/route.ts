@@ -44,6 +44,7 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
@@ -538,16 +539,11 @@ async function handlePost(request: NextRequest) {
         .maybeSingle();
       leadPayload.list_id = targetList?.id ?? null;
       if (targetList?.pipeline_id) {
-        const { data: defaultStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", targetList.pipeline_id)
-          .eq("is_default", true)
-          .maybeSingle();
-        if (defaultStage) {
+        const landing = await getPipelineLandingStage(supabase, targetList.pipeline_id);
+        if (landing) {
           leadPayload.pipeline_id = targetList.pipeline_id;
-          leadPayload.stage_id = defaultStage.id;
-          leadPayload.status = defaultStage.slug;
+          leadPayload.stage_id = landing.id;
+          leadPayload.status = landing.slug;
         }
       }
 
@@ -584,22 +580,15 @@ async function handlePost(request: NextRequest) {
       if (listCheck.is_archive && !body.archive_reason) {
         return apiValidationError({ archive_reason: ["Archive reason is required when moving to an archive list"] });
       }
-      // Align pipeline/stage/status to the chosen list's pipeline default (first) stage.
+      // Align pipeline/stage/status to the chosen list's landing stage.
       // Without this the lead keeps the default-pipeline stage resolved above, whose slug
       // matches no stage in the list's pipeline → blank Status in lead detail.
       if (listCheck.pipeline_id) {
-        const { data: defaultStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", listCheck.pipeline_id)
-          .order("is_default", { ascending: false })
-          .order("position", { ascending: true })
-          .limit(1)
-          .maybeSingle();
-        if (defaultStage) {
+        const landing = await getPipelineLandingStage(supabase, listCheck.pipeline_id);
+        if (landing) {
           leadPayload.pipeline_id = listCheck.pipeline_id;
-          leadPayload.stage_id = defaultStage.id;
-          leadPayload.status = defaultStage.slug;
+          leadPayload.stage_id = landing.id;
+          leadPayload.status = landing.slug;
         }
       }
     }
