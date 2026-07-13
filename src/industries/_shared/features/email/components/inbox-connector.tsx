@@ -34,10 +34,14 @@ export function InboxConnector() {
     }
   }, [searchParams, fetchInboxes, router]);
 
-  async function handleConnect() {
+  async function handleConnect(loginHint?: string) {
     setConnecting(true);
     try {
-      const res = await fetch("/api/v1/email/inboxes/connect", { method: "POST" });
+      const res = await fetch("/api/v1/email/inboxes/connect", {
+        method: "POST",
+        headers: loginHint ? { "Content-Type": "application/json" } : undefined,
+        body: loginHint ? JSON.stringify({ login_hint: loginHint }) : undefined,
+      });
       if (!res.ok) {
         toast.error("Could not start Gmail connection");
         return;
@@ -83,7 +87,7 @@ export function InboxConnector() {
         </div>
         <Button
           size="sm"
-          onClick={handleConnect}
+          onClick={() => handleConnect()}
           disabled={connecting}
           className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg"
         >
@@ -141,9 +145,10 @@ export function InboxConnector() {
                   {broken && (
                     <Button
                       size="sm"
-                      onClick={handleConnect}
+                      onClick={() => handleConnect(inbox.email)}
                       disabled={connecting}
                       className="bg-primary text-primary-foreground hover:bg-primary/90"
+                      title={`Reconnect ${inbox.email}`}
                     >
                       Reconnect
                     </Button>
