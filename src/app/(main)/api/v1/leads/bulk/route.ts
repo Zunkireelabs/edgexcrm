@@ -4,6 +4,7 @@ import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -244,18 +245,16 @@ export async function PATCH(request: NextRequest) {
         bulkUpdatePayload.archived_from_list_id = null;
         bulkUpdatePayload.archived_from_status = null;
       }
-      // Sync pipeline + default stage so stage updates work after the move
+      // Sync pipeline + landing stage so stage updates work after the move.
+      // Use the shared helper: default-flagged stage if present, else first by
+      // position — a pipeline with no is_default stage (e.g. Prospects) must
+      // still land on a real stage, or the lead's Status renders blank.
       if (targetList.pipeline_id) {
-        const { data: defaultStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", targetList.pipeline_id)
-          .eq("is_default", true)
-          .maybeSingle();
-        if (defaultStage) {
+        const landing = await getPipelineLandingStage(supabase, targetList.pipeline_id);
+        if (landing) {
           bulkUpdatePayload.pipeline_id = targetList.pipeline_id;
-          bulkUpdatePayload.stage_id = defaultStage.id;
-          bulkUpdatePayload.status = defaultStage.slug;
+          bulkUpdatePayload.stage_id = landing.id;
+          bulkUpdatePayload.status = landing.slug;
         }
       }
     }
