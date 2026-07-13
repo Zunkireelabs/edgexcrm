@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest } from "@/lib/api/auth";
-import { getApplicationWithAccess } from "@/lib/api/applications";
+import { getApplicationWithAccess, canManageApplicationForLead } from "@/lib/api/applications";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -14,7 +14,6 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -46,7 +45,6 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canEditApplication(auth.permissions, auth.positionSlug)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -67,11 +65,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     body.program_name = trimmed;
   }
 
-  const { allowed, application: existing, dbError } = await getApplicationWithAccess<
-    Record<string, unknown> & { lead_id: string; stage_id: string }
+  const { allowed, application: existing, parentLead, dbError } = await getApplicationWithAccess<
+    Record<string, unknown> & { lead_id: string; stage_id: string; assigned_to: string | null }
   >(auth, id, "*");
   if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
-  if (!existing || !allowed) return apiNotFound("Application");
+  if (!existing || !allowed || !parentLead) return apiNotFound("Application");
+  if (!canManageApplicationForLead(auth, parentLead, existing)) return apiForbidden();
   const existingRow = existing;
 
   const db = await scopedClient(auth);
@@ -172,15 +171,15 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canDeleteApplication(auth.permissions)) return apiForbidden();
 
-  const { allowed, application: existing, dbError } = await getApplicationWithAccess<{ id: string; lead_id: string }>(
-    auth,
-    id,
-    "id, lead_id"
-  );
+  const { allowed, application: existing, parentLead, dbError } = await getApplicationWithAccess<{
+    id: string;
+    lead_id: string;
+    assigned_to: string | null;
+  }>(auth, id, "id, lead_id, assigned_to");
   if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
-  if (!existing || !allowed) return apiNotFound("Application");
+  if (!existing || !allowed || !parentLead) return apiNotFound("Application");
+  if (!canManageApplicationForLead(auth, parentLead, existing)) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { error } = await db

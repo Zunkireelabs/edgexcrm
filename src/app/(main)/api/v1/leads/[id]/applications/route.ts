@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { shouldRestrictToSelf, canManageApplications } from "@/lib/api/permissions";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -45,18 +47,21 @@ export async function GET(_request: NextRequest, context: RouteContext) {
 
   const leadRow = lead as { id: string; assigned_to: string | null; branch_id: string | null };
 
-  // Counselor: own leads only; branch-manager: membership-based
+  // Counselor: own leads only; branch-manager: membership-based. Lead collaborators
+  // (ever-assigned, incl. reassigned away) keep VIEW access — mirrors the lead-detail
+  // view scope which already admits collaborators.
   const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (
+  const isRestrictedAndUnassigned =
     shouldRestrictToSelf(auth.permissions) &&
     !(
       membership.some((m: { assigned_to: string | null }) => m.assigned_to === auth.userId) ||
       leadRow.assigned_to === auth.userId
-    )
-  ) {
-    return apiNotFound("Lead");
+    );
+  if (isRestrictedAndUnassigned) {
+    if (!(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))) return apiNotFound("Lead");
+  } else if (!requireLeadBranchAccess(auth, leadRow, membership)) {
+    if (!(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))) return apiNotFound("Lead");
   }
-  if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
 
   const db = await scopedClient(auth);
   const { data, error } = await db
@@ -64,7 +69,8 @@ export async function GET(_request: NextRequest, context: RouteContext) {
     .select("*, application_stages!applications_stage_id_fkey(id,name,slug,color,position,terminal_type)")
     .eq("lead_id", id)
     .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+    .order("position", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
 
   if (error) return apiError("DB_ERROR", "Failed to fetch applications", 500);
   return apiSuccess(data ?? []);
@@ -79,7 +85,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   const supabase = await createServiceClient();
 
@@ -107,6 +112,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiNotFound("Lead");
   }
   if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+
+  // Write gate: owner/admin · branch-manager of the lead's branch · lead assignee.
+  // No auto-assign on create — managers/admins must not silently become the assignee.
+  if (!canCreateOrReorderApplications(auth, leadRow)) return apiForbidden();
 
   // Consent gate — only enforced if the tenant has an ACTIVE consent template
   const { data: consentTpl } = await supabase.from("consent_templates")
@@ -167,12 +176,24 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!stageId) return apiError("NO_STAGES", "No application stages found for this tenant", 500);
 
+  // Append to the end of the lead's panel order (position = current max + 1).
+  const { data: maxRow } = await db
+    .from("applications")
+    .select("position")
+    .eq("lead_id", leadRow.id)
+    .is("deleted_at", null)
+    .order("position", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  const nextPosition = (((maxRow as { position: number | null } | null)?.position ?? -1) + 1);
+
   const insert: Record<string, unknown> = {
     lead_id: leadRow.id,
     university_name: String(body.university_name).trim(),
     program_name: String(body.program_name).trim(),
     stage_id: stageId,
     status: stageSlug,
+    position: nextPosition,
   };
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.country) insert.country = String(body.country);

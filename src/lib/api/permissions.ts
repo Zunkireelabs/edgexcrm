@@ -123,13 +123,10 @@ export function positionPermissionsFromEmbed(embed: unknown): PositionPermission
 export function canManageApplications(p: ResolvedPermissions): boolean {
   return p.canManageApplications;
 }
-const APP_EDIT_POSITIONS = new Set(["branch-manager", "application-executive"]);
-export function canEditApplication(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
-  return p.baseTier === "owner" || p.baseTier === "admin" || APP_EDIT_POSITIONS.has(positionSlug ?? "");
-}
-export function canDeleteApplication(p: ResolvedPermissions): boolean {
-  return p.baseTier === "owner" || p.baseTier === "admin";
-}
+// Application edit/delete/create access now lives in canManageApplicationForLead /
+// canCreateOrReorderApplications (src/lib/api/applications.ts) — branch- and
+// assignee-aware. The old blanket position-based canEditApplication /
+// canDeleteApplication were removed in favor of that model.
 export function canManageClasses(p: ResolvedPermissions): boolean {
   return p.canManageClasses;
 }

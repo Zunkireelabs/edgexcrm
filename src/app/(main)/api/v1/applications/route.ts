@@ -90,7 +90,6 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -132,6 +131,11 @@ export async function POST(request: NextRequest) {
     return apiNotFound("Lead");
   }
   if (!requireLeadBranchAccess(auth, leadRow, membership)) return apiNotFound("Lead");
+
+  // Standalone board create gate — the coarse canManageApplications flag (spec §8:
+  // the standalone board is out of scope for the branch/assignee-aware model). The
+  // lead-detail PANEL route uses canCreateOrReorderApplications instead.
+  if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   // Consent gate — only enforced if the tenant has an ACTIVE consent template
   const { data: consentTpl } = await supabase.from("consent_templates")
@@ -177,12 +181,24 @@ export async function POST(request: NextRequest) {
 
   if (!stageId) return apiError("NO_STAGES", "No application stages found for this tenant", 500);
 
+  // Append to the end of the lead's panel order (position = current max + 1).
+  const { data: maxRow } = await db
+    .from("applications")
+    .select("position")
+    .eq("lead_id", leadRow.id)
+    .is("deleted_at", null)
+    .order("position", { ascending: false, nullsFirst: false })
+    .limit(1)
+    .maybeSingle();
+  const nextPosition = (((maxRow as { position: number | null } | null)?.position ?? -1) + 1);
+
   const insert: Record<string, unknown> = {
     lead_id: leadRow.id,
     university_name: String(body.university_name).trim(),
     program_name: String(body.program_name).trim(),
     stage_id: stageId,
     status: stageSlug,
+    position: nextPosition,
   };
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.country) insert.country = String(body.country);
