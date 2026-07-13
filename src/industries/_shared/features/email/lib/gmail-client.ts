@@ -28,6 +28,28 @@ export async function getProfileEmail(
   return email;
 }
 
+/**
+ * Revoke a Gmail OAuth grant on Google's side (undoes "prompt=consent").
+ * Call this on Disconnect — without it, deleting the local row only forgets
+ * the credential here; the grant stays live under the user's Google Account
+ * (Security → Third-party access) with a refresh_token nobody references
+ * anymore but that was never actually invalidated.
+ * Returns false (never throws) on any failure — the caller should still
+ * remove the local row; a revoke failure just means the Google-side grant
+ * lingers, which is a hygiene gap, not a reason to block disconnecting.
+ */
+export async function revokeToken(token: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`,
+      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+    );
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function refreshAccessTokenIfNeeded(
   account: ConnectedEmailAccount,
 ): Promise<{ access_token: string; expiry_date: number } | null> {
