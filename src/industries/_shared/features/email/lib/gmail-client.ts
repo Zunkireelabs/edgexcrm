@@ -42,7 +42,11 @@ export async function revokeToken(token: string): Promise<boolean> {
   try {
     const res = await fetch(
       `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token)}`,
-      { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        signal: AbortSignal.timeout(8000),
+      },
     );
     return res.ok;
   } catch {
