@@ -25,6 +25,7 @@ interface SummaryRow {
   minutes: number;
   billable_minutes: number;
   billable_amount: number;
+  currency: string;
 }
 
 interface EntryWithJoins extends TimeEntry {
@@ -67,6 +68,9 @@ export async function GET(request: NextRequest) {
 
   const db = await scopedClient(auth);
   const isAdmin = requireAdmin(auth);
+
+  const { data: tenantRow } = await db.raw().from("tenants").select("default_currency").eq("id", auth.tenantId).single();
+  const currency = (tenantRow as { default_currency: string } | null)?.default_currency ?? "NPR";
 
   let query = db
     .from("time_entries")
@@ -166,6 +170,7 @@ export async function GET(request: NextRequest) {
       minutes: grp.reduce((sum, e) => sum + e.minutes, 0),
       billable_minutes: calculateBillableMinutes(grp as TimeEntry[]),
       billable_amount: calculateBillableAmount(grp as TimeEntry[]),
+      currency,
     });
   }
 

@@ -58,6 +58,7 @@ interface BillableSummary {
   this_month: { billable_minutes: number; billable_amount: number };
   last_month: { billable_minutes: number; billable_amount: number };
   lifetime: { billable_minutes: number; billable_amount: number };
+  currency: string;
 }
 
 interface ActivityData {
