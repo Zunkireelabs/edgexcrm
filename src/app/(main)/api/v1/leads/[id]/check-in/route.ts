@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { authenticateRequest, resolvePositionSlug } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import {
@@ -121,16 +122,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
         };
 
         if (prospectsList.pipeline_id) {
-          const { data: defaultStage } = await supabase
-            .from("pipeline_stages")
-            .select("id, slug")
-            .eq("pipeline_id", prospectsList.pipeline_id)
-            .eq("is_default", true)
-            .maybeSingle();
-          if (defaultStage) {
+          const landing = await getPipelineLandingStage(supabase, prospectsList.pipeline_id);
+          if (landing) {
             promotePayload.pipeline_id = prospectsList.pipeline_id;
-            promotePayload.stage_id = defaultStage.id;
-            promotePayload.status = defaultStage.slug;
+            promotePayload.stage_id = landing.id;
+            promotePayload.status = landing.slug;
           }
         }
 

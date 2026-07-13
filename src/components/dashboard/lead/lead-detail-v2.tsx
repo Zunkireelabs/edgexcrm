@@ -77,6 +77,8 @@ interface LeadDetailV2Props {
   /** Revert assignee options: the previous holder's same-position peers in their branch. */
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
   canManageApplications?: boolean;
+  /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
+  canManageApplicationPanel?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
@@ -151,6 +153,7 @@ export function LeadDetailV2({
   revertTargetName = null,
   revertTargetMembers = [],
   canManageApplications,
+  canManageApplicationPanel,
   canEnroll,
   leadLists,
   activeLeadLists,
@@ -387,11 +390,19 @@ export function LeadDetailV2({
     setStageId(newStageId);
     setStatus(newStage.slug);
 
+    // When the chosen stage belongs to a different pipeline than the lead's current
+    // pipeline_id (data-drift fallback in KeyInfoSection), send pipeline_id too so the
+    // PATCH validates against — and re-syncs to — the correct pipeline.
+    const body: Record<string, unknown> =
+      newStage.pipeline_id && newStage.pipeline_id !== lead.pipeline_id
+        ? { stage_id: newStageId, pipeline_id: newStage.pipeline_id }
+        : { stage_id: newStageId };
+
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_id: newStageId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to update stage");
       toast.success("Stage updated");
@@ -839,7 +850,7 @@ export function LeadDetailV2({
                   )}
                   <ApplicationsCard
                     leadId={currentLead.id}
-                    canManage={canManageApplications ?? isAdmin}
+                    canManage={canManageApplicationPanel ?? canManageApplications ?? isAdmin}
                     disabled={consentEnabled && !consentSignedState}
                   />
                 </>

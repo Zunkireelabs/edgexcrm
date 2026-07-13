@@ -49,9 +49,11 @@ export async function POST(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
-  const { allowed, dbError } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
+  const { allowed, viaCollaborator, dbError } = await getApplicationWithAccess<{ lead_id: string }>(auth, id, "lead_id");
   if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!allowed) return apiNotFound("Application");
+  // Collaborators (view-only bypass) may read notes but must not write them.
+  if (viaCollaborator) return apiForbidden();
 
   const db = await scopedClient(auth);
 

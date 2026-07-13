@@ -16,6 +16,7 @@ import {
 } from "@/lib/api/response";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { createRequestLogger } from "@/lib/logger";
 import {
   createNotificationsExcept,
@@ -259,6 +260,26 @@ export async function PATCH(
     }
   }
 
+  // Validate an incoming pipeline_id belongs to this tenant before it can be
+  // written (pipeline_id is in UPDATABLE_FIELDS, and the drift self-heal sends it).
+  // Stops a crafted request from stamping a lead with another tenant's pipeline.
+  // Scoped to education_consultancy so non-education tenants keep prior behavior.
+  if (
+    auth.industryId === "education_consultancy" &&
+    body.pipeline_id !== undefined &&
+    body.pipeline_id !== null
+  ) {
+    const { data: pipelineCheck } = await supabase
+      .from("pipelines")
+      .select("id")
+      .eq("id", body.pipeline_id as string)
+      .eq("tenant_id", auth.tenantId)
+      .maybeSingle();
+    if (!pipelineCheck) {
+      return apiValidationError({ pipeline_id: ["Pipeline not found in this tenant"] });
+    }
+  }
+
   // Dual-mode status/stage_id resolution
   if (body.status !== undefined && body.stage_id !== undefined) {
     return apiValidationError({
@@ -291,10 +312,17 @@ export async function PATCH(
       .eq("id", body.stage_id)
       .eq("tenant_id", auth.tenantId);
 
-    // If the lead currently belongs to a list, scope to that list's pipeline
+    // Scope validation to the target pipeline. For education, prefer an incoming
+    // pipeline_id (the KeyInfoSection data-drift fallback sends stage_id + pipeline_id
+    // together to re-sync a mismatched lead). Non-education tenants keep prior behavior
+    // (validate against the lead's current pipeline only) so nothing changes for them.
     const currentPipelineId = (existingLead as Record<string, unknown>).pipeline_id as string | null;
-    if (currentPipelineId) {
-      stageQuery = stageQuery.eq("pipeline_id", currentPipelineId);
+    const targetPipelineId =
+      auth.industryId === "education_consultancy"
+        ? ((body.pipeline_id as string | undefined) ?? currentPipelineId)
+        : currentPipelineId;
+    if (targetPipelineId) {
+      stageQuery = stageQuery.eq("pipeline_id", targetPipelineId);
     }
 
     const { data: stage } = await stageQuery.single();
@@ -599,30 +627,19 @@ export async function PATCH(
         updatePayload.archived_from_list_id = null;
         updatePayload.archived_from_status = null;
       }
-      // Reset stage to the destination list's default stage on list move.
+      // Reset stage to the destination list's landing stage on list move — UNLESS the
+      // caller explicitly set status/stage_id in this same request (they win, and the
+      // dual-mode block above already resolved them; don't double-write).
       // If destination has no pipeline, clear stage so it doesn't show stale/null as "Unknown".
+      const callerSetStage = body.status !== undefined || body.stage_id !== undefined;
       if (targetList.pipeline_id) {
-        const { data: defaultStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", targetList.pipeline_id)
-          .eq("is_default", true)
-          .maybeSingle();
-        // Fall back to first stage by position when no is_default stage configured.
-        const { data: firstStage } = !defaultStage
-          ? await supabase
-              .from("pipeline_stages")
-              .select("id, slug")
-              .eq("pipeline_id", targetList.pipeline_id)
-              .order("position", { ascending: true })
-              .limit(1)
-              .maybeSingle()
-          : { data: null };
-        const resolvedStage = defaultStage ?? firstStage;
-        if (resolvedStage) {
-          updatePayload.pipeline_id = targetList.pipeline_id;
-          updatePayload.stage_id = resolvedStage.id;
-          updatePayload.status = resolvedStage.slug;
+        if (!callerSetStage) {
+          const landing = await getPipelineLandingStage(supabase, targetList.pipeline_id);
+          if (landing) {
+            updatePayload.pipeline_id = targetList.pipeline_id;
+            updatePayload.stage_id = landing.id;
+            updatePayload.status = landing.slug;
+          }
         }
       } else {
         updatePayload.pipeline_id = null;
@@ -678,16 +695,11 @@ export async function PATCH(
           .eq("id", currentListId)
           .maybeSingle();
         if (crossBranchList?.pipeline_id) {
-          const { data: firstStage } = await supabase
-            .from("pipeline_stages")
-            .select("id, slug")
-            .eq("pipeline_id", crossBranchList.pipeline_id)
-            .eq("is_default", true)
-            .single();
-          if (firstStage) {
+          const landing = await getPipelineLandingStage(supabase, crossBranchList.pipeline_id);
+          if (landing) {
             updatePayload.pipeline_id = crossBranchList.pipeline_id;
-            updatePayload.stage_id = firstStage.id;
-            updatePayload.status = firstStage.slug;
+            updatePayload.stage_id = landing.id;
+            updatePayload.status = landing.slug;
           }
         }
       }
