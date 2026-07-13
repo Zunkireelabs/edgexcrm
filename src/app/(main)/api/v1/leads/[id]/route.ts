@@ -263,7 +263,12 @@ export async function PATCH(
   // Validate an incoming pipeline_id belongs to this tenant before it can be
   // written (pipeline_id is in UPDATABLE_FIELDS, and the drift self-heal sends it).
   // Stops a crafted request from stamping a lead with another tenant's pipeline.
-  if (body.pipeline_id !== undefined && body.pipeline_id !== null) {
+  // Scoped to education_consultancy so non-education tenants keep prior behavior.
+  if (
+    auth.industryId === "education_consultancy" &&
+    body.pipeline_id !== undefined &&
+    body.pipeline_id !== null
+  ) {
     const { data: pipelineCheck } = await supabase
       .from("pipelines")
       .select("id")
@@ -307,12 +312,15 @@ export async function PATCH(
       .eq("id", body.stage_id)
       .eq("tenant_id", auth.tenantId);
 
-    // Scope validation to the target pipeline: prefer an incoming pipeline_id (the
-    // KeyInfoSection data-drift fallback sends stage_id + pipeline_id together to
-    // re-sync a mismatched lead), else the lead's current pipeline.
+    // Scope validation to the target pipeline. For education, prefer an incoming
+    // pipeline_id (the KeyInfoSection data-drift fallback sends stage_id + pipeline_id
+    // together to re-sync a mismatched lead). Non-education tenants keep prior behavior
+    // (validate against the lead's current pipeline only) so nothing changes for them.
+    const currentPipelineId = (existingLead as Record<string, unknown>).pipeline_id as string | null;
     const targetPipelineId =
-      (body.pipeline_id as string | undefined) ??
-      ((existingLead as Record<string, unknown>).pipeline_id as string | null);
+      auth.industryId === "education_consultancy"
+        ? ((body.pipeline_id as string | undefined) ?? currentPipelineId)
+        : currentPipelineId;
     if (targetPipelineId) {
       stageQuery = stageQuery.eq("pipeline_id", targetPipelineId);
     }
