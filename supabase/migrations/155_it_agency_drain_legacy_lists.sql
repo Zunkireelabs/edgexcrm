@@ -167,6 +167,28 @@ FROM (SELECT DISTINCT tenant_id, raw_list_id FROM _mig155_legacy) lg
 WHERE ll.tenant_id = lg.tenant_id
   AND ll.is_intake <> (ll.id = lg.raw_list_id);
 
+-- ─── 6b. Guard: no lead may still reference a legacy pipeline/stage before we drop
+--         it. Catches the edge case where a drift-repair target list's pipeline had
+--         zero pipeline_stages (the LATERAL returned no landing row → that lead was
+--         skipped), which would otherwise surface as a cryptic FK error on the
+--         DELETEs below. Fail loud with a clear message instead.
+
+DO $$
+DECLARE
+  v_residual INT;
+BEGIN
+  SELECT COUNT(*) INTO v_residual
+  FROM leads l
+  WHERE l.pipeline_id IN (SELECT legacy_pipeline_id FROM _mig155_legacy)
+     OR l.stage_id IN (
+          SELECT ps.id FROM pipeline_stages ps
+          JOIN _mig155_legacy lg ON lg.legacy_pipeline_id = ps.pipeline_id
+        );
+  IF v_residual > 0 THEN
+    RAISE EXCEPTION '155 ABORT: % lead(s) still reference a legacy pipeline/stage after drain+drift-repair (likely a current-list pipeline with no pipeline_stages) — resolve before dropping legacy pipelines', v_residual;
+  END IF;
+END$$;
+
 -- ─── 7. Delete the now-empty legacy lists: stages -> pipelines -> lists ─────────
 --        (leads_pipeline_id_fkey is ON DELETE NO ACTION — if any lead were somehow
 --        still pointing at a legacy pipeline, this delete errors and the whole

@@ -519,13 +519,22 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 {navAllowed("/leads") && (() => {
-                  const processingLists = leadLists
-                    .filter((l) => l.funnel_key === "lead_processing")
-                    .sort((a, b) => a.sort_order - b.sort_order);
-                  const salesLists = leadLists
-                    .filter((l) => l.funnel_key === "sales_leads")
-                    .sort((a, b) => a.sort_order - b.sort_order);
-                  const ungroupedLists = leadLists.filter((l) => l.funnel_key == null);
+                  // Funnel grouping is it_agency-only — non-it_agency tenants always fall
+                  // through to the ungrouped/All Leads path below, even if a list somehow
+                  // carries a funnel_key (belt-and-suspenders; the write path is gated too).
+                  const processingLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "lead_processing")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const salesLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "sales_leads")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const ungroupedLists = isItAgency
+                    ? leadLists.filter((l) => l.funnel_key == null)
+                    : leadLists;
                   const isAdminUser = role === "owner" || role === "admin";
 
                   if (processingLists.length === 0 && salesLists.length === 0) {

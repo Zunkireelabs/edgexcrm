@@ -137,6 +137,10 @@ export async function POST(request: NextRequest) {
   const funnelKeyErr = validateFunnelKey(body.funnel_key);
   if (funnelKeyErr) return apiValidationError({ funnel_key: [funnelKeyErr] });
 
+  if (body.funnel_key != null && auth.industryId !== "it_agency") {
+    return apiValidationError({ funnel_key: ["funnel_key is not supported for this industry"] });
+  }
+
   const db = await scopedClient(auth);
   const supabase = await createServiceClient();
 
