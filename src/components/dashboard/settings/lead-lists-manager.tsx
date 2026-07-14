@@ -23,6 +23,13 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -39,6 +46,9 @@ import {
 import { List, Lock, Pencil, Trash2, Plus, ChevronUp, ChevronDown, Archive, GripVertical } from "lucide-react";
 import { toast } from "sonner";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
+import { useSettingsModal } from "@/contexts/settings-modal-context";
+
+type FunnelSectionKey = "lead_processing" | "sales_leads" | "unassigned";
 
 interface Position {
   id: string;
@@ -56,6 +66,7 @@ interface LeadListRow {
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
   count: number;
+  funnel_key: string | null;
 }
 
 interface LeadListFormState {
@@ -64,15 +75,17 @@ interface LeadListFormState {
   isArchive: boolean;
   accessMode: "all" | "allow";
   positionIds: string[];
+  funnelKey: string | null;
 }
 
-function buildDefaultForm(): LeadListFormState {
+function buildDefaultForm(presetFunnelKey: string | null = null): LeadListFormState {
   return {
     name: "",
     color: "",
     isArchive: false,
     accessMode: "all",
     positionIds: [],
+    funnelKey: presetFunnelKey,
   };
 }
 
@@ -83,6 +96,7 @@ function formFromList(list: LeadListRow): LeadListFormState {
     isArchive: list.is_archive,
     accessMode: list.access.mode,
     positionIds: list.access.mode === "allow" ? list.access.positionIds : [],
+    funnelKey: list.funnel_key,
   };
 }
 
@@ -237,18 +251,97 @@ function PinnedLeadListRow({ list, onEdit, onDelete }: PinnedLeadListRowProps) {
   );
 }
 
+interface FunnelSectionProps {
+  title?: string;
+  lists: LeadListRow[];
+  sensors: ReturnType<typeof useSensors>;
+  onDragEnd: (event: DragEndEvent) => void;
+  onMoveUp: (list: LeadListRow) => void;
+  onMoveDown: (list: LeadListRow) => void;
+  onEdit: (list: LeadListRow) => void;
+  onDelete: (list: LeadListRow) => void;
+  onAddStage?: () => void;
+}
+
+function FunnelSection({
+  title,
+  lists,
+  sensors,
+  onDragEnd,
+  onMoveUp,
+  onMoveDown,
+  onEdit,
+  onDelete,
+  onAddStage,
+}: FunnelSectionProps) {
+  return (
+    <div>
+      {title && (
+        <div className="flex items-center justify-between pt-3 pb-1">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            {title}
+          </p>
+          {onAddStage && (
+            <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={onAddStage}>
+              <Plus className="h-3 w-3 mr-1" />
+              Add stage
+            </Button>
+          )}
+        </div>
+      )}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={lists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+          {lists.map((list, idx) => (
+            <LeadListRow
+              key={list.id}
+              list={list}
+              isFirst={idx === 0}
+              isLast={idx === lists.length - 1}
+              onMoveUp={() => onMoveUp(list)}
+              onMoveDown={() => onMoveDown(list)}
+              onEdit={() => onEdit(list)}
+              onDelete={() => onDelete(list)}
+            />
+          ))}
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
 export function LeadListsManager() {
   const router = useRouter();
+  const { industryId } = useSettingsModal();
+  const isItAgency = industryId === "it_agency";
   const [lists, setLists] = useState<LeadListRow[]>([]);
   const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingList, setEditingList] = useState<LeadListRow | null>(null);
-  const [form, setForm] = useState<LeadListFormState>(buildDefaultForm);
+  const [form, setForm] = useState<LeadListFormState>(() => buildDefaultForm());
   const [saving, setSaving] = useState(false);
 
   const funnelLists = useMemo(() => lists.filter((l) => !isOffFunnelLeadList(l)), [lists]);
   const offFunnelLists = useMemo(() => lists.filter((l) => isOffFunnelLeadList(l)), [lists]);
+
+  const processingLists = useMemo(
+    () => funnelLists.filter((l) => l.funnel_key === "lead_processing"),
+    [funnelLists]
+  );
+  const salesLists = useMemo(
+    () => funnelLists.filter((l) => l.funnel_key === "sales_leads"),
+    [funnelLists]
+  );
+  const unassignedLists = useMemo(
+    () => funnelLists.filter((l) => l.funnel_key == null),
+    [funnelLists]
+  );
+
+  function sectionArray(key: FunnelSectionKey): LeadListRow[] {
+    if (key === "lead_processing") return processingLists;
+    if (key === "sales_leads") return salesLists;
+    return unassignedLists;
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -276,9 +369,9 @@ export function LeadListsManager() {
     fetchData();
   }, [fetchData]);
 
-  function openCreate() {
+  function openCreate(presetFunnelKey: string | null = null) {
     setEditingList(null);
-    setForm(buildDefaultForm());
+    setForm(buildDefaultForm(presetFunnelKey));
     setDialogOpen(true);
   }
 
@@ -305,6 +398,7 @@ export function LeadListsManager() {
       };
       if (!editingList) {
         body.is_archive = form.isArchive;
+        body.funnel_key = form.isArchive ? null : form.funnelKey;
       } else if (!editingList.is_system) {
         body.is_archive = form.isArchive;
       }
@@ -378,6 +472,36 @@ export function LeadListsManager() {
     persistOrder([...arrayMove(funnelLists, idx, swapIdx), ...offFunnelLists]);
   }
 
+  // it_agency: reorder stays scoped within one funnel section, but the full
+  // (all-sections + off-funnel) array is still sent to the reorder route, which
+  // has no notion of sections and just persists array index as sort_order.
+  function persistSectionOrder(key: FunnelSectionKey, newSection: LeadListRow[]) {
+    const merged = [
+      key === "lead_processing" ? newSection : processingLists,
+      key === "sales_leads" ? newSection : salesLists,
+      key === "unassigned" ? newSection : unassignedLists,
+    ].flat();
+    persistOrder([...merged, ...offFunnelLists]);
+  }
+
+  function handleSectionReorder(list: LeadListRow, direction: "up" | "down", key: FunnelSectionKey) {
+    const section = sectionArray(key);
+    const idx = section.findIndex((l) => l.id === list.id);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= section.length) return;
+    persistSectionOrder(key, arrayMove(section, idx, swapIdx));
+  }
+
+  function handleSectionDragEnd(event: DragEndEvent, key: FunnelSectionKey) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const section = sectionArray(key);
+    const oldIndex = section.findIndex((l) => l.id === active.id);
+    const newIndex = section.findIndex((l) => l.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    persistSectionOrder(key, arrayMove(section, oldIndex, newIndex));
+  }
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
@@ -431,29 +555,68 @@ export function LeadListsManager() {
               Manage lifecycle lists for lead segmentation
             </CardDescription>
           </div>
-          <Button size="sm" onClick={openCreate}>
+          <Button size="sm" onClick={() => openCreate(isItAgency ? "lead_processing" : null)}>
             <Plus className="h-4 w-4 mr-1" />
             Add List
           </Button>
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-              <SortableContext items={funnelLists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
-                {funnelLists.map((list, idx) => (
-                  <LeadListRow
-                    key={list.id}
-                    list={list}
-                    isFirst={idx === 0}
-                    isLast={idx === funnelLists.length - 1}
-                    onMoveUp={() => handleReorder(list, "up")}
-                    onMoveDown={() => handleReorder(list, "down")}
-                    onEdit={() => openEdit(list)}
-                    onDelete={() => handleDelete(list)}
+            {isItAgency ? (
+              <>
+                <FunnelSection
+                  title="Lead Processing"
+                  lists={processingLists}
+                  sensors={sensors}
+                  onDragEnd={(e) => handleSectionDragEnd(e, "lead_processing")}
+                  onMoveUp={(list) => handleSectionReorder(list, "up", "lead_processing")}
+                  onMoveDown={(list) => handleSectionReorder(list, "down", "lead_processing")}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onAddStage={() => openCreate("lead_processing")}
+                />
+                <FunnelSection
+                  title="Sales Leads"
+                  lists={salesLists}
+                  sensors={sensors}
+                  onDragEnd={(e) => handleSectionDragEnd(e, "sales_leads")}
+                  onMoveUp={(list) => handleSectionReorder(list, "up", "sales_leads")}
+                  onMoveDown={(list) => handleSectionReorder(list, "down", "sales_leads")}
+                  onEdit={openEdit}
+                  onDelete={handleDelete}
+                  onAddStage={() => openCreate("sales_leads")}
+                />
+                {unassignedLists.length > 0 && (
+                  <FunnelSection
+                    title="Unassigned"
+                    lists={unassignedLists}
+                    sensors={sensors}
+                    onDragEnd={(e) => handleSectionDragEnd(e, "unassigned")}
+                    onMoveUp={(list) => handleSectionReorder(list, "up", "unassigned")}
+                    onMoveDown={(list) => handleSectionReorder(list, "down", "unassigned")}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
                   />
-                ))}
-              </SortableContext>
-            </DndContext>
+                )}
+              </>
+            ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={funnelLists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+                  {funnelLists.map((list, idx) => (
+                    <LeadListRow
+                      key={list.id}
+                      list={list}
+                      isFirst={idx === 0}
+                      isLast={idx === funnelLists.length - 1}
+                      onMoveUp={() => handleReorder(list, "up")}
+                      onMoveDown={() => handleReorder(list, "down")}
+                      onEdit={() => openEdit(list)}
+                      onDelete={() => handleDelete(list)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            )}
             {lists.length === 0 && (
               <p className="text-sm text-muted-foreground text-center py-4">
                 No lists yet. Create one to get started.
@@ -536,6 +699,26 @@ export function LeadListsManager() {
                     Archive list — leads here are excluded from the master All Leads view
                   </label>
                 </div>
+              </div>
+            )}
+
+            {/* Funnel — it_agency only, new lists only, hidden once Archive is checked
+                (archive lists are off-funnel) or while editing (funnel_key is create-only) */}
+            {isItAgency && !editingList && !form.isArchive && (
+              <div className="space-y-1.5">
+                <Label>Funnel</Label>
+                <Select
+                  value={form.funnelKey ?? "lead_processing"}
+                  onValueChange={(v) => setForm((f) => ({ ...f, funnelKey: v }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="lead_processing">Lead Processing</SelectItem>
+                    <SelectItem value="sales_leads">Sales Leads</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
