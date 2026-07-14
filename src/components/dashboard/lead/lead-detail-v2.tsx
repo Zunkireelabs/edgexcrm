@@ -870,7 +870,13 @@ export function LeadDetailV2({
                   canManage={canEnroll ?? isAdmin}
                 />
               )}
-              {checkInActive && <CheckInHistoryCard leadId={currentLead.id} />}
+              {checkInActive && (
+                <CheckInHistoryCard
+                  leadId={currentLead.id}
+                  teamMemberNames={teamMemberNames}
+                  teamMemberEmails={teamMemberEmails}
+                />
+              )}
             </div>
           ) : (
             <ManagementPanel
