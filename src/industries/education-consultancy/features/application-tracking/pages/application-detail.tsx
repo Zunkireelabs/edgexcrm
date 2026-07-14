@@ -409,10 +409,10 @@ export function ApplicationDetailPage({
                     <span className="text-xs">{fullLead.intake_source}</span>
                   </div>
                 )}
-                {/* Counselor */}
+                {/* Assigned To */}
                 <div className="flex items-center gap-2 text-sm">
                   <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">Counselor:</span>
+                  <span className="text-muted-foreground text-xs">Assigned To:</span>
                   <span className="text-xs truncate">
                     {fullLead.assigned_to
                       ? (teamMemberNames[fullLead.assigned_to] ?? teamMemberEmails[fullLead.assigned_to] ?? "Unassigned")

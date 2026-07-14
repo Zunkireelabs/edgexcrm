@@ -56,7 +56,7 @@ export async function GET(
   // Fetch all check-in notes for this lead
   const { data, error } = await supabase
     .from("lead_notes")
-    .select("id, content, created_at, user_email")
+    .select("id, content, created_at, user_email, user_id")
     .eq("lead_id", id)
     .like("content", "[CHECK-IN]%")
     .order("created_at", { ascending: false });
