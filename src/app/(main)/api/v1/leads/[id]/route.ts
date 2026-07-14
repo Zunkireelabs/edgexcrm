@@ -160,6 +160,11 @@ export async function PATCH(
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
 
+  // A non-admin, branch-restricted caller (§4.2) — reused by every branch
+  // boundary check in this handler so they stay in sync with each other.
+  const isBranchScopedManager =
+    auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member";
+
   let body: Record<string, unknown>;
   try {
     body = await request.json();
@@ -493,7 +498,7 @@ export async function PATCH(
   // §4.2 Branch-manager assignment guard: a team-scoped non-admin can only set
   // assigned_to / branch_id when the lead is already in their branch, and the
   // target user (if assigning) must also be in their branch. Admins bypass.
-  if (auth.permissions.leadScope === "team" && auth.permissions.baseTier === "member") {
+  if (isBranchScopedManager) {
     const touchingBranchFields =
       body.assigned_to !== undefined || body.branch_id !== undefined;
     if (touchingBranchFields) {
@@ -591,7 +596,9 @@ export async function PATCH(
           const isExempt =
             auth.permissions.baseTier !== "member" || auth.permissions.leadScope === "team";
           const currentHolder = existingLead.assigned_to as string | null;
-          let lastHandoffFromUserId: string | null = null;
+          // No current holder → nothing to protect (this is not a "first
+          // holder", just an unassigned lead); allow the revert without
+          // touching assigned_to.
           if (currentHolder) {
             const { data: lastHandoff } = await supabase
               .from("lead_assignment_history")
@@ -601,15 +608,38 @@ export async function PATCH(
               .order("created_at", { ascending: false })
               .limit(1)
               .maybeSingle();
-            lastHandoffFromUserId = (lastHandoff as { from_user_id?: string } | null)?.from_user_id ?? null;
+            const lastHandoffFromUserId =
+              (lastHandoff as { from_user_id?: string } | null)?.from_user_id ?? null;
+
+            if (lastHandoffFromUserId) {
+              // Only reassign to a still-current tenant member — the prior
+              // holder may have since left the tenant.
+              const { data: handoffMemberCheck } = await supabase
+                .from("tenant_users")
+                .select("user_id, branch_id")
+                .eq("tenant_id", auth.tenantId)
+                .eq("user_id", lastHandoffFromUserId)
+                .maybeSingle();
+              const handoffBranchId = (handoffMemberCheck as { branch_id: string | null } | null)?.branch_id ?? null;
+              // Same branch boundary as the §4.2 guard above — this path sets
+              // assigned_to directly (body.assigned_to is never set here), so
+              // that guard never runs on its own; re-check it explicitly.
+              const crossBranchForManager =
+                isBranchScopedManager && auth.branchId && handoffBranchId !== auth.branchId;
+              if (handoffMemberCheck && !crossBranchForManager) {
+                updatePayload.assigned_to = lastHandoffFromUserId;
+              } else if (!handoffMemberCheck && !isExempt) {
+                return apiForbidden("Previous holder is no longer a member of this tenant");
+              }
+              // Exempt caller when the prior holder has left, or a branch
+              // manager reverting to someone outside their branch: allow the
+              // move, leave assigned_to as-is.
+            } else if (!isExempt) {
+              // No prior handoff recorded → this holder is the lead's origin.
+              return apiForbidden("First holder cannot revert this lead");
+            }
+            // Exempt origin caller: allow the move, leave assigned_to as-is.
           }
-          if (lastHandoffFromUserId) {
-            updatePayload.assigned_to = lastHandoffFromUserId;
-          } else if (!isExempt) {
-            // No prior handoff recorded → this holder is the lead's origin.
-            return apiForbidden("First holder cannot revert this lead");
-          }
-          // Exempt origin caller: allow the move, leave assigned_to as-is.
         }
       }
 
@@ -741,16 +771,32 @@ export async function PATCH(
   if (updatePayload.branch_id !== undefined || updatePayload.assigned_to !== undefined) {
     await syncOriginMembership(supabase, auth.tenantId, id, (updated as Lead).branch_id ?? null, (updated as Lead).assigned_to ?? null);
   }
-  // Mirror leads.assigned_to onto every non-origin pool row for this lead — prevents the
+  // Mirror leads.assigned_to onto non-origin pool rows for this lead — prevents the
   // cross-branch pool from showing an already-claimed lead to other callers, and reopens
-  // the pool row on unassign. Runs for every assigner (incl. admin/owner with no branchId)
-  // and covers all pool rows, not just the caller's own branch.
+  // the pool row on unassign. Runs for every assigner (incl. admin/owner with no branchId).
+  // Scoped to rows that were tracking the lead's overall assignment (unclaimed, or already
+  // matching the previous assignee) — never overwrites a row independently claimed for a
+  // *different* user via the per-branch assignment endpoint (PATCH /leads/[id]/branches/[branchId]).
   if (updatePayload.assigned_to !== undefined) {
-    await supabase.from("lead_branches")
+    const prevAssignedTo = existingLead.assigned_to as string | null;
+    let mirrorQuery = supabase.from("lead_branches")
       .update({ assigned_to: (updated as Lead).assigned_to ?? null })
       .eq("tenant_id", auth.tenantId)
       .eq("lead_id", id)
       .eq("is_origin", false);
+    // A branch-scoped (non-admin) manager can only ever assign within their
+    // own branch (enforced by the §4.2 guard above), so only mirror into
+    // their own branch's pool row — their action shouldn't ripple into
+    // other branches they have no visibility into. Admin/owner/unrestricted
+    // callers keep the tenant-wide mirror (they can already assign anyone
+    // tenant-wide via the normal validation above).
+    if (isBranchScopedManager && auth.branchId) {
+      mirrorQuery = mirrorQuery.eq("branch_id", auth.branchId);
+    }
+    mirrorQuery = prevAssignedTo
+      ? mirrorQuery.or(`assigned_to.is.null,assigned_to.eq.${prevAssignedTo}`)
+      : mirrorQuery.is("assigned_to", null);
+    await mirrorQuery;
   }
 
   // New assignee becomes a permanent collaborator (engaged-user visibility).
