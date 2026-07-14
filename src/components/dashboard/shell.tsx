@@ -45,7 +45,6 @@ import {
   Megaphone,
   GraduationCap,
   BookOpen,
-  Repeat2,
   Package,
   FileSignature,
   Gauge,
@@ -130,7 +129,6 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Megaphone,
   GraduationCap,
   BookOpen,
-  Repeat2,
   Package,
   FileSignature,
   Gauge,
@@ -461,7 +459,6 @@ export function DashboardShell({
                     isAdmin={role === "owner" || role === "admin"}
                   />
                 </Suspense>
-                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
                 {archiveLists.length > 0 && (

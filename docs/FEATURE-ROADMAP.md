@@ -23,6 +23,30 @@ _(empty — add items here as they come up)_
 
 Sadin signed off on building this. Has at least a paragraph of intent. Ready for planning when picked up.
 
+### Dashboards as a "Business OS" — IA + data-gap backlog (approved as direction 2026-07-12)
+
+**Vision:** dashboards are the **bird's-eye cockpit of a business operating system** — a CEO/owner opens the dashboard view and sees every movement in the business (demand → sales → delivery → people → money) in one place, to plan/execute/run the company on data. Umbrella plan: `~/.claude/plans/you-had-given-me-magical-sparrow.md`. Built on the `_shared` insights engine so the IA templates across industries.
+
+**Target IA (per industry):** 🏠 Home = personal "My Work" strip · **Company Overview** (exec bubble-up tiles) · **Sales & Outreach** (CRM funnel) · **Delivery/Ops** (delivery cockpit). Rule: every dashboard is company-scope, never `userId`-scoped; personal widgets live only on Home.
+
+**Build phases (it_agency first, then Education):** Phase 0 clean Delivery + personal→Home · Phase 1 Sales & Outreach · Phase 2 Delivery controls · Phase 3 Company Overview · Phase 4 Education replication · Phase 5 = close the gaps below.
+
+**🔒 Data-gap backlog (Phase 5 — widgets we can't render until the plumbing exists):**
+- **G1 — Stage history / cohort conversion / days-in-stage.** Leads store only current `stage_id`; no stage-entered/exited timestamps. Need `lead_stage_history` (or typed stage-change rows in `lead_activities`). Unlocks true funnel conversion, per-stage dwell, velocity-by-stage.
+- **G2 — Pipeline coverage vs target.** No sales quota/target exists. Need a per-period target table. Unlocks Pipeline Coverage + attainment %.
+- **G3 — Lost-reason analytics.** `deals` has no `lost_reason`/`lost_at`. Unlocks win/loss *quality* analysis.
+- **G4 — Valuing the lead funnel.** Leads carry no value (value lives on `deals`); need a guaranteed lead↔deal link + rollup.
+- **G5 — Time-to-first-contact fidelity.** Depends on `lead_activities` reliably logging a first-contact event type — verify/augment.
+- **G6 — Velocity / cycle-time / throughput trend.** `tasks` has no `done_at`/status-history (only noisy `updated_at`). Need task status-history or `done_at`. Unlocks tasks-done-per-week, cycle & lead time. *(Interim: Logged-Hours Trend from `time_entries.entry_date`.)*
+- **G7 — True realization %.** Need standard-rate vs actually-billed + write-offs; requires billing/collections wired. *(Interim: "billable value" proxy = approved billable minutes × `rate_snapshot`.)*
+- **G8 — On-time % trend / schedule variance / burndown.** No baseline snapshots, no `actual_end_date`, no sprint/cycle model. *(Interim: point-in-time "past due" only.)*
+- **G9 — Per-industry widget-component registry.** `dashboard-renderer.tsx` hardcodes `industryId === "it_agency"` (code flags it as future cleanup). A real registry lets each industry plug its own widget pack — prerequisite for clean Education (Phase 4) and future industries.
+- **G10 — Per-widget role/position gating.** Company dashboards show admin-scope widgets (approvals, aggregates) to all roles; `dashboards.granted_position_ids` gates a whole dashboard, but per-*widget* gating may be needed. (Parked open-decision.)
+- **P1 — Money formatting is hardcoded USD.** `formatCurrency` (`src/lib/format-billable-delta.ts`) hardcodes `currency: "USD"`, so every it_agency money display (cost/margin tiles, billable value, My Time) shows `$` even for NPR tenants (Zunkiree bills ₨). No `currency` column on `tenants` today. Fix app-wide (add a tenant currency + thread it through, or standardize it_agency on NPR) so no single widget shows a different symbol than the rest. Small; approved 2026-07-12.
+- **P2 — Due-date keyword filters are off-by-one in UTC+ timezones (real bug, not dashboard-scoped).** `dueFilterToDateRange` / `toISODate` in `src/industries/it-agency/features/project-board/lib/due-keywords.ts` builds a **local-midnight** `Date` then formats it with `toISOString()` (UTC) — in a UTC+ timezone (e.g. Asia/Kathmandu, UTC+5:45, the primary market) `toISODate(today)` returns **yesterday's** calendar date, shifting `today`/`this_week`/`overdue` back a day. Empirically: on Mon 2026-07-13, `overdue` resolved to `due_date <= 2026-07-11`, wrongly excluding tasks due 07-12. Affects the **project-board task filters (shipped, daily-use)** and the Phase-2 `delivery-overdue-tasks` widget (undercounts overdue). Fix `toISODate` to format in local/tenant tz (or compute the date parts without a UTC round-trip) + test both surfaces. Found 2026-07-13. **Higher priority than the dashboard backlog — it degrades a live feature.**
+- **P3 — Insights RPCs don't honor branch-manager `leadScope:"team"` (latent scope gap).** Surfaced by code-review of the it_agency Sales/Delivery dashboards (2026-07-13). The `sales_*`/delivery RPCs take a single `p_assigned_to UUID` and `shouldRestrictToSelf` only self-restricts counselors (`leadScope:"self"`); a **branch manager** (`leadScope:"team"`) granted an insights dashboard would see **tenant-wide** data instead of their branch's — unlike `/api/v1/leads`' `leadQueryScope()`. **Latent, not live-exploitable today:** seeded dashboards are `granted_position_ids = '{}'` → owners/admins only, who are meant to see tenant-wide. Triggers only once an admin grants a BM position an insights dashboard. Fix requires widening the RPC signature (`p_assigned_to UUID` → `UUID[]`/branch-member set), so it's a real design change — do it before/with enabling BM insights grants. Overlaps the Branches "Phase 3 branch-scoped Insights" separate brief.
+- **P4 — `sales/proposals` intentionally skips self-restriction (no owner column).** The proposals RPC has no per-user owner dimension, so it can't self-restrict and returns tenant-wide counts. Fine while access is admins-only (empty grant); revisit if proposals ever get an owner and non-admin positions are granted. Signed off 2026-07-13.
+
 ### IT-agency industry (`it_agency`)
 
 Four first-round candidates for the IT-agency manifest. All are industry-scoped (live under `src/industries/it-agency/features/<feature>/`). Approved 2026-05-25.

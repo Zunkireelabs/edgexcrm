@@ -693,7 +693,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               <p className="text-sm text-foreground">
                                 Application note{item.institution ? ` · ${item.institution}` : ""}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 break-words">
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                 {item.content}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
@@ -1089,6 +1089,8 @@ function getSystemActivityDescription(
     }
     if (labels.length > 0) return `Updated ${labels.join(", ")}`;
   }
+
+  if (activity.action === "application.reordered") return "Reordered Application";
 
   // Humanized fallback — never render a raw dotted action string
   const actionParts = activity.action.split(".");

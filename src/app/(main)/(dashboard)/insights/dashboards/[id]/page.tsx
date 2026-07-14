@@ -10,7 +10,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
-import { DashboardView } from "@/industries/education-consultancy/features/insights/pages/dashboard-view";
+import { DashboardView } from "@/industries/_shared/features/insights/pages/dashboard-view";
 import type { Dashboard } from "@/types/database";
 
 export default async function InsightsDashboardViewPage({
@@ -30,7 +30,7 @@ export default async function InsightsDashboardViewPage({
 
   const supabase = await createServiceClient();
 
-  const [dashboardResult, allDashboardsResult] = await Promise.all([
+  const [dashboardResult, allDashboardsResult, tenantUserResult] = await Promise.all([
     supabase
       .from("dashboards")
       .select("*")
@@ -43,7 +43,14 @@ export default async function InsightsDashboardViewPage({
       .eq("tenant_id", tenantData.tenant.id)
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true }),
+    supabase
+      .from("tenant_users")
+      .select("id")
+      .eq("tenant_id", tenantData.tenant.id)
+      .eq("user_id", userId)
+      .maybeSingle(),
   ]);
+  const currentTenantUserId = tenantUserResult.data?.id ?? null;
 
   if (!dashboardResult.data) notFound();
   const dashboard = dashboardResult.data as Dashboard;
@@ -84,6 +91,9 @@ export default async function InsightsDashboardViewPage({
       formMap={formMap}
       visibleDashboards={visibleDashboards}
       canManage={isAdmin}
+      industryId={tenantData.tenant.industry_id}
+      currentUserId={userId}
+      currentTenantUserId={currentTenantUserId}
     />
   );
 }

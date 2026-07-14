@@ -55,6 +55,7 @@ export function OrganizationPanel() {
           <TenantLocaleManager
             timezone={bootstrapData?.timezone ?? "Asia/Kathmandu"}
             weekendDays={bootstrapData?.weekendDays ?? [6]}
+            defaultCurrency={bootstrapData?.defaultCurrency ?? "NPR"}
           />
         </>
       )}
