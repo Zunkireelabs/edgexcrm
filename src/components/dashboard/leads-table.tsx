@@ -51,6 +51,7 @@ import {
   Archive,
   RotateCcw,
   Columns4,
+  ArrowUpCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -118,7 +119,9 @@ interface LeadsTableProps {
   memberBranchMap?: Record<string, string>;
   /** Slug of the currently active list; enables the Kanban toggle. */
   activeListSlug?: string | null;
-  /** When true the active list has its own pipeline and can show kanban. */
+  /** it_agency funnel key when viewing a whole funnel (no single list active). */
+  activeFunnelKey?: string | null;
+  /** When true the active list (or funnel) has a pipeline/stages and can show kanban. */
   hasListPipeline?: boolean;
   /** True for branch managers (leadScope==="team") — unlocks the Counselors filter. */
   isTeamScoped?: boolean;
@@ -126,6 +129,8 @@ interface LeadsTableProps {
   allLeadLists?: LeadList[];
   /** Current user's position slug — threaded to AddLeadSheet for the education assignment cascade. */
   currentUserPositionSlug?: string | null;
+  /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open task. */
+  openTaskLeadIds?: Set<string>;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -166,10 +171,12 @@ export function LeadsTable({
   assignableMembers,
   memberBranchMap = {},
   activeListSlug = null,
+  activeFunnelKey = null,
   hasListPipeline = false,
   isTeamScoped = false,
   allLeadLists,
   currentUserPositionSlug = null,
+  openTaskLeadIds,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy";
@@ -186,7 +193,7 @@ export function LeadsTable({
   // Reset status filter when switching lists so a stale status doesn't hide all rows.
   useEffect(() => {
     setStatusFilter("all");
-  }, [activeListSlug]);
+  }, [activeListSlug, activeFunnelKey]);
 
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
@@ -213,6 +220,8 @@ export function LeadsTable({
   const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
   const [isMoveList, setIsMoveList] = useState(false);
   const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
+  // it_agency: Fit-Qualified → Sales Leads graduation reuses the move-to-list dialog/API.
+  const [isGraduateMove, setIsGraduateMove] = useState(false);
 
   // Smart suggestion — stable key derived from the staging list's id
   const stagingListId = isStagingView ? (localLeads[0]?.list_id ?? null) : null;
@@ -670,6 +679,9 @@ export function LeadsTable({
   const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
   // The "Archived" list, used by the bulk Archive shortcut (opens the move dialog pre-targeted here).
   const archivedList = leadLists.find((l) => l.slug === "archived") ?? leadLists.find((l) => l.is_archive) ?? null;
+  // it_agency: "Graduate → Sales Leads" shortcut, enabled only when viewing the Fit-Qualified stage.
+  const graduateTargetList = leadLists.find((l) => l.funnel_key === "sales_leads" && l.slug === "new-prospect") ?? null;
+  const canGraduate = industryId === "it_agency" && activeListSlug === "fit-qualified" && !!graduateTargetList;
 
   const CHUNK_SIZE = 100;
 
@@ -743,6 +755,7 @@ export function LeadsTable({
             ...(moveAssignTo !== "keep" && {
               assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
             }),
+            ...(isGraduateMove && { graduate: true }),
           }),
         });
         const data = await response.json();
@@ -772,7 +785,9 @@ export function LeadsTable({
           ? teamMembers.find((m) => m.user_id === moveAssignTo)?.name
           : null;
       const toastMsg = [
-        `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
+        isGraduateMove
+          ? `Graduated ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to Sales Leads`
+          : `Moved ${totalMoved} lead${totalMoved !== 1 ? "s" : ""} to ${moveTargetList?.name ?? "list"}`,
         assignedName ? `and assigned to ${assignedName}` : null,
       ]
         .filter(Boolean)
@@ -784,6 +799,7 @@ export function LeadsTable({
       setMoveListId("");
       setMoveArchiveReason("");
       setMoveAssignTo("keep");
+      setIsGraduateMove(false);
       router.refresh();
     } catch (error) {
       toast.dismiss("bulk-move");
@@ -1064,9 +1080,10 @@ export function LeadsTable({
         viewMode === "trash" || viewMode === "archived"
           ? async (leadId: string) => { await restoreLeads([leadId]); }
           : undefined,
+      openTaskLeadIds,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -1251,11 +1268,15 @@ export function LeadsTable({
             <span>Edit columns</span>
           </button>
 
-          {/* Kanban toggle — only when the active list has its own pipeline */}
-          {hasListPipeline && activeListSlug && (
+          {/* Kanban toggle — active list's own pipeline, or (it_agency) the whole funnel */}
+          {hasListPipeline && (activeListSlug || activeFunnelKey) && (
             <button
               type="button"
-              onClick={() => router.push(`/leads?list=${activeListSlug}&view=kanban`)}
+              onClick={() => router.push(
+                activeListSlug
+                  ? `/leads?list=${activeListSlug}&view=kanban`
+                  : `/leads?funnel=${activeFunnelKey}&view=kanban`
+              )}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
             >
               <Columns4 className="h-3 w-3 shrink-0" />
@@ -1420,11 +1441,27 @@ export function LeadsTable({
                 Branch
               </button>
             )}
+            {(isAdmin || isTeamScoped) && canGraduate && (
+              <button
+                onClick={() => {
+                  setMoveArchiveReason("");
+                  setMoveAssignTo("keep");
+                  setMoveListId(graduateTargetList!.id);
+                  setIsGraduateMove(true);
+                  setMoveListDialogOpen(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-emerald-600 hover:bg-emerald-50 rounded transition-colors"
+              >
+                <ArrowUpCircle className="h-4 w-4" />
+                Graduate → Sales Leads
+              </button>
+            )}
             {(isAdmin || isTeamScoped) && archivedList && (
               <button
                 onClick={() => {
                   setMoveArchiveReason("");
                   setMoveAssignTo("keep");
+                  setIsGraduateMove(false);
                   setMoveListId(archivedList.id);
                   setMoveListDialogOpen(true);
                 }}
@@ -1793,21 +1830,25 @@ export function LeadsTable({
       {/* Bulk Move to List Dialog */}
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
-        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
       }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {moveTargetIsArchive
+              {isGraduateMove
+                ? `Graduate ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to Sales Leads`
+                : moveTargetIsArchive
                 ? `Archive ${selectedCount} lead${selectedCount !== 1 ? "s" : ""}`
                 : `Move ${selectedCount} lead${selectedCount !== 1 ? "s" : ""} to stage`}
             </DialogTitle>
             <DialogDescription>
-              Select a target stage. Leads will be moved out of their current stage.
+              {isGraduateMove
+                ? `These leads leave Lead Processing and land in Sales Leads / ${graduateTargetList?.name ?? "New Prospect"}.`
+                : "Select a target stage. Leads will be moved out of their current stage."}
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-3">
-            <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }}>
+            <Select value={moveListId} onValueChange={(v) => { setMoveListId(v); setMoveArchiveReason(""); }} disabled={isGraduateMove}>
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select list..." />
               </SelectTrigger>
@@ -1863,9 +1904,9 @@ export function LeadsTable({
                 </Select>
               </div>
             )}
-            {isStagingView && (
+            {(isStagingView || isGraduateMove) && (
               <>
-                {selectionAssignmentHint && (
+                {isStagingView && selectionAssignmentHint && (
                   <p className="text-xs text-muted-foreground">{selectionAssignmentHint}</p>
                 )}
                 <div className="space-y-1.5">
@@ -1910,7 +1951,7 @@ export function LeadsTable({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); }}
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }}
               disabled={isMoveList}
             >
               Cancel
@@ -1920,8 +1961,8 @@ export function LeadsTable({
               disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
             >
               {isMoveList
-                ? (moveTargetIsArchive ? "Archiving…" : "Moving…")
-                : (moveTargetIsArchive ? "Archive" : "Move")}
+                ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")
+                : (isGraduateMove ? "Graduate" : moveTargetIsArchive ? "Archive" : "Move")}
             </Button>
           </DialogFooter>
         </DialogContent>

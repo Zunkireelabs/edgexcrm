@@ -44,15 +44,18 @@ interface PipelineSettingsModalProps {
   pipeline: PipelineWithCounts;
   /** When true, hides pipeline-level controls; only shows stage add/edit/reorder/delete. */
   listStageMode?: boolean;
+  /** it_agency only: relabels "Stage(s)" as "Status(es)" in list-stage mode. */
+  statusMode?: boolean;
 }
 
 interface SortableStageItemProps {
   stage: PipelineStageWithCount;
   onEdit: (stage: PipelineStageWithCount) => void;
   onDelete: (stage: PipelineStageWithCount) => void;
+  stageWordLower: string;
 }
 
-function SortableStageItem({ stage, onEdit, onDelete }: SortableStageItemProps) {
+function SortableStageItem({ stage, onEdit, onDelete, stageWordLower }: SortableStageItemProps) {
   const {
     attributes,
     listeners,
@@ -133,7 +136,7 @@ function SortableStageItem({ stage, onEdit, onDelete }: SortableStageItemProps) 
           size="icon-xs"
           onClick={() => onDelete(stage)}
           disabled={stage.lead_count > 0}
-          title={stage.lead_count > 0 ? "Cannot delete stage with leads" : "Delete stage"}
+          title={stage.lead_count > 0 ? `Cannot delete ${stageWordLower} with leads` : `Delete ${stageWordLower}`}
         >
           <Trash2 className="h-3 w-3" />
         </Button>
@@ -147,7 +150,10 @@ export function PipelineSettingsModal({
   onClose,
   pipeline,
   listStageMode = false,
+  statusMode = false,
 }: PipelineSettingsModalProps) {
+  const stageWord = statusMode ? "Status" : "Stage";
+  const stageWordLower = statusMode ? "status" : "stage";
   const [name, setName] = useState(pipeline.name);
   const [isDefault, setIsDefault] = useState(pipeline.is_default);
   const [stages, setStages] = useState<PipelineStageWithCount[]>([]);
@@ -299,7 +305,7 @@ export function PipelineSettingsModal({
         throw new Error(json.error?.message || "Failed to update stage");
       }
 
-      toast.success("Stage updated");
+      toast.success(`${stageWord} updated`);
       setEditingStage(null);
       fetchPipelineDetails();
     } catch (error) {
@@ -326,7 +332,7 @@ export function PipelineSettingsModal({
         throw new Error(json.error?.message || "Failed to add stage");
       }
 
-      toast.success("Stage added");
+      toast.success(`${stageWord} added`);
       setIsAddingStage(false);
       fetchPipelineDetails();
     } catch (error) {
@@ -346,7 +352,7 @@ export function PipelineSettingsModal({
         throw new Error(json.error?.message || "Failed to delete stage");
       }
 
-      toast.success("Stage deleted");
+      toast.success(`${stageWord} deleted`);
       setDeleteConfirm(null);
       fetchPipelineDetails();
     } catch (error) {
@@ -363,7 +369,7 @@ export function PipelineSettingsModal({
       <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
         <DialogContent className="sm:max-w-[500px] max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>{listStageMode ? "Manage Stages" : "Pipeline Settings"}</DialogTitle>
+            <DialogTitle>{listStageMode ? `Manage ${stageWord}s` : "Pipeline Settings"}</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto space-y-6 py-4">
@@ -402,7 +408,7 @@ export function PipelineSettingsModal({
                 {/* Stages Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <Label>Stages</Label>
+                    <Label>{stageWord}s</Label>
                     <Button
                       type="button"
                       variant="outline"
@@ -410,7 +416,7 @@ export function PipelineSettingsModal({
                       onClick={() => setIsAddingStage(true)}
                     >
                       <Plus className="h-4 w-4 mr-1" />
-                      Add Stage
+                      Add {stageWord}
                     </Button>
                   </div>
 
@@ -441,6 +447,7 @@ export function PipelineSettingsModal({
                             stage={stage}
                             onEdit={setEditingStage}
                             onDelete={setDeleteConfirm}
+                            stageWordLower={stageWordLower}
                           />
                         ))}
                       </div>
@@ -487,6 +494,7 @@ export function PipelineSettingsModal({
           onSave={handleStageEditSave}
           stage={editingStage}
           mode="edit"
+          statusMode={statusMode}
         />
       )}
 
@@ -497,6 +505,7 @@ export function PipelineSettingsModal({
           onClose={() => setIsAddingStage(false)}
           onSave={handleAddStage}
           mode="add"
+          statusMode={statusMode}
         />
       )}
 
@@ -505,10 +514,10 @@ export function PipelineSettingsModal({
         <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
           <DialogContent className="sm:max-w-[400px]">
             <DialogHeader>
-              <DialogTitle>Delete Stage</DialogTitle>
+              <DialogTitle>Delete {stageWord}</DialogTitle>
             </DialogHeader>
             <p className="text-sm text-muted-foreground py-4">
-              Are you sure you want to delete the stage &quot;{deleteConfirm.name}&quot;?
+              Are you sure you want to delete the {stageWordLower} &quot;{deleteConfirm.name}&quot;?
               This action cannot be undone.
             </p>
             <DialogFooter>
