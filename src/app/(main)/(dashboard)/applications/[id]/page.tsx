@@ -116,8 +116,8 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       stages={stages}
       fullLead={fullLead}
       activityTimeline={activityTimeline}
-      canEdit={canManageApplicationForLead(tenantData, parentLead, application)}
-      canDelete={canManageApplicationForLead(tenantData, parentLead, application)}
+      canEdit={canManageApplicationForLead(tenantData, parentLead)}
+      canDelete={canManageApplicationForLead(tenantData, parentLead)}
       currentUserId={tenantData.userId}
     />
   );

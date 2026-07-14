@@ -153,8 +153,6 @@ export function ApplicationDetailPage({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [assignedTo, setAssignedTo] = useState("");
-  const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
   const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
     useApplicationReferenceData();
 
@@ -190,15 +188,12 @@ export function ApplicationDetailPage({
       .then((j) => {
         const emails: Record<string, string> = {};
         const names: Record<string, string> = {};
-        const members: { user_id: string; name: string; email: string }[] = [];
         for (const m of j.data ?? []) {
           if (m.user_id && m.email) emails[m.user_id] = m.email;
           if (m.user_id && m.name) names[m.user_id] = m.name;
-          if (m.user_id) members.push({ user_id: m.user_id, name: m.name ?? m.email ?? m.user_id, email: m.email ?? "" });
         }
         setTeamMemberEmails(emails);
         setTeamMemberNames(names);
-        setTeamMembers(members);
       })
       .catch(() => {});
   }, []);
@@ -250,7 +245,6 @@ export function ApplicationDetailPage({
     setAgentId(application.agent_id ?? "");
     setAppliedDate(application.applied_date ?? "");
     setIntakeStartDate(application.intake_start_date ?? "");
-    setAssignedTo(application.assigned_to ?? "");
     setEditing(true);
   }
 
@@ -292,7 +286,6 @@ export function ApplicationDetailPage({
         agent_id: agentId && agentId !== "__none__" ? agentId : null,
         applied_date: appliedDate || null,
         intake_start_date: intakeStartDate || null,
-        assigned_to: assignedTo && assignedTo !== "__none__" ? assignedTo : null,
       };
 
       const res = await fetch(`/api/v1/applications/${application.id}`, {
@@ -609,33 +602,14 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Application Executive */}
+              {/* Created by */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Application Executive</Label>
-                {editing && canEdit ? (
-                  <Select
-                    value={assignedTo || "__none__"}
-                    onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Unassigned</SelectItem>
-                      {teamMembers.map((m) => (
-                        <SelectItem key={m.user_id} value={m.user_id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm font-medium">
-                    {application.assigned_to
-                      ? (teamMemberNames[application.assigned_to] ?? teamMemberEmails[application.assigned_to] ?? "—")
-                      : "Unassigned"}
-                  </p>
-                )}
+                <Label className="text-xs text-muted-foreground">Created by</Label>
+                <p className="text-sm font-medium">
+                  {application.created_by
+                    ? (teamMemberNames[application.created_by] ?? teamMemberEmails[application.created_by] ?? "—")
+                    : "—"}
+                </p>
               </div>
 
               {/* Country */}

@@ -1067,6 +1067,7 @@ export interface Application {
   tenant_id: string;
   lead_id: string;
   assigned_to: string | null;
+  created_by: string | null;
   university_name: string;
   program_name: string;
   intake_term: string | null;

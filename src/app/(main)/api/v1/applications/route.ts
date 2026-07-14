@@ -199,10 +199,10 @@ export async function POST(request: NextRequest) {
     stage_id: stageId,
     status: stageSlug,
     position: nextPosition,
+    created_by: auth.userId,
   };
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.country) insert.country = String(body.country);
-  if (body.assigned_to) insert.assigned_to = String(body.assigned_to);
   if (body.application_deadline) insert.application_deadline = String(body.application_deadline);
   if (body.application_fee_paid !== undefined) insert.application_fee_paid = Boolean(body.application_fee_paid);
   if (body.tuition_fee !== undefined && body.tuition_fee !== null) insert.tuition_fee = Number(body.tuition_fee);
