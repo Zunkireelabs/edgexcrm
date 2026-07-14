@@ -17,19 +17,14 @@ type AppAuth = Pick<AuthContext, "userId" | "permissions" | "positionSlug" | "br
 
 /**
  * Edit / delete of a SPECIFIC application card:
- *   owner/admin · branch-manager of the lead's ASSIGNED branch · the application assignee.
- * No position gets blanket edit — an application-executive edits only their own card.
- * (Pass `application` omitted for the create/reorder case — see below.)
+ *   owner/admin · branch-manager of the lead's ASSIGNED branch · the lead assignee.
+ * Same rule as create/reorder — application cards no longer have their own assignee.
  */
-export function canManageApplicationForLead(
-  auth: AppAuth,
-  lead: LeadAccessShape,
-  application?: { assigned_to: string | null } | null,
-): boolean {
+export function canManageApplicationForLead(auth: AppAuth, lead: LeadAccessShape): boolean {
   const p = auth.permissions;
   if (p.baseTier === "owner" || p.baseTier === "admin") return true;
   if (auth.positionSlug === "branch-manager" && auth.branchId && auth.branchId === lead.branch_id) return true;
-  if (application && application.assigned_to === auth.userId) return true;
+  if (lead.assigned_to === auth.userId) return true;
   return false;
 }
 

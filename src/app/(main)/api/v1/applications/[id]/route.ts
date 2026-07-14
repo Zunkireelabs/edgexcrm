@@ -70,7 +70,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   >(auth, id, "*");
   if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!existing || !allowed || !parentLead) return apiNotFound("Application");
-  if (!canManageApplicationForLead(auth, parentLead, existing)) return apiForbidden();
+  if (!canManageApplicationForLead(auth, parentLead)) return apiForbidden();
   const existingRow = existing;
 
   const db = await scopedClient(auth);
@@ -95,7 +95,6 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     "program_name",
     "intake_term",
     "country",
-    "assigned_to",
     "offer_type",
     "application_deadline",
     "application_fee_paid",
@@ -179,7 +178,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   }>(auth, id, "id, lead_id, assigned_to");
   if (dbError) return apiError("DB_ERROR", "Failed to fetch application", 500);
   if (!existing || !allowed || !parentLead) return apiNotFound("Application");
-  if (!canManageApplicationForLead(auth, parentLead, existing)) return apiForbidden();
+  if (!canManageApplicationForLead(auth, parentLead)) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { error } = await db
