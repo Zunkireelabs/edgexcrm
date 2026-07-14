@@ -319,6 +319,32 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Previous assignees also retain lifecycle visibility after a bulk handoff.
+  // Each lead's prior assignee differs, so group by prev-user and add per group.
+  // Mirrors single-lead PATCH behavior (leads/[id]/route.ts).
+  if (body.assigned_to !== undefined) {
+    const prevByUser = new Map<string, string[]>();
+    for (const id of idsToUpdate) {
+      const prev = existingMap.get(id)?.assigned_to as string | null | undefined;
+      if (prev && prev !== body.assigned_to) {
+        const arr = prevByUser.get(prev) ?? [];
+        arr.push(id);
+        prevByUser.set(prev, arr);
+      }
+    }
+    if (prevByUser.size > 0) {
+      try {
+        await Promise.all(
+          [...prevByUser.entries()].map(([userId, leadIds]) =>
+            addLeadCollaborators(supabase, auth.tenantId, leadIds, userId),
+          ),
+        );
+      } catch (err) {
+        log.error({ err }, "addLeadCollaborators (prev assignees) on bulk handoff failed");
+      }
+    }
+  }
+
   // Keep lead_branches origin rows in sync for each updated lead
   if (body.branch_id !== undefined || body.assigned_to !== undefined) {
     await Promise.all(
