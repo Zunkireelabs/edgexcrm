@@ -301,7 +301,9 @@ export function KeyInfoSection({
             </div>
           )}
 
-          {/* Assigned To */}
+          {/* Assigned To — skipped for Other-tagged walk-ins (not real pipeline leads,
+              so there's no counselor to assign). */}
+          {!isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
             {isAdmin ||
@@ -354,9 +356,13 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+          )}
 
-          {/* Lead Collaborators — visible to all, editable by admin/owner only */}
-          <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+          {/* Lead Collaborators — visible to all, editable by admin/owner only.
+              Skipped for Other-tagged walk-ins (no collaboration flow for Contacts). */}
+          {!isOtherContact && (
+            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+          )}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
