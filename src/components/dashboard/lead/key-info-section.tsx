@@ -184,6 +184,10 @@ export function KeyInfoSection({
   // When lead has no stage_id yet, show the pipeline's default/first stage.
   const effectiveStageId = stageId || defaultPipelineStage?.id || "";
 
+  // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
+  // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
+  const isOtherContact = lead.tags?.includes("other") ?? false;
+
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
     ([key, v]) => v != null && v !== "" && !isReservedCustomField(key, industryId)
@@ -210,8 +214,9 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list */}
-          {!isInIntakeList && (
+          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list,
+              and for Other-tagged Contacts (never in the pipeline). */}
+          {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
@@ -251,8 +256,9 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →] */}
-          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
+          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →].
+              Skipped for Other-tagged Contacts — they don't have a real list/stage. */}
+          {!isOtherContact && ((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
