@@ -279,6 +279,10 @@ export function DashboardShell({
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate (CRE capital-raise): renders the generic sidebar branch, but the
+  // universal "All Leads" nav item is relabeled "Investors" (investors ride the
+  // leads spine). Additive — no other industry's label changes.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -679,7 +683,7 @@ export function DashboardShell({
                 }
                 const node = renderNavItem(
                   item.href === "/leads"
-                    ? { ...item, badge: counts.unread_leads || undefined }
+                    ? { ...item, label: isRealEstate ? "Investors" : item.label, badge: counts.unread_leads || undefined }
                     : item
                 );
                 if (item.href === "/home") {
