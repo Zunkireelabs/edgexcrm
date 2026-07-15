@@ -41,6 +41,7 @@ import { ClassesCard } from "@/industries/education-consultancy/features/classes
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
 import { InvestorProfileCard } from "@/industries/real-estate/features/investors/components/investor-profile-card";
 import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
+import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
@@ -897,6 +898,7 @@ export function LeadDetailV2({
                 canEdit={canEdit}
               />
               <CommitmentsPanel leadId={currentLead.id} canManage={isAdmin} />
+              <InvestorCommsCard leadId={currentLead.id} canManage={isAdmin} />
               {/* Subscription Agreement — reuses the consent e-sign spine with
                   real_estate labels + no education processing-fee section. */}
               <ConsentCard
