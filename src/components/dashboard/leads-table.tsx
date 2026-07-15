@@ -91,6 +91,8 @@ interface LeadsTableProps {
   leads: Lead[];
   memberMap?: Record<string, string>;
   memberNames?: Record<string, string>;
+  /** lead_id -> collaborator user_ids (assignee + anyone ever assigned). Powers the Collaborators filter. */
+  leadCollaborators?: Record<string, string[]>;
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
   role?: UserRole;
@@ -131,6 +133,11 @@ interface LeadsTableProps {
   currentUserPositionSlug?: string | null;
   /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open task. */
   openTaskLeadIds?: Set<string>;
+  /** When true, hides Add Lead regardless of role/isTeamScoped — e.g. Contacts, where AddLeadSheet's
+   * student/parent tags would mistag a walk-in and make it vanish from this "other"-tagged view. */
+  disableAddLead?: boolean;
+  /** When true, hides the Tag filter — e.g. Contacts, where every row is already tagged "other". */
+  hideTagFilter?: boolean;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -146,6 +153,7 @@ export function LeadsTable({
   leads,
   memberMap = {},
   memberNames = {},
+  leadCollaborators = {},
   stages = [],
   formMap = {},
   role = "viewer",
@@ -177,9 +185,11 @@ export function LeadsTable({
   allLeadLists,
   currentUserPositionSlug = null,
   openTaskLeadIds,
+  disableAddLead = false,
+  hideTagFilter = false,
 }: LeadsTableProps) {
   const router = useRouter();
-  const showTags = industryId === "education_consultancy";
+  const showTags = industryId === "education_consultancy" && !hideTagFilter;
   const [localLeads, setLocalLeads] = useState(leads);
   // Re-sync when the server sends a new lead set — list switch (?list=…),
   // branch switch (router.refresh), etc. Without this the table shows stale
@@ -197,6 +207,7 @@ export function LeadsTable({
 
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
+  const [collaboratorFilter, setCollaboratorFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
@@ -257,7 +268,7 @@ export function LeadsTable({
   const isAdmin = role === "admin" || role === "owner";
   // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
   // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
-  const canCreateLead = isAdmin || isTeamScoped;
+  const canCreateLead = !disableAddLead && (isAdmin || isTeamScoped);
   // Same position-first gate for inline row edits (stage change, list move).
   const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
@@ -353,6 +364,40 @@ export function LeadsTable({
     return Array.from(c.entries());
   }, [memberMap]);
 
+  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
+  const collaboratorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      const matchesSource =
+        sourceFilter.length === 0 ||
+        (isStagingView
+          ? (l.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
+          : (l.intake_source ? sourceFilter.includes(l.intake_source) : false));
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesSource || !matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
+      (leadCollaborators[l.id] ?? []).forEach((userId) => {
+        m.set(userId, (m.get(userId) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -371,6 +416,10 @@ export function LeadsTable({
         (isStagingView
           ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
           : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
+
+      const matchesCollaborator =
+        collaboratorFilter.length === 0 ||
+        (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
 
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -409,7 +458,7 @@ export function LeadsTable({
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesTag && matchesCreated && matchesProspectIndustry;
+      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesCollaborator && matchesTag && matchesCreated && matchesProspectIndustry;
     });
 
     // Apply sorting
@@ -444,7 +493,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, collaboratorFilter, leadCollaborators, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -452,6 +501,7 @@ export function LeadsTable({
     setFormFilter("all");
     setCounselorFilter([]);
     setSourceFilter([]);
+    setCollaboratorFilter([]);
     setTagFilter("all");
     setCreatedFilter("all");
     setProspectIndustryFilter("all");
@@ -464,6 +514,7 @@ export function LeadsTable({
     formFilter !== "all",
     counselorFilter.length > 0,
     sourceFilter.length > 0,
+    collaboratorFilter.length > 0,
     tagFilter !== "all",
     createdFilter !== "all",
     prospectIndustryFilter !== "all",
@@ -1136,6 +1187,27 @@ export function LeadsTable({
                 description: email,
               })),
             ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...((isAdmin || isTeamScoped) && counselors.length > 0 && Object.keys(leadCollaborators).length > 0
+      ? [
+          {
+            id: "collaborator",
+            label: "Collaborators",
+            icon: <UserPlus className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: collaboratorFilter,
+            onChange: (val: string[]) => {
+              setCollaboratorFilter(val);
+              setCurrentPage(1);
+            },
+            options: counselors
+              .map(([userId, email]) => ({
+                value: userId,
+                label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
+                description: email,
+              })),
           } satisfies FilterDef,
         ]
       : []),
