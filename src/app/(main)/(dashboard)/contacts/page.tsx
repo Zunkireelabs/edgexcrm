@@ -133,6 +133,9 @@ export default async function ContactsRoutePage() {
           currentUserPositionSlug={tenantData.positionSlug}
           disableAddLead
           hideTagFilter
+          columnPrefsScope="contacts"
+          excludeDefaultVisibleKeys={["lead_type", "status"]}
+          extraDefaultVisibleKeys={["phone", "created"]}
         />
       </div>
     );
