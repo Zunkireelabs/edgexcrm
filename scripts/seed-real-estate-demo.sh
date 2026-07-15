@@ -31,6 +31,7 @@ TENANT_ID="ce000000-0000-4000-8000-000000000001"
 PIPELINE_ID="ce000000-0000-4000-8000-0000000000a1"
 STAGE_ID="ce000000-0000-4000-8000-0000000000b1"
 OFFERING_ID="ce000000-0000-4000-8000-0000000000c1"
+OFFERING2_ID="ce000000-0000-4000-8000-0000000000c2"
 
 echo "→ Ensuring local stack is reachable..."
 if ! curl -sf "$API_URL/rest/v1/" -H "apikey: $SERVICE_ROLE_KEY" >/dev/null 2>&1; then
@@ -65,7 +66,8 @@ psql "$LOCAL_DB" -v ON_ERROR_STOP=1 \
   -v owner_uid="$AUTH_UID" \
   -v pipeline_id="$PIPELINE_ID" \
   -v stage_id="$STAGE_ID" \
-  -v offering_id="$OFFERING_ID" <<'SQL'
+  -v offering_id="$OFFERING_ID" \
+  -v offering2_id="$OFFERING2_ID" <<'SQL'
 BEGIN;
 
 -- 1. Tenant (fresh; does NOT touch Test Agency).
@@ -129,6 +131,31 @@ VALUES
   ('ce000000-0000-4000-8000-0000000000e7', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d7', :'offering_id', 100000, 'declined',    NULL,  NULL,  :'owner_uid')
 ON CONFLICT (id) DO NOTHING;
 
+-- 7. Second offering — reuses the SAME 7 investors at DIFFERENT statuses, so the
+--    per-offering raise funnel is visible (e.g. Sarah is funded on Fund II but a
+--    soft-commit here; Grace declined Fund II yet funded here). Equity raised here
+--    (subscribed + funded) = $850K.
+INSERT INTO public.offerings
+  (id, tenant_id, name, slug, asset_class, structure, exemption, target_raise, min_investment, pref_return, currency, status, description, created_by)
+VALUES
+  (:'offering2_id', :'tenant_id', 'Southeast Flex Portfolio I', 'southeast-flex-portfolio-i',
+   'flex', 'single_asset', '506b', 10000000, 25000, 7.00, 'USD', 'raising',
+   'Single-asset small-bay flex acquisition — Nashville MSA. 506(b) existing relationships.',
+   :'owner_uid')
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO public.investor_commitments
+  (id, tenant_id, lead_id, offering_id, amount, status, committed_at, funded_at, created_by)
+VALUES
+  ('ce000000-0000-4000-8000-0000000000e8', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d1', :'offering2_id', 200000, 'soft_commit', now(), NULL, :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000e9', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d2', :'offering2_id', 400000, 'subscribed',  now(), NULL, :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000ea', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d3', :'offering2_id', NULL,   'prospect',    NULL,  NULL, :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000eb', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d4', :'offering2_id', 350000, 'funded',      now(), now(), :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000ec', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d5', :'offering2_id', 150000, 'soft_commit', now(), NULL, :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000ed', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d6', :'offering2_id', NULL,   'prospect',    NULL,  NULL, :'owner_uid'),
+  ('ce000000-0000-4000-8000-0000000000ee', :'tenant_id', 'ce000000-0000-4000-8000-0000000000d7', :'offering2_id', 100000, 'funded',      now(), now(), :'owner_uid')
+ON CONFLICT (id) DO NOTHING;
+
 COMMIT;
 SQL
 
@@ -136,5 +163,6 @@ echo ""
 echo "✅ real_estate demo ready."
 echo "   Login:   $EMAIL / $PASSWORD"
 echo "   Tenant:  CRE Capital Management (real_estate, slug cre-capital)"
-echo "   Offering: Industrial Value-Add Fund II — 7 investors across the funnel"
+echo "   Offerings: Industrial Value-Add Fund II (\$1.2M) + Southeast Flex Portfolio I (\$0.85M)"
+echo "              same 7 investors, different status per offering (per-offering funnel)"
 echo "   Studio:  http://127.0.0.1:54323"
