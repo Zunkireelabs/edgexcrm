@@ -173,6 +173,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
               Preview
             </button>
           </div>
+          {/* Desktop: phone under the name (grey) */}
+          {lead.phone && (
+            <div className="hidden md:block text-xs text-gray-500 mt-0.5">{lead.phone}</div>
+          )}
           {/* Mobile: email + preview icon */}
           <div className="flex items-center gap-2 md:hidden">
             <div className="text-xs text-gray-500">
