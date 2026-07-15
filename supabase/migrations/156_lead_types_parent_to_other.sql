@@ -11,6 +11,10 @@
 -- Additive/reversible: plain UPDATE on a config table, no data loss. Rollback:
 -- UPDATE lead_types SET slug = 'parent', label = 'Parent' WHERE slug = 'other'
 -- AND tenant_id IN (SELECT id FROM tenants WHERE industry_id = 'education_consultancy');
+-- Applied: STAGE ONLY (dymeudcddasqpomfpjvt) — 1 row updated (Admizz Education),
+-- verified after-state = student + other. Not yet applied to prod.
+
+BEGIN;
 
 UPDATE lead_types
 SET slug = 'other', label = 'Other', updated_at = NOW()
@@ -24,3 +28,9 @@ SELECT t.id, 'other', 'Other', 2, false
 FROM tenants t
 WHERE t.industry_id = 'education_consultancy'
 ON CONFLICT (tenant_id, slug) DO NOTHING;
+
+-- REQUIRED: self-record in the ledger (mig 123).
+INSERT INTO public.schema_migrations (version) VALUES ('156_lead_types_parent_to_other.sql')
+  ON CONFLICT (version) DO NOTHING;
+
+COMMIT;
