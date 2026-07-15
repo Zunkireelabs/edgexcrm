@@ -134,7 +134,7 @@ export default async function ContactsRoutePage() {
           disableAddLead
           hideTagFilter
           columnPrefsScope="contacts"
-          excludeDefaultVisibleKeys={["lead_type", "status"]}
+          excludeDefaultVisibleKeys={["lead_type", "status", "ref_code", "form_source"]}
           extraDefaultVisibleKeys={["phone", "created"]}
         />
       </div>
