@@ -91,7 +91,12 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
 }
 
 function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
-  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
+  const currentTag = lead.tags?.includes("parent")
+    ? "parent"
+    : lead.tags?.includes("other")
+      ? "other"
+      : "student";
+  // "other" (Contacts walk-ins) promotes to "student" on click; student/parent just toggle.
   const nextTag = currentTag === "student" ? "parent" : "student";
 
   async function toggle() {
@@ -109,17 +114,20 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
     }
   }
 
+  const classesByTag: Record<string, string> = {
+    parent: "bg-green-100 text-green-700 hover:bg-green-200",
+    other: "bg-amber-100 text-amber-700 hover:bg-amber-200",
+    student: "bg-blue-100 text-blue-700 hover:bg-blue-200",
+  };
+  const labelsByTag: Record<string, string> = { parent: "Parent", other: "Other", student: "Student" };
+
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-        currentTag === "parent"
-          ? "bg-green-100 text-green-700 hover:bg-green-200"
-          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-      }`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${classesByTag[currentTag]}`}
       title={`Click to change to ${nextTag}`}
     >
-      {currentTag === "parent" ? "Parent" : "Student"}
+      {labelsByTag[currentTag]}
     </button>
   );
 }

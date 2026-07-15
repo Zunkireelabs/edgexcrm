@@ -138,6 +138,12 @@ interface LeadsTableProps {
   disableAddLead?: boolean;
   /** When true, hides the Tag filter — e.g. Contacts, where every row is already tagged "other". */
   hideTagFilter?: boolean;
+  /** Keys to drop from the computed default-visible set — e.g. Contacts drops "lead_type"/"status"
+   * (pipeline-only controls that don't apply to other-tagged walk-ins). */
+  excludeDefaultVisibleKeys?: string[];
+  /** Namespaces the "Edit columns" localStorage prefs so this view's column choices don't bleed
+   * into/from other LeadsTable consumers sharing the same tenant+user (e.g. "contacts"). */
+  columnPrefsScope?: string;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -187,6 +193,8 @@ export function LeadsTable({
   openTaskLeadIds,
   disableAddLead = false,
   hideTagFilter = false,
+  excludeDefaultVisibleKeys = [],
+  columnPrefsScope,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy" && !hideTagFilter;
@@ -964,10 +972,12 @@ export function LeadsTable({
   // Default middle visible keys (anchors name + actions always implicit).
   const defaultMiddleKeys = useMemo(() => {
     const defaults = getDefaultVisibleKeys(industryId, maxBranches);
-    const base = defaults.filter((k) => k !== "name" && k !== "actions");
+    const base = defaults.filter(
+      (k) => k !== "name" && k !== "actions" && !excludeDefaultVisibleKeys.includes(k),
+    );
     const extra = extraDefaultVisibleKeys.filter((k) => !base.includes(k));
     return [...base, ...extra];
-  }, [industryId, maxBranches, extraDefaultVisibleKeys]);
+  }, [industryId, maxBranches, extraDefaultVisibleKeys, excludeDefaultVisibleKeys]);
 
   // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
@@ -985,10 +995,12 @@ export function LeadsTable({
       .map((c) => c.key);
     const validKeys = [...staticKeys, ...cfKeys];
     const defKeys = [
-      ...getDefaultVisibleKeys(industryId).filter((k) => k !== "name" && k !== "actions"),
+      ...getDefaultVisibleKeys(industryId).filter(
+        (k) => k !== "name" && k !== "actions" && !excludeDefaultVisibleKeys.includes(k),
+      ),
       ...extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions"),
     ];
-    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
+    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys, columnPrefsScope));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
 
@@ -1010,11 +1022,11 @@ export function LeadsTable({
   // Handlers for the column manager dialog.
   function handleColumnApply(keys: string[]) {
     setVisibleKeys(keys);
-    saveColumnPrefs(tenantId, currentUserId, keys);
+    saveColumnPrefs(tenantId, currentUserId, keys, columnPrefsScope);
   }
 
   function handleColumnReset() {
-    clearColumnPrefs(tenantId, currentUserId);
+    clearColumnPrefs(tenantId, currentUserId, columnPrefsScope);
     setVisibleKeys(defaultMiddleKeys);
   }
 
