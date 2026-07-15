@@ -639,6 +639,7 @@ export function LeadDetailV2({
             editErrors={editErrors}
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
@@ -814,6 +815,7 @@ export function LeadDetailV2({
             industryId={tenant.industry_id}
             tenantName={tenant.name}
             tenantLogoUrl={tenant.logo_url}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.

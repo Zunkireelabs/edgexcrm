@@ -6,6 +6,7 @@ import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agen
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -186,7 +187,7 @@ export function KeyInfoSection({
 
   // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
   // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
-  const isOtherContact = lead.tags?.includes("other") ?? false;
+  const isOtherContact = isOtherLead(lead.tags, industryId);
 
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(

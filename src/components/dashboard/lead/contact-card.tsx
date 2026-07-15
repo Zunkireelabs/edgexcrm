@@ -22,6 +22,7 @@ import { nationalityFromPhone } from "@/lib/leads/nationality";
 import { toast } from "sonner";
 import type { Lead, PipelineStage } from "@/types/database";
 import { getLeadFullName, getLeadInitials } from "./lead-name";
+import { isOtherLead } from "@/lib/leads/lead-type";
 
 interface LeadTypeOption {
   id: string;
@@ -30,7 +31,15 @@ interface LeadTypeOption {
   is_default: boolean;
 }
 
-function LeadTypeBadge({ leadId, tags }: { leadId: string; tags: string[] }) {
+function LeadTypeBadge({
+  leadId,
+  tags,
+  onTagChange,
+}: {
+  leadId: string;
+  tags: string[];
+  onTagChange?: (tags: string[]) => void;
+}) {
   const [options, setOptions] = useState<LeadTypeOption[]>([]);
   const [currentTags, setCurrentTags] = useState(tags);
   const [open, setOpen] = useState(false);
@@ -63,6 +72,9 @@ function LeadTypeBadge({ leadId, tags }: { leadId: string; tags: string[] }) {
         body: JSON.stringify({ tags: nextTags }),
       });
       if (!res.ok) throw new Error();
+      // Propagate up so the parent's lead state (Status/Stage gating, badges) stays
+      // in sync — otherwise converting Other↔Student needs a page reload to reflect.
+      onTagChange?.(nextTags);
       toast.success(`Set to ${options.find((o) => o.slug === slug)?.label ?? slug}`);
     } catch {
       setCurrentTags(prev);
@@ -123,6 +135,9 @@ interface ContactCardProps {
   editErrors?: { email?: string; phone?: string };
   onDraftChange?: (field: keyof LeadDraftSubset, value: string) => void;
   industryId?: string | null;
+  /** Called after the Tag pill changes the lead type, so the parent can keep its
+   * lead state in sync (Status/Stage gating depends on tags). */
+  onTagChange?: (tags: string[]) => void;
 }
 
 interface QuickActionButtonProps {
@@ -160,6 +175,7 @@ export function ContactCard({
   editErrors = {},
   onDraftChange,
   industryId,
+  onTagChange,
 }: ContactCardProps) {
   const fullName = isEditing && draft
     ? [draft.first_name, draft.last_name].filter(Boolean).join(" ") || "—"
@@ -282,7 +298,7 @@ export function ContactCard({
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
                 {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
                     never enter the funnel (same gate as Key Information's Status/Stage). */}
-                {currentStage && !(industryId === "education_consultancy" && lead.tags?.includes("other")) && (
+                {currentStage && !isOtherLead(lead.tags, industryId) && (
                   <Badge
                     variant="secondary"
                     style={{
@@ -294,7 +310,7 @@ export function ContactCard({
                   </Badge>
                 )}
                 {industryId === "education_consultancy" && (
-                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} />
+                  <LeadTypeBadge leadId={lead.id} tags={lead.tags ?? []} onTagChange={onTagChange} />
                 )}
               </div>
             </>
