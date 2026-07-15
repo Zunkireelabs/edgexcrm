@@ -43,10 +43,9 @@ export default async function HomePage() {
     ]);
   const currentTenantUserId = tenantUserResult.data?.id ?? null;
 
-  const userName =
-    (user.user_metadata?.full_name as string | undefined)?.split(" ")[0] ||
-    user.email?.split("@")[0] ||
-    "there";
+  const meta = user.user_metadata as Record<string, unknown> | undefined;
+  const fullName = (meta?.name ?? meta?.full_name) as string | undefined;
+  const userName = fullName?.trim().split(" ")[0] || user.email?.split("@")[0] || "there";
 
   return (
     <HomeContent

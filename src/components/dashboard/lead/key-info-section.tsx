@@ -6,6 +6,7 @@ import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agen
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -184,6 +185,10 @@ export function KeyInfoSection({
   // When lead has no stage_id yet, show the pipeline's default/first stage.
   const effectiveStageId = stageId || defaultPipelineStage?.id || "";
 
+  // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
+  // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
+  const isOtherContact = isOtherLead(lead.tags, industryId);
+
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
     ([key, v]) => v != null && v !== "" && !isReservedCustomField(key, industryId)
@@ -210,8 +215,9 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list */}
-          {!isInIntakeList && (
+          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list,
+              and for Other-tagged Contacts (never in the pipeline). */}
+          {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
@@ -251,8 +257,9 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →] */}
-          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
+          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →].
+              Skipped for Other-tagged Contacts — they don't have a real list/stage. */}
+          {!isOtherContact && ((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
