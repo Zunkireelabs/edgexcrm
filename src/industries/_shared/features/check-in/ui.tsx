@@ -221,10 +221,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [referralSource, setReferralSource] = useState("");
   const [referredBy, setReferredBy] = useState("");
 
-  // Check-in history state
+  // Check-in history state — every checked-in visitor shows here regardless of tag
+  // (Other-tagged ones also surface separately on the Contacts page).
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
-  // "other" walk-ins belong on the Contacts page only, not Check-In History
-  const visibleCheckIns = checkIns.filter((r) => !(r.tags ?? []).includes("other"));
+  const visibleCheckIns = checkIns;
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customFrom, setCustomFrom] = useState("");
