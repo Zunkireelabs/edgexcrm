@@ -96,9 +96,9 @@ export async function GET(request: NextRequest) {
       pipelines: { name: string } | null;
     };
     const tags = lead?.tags ?? [];
-    const isStudentOrParent = tags.some((t) => t === "student" || t === "parent");
+    const isStudent = tags.includes("student");
     const isNew =
-      isStudentOrParent &&
+      isStudent &&
       !!lead?.created_at &&
       Math.abs(new Date(note.created_at).getTime() - new Date(lead.created_at).getTime()) <= 60_000;
     return {

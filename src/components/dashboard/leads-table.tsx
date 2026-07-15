@@ -133,8 +133,9 @@ interface LeadsTableProps {
   currentUserPositionSlug?: string | null;
   /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open task. */
   openTaskLeadIds?: Set<string>;
-  /** When true, hides Add Lead regardless of role/isTeamScoped — e.g. Contacts, where AddLeadSheet's
-   * student/parent tags would mistag a walk-in and make it vanish from this "other"-tagged view. */
+  /** When true, hides Add Lead regardless of role/isTeamScoped — e.g. Contacts, where AddLeadSheet
+   * always creates a "student" lead, which would mistag a walk-in and make it vanish from this
+   * "other"-tagged view. */
   disableAddLead?: boolean;
   /** When true, hides the Tag filter — e.g. Contacts, where every row is already tagged "other". */
   hideTagFilter?: boolean;
@@ -1237,7 +1238,6 @@ export function LeadsTable({
             options: [
               { value: "all", label: "All Tags", description: "Show all leads" },
               { value: "student", label: "Student", description: "Student leads only" },
-              { value: "parent", label: "Parent", description: "Parent leads only" },
             ],
           } satisfies FilterDef,
         ]

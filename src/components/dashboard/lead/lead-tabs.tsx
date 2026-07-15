@@ -465,15 +465,15 @@ function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: str
 
   return (
     <div className="flex gap-1.5">
-      {["student", "parent"].map((tag) => (
+      {["student", "other"].map((tag) => (
         <button
           key={tag}
           disabled={updating}
           onClick={() => handleToggle(tag)}
           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
             tags.includes(tag)
-              ? tag === "parent"
-                ? "bg-green-100 text-green-700 ring-2 ring-green-300"
+              ? tag === "other"
+                ? "bg-amber-100 text-amber-700 ring-2 ring-amber-300"
                 : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
               : "bg-gray-100 text-gray-400 hover:bg-gray-200"
           }`}
