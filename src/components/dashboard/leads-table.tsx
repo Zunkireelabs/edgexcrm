@@ -136,6 +136,8 @@ interface LeadsTableProps {
   /** When true, hides Add Lead regardless of role/isTeamScoped — e.g. Contacts, where AddLeadSheet's
    * student/parent tags would mistag a walk-in and make it vanish from this "other"-tagged view. */
   disableAddLead?: boolean;
+  /** When true, hides the Tag filter — e.g. Contacts, where every row is already tagged "other". */
+  hideTagFilter?: boolean;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -184,9 +186,10 @@ export function LeadsTable({
   currentUserPositionSlug = null,
   openTaskLeadIds,
   disableAddLead = false,
+  hideTagFilter = false,
 }: LeadsTableProps) {
   const router = useRouter();
-  const showTags = industryId === "education_consultancy";
+  const showTags = industryId === "education_consultancy" && !hideTagFilter;
   const [localLeads, setLocalLeads] = useState(leads);
   // Re-sync when the server sends a new lead set — list switch (?list=…),
   // branch switch (router.refresh), etc. Without this the table shows stale
@@ -1187,7 +1190,7 @@ export function LeadsTable({
           } satisfies FilterDef,
         ]
       : []),
-    ...((isAdmin || isTeamScoped) && counselors.length > 0
+    ...((isAdmin || isTeamScoped) && counselors.length > 0 && Object.keys(leadCollaborators).length > 0
       ? [
           {
             id: "collaborator",
@@ -1223,7 +1226,6 @@ export function LeadsTable({
               { value: "all", label: "All Tags", description: "Show all leads" },
               { value: "student", label: "Student", description: "Student leads only" },
               { value: "parent", label: "Parent", description: "Parent leads only" },
-              { value: "other", label: "Other", description: "Walk-in / other contacts" },
             ],
           } satisfies FilterDef,
         ]

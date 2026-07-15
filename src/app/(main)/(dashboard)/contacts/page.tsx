@@ -132,6 +132,7 @@ export default async function ContactsRoutePage() {
           positionSlugMap={positionSlugMap}
           currentUserPositionSlug={tenantData.positionSlug}
           disableAddLead
+          hideTagFilter
         />
       </div>
     );
