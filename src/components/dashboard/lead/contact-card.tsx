@@ -280,7 +280,9 @@ export function ContactCard({
             <>
               <h2 className="text-lg font-semibold text-foreground">{fullName}</h2>
               <div className="flex flex-wrap items-center justify-center gap-1.5 mt-2">
-                {currentStage && (
+                {/* Pipeline stage badge — meaningless for Other-tagged walk-ins, which
+                    never enter the funnel (same gate as Key Information's Status/Stage). */}
+                {currentStage && !(industryId === "education_consultancy" && lead.tags?.includes("other")) && (
                   <Badge
                     variant="secondary"
                     style={{
