@@ -897,6 +897,25 @@ export function LeadDetailV2({
                 canEdit={canEdit}
               />
               <CommitmentsPanel leadId={currentLead.id} canManage={isAdmin} />
+              {/* Subscription Agreement — reuses the consent e-sign spine with
+                  real_estate labels + no education processing-fee section. */}
+              <ConsentCard
+                leadId={currentLead.id}
+                tenantId={tenant.id}
+                consentEnabled={true}
+                consentSigned={false}
+                canManage={isAdmin}
+                showProcessingFee={false}
+                labels={{
+                  sectionTitle: "Subscription Agreement",
+                  docLabel: "Subscription Agreement",
+                  requiredTitle: "Subscription Agreement required",
+                  requiredHelp:
+                    "This investor must sign the Subscription Agreement before their commitment can be marked Subscribed.",
+                  awaitingHelp: "Subscription Agreement sent · awaiting investor signature",
+                  signedTitle: "Subscription Agreement signed",
+                }}
+              />
               <ManagementPanel
                 ref={checklistRef}
                 lead={currentLead}

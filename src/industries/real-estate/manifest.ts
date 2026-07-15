@@ -28,6 +28,15 @@ export const manifest: IndustryManifest = {
       icon: "Building2",
       position: "before-pipeline",
     },
+    {
+      // Per-offering data room (Phase 1.6). Lives under the OFFERINGS feature —
+      // rendered in the shell's isRealEstate branch via reItem("/data-room").
+      featureId: FEATURES.OFFERINGS,
+      href: "/data-room",
+      label: "Data Room",
+      icon: "FolderOpen",
+      position: "after-pipeline",
+    },
   ],
   ai: aiConfig,
 };

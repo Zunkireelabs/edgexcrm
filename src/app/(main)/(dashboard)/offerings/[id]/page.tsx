@@ -19,7 +19,7 @@ export default async function OfferingDetailRoute({ params }: Props) {
 
   return (
     <div className="p-6">
-      <OfferingDetail offeringId={id} canManage={isAdmin} />
+      <OfferingDetail offeringId={id} tenantId={tenantData.tenant.id} canManage={isAdmin} />
     </div>
   );
 }

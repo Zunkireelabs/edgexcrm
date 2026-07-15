@@ -80,6 +80,24 @@ INSERT INTO public.tenant_users (tenant_id, user_id, role)
 VALUES (:'tenant_id', :'owner_uid', 'owner')
 ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = 'owner';
 
+-- 2b. Subscription Agreement consent template (reuses the education consent
+--     e-sign spine — one active template per tenant; UNIQUE(tenant_id)).
+--     Makes the "Subscription Agreement" card on an investor able to send/sign.
+INSERT INTO public.consent_templates (tenant_id, title, body, is_active, require_drawn_signature)
+VALUES (
+  :'tenant_id',
+  'Subscription Agreement',
+  E'By signing below, the undersigned investor subscribes to the offering and acknowledges:\n\n'
+  '• I have received and reviewed the Private Placement Memorandum (PPM), Operating Agreement, and subscription documents.\n'
+  '• I qualify as an accredited investor and my accreditation and identity (KYC/AML) information is true and complete.\n'
+  '• I understand this is a private, illiquid, high-risk investment and I may lose my entire principal.\n'
+  '• This subscription is subject to acceptance by the Sponsor and the terms of the offering documents.\n\n'
+  'This is a demonstration template. Replace with your reviewed subscription agreement before production use.',
+  true,
+  false
+)
+ON CONFLICT (tenant_id) DO NOTHING;
+
 -- 3. A pipeline + one stage (leads.pipeline_id is NOT NULL).
 INSERT INTO public.pipelines (id, tenant_id, name, slug, is_default)
 VALUES (:'pipeline_id', :'tenant_id', 'Investors', 'investors', true)

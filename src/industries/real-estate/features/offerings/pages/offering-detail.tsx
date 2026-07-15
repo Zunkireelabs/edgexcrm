@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { RaiseFunnelBoard, type BoardCommitment } from "../components/raise-funnel-board";
+import { DataRoomSection } from "../components/data-room-section";
 import {
   formatCurrency,
   type Offering,
@@ -28,7 +29,15 @@ function Term({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function OfferingDetail({ offeringId, canManage }: { offeringId: string; canManage: boolean }) {
+export function OfferingDetail({
+  offeringId,
+  tenantId,
+  canManage,
+}: {
+  offeringId: string;
+  tenantId: string;
+  canManage: boolean;
+}) {
   const [offering, setOffering] = useState<Offering | null>(null);
   const [commitments, setCommitments] = useState<BoardCommitment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -121,6 +130,8 @@ export function OfferingDetail({ offeringId, canManage }: { offeringId: string; 
         targetRaise={offering.target_raise}
         canManage={canManage}
       />
+
+      <DataRoomSection offeringId={offering.id} tenantId={tenantId} canManage={canManage} />
     </div>
   );
 }

@@ -52,6 +52,7 @@ import {
   CalendarCheck,
   Filter,
   Target,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -135,6 +136,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Package,
   FileSignature,
   Gauge,
+  FolderOpen,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -290,6 +292,7 @@ export function DashboardShell({
       education_consultancy: "edu",
       travel_agency: "travel",
       it_agency: "agency",
+      real_estate: "capital",
     } as Record<string, string>)[tenant.industry_id ?? ""] ?? "";
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
@@ -644,6 +647,45 @@ export function DashboardShell({
                 {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
                 {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
                 {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
+              </>
+            );
+          })() : isRealEstate ? (() => {
+            // real_estate (CRE capital-raise): departmental sidebar mirroring the
+            // it_agency branch. Investors ride the universal /leads spine (relabeled);
+            // Offerings + Data Room come from the industry manifest via reItem().
+            const reItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+
+                {/* Capital Raise */}
+                <NavSectionHeader label="Capital Raise" />
+                {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
+                {reItem("/offerings") && renderIndustryEntry(reItem("/offerings")!)}
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+                {reItem("/data-room") && renderIndustryEntry(reItem("/data-room")!)}
+
+                {/* Investor Relations — header omitted until Distributions/Statements
+                    land (avoids an empty-section header). Add it here when they do. */}
+
+                {/* People */}
+                <NavSectionHeader label="People" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
+                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
+
+                {/* Comms */}
+                <NavSectionHeader label="Comms" />
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
               </>
             );
           })() : (
