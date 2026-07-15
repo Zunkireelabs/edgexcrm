@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { Suspense, useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { RaiseFunnelBoard, type BoardCommitment } from "../components/raise-funnel-board";
 import { DataRoomSection } from "../components/data-room-section";
 import {
@@ -29,15 +31,31 @@ function Term({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function OfferingDetail({
-  offeringId,
-  tenantId,
-  canManage,
-}: {
+interface OfferingDetailProps {
   offeringId: string;
   tenantId: string;
   canManage: boolean;
-}) {
+}
+
+// Public export: Suspense-wrap the inner component because it reads the URL via
+// useSearchParams() (Next 16 requires a Suspense boundary around it). The wrapper
+// keeps the route shell — which lives outside this feature folder — untouched.
+export function OfferingDetail(props: OfferingDetailProps) {
+  return (
+    <Suspense fallback={<div className="h-64 bg-muted/40 rounded-xl animate-pulse" />}>
+      <OfferingDetailInner {...props} />
+    </Suspense>
+  );
+}
+
+function OfferingDetailInner({ offeringId, tenantId, canManage }: OfferingDetailProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Intent-based initial tab: /offerings/[id]?tab=data-room opens on the docs;
+  // anything else opens on the raise funnel.
+  const [tab, setTab] = useState<string>(
+    () => (searchParams.get("tab") === "data-room" ? "data-room" : "raise"),
+  );
   const [offering, setOffering] = useState<Offering | null>(null);
   const [commitments, setCommitments] = useState<BoardCommitment[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,6 +88,14 @@ export function OfferingDetail({
   useEffect(() => {
     load();
   }, [load]);
+
+  function handleTabChange(value: string) {
+    setTab(value);
+    // Reflect the tab in the URL so it's shareable and survives refresh/back.
+    // Raise is the default → drop the param; Data Room → ?tab=data-room.
+    const query = value === "data-room" ? "?tab=data-room" : "";
+    router.replace(`/offerings/${offeringId}${query}`, { scroll: false });
+  }
 
   if (loading) {
     return <div className="h-64 bg-muted/40 rounded-xl animate-pulse" />;
@@ -123,15 +149,26 @@ export function OfferingDetail({
         />
       </div>
 
-      <RaiseFunnelBoard
-        offeringId={offering.id}
-        commitments={commitments}
-        currency={currency}
-        targetRaise={offering.target_raise}
-        canManage={canManage}
-      />
+      <Tabs value={tab} onValueChange={handleTabChange}>
+        <TabsList className="mb-4">
+          <TabsTrigger value="raise">Raise</TabsTrigger>
+          <TabsTrigger value="data-room">Data Room</TabsTrigger>
+        </TabsList>
 
-      <DataRoomSection offeringId={offering.id} tenantId={tenantId} canManage={canManage} />
+        <TabsContent value="raise" className="mt-0">
+          <RaiseFunnelBoard
+            offeringId={offering.id}
+            commitments={commitments}
+            currency={currency}
+            targetRaise={offering.target_raise}
+            canManage={canManage}
+          />
+        </TabsContent>
+
+        <TabsContent value="data-room" className="mt-0">
+          <DataRoomSection offeringId={offering.id} tenantId={tenantId} canManage={canManage} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
