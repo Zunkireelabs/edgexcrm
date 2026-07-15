@@ -361,8 +361,9 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── STUDY INTEREST — education_consultancy only ─────────── */}
-          {industryId === "education_consultancy" && (
+          {/* ── STUDY INTEREST — education_consultancy only, skipped for Other-tagged
+              walk-ins (Contacts) since they aren't applying to study anywhere. */}
+          {industryId === "education_consultancy" && !lead.tags?.includes("other") && (
             <StudyInterestPanel
               lead={lead}
               isAdmin={isAdmin}
