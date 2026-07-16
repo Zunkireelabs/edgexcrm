@@ -95,7 +95,9 @@ describe("tool schemas sanitize placeholder junk", () => {
 
   it("pipeline_summary: the NIL uuid pipelineId parses to undefined, not an invented pipeline", () => {
     const tool = toolset.find((t) => t.id === "pipeline_summary")!;
-    const result = tool.inputSchema.parse({ pipelineId: "00000000-0000-0000-0000-000000000000" });
+    const result = tool.inputSchema.parse({ pipelineId: "00000000-0000-0000-0000-000000000000" }) as {
+      pipelineId?: string;
+    };
     expect(result.pipelineId).toBeUndefined();
   });
 

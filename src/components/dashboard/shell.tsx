@@ -896,7 +896,7 @@ export function DashboardShell({
 
           {/* AI Assistant Panel */}
           <div className="print:hidden">
-            <AIAssistantPanel />
+            <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
           </div>
         </div>
       </div>

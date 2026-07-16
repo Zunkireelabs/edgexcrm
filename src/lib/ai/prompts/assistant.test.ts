@@ -30,6 +30,10 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Never pass placeholder values such as empty strings or all-zero UUIDs.");
   });
 
+  it("tells the model links are relative paths, never invent a domain", () => {
+    expect(prompt).toContain("never invent or prepend a domain");
+  });
+
   it("is a pure function — no DB access, same input produces same output", () => {
     const again = buildSystemPrompt({
       tenantName: "Admizz Education",

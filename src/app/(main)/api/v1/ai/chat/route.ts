@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamText, stepCountIs, convertToModelMessages, generateText, type UIMessage } from "ai";
 import { isAssistantEnabled } from "@/lib/ai/flag";
-import { mockChatResponse } from "./mock";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
@@ -14,6 +13,7 @@ import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
 import { model } from "@/lib/ai/provider";
 import { startTrace } from "@/lib/ai/telemetry";
 import { createRequestLogger } from "@/lib/logger";
+import type { ScopedClient } from "@/lib/supabase/scoped";
 
 const MAX_TOOL_STEPS = 6;
 
@@ -25,10 +25,33 @@ function extractText(message: UIMessage | undefined): string {
     .join(" ");
 }
 
+/**
+ * Insert a new ai_conversations row, retrying once with a fresh server-side
+ * UUID if the preferred id collides (e.g. a client-supplied UUID that already
+ * exists as ANOTHER tenant's conversation — the scoped SELECT above misses it,
+ * so the insert is the first place the PK conflict surfaces).
+ */
+async function createConversationRow(
+  db: ScopedClient,
+  userId: string,
+  log: ReturnType<typeof createRequestLogger>,
+  preferredId: string,
+): Promise<string> {
+  const { error } = await db.from("ai_conversations").insert({ id: preferredId, user_id: userId, title: null });
+  if (!error) return preferredId;
+
+  log.error({ err: error, conversationId: preferredId }, "conversation insert failed, retrying with a server-generated id");
+  const fallbackId = crypto.randomUUID();
+  const { error: retryErr } = await db.from("ai_conversations").insert({ id: fallbackId, user_id: userId, title: null });
+  if (retryErr) log.error({ err: retryErr, conversationId: fallbackId }, "conversation insert retry failed");
+  return fallbackId;
+}
+
 export async function POST(request: NextRequest) {
-  if (!isAssistantEnabled()) {
-    return mockChatResponse(request);
-  }
+  // Same 404 shape as an unowned/missing conversation — surfaces (panel, Ask
+  // Orca) can't half-work with the assistant disabled; a fresh chat's first
+  // send has no legitimate 404 path other than this one.
+  if (!isAssistantEnabled()) return apiNotFound();
 
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "POST", path: "/api/v1/ai/chat" });
@@ -49,7 +72,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  let body: { id?: string; messages?: UIMessage[] };
+  let body: { id?: string; messages?: UIMessage[]; name?: string };
   try {
     body = await request.json();
   } catch {
@@ -73,14 +96,11 @@ export async function POST(request: NextRequest) {
       if (existingRow.user_id !== auth.userId) return apiNotFound("Conversation");
       needsTitle = !existingRow.title;
     } else {
-      const { error: insertErr } = await db.from("ai_conversations").insert({ id: conversationId, user_id: auth.userId, title: null });
-      if (insertErr) log.error({ err: insertErr, conversationId }, "failed to create conversation");
+      conversationId = await createConversationRow(db, auth.userId, log, conversationId);
       needsTitle = true;
     }
   } else {
-    conversationId = crypto.randomUUID();
-    const { error: insertErr } = await db.from("ai_conversations").insert({ id: conversationId, user_id: auth.userId, title: null });
-    if (insertErr) log.error({ err: insertErr, conversationId }, "failed to create conversation");
+    conversationId = await createConversationRow(db, auth.userId, log, crypto.randomUUID());
     needsTitle = true;
   }
 
@@ -96,10 +116,11 @@ export async function POST(request: NextRequest) {
   trace.span("chat.start", { conversationId, toolCount: toolset.length });
 
   const modelMessages = await convertToModelMessages(messages, { tools });
+  const userFirstName = (typeof body.name === "string" && body.name.trim()) || auth.email.split("@")[0] || "there";
   const systemPrompt = buildSystemPrompt({
     tenantName,
     industryId: auth.industryId,
-    userFirstName: auth.email.split("@")[0] || "there",
+    userFirstName,
     role: auth.role,
     today: new Date().toISOString().slice(0, 10),
   });
@@ -161,7 +182,12 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        trace.end({ ok: true, inputTokens: event.usage.inputTokens, outputTokens: event.usage.outputTokens });
+        trace.end({
+          ok: true,
+          model: event.model?.modelId,
+          inputTokens: event.usage.inputTokens,
+          outputTokens: event.usage.outputTokens,
+        });
       } catch (err) {
         log.error({ err }, "chat onFinish persistence failed");
         trace.end({ ok: false });
@@ -177,6 +203,9 @@ export async function POST(request: NextRequest) {
   // isn't possible here — the safe equivalent is an error part embedded in
   // the UI message stream (never leaking raw provider error details).
   return result.toUIMessageStreamResponse({
+    // Surfaces the (possibly server-regenerated, see createConversationRow)
+    // conversation id back to the client via message.metadata.
+    messageMetadata: ({ part }) => (part.type === "start" ? { conversationId } : undefined),
     onError: (error) => {
       log.error({ err: error }, "chat stream error");
       return "Something went wrong generating a response. Please try again.";
