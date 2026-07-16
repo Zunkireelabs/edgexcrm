@@ -6,7 +6,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { checkRateLimit, PUBLIC_READ_LIMIT } from "@/lib/api/rate-limit";
 import { apiRateLimited } from "@/lib/api/response";
-import { scoreSubmissions, pickMatchWinners } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
 import type { LeadSubmission } from "@/types/database";
@@ -130,16 +130,11 @@ export async function GET(
     .filter((r) => r.status === "scheduled")
     .map((r) => ({ match_id: r.match_id, match_label: r.match_label }));
 
-  const autoWinners = pickMatchWinners(standings, resultsMap);
-
   const publicResults = results.map((r) => {
     let winner: string | null = null;
-    if (r.status === "final") {
-      const effectiveEmail = r.winner_email ?? autoWinners.get(r.match_id) ?? null;
-      if (effectiveEmail) {
-        const entry = standings.find((e) => e.email === effectiveEmail);
-        if (entry) winner = maskName(entry.name);
-      }
+    if (r.status === "final" && r.winner_email) {
+      const entry = standings.find((e) => e.email === r.winner_email);
+      if (entry) winner = maskName(entry.name);
     }
     return {
       match_label: r.match_label,

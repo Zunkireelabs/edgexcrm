@@ -5,7 +5,8 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { normalizeEmail } from "@/lib/leads/dedup";
-import type { CampaignConfig } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import type { CampaignConfig, ScoringSubmission } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 
 const VALID_OUTCOMES = new Set(["team_a", "team_b", "draw"]);
 
@@ -65,33 +66,33 @@ export async function PATCH(
       }
 
       const config = campaignRow.config;
-      const matchIdField = config.fields?.match_id ?? "match_id";
-      const predictionField = config.fields?.prediction ?? "prediction";
-      const validOutcomes = new Set(Object.values(config.outcomes ?? {}));
+      // Defensive defaults — scoreSubmissions reads these paths unguarded, so an
+      // older/partially-configured campaign row must not throw here.
+      const safeConfig: CampaignConfig = {
+        ...config,
+        fields: {
+          match_id: config.fields?.match_id ?? "match_id",
+          match_label: config.fields?.match_label ?? "match_label",
+          prediction: config.fields?.prediction ?? "prediction",
+        },
+        outcomes: config.outcomes ?? { team_a: "team_a", team_b: "team_b", draw: "draw" },
+      };
 
-      const { data: subsRaw } = await db
+      // Eligible = anywhere on the campaign leaderboard (any match), not just
+      // a predictor of this specific match — owners pick winners individually.
+      const { data: subsRaw, error: subsError } = await db
         .from("lead_submissions")
-        .select("email, normalized_email, custom_fields")
+        .select("email, normalized_email, first_name, last_name, phone, custom_fields, created_at")
         .eq("form_config_id", campaignRow.form_config_id);
 
-      const subs = (subsRaw ?? []) as unknown as Array<{
-        email: string | null;
-        normalized_email: string | null;
-        custom_fields: Record<string, unknown>;
-      }>;
+      if (subsError) return apiError("DB_ERROR", "Failed to fetch submissions", 500);
 
-      const isPredictor = subs.some((sub) => {
-        const matchIdVal = String(sub.custom_fields?.[matchIdField] ?? "").trim();
-        if (matchIdVal !== matchId) return false;
-        if (!matchIdVal.startsWith("espn-")) return false;
-        const prediction = String(sub.custom_fields?.[predictionField] ?? "").trim();
-        if (!validOutcomes.has(prediction)) return false;
-        const normEmail = normalizeEmail(sub.email) ?? normalizeEmail(sub.normalized_email);
-        return normEmail === normalizedInput;
-      });
+      const subs = (subsRaw ?? []) as unknown as ScoringSubmission[];
+      const applicants = scoreSubmissions(subs, {}, safeConfig);
+      const isApplicant = applicants.some((e) => e.email === normalizedInput);
 
-      if (!isPredictor) {
-        return apiValidationError({ set_winner: ["Not a predictor of this match"] });
+      if (!isApplicant) {
+        return apiValidationError({ set_winner: ["Not an applicant on this campaign's leaderboard"] });
       }
 
       patch = { winner_email: normalizedInput };

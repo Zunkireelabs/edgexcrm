@@ -45,7 +45,7 @@ interface EspnResult {
   source?: "espn" | "manual";
   locked?: boolean;
   match_date: string | null;
-  winner?: { email: string; name: string; source: "auto" | "manual" } | null;
+  winner?: { email: string; name: string } | null;
 }
 
 interface Campaign {
@@ -486,6 +486,22 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
     return map;
   }, [data]);
 
+  // Full leaderboard applicant list — winner picker isn't limited to a match's
+  // own predictors; owners can assign any applicant as the winner of any match.
+  const allApplicants = useMemo(() => {
+    if (!data) return [];
+    const list = data.standings.map((entry) => ({
+      name: entry.name,
+      email: entry.email,
+      studyAbroad: entry.profile?.["study_abroad_interest"] === "yes",
+    }));
+    list.sort((a, b) => {
+      if (a.studyAbroad !== b.studyAbroad) return a.studyAbroad ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
+  }, [data]);
+
   const loadLeaderboard = useCallback(() => {
     setLoading(true);
     setError(null);
@@ -706,30 +722,27 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                             <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                                             Winner:
                                             {r.winner ? (
-                                              <>
-                                                <span>{r.winner.name}</span>
-                                                <Badge variant="outline" className="text-xs capitalize">{r.winner.source}</Badge>
-                                              </>
+                                              <span>{r.winner.name}</span>
                                             ) : (
-                                              <span className="font-normal text-muted-foreground">No eligible winner yet</span>
+                                              <span className="font-normal text-muted-foreground">No winner selected</span>
                                             )}
                                           </span>
                                           <select
-                                            value={r.winner?.email ?? "__auto__"}
+                                            value={r.winner?.email ?? "__none__"}
                                             onClick={(e) => e.stopPropagation()}
                                             onChange={(e) =>
-                                              handleSetWinner(r.match_id, e.target.value === "__auto__" ? null : e.target.value)
+                                              handleSetWinner(r.match_id, e.target.value === "__none__" ? null : e.target.value)
                                             }
                                             className="h-7 rounded-md border bg-background px-2 text-xs"
                                           >
-                                            <option value="__auto__">Use auto pick</option>
-                                            {(matchPredictors.get(r.match_id) ?? []).map((p) => (
+                                            <option value="__none__">— No winner selected —</option>
+                                            {allApplicants.map((p) => (
                                               <option key={p.email} value={p.email}>
                                                 {p.name}
                                               </option>
                                             ))}
                                           </select>
-                                          <span className="text-muted-foreground">Internal only — does not change the match result or the public leaderboard.</span>
+                                          <span className="text-muted-foreground">Does not change the match result — the masked winner name is shown on the public leaderboard.</span>
                                         </div>
                                       </td>
                                     </tr>
