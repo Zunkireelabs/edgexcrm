@@ -339,6 +339,7 @@ export function AddApplicationSheet({
                   suggestions={collegeSuggestions}
                   placeholder="e.g. Univ. of Melbourne"
                   onCreateNew={handleCreateCollege}
+                  createLabel="university"
                 />
               </div>
               <div className="space-y-1.5">
@@ -352,6 +353,7 @@ export function AddApplicationSheet({
                   suggestions={effectiveProgramSuggestions}
                   placeholder={!universityName.trim() ? "Select a university first" : "e.g. MSc Computer Science"}
                   onCreateNew={handleCreateProgram}
+                  createLabel="program"
                 />
               </div>
             </div>

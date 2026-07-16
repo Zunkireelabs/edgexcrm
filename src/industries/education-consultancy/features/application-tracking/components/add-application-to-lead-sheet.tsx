@@ -203,6 +203,7 @@ export function AddApplicationToLeadSheet({
               suggestions={collegeSuggestions}
               placeholder="e.g. University of Melbourne"
               onCreateNew={handleCreateCollege}
+              createLabel="university"
             />
           </div>
 
@@ -217,6 +218,7 @@ export function AddApplicationToLeadSheet({
               suggestions={effectiveProgramSuggestions}
               placeholder={!universityName.trim() ? "Select a university first" : "e.g. Master of Computer Science"}
               onCreateNew={handleCreateProgram}
+              createLabel="program"
             />
           </div>
 

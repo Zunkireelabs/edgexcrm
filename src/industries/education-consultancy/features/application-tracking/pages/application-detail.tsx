@@ -641,6 +641,7 @@ export function ApplicationDetailPage({
                     suggestions={collegeSuggestions}
                     placeholder="e.g. University of Melbourne"
                     onCreateNew={handleCreateCollege}
+                    createLabel="university"
                   />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
