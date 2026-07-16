@@ -1180,7 +1180,7 @@ export function LeadsTable({
       ? [
           {
             id: "counselor",
-            label: "Counselor",
+            label: "Assigned To",
             icon: <Users2 className="h-3.5 w-3.5" />,
             multiple: true,
             value: counselorFilter,
