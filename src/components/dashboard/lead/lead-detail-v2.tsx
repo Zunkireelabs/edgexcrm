@@ -288,6 +288,11 @@ export function LeadDetailV2({
     assignToUserId?: string | null;
   } | null>(null);
 
+  // Assign-a-counselor gate (§6b hard-block): the server now rejects assigning a
+  // counselor when that assignment would auto-promote an unqualified lead into
+  // Prospects. Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{ userId: string } | null>(null);
+
   async function performListMove(
     listId: string,
     archiveReason?: string,
@@ -530,7 +535,17 @@ export function LeadDetailV2({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assigned_to: value }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && value) {
+          setAssignedTo(lead.assigned_to || "");
+          toast.error(academicMsg);
+          setPendingAssignGate({ userId: value });
+          return;
+        }
+        throw new Error(errJson?.error?.message);
+      }
       toast.success("Assignment updated");
       // revertTargetUserId/Name are computed server-side from the lead's
       // assignment history — refresh so the Revert confirm dialog reflects
@@ -541,6 +556,29 @@ export function LeadDetailV2({
       setAssignedTo(lead.assigned_to || "");
     }
   };
+
+  async function confirmAssignQualification(patch: Record<string, string>) {
+    if (!pendingAssignGate) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: pendingAssignGate.userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to update assignment");
+      }
+      const json = await res.json();
+      setCurrentLead(json.data as Lead);
+      setAssignedTo(pendingAssignGate.userId);
+      toast.success("Assignment updated");
+      setPendingAssignGate(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update assignment");
+    }
+  }
 
   const handleDeleteLead = async () => {
     if (!confirm("Are you sure you want to delete this lead? This cannot be undone.")) return;
@@ -1081,6 +1119,13 @@ export function LeadDetailV2({
           setPendingProspectMove(null);
         }}
         onCancel={() => setPendingProspectMove(null)}
+      />
+
+      <ProspectQualificationDialog
+        lead={currentLead as unknown as Record<string, unknown>}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
       />
     </div>
   );

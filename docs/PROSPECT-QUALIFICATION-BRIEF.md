@@ -164,6 +164,46 @@ Create shared `src/components/dashboard/leads/prospect-qualification-dialog.tsx`
 - **As a non-education tenant** (an `it_agency` tenant): no academic UI anywhere, no gate, funnel/kanban unchanged.
 - **SEE-only** GPA does NOT satisfy the gate (must be +2/Bachelor/Masters).
 
+## 6b. Follow-up change (post-review, 2026-07-16): hard-block assign→promote
+
+Decision reversed from the first implementation: assigning a counselor to an **unqualified** lead must be **hard-blocked (422)**, not silently skip the promotion. Behavior now matches the check-in route exactly — you cannot assign a counselor (which would auto-promote to Prospects) until the qualification %/GPA is on file.
+
+**Server — `src/app/(main)/api/v1/leads/[id]/route.ts`:**
+- The current auto-promote block (~`:815-883`) runs **after** the main `.update(updatePayload)` at `:757` — too late to block. Add a **pre-update guard BEFORE `:757`** that mirrors the promote condition and returns `apiValidationError` when it would promote an unqualified lead:
+  ```ts
+  // Hard-block: assigning a counselor that would auto-promote an unqualified lead into Prospects.
+  if (
+    auth.industryId === "education_consultancy" &&
+    updatePayload.assigned_to != null &&
+    updatePayload.list_id === undefined
+  ) {
+    const slug = await resolvePositionSlug(supabase, auth.tenantId, updatePayload.assigned_to as string);
+    if (slug === "counselor") {
+      const { data: prospectsList } = await supabase.from("lead_lists")
+        .select("id, sort_order").eq("tenant_id", auth.tenantId).eq("slug", "prospects").maybeSingle();
+      if (prospectsList) {
+        const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+        let sort: number | null = null, staging = false;
+        if (currentListId) {
+          const { data: cl } = await supabase.from("lead_lists")
+            .select("sort_order, is_staging").eq("id", currentListId).maybeSingle();
+          sort = cl?.sort_order ?? null; staging = cl?.is_staging ?? false;
+        }
+        const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
+        const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
+        if (wouldPromote && !qualifies) {
+          return apiValidationError({ academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] });
+        }
+      }
+    }
+  }
+  ```
+- The existing auto-promote block's `qualifies &&` guard (~`:850`) becomes redundant (unqualified is now blocked upstream) — leave it as a harmless belt-and-suspenders OR drop it; do not remove the surrounding promotion logic. To avoid the double DB round-trip (resolvePositionSlug + list lookups run twice), optionally compute the promote decision once above and reuse it below — not required.
+
+**Client — the assign surfaces that were NOT in the original Phase 5 (list-move) scope now hit this 422 and must handle it:**
+- Assignee dropdown on lead detail (`lead-detail-v2.tsx`) and the new-leads triage assignment UI. On a 422 with an `academic` key: surface the message via toast, and — matching Phase 5 — **open the `prospect-qualification-dialog`** so the assigner can enter the %/GPA and retry the assignment in one flow (preferred). Minimum acceptable: show the error toast and do not silently swallow it.
+- Re-verify: assigning a counselor to a lead with no +2/Bachelor/Masters GPA is rejected; adding a GPA (or filling via the dialog) then lets the assignment + promotion succeed.
+
 ## 6. Ship
 - One `feature/prospect-qualification` branch, squash-PR to `stage`. CI green.
 - Migration 159 to prod (per-action approval) **before** the stage→main promote (merge commit, not squash).

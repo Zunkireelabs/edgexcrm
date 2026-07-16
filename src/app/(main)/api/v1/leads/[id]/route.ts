@@ -754,6 +754,35 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  // Hard-block: assigning a counselor that would auto-promote an unqualified lead into
+  // Prospects. Must run BEFORE the update below — the auto-promote block further down
+  // fires only after the lead is already saved, too late to block.
+  if (
+    auth.industryId === "education_consultancy" &&
+    updatePayload.assigned_to != null &&
+    updatePayload.list_id === undefined
+  ) {
+    const slug = await resolvePositionSlug(supabase, auth.tenantId, updatePayload.assigned_to as string);
+    if (slug === "counselor") {
+      const { data: prospectsList } = await supabase.from("lead_lists")
+        .select("id, sort_order").eq("tenant_id", auth.tenantId).eq("slug", "prospects").maybeSingle();
+      if (prospectsList) {
+        const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+        let sort: number | null = null, staging = false;
+        if (currentListId) {
+          const { data: cl } = await supabase.from("lead_lists")
+            .select("sort_order, is_staging").eq("id", currentListId).maybeSingle();
+          sort = cl?.sort_order ?? null; staging = cl?.is_staging ?? false;
+        }
+        const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
+        const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
+        if (wouldPromote && !qualifies) {
+          return apiValidationError({ academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] });
+        }
+      }
+    }
+  }
+
   const { data: updated, error } = await supabase
     .from("leads")
     .update(updatePayload)

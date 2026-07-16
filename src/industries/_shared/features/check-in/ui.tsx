@@ -50,6 +50,7 @@ import {
   TEST_TYPES,
   hasProspectQualification,
 } from "@/lib/leads/prospect-qualification";
+import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 
 interface LeadResult {
   id: string;
@@ -239,6 +240,14 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const updateTestScore = (col: string, value: string) =>
     setTestScores((prev) => ({ ...prev, [col]: value }));
 
+  // Assign-a-counselor gate (§6b hard-block): assigning a new walk-in's counselor from
+  // the check-in history table can hit the server's 422 (would auto-promote an
+  // unqualified lead into Prospects). Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{
+    record: CheckInRecord;
+    userId: string;
+  } | null>(null);
+
   // Check-in history state — every checked-in visitor shows here regardless of tag
   // (Other-tagged ones also surface separately on the Contacts page).
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
@@ -391,6 +400,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           body: JSON.stringify({ assigned_to: userId }),
         });
         if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+          if (academicMsg && userId) {
+            toast.error(academicMsg);
+            setPendingAssignGate({ record, userId });
+            return;
+          }
           toast.error("Failed to assign lead");
           return;
         }
@@ -423,6 +439,33 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       toast.error("Failed to update");
     } finally {
       setAssigningId(null);
+    }
+  };
+
+  const confirmAssignQualification = async (patch: Record<string, string>) => {
+    if (!pendingAssignGate) return;
+    const { record, userId } = pendingAssignGate;
+    if (!record.lead_id) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to assign lead");
+      }
+      const name = memberNameById.get(userId) ?? null;
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success("Lead assigned");
+      setPendingAssignGate(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign lead");
     }
   };
 
@@ -1377,6 +1420,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           </div>
         </div>
       )}
+
+      <ProspectQualificationDialog
+        lead={{}}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
+      />
     </div>
   );
 }
