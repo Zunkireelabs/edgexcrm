@@ -12,6 +12,8 @@
     "migrate:rku": "tsx scripts/migrate-rku-leads.ts"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.15",
+    "@ai-sdk/openai": "^4.0.15",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -20,6 +22,7 @@
     "@tiptap/extension-link": "^3.24.0",
     "@tiptap/react": "^3.24.0",
     "@tiptap/starter-kit": "^3.24.0",
+    "ai": "^7.0.28",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
@@ -36,7 +39,8 @@
     "recharts": "^3.8.0",
     "resend": "^6.10.0",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.5.0"
+    "tailwind-merge": "^3.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

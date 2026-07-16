@@ -150,3 +150,5 @@ export async function scopedClient(auth: AuthContext) {
     },
   };
 }
+
+export type ScopedClient = Awaited<ReturnType<typeof scopedClient>>;

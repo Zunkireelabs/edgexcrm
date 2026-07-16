@@ -140,3 +140,15 @@ ai_usage_events  (id uuid pk, tenant_id fk, user_id, agent_id uuid null, run_id 
 ## 9. Explicit non-goals (resist scope creep)
 
 No writes of any kind. No background/async runs. No embeddings/RAG (Phase 2). No agent identities (Phase 3). No voice, no MCP server, no per-industry custom prompts beyond the manifest toolIds mechanism (industry prompt packs land in Phase 3).
+
+## 10. Provider status (1A)
+
+Phase 1A (plumbing only — see `docs/ai-native-efforts/working/BRIEF-PHASE-1A-PLUMBING.md`) shipped on `feature/ai-assistant-foundation` (based on `feature/real-estate-vertical`) on 2026-07-15:
+
+- Both provider adapters installed (`@ai-sdk/openai`, `@ai-sdk/anthropic`, `ai`, `zod`) so the provider swap needs no `npm i` later. `langfuse` intentionally **not** installed this slice — `telemetry.ts` is a no-op seam until 1C.
+- New local-only env vars in `.env.local`:
+  - `AI_ASSISTANT_ENABLED=true`
+  - `OPENAI_API_KEY` — **not yet set**; not needed until 1B makes real LLM calls. TODO: Sadin to provide.
+  - `ANTHROPIC_API_KEY` — intentionally absent; provider seam (`src/lib/ai/provider.ts`) falls back to OpenAI when unset, flips to Anthropic when present. Verified both directions with a 2-line `tsx` check.
+- `src/lib/ai/tools/registry.ts`'s `requiredPermission` filter is a `TODO(1B)`: `AuthContext.permissions` is a typed `ResolvedPermissions` object (not a generic string-keyed map — see `src/lib/api/permissions.ts`), so there's no existing "does auth hold permission X" helper keyed by an arbitrary string to reuse yet. 1A's `buildToolset()` filters on `industries` only; a tool that declares `requiredPermission` is still returned. Needs a decision in 1B on how tool permission keys map to the resolved-permissions shape.
+- 1A ships **zero** real tools — registry is exercised only by fixture tools in `src/lib/ai/tools/registry.test.ts`.
