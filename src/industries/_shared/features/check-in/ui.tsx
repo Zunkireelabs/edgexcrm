@@ -9,6 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -40,6 +45,12 @@ import {
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import {
+  ACADEMIC_LEVELS,
+  TEST_TYPES,
+  hasProspectQualification,
+} from "@/lib/leads/prospect-qualification";
+import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 
 interface LeadResult {
   id: string;
@@ -220,6 +231,22 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [studyLevel, setStudyLevel] = useState("");
   const [referralSource, setReferralSource] = useState("");
   const [referredBy, setReferredBy] = useState("");
+  const [academics, setAcademics] = useState<Record<string, string>>({});
+  const [testScores, setTestScores] = useState<Record<string, string>>({});
+  const [academicsOpen, setAcademicsOpen] = useState(false);
+  const [academicsError, setAcademicsError] = useState(false);
+  const updateAcademic = (col: string, value: string) =>
+    setAcademics((prev) => ({ ...prev, [col]: value }));
+  const updateTestScore = (col: string, value: string) =>
+    setTestScores((prev) => ({ ...prev, [col]: value }));
+
+  // Assign-a-counselor gate (§6b hard-block): assigning a new walk-in's counselor from
+  // the check-in history table can hit the server's 422 (would auto-promote an
+  // unqualified lead into Prospects). Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{
+    record: CheckInRecord;
+    userId: string;
+  } | null>(null);
 
   // Check-in history state — every checked-in visitor shows here regardless of tag
   // (Other-tagged ones also surface separately on the Contacts page).
@@ -373,6 +400,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           body: JSON.stringify({ assigned_to: userId }),
         });
         if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+          if (academicMsg && userId) {
+            toast.error(academicMsg);
+            setPendingAssignGate({ record, userId });
+            return;
+          }
           toast.error("Failed to assign lead");
           return;
         }
@@ -408,6 +442,33 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     }
   };
 
+  const confirmAssignQualification = async (patch: Record<string, string>) => {
+    if (!pendingAssignGate) return;
+    const { record, userId } = pendingAssignGate;
+    if (!record.lead_id) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to assign lead");
+      }
+      const name = memberNameById.get(userId) ?? null;
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success("Lead assigned");
+      setPendingAssignGate(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign lead");
+    }
+  };
+
   const handleCheckOut = async (record: CheckInRecord) => {
     if (checkingOutId) return;
     setCheckingOutId(record.id);
@@ -432,6 +493,21 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       toast.error("Please provide at least a name, email, or phone");
       return;
     }
+
+    if (
+      industryId === "education_consultancy" &&
+      leadTag === "student" &&
+      assignedTo &&
+      !hasProspectQualification(academics)
+    ) {
+      setAcademicsOpen(true);
+      setAcademicsError(true);
+      toast.error(
+        "Enter the student's highest qualification (%/GPA) before assigning a counselor."
+      );
+      return;
+    }
+    setAcademicsError(false);
 
     setSubmitting(true);
     try {
@@ -462,6 +538,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                 destinations: destination ? [destination] : [],
                 degree_level: studyLevel || null,
               }
+            : {}),
+          ...(industryId === "education_consultancy" && leadTag === "student"
+            ? { ...academics, ...testScores }
             : {}),
           is_final: true,
           step: 1,
@@ -504,6 +583,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setStudyLevel("");
         setReferralSource("");
         setReferredBy("");
+        setAcademics({});
+        setTestScores({});
+        setAcademicsOpen(false);
         setSubmitting(false);
       }
     } catch {
@@ -813,6 +895,76 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                     )}
 
+                    {/* Academic Qualification & Test Report — education Student tag only */}
+                    {industryId === "education_consultancy" && leadTag === "student" && (
+                      <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
+                        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-xs font-medium text-gray-700 hover:text-gray-900">
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform ${
+                              academicsOpen ? "rotate-90" : ""
+                            }`}
+                          />
+                          Academic &amp; test details
+                          <span className="text-[10px] text-gray-400 font-normal">(optional)</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 pt-1">
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Academic Qualification
+                            </p>
+                            {ACADEMIC_LEVELS.map((level) => (
+                              <div key={level.key} className="space-y-1">
+                                <Label className="text-xs">{level.label}</Label>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <Input
+                                    placeholder="%/GPA"
+                                    value={academics[`${level.key}_gpa`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_gpa`, e.target.value)}
+                                    className={`h-8 text-xs ${
+                                      academicsError && level.gateEligible
+                                        ? "ring-2 ring-destructive"
+                                        : ""
+                                    }`}
+                                  />
+                                  <Input
+                                    placeholder="School / College"
+                                    value={academics[`${level.key}_institution`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_institution`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                  <Input
+                                    placeholder="Passed year"
+                                    inputMode="numeric"
+                                    value={academics[`${level.key}_passed_year`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_passed_year`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Test Report &amp; Score
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {TEST_TYPES.map((t) => (
+                                <div key={t.key} className="space-y-1">
+                                  <Label className="text-xs">{t.label}</Label>
+                                  <Input
+                                    placeholder="Score"
+                                    value={testScores[`${t.key}_score`] || ""}
+                                    onChange={(e) => updateTestScore(`${t.key}_score`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
                     {/* Assign Counselor / Meet with */}
                     {leadTag === "other" ? (
                       <div className="space-y-1">
@@ -884,6 +1036,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setStudyLevel("");
                           setReferralSource("");
                           setReferredBy("");
+                          setAcademics({});
+                          setTestScores({});
+                          setAcademicsOpen(false);
+                          setAcademicsError(false);
                         }}
                       >
                         Cancel
@@ -1264,6 +1420,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           </div>
         </div>
       )}
+
+      <ProspectQualificationDialog
+        lead={{}}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
+      />
     </div>
   );
 }
