@@ -6,7 +6,7 @@ import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { checkDailyBudget } from "@/lib/ai/budget";
-import "@/lib/ai/tools/universal"; // module-load registration — must run before buildToolset()
+import "@/lib/ai/tools/packs"; // module-load registration — must run before buildToolset()
 import { buildToolset } from "@/lib/ai/tools/registry";
 import { toAiSdkTools } from "@/lib/ai/tools/adapter";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";

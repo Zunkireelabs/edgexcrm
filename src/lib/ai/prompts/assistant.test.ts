@@ -44,4 +44,34 @@ describe("buildSystemPrompt", () => {
     });
     expect(again).toBe(prompt);
   });
+
+  it("does not contain real_estate industry context for an education_consultancy tenant", () => {
+    expect(prompt).not.toContain("capital raise");
+  });
+});
+
+describe("buildSystemPrompt industry context", () => {
+  it("includes the real_estate offering/commitment context for a real_estate tenant", () => {
+    const prompt = buildSystemPrompt({
+      tenantName: "CRE Capital",
+      industryId: "real_estate",
+      userFirstName: "Owner",
+      role: "owner",
+      today: "2026-07-16",
+    });
+    expect(prompt).toContain("capital raise");
+    expect(prompt).toContain("search_offerings");
+    expect(prompt).toContain("prospect -> soft_commit -> subscribed -> funded");
+  });
+
+  it("omits industry context entirely for a null industryId", () => {
+    const prompt = buildSystemPrompt({
+      tenantName: "No Industry Co",
+      industryId: null,
+      userFirstName: "Someone",
+      role: "owner",
+      today: "2026-07-16",
+    });
+    expect(prompt).not.toContain("capital raise");
+  });
 });
