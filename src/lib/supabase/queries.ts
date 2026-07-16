@@ -445,7 +445,14 @@ export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | n
 
 export async function getLeadsForPipeline(
   tenantId: string,
-  options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string; branchId?: string | null }
+  options?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    pipelineId?: string;
+    branchId?: string | null;
+    excludeOtherType?: boolean;
+  }
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
@@ -458,6 +465,9 @@ export async function getLeadsForPipeline(
     .is("converted_at", null)
     .not("stage_id", "is", null)
     .limit(500);
+
+  // Exclude "other" type contacts from the board — they're walk-in visitors only.
+  if (options?.excludeOtherType) query = query.not("tags", "cs", '{"other"}');
 
   if (options?.pipelineId) {
     // If this specific pipeline isn't in the allowed set, return empty immediately.

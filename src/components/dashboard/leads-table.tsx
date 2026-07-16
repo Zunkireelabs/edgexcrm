@@ -90,6 +90,8 @@ interface LeadsTableProps {
   leads: Lead[];
   memberMap?: Record<string, string>;
   memberNames?: Record<string, string>;
+  /** lead_id -> collaborator user_ids (assignee + anyone ever assigned). Powers the Collaborators filter. */
+  leadCollaborators?: Record<string, string[]>;
   stages?: PipelineStage[];
   formMap?: Record<string, string>;
   role?: UserRole;
@@ -126,6 +128,18 @@ interface LeadsTableProps {
   allLeadLists?: LeadList[];
   /** Current user's position slug — threaded to AddLeadSheet for the education assignment cascade. */
   currentUserPositionSlug?: string | null;
+  /** When true, hides Add Lead regardless of role/isTeamScoped — e.g. Contacts, where AddLeadSheet
+   * always creates a "student" lead, which would mistag a walk-in and make it vanish from this
+   * "other"-tagged view. */
+  disableAddLead?: boolean;
+  /** When true, hides the Tag filter — e.g. Contacts, where every row is already tagged "other". */
+  hideTagFilter?: boolean;
+  /** Keys to drop from the computed default-visible set — e.g. Contacts drops "lead_type"/"status"
+   * (pipeline-only controls that don't apply to other-tagged walk-ins). */
+  excludeDefaultVisibleKeys?: string[];
+  /** Namespaces the "Edit columns" localStorage prefs so this view's column choices don't bleed
+   * into/from other LeadsTable consumers sharing the same tenant+user (e.g. "contacts"). */
+  columnPrefsScope?: string;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -141,6 +155,7 @@ export function LeadsTable({
   leads,
   memberMap = {},
   memberNames = {},
+  leadCollaborators = {},
   stages = [],
   formMap = {},
   role = "viewer",
@@ -170,9 +185,13 @@ export function LeadsTable({
   isTeamScoped = false,
   allLeadLists,
   currentUserPositionSlug = null,
+  disableAddLead = false,
+  hideTagFilter = false,
+  excludeDefaultVisibleKeys = [],
+  columnPrefsScope,
 }: LeadsTableProps) {
   const router = useRouter();
-  const showTags = industryId === "education_consultancy";
+  const showTags = industryId === "education_consultancy" && !hideTagFilter;
   const [localLeads, setLocalLeads] = useState(leads);
   // Re-sync when the server sends a new lead set — list switch (?list=…),
   // branch switch (router.refresh), etc. Without this the table shows stale
@@ -190,6 +209,7 @@ export function LeadsTable({
 
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
+  const [collaboratorFilter, setCollaboratorFilter] = useState<string[]>([]);
   const [sourceFilter, setSourceFilter] = useState<string[]>([]);
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
@@ -248,7 +268,7 @@ export function LeadsTable({
   const isAdmin = role === "admin" || role === "owner";
   // Position is the source of truth: gate on resolved canEditLeads, not the legacy role string
   // (a Branch Manager has role="viewer" but canEditLeads=true). Fall back to role if not passed.
-  const canCreateLead = isAdmin || isTeamScoped;
+  const canCreateLead = !disableAddLead && (isAdmin || isTeamScoped);
   // Same position-first gate for inline row edits (stage change, list move).
   const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
@@ -344,6 +364,40 @@ export function LeadsTable({
     return Array.from(c.entries());
   }, [memberMap]);
 
+  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
+  const collaboratorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    const now = Date.now();
+    const dayMs = 24 * 60 * 60 * 1000;
+    localLeads.forEach((l) => {
+      const matchesSource =
+        sourceFilter.length === 0 ||
+        (isStagingView
+          ? (l.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
+          : (l.intake_source ? sourceFilter.includes(l.intake_source) : false));
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      let matchesTime = true;
+      if (createdFilter !== "all") {
+        const createdAt = new Date(l.created_at).getTime();
+        switch (createdFilter) {
+          case "today": matchesTime = now - createdAt < dayMs; break;
+          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
+          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
+        }
+      }
+      if (!matchesSource || !matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
+      (leadCollaborators[l.id] ?? []).forEach((userId) => {
+        m.set(userId, (m.get(userId) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
 
   const filtered = useMemo(() => {
     const now = Date.now();
@@ -362,6 +416,10 @@ export function LeadsTable({
         (isStagingView
           ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
           : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
+
+      const matchesCollaborator =
+        collaboratorFilter.length === 0 ||
+        (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
 
       const matchesTag =
         tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
@@ -400,7 +458,7 @@ export function LeadsTable({
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesTag && matchesCreated && matchesProspectIndustry;
+      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesCollaborator && matchesTag && matchesCreated && matchesProspectIndustry;
     });
 
     // Apply sorting
@@ -435,7 +493,7 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
+  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, collaboratorFilter, leadCollaborators, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
 
   const clearFilters = () => {
     setSearch("");
@@ -443,6 +501,7 @@ export function LeadsTable({
     setFormFilter("all");
     setCounselorFilter([]);
     setSourceFilter([]);
+    setCollaboratorFilter([]);
     setTagFilter("all");
     setCreatedFilter("all");
     setProspectIndustryFilter("all");
@@ -455,6 +514,7 @@ export function LeadsTable({
     formFilter !== "all",
     counselorFilter.length > 0,
     sourceFilter.length > 0,
+    collaboratorFilter.length > 0,
     tagFilter !== "all",
     createdFilter !== "all",
     prospectIndustryFilter !== "all",
@@ -897,10 +957,12 @@ export function LeadsTable({
   // Default middle visible keys (anchors name + actions always implicit).
   const defaultMiddleKeys = useMemo(() => {
     const defaults = getDefaultVisibleKeys(industryId, maxBranches);
-    const base = defaults.filter((k) => k !== "name" && k !== "actions");
+    const base = defaults.filter(
+      (k) => k !== "name" && k !== "actions" && !excludeDefaultVisibleKeys.includes(k),
+    );
     const extra = extraDefaultVisibleKeys.filter((k) => !base.includes(k));
     return [...base, ...extra];
-  }, [industryId, maxBranches, extraDefaultVisibleKeys]);
+  }, [industryId, maxBranches, extraDefaultVisibleKeys, excludeDefaultVisibleKeys]);
 
   // Managed visible middle keys — initialized to defaults, then loaded from localStorage.
   const [visibleKeys, setVisibleKeys] = useState<string[]>(defaultMiddleKeys);
@@ -918,10 +980,12 @@ export function LeadsTable({
       .map((c) => c.key);
     const validKeys = [...staticKeys, ...cfKeys];
     const defKeys = [
-      ...getDefaultVisibleKeys(industryId).filter((k) => k !== "name" && k !== "actions"),
+      ...getDefaultVisibleKeys(industryId).filter(
+        (k) => k !== "name" && k !== "actions" && !excludeDefaultVisibleKeys.includes(k),
+      ),
       ...extraDefaultVisibleKeys.filter((k) => k !== "name" && k !== "actions"),
     ];
-    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys));
+    setVisibleKeys(loadColumnPrefs(tenantId, currentUserId, validKeys, defKeys, columnPrefsScope));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, currentUserId]);
 
@@ -943,11 +1007,11 @@ export function LeadsTable({
   // Handlers for the column manager dialog.
   function handleColumnApply(keys: string[]) {
     setVisibleKeys(keys);
-    saveColumnPrefs(tenantId, currentUserId, keys);
+    saveColumnPrefs(tenantId, currentUserId, keys, columnPrefsScope);
   }
 
   function handleColumnReset() {
-    clearColumnPrefs(tenantId, currentUserId);
+    clearColumnPrefs(tenantId, currentUserId, columnPrefsScope);
     setVisibleKeys(defaultMiddleKeys);
   }
 
@@ -1099,7 +1163,7 @@ export function LeadsTable({
       ? [
           {
             id: "counselor",
-            label: "Counselor",
+            label: "Assigned To",
             icon: <Users2 className="h-3.5 w-3.5" />,
             multiple: true,
             value: counselorFilter,
@@ -1122,6 +1186,27 @@ export function LeadsTable({
           } satisfies FilterDef,
         ]
       : []),
+    ...((isAdmin || isTeamScoped) && counselors.length > 0 && Object.keys(leadCollaborators).length > 0
+      ? [
+          {
+            id: "collaborator",
+            label: "Collaborators",
+            icon: <UserPlus className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: collaboratorFilter,
+            onChange: (val: string[]) => {
+              setCollaboratorFilter(val);
+              setCurrentPage(1);
+            },
+            options: counselors
+              .map(([userId, email]) => ({
+                value: userId,
+                label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
+                description: email,
+              })),
+          } satisfies FilterDef,
+        ]
+      : []),
     ...(showTags
       ? [
           {
@@ -1136,7 +1221,6 @@ export function LeadsTable({
             options: [
               { value: "all", label: "All Tags", description: "Show all leads" },
               { value: "student", label: "Student", description: "Student leads only" },
-              { value: "parent", label: "Parent", description: "Parent leads only" },
             ],
           } satisfies FilterDef,
         ]

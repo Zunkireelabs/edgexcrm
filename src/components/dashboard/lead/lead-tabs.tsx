@@ -40,6 +40,8 @@ interface LeadTabsProps {
   tenantName?: string;
   tenantLogoUrl?: string | null;
   onSaveItinerary?: (itinerary: Itinerary) => Promise<void>;
+  /** Keeps the parent's lead state in sync when the overview Tag control changes it. */
+  onTagChange?: (tags: string[]) => void;
 }
 
 export interface LeadTabsRef {
@@ -48,7 +50,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -114,6 +116,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
                     <TagSelector
                       leadId={lead.id}
                       currentTags={lead.tags || []}
+                      onTagChange={onTagChange}
                     />
                   }
                 />
@@ -439,7 +442,15 @@ function InfoGridRow({ label, value, isLink, linkType }: InfoGridRowProps) {
   );
 }
 
-function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: string[] }) {
+function TagSelector({
+  leadId,
+  currentTags,
+  onTagChange,
+}: {
+  leadId: string;
+  currentTags: string[];
+  onTagChange?: (tags: string[]) => void;
+}) {
   const [tags, setTags] = useState(currentTags);
   const [updating, setUpdating] = useState(false);
 
@@ -454,6 +465,7 @@ function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: str
       });
       if (res.ok) {
         setTags(newTags);
+        onTagChange?.(newTags);
         toast.success(`Tagged as ${tag}`);
       }
     } catch {
@@ -465,22 +477,26 @@ function TagSelector({ leadId, currentTags }: { leadId: string; currentTags: str
 
   return (
     <div className="flex gap-1.5">
-      {["student", "parent"].map((tag) => (
-        <button
-          key={tag}
-          disabled={updating}
-          onClick={() => handleToggle(tag)}
-          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
-            tags.includes(tag)
-              ? tag === "parent"
-                ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-              : "bg-gray-100 text-gray-400 hover:bg-gray-200"
-          }`}
-        >
-          {tag.charAt(0).toUpperCase() + tag.slice(1)}
-        </button>
-      ))}
+      {["student", "other"].map((tag) => {
+        // Treat a legacy "parent" tag as "other" for the active state.
+        const isActive = tag === "other" ? (tags.includes("other") || tags.includes("parent")) : tags.includes(tag);
+        return (
+          <button
+            key={tag}
+            disabled={updating}
+            onClick={() => handleToggle(tag)}
+            className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors cursor-pointer ${
+              isActive
+                ? tag === "other"
+                  ? "bg-amber-100 text-amber-700 ring-2 ring-amber-300"
+                  : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                : "bg-gray-100 text-gray-400 hover:bg-gray-200"
+            }`}
+          >
+            {tag.charAt(0).toUpperCase() + tag.slice(1)}
+          </button>
+        );
+      })}
     </div>
   );
 }

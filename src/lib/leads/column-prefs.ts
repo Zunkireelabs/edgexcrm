@@ -1,7 +1,7 @@
 const PREFS_VERSION = 1;
 
-function prefsKey(tenantId: string, userId: string): string {
-  return `leads_columns_${tenantId}_${userId}`;
+function prefsKey(tenantId: string, userId: string, scope?: string): string {
+  return `leads_columns_${tenantId}_${userId}${scope ? `_${scope}` : ""}`;
 }
 
 interface StoredPrefs {
@@ -19,9 +19,10 @@ export function loadColumnPrefs(
   userId: string,
   validKeys: string[],
   defaults: string[],
+  scope?: string,
 ): string[] {
   try {
-    const raw = localStorage.getItem(prefsKey(tenantId, userId));
+    const raw = localStorage.getItem(prefsKey(tenantId, userId, scope));
     if (!raw) return defaults;
     const parsed = JSON.parse(raw) as Partial<StoredPrefs>;
     if (parsed.v !== PREFS_VERSION || !Array.isArray(parsed.columns)) return defaults;
@@ -38,19 +39,20 @@ export function saveColumnPrefs(
   tenantId: string,
   userId: string,
   columns: string[],
+  scope?: string,
 ): void {
   try {
     const prefs: StoredPrefs = { v: PREFS_VERSION, columns };
-    localStorage.setItem(prefsKey(tenantId, userId), JSON.stringify(prefs));
+    localStorage.setItem(prefsKey(tenantId, userId, scope), JSON.stringify(prefs));
   } catch {
     // private mode or storage full — silent
   }
 }
 
 /** Remove persisted prefs so the next load returns defaults. */
-export function clearColumnPrefs(tenantId: string, userId: string): void {
+export function clearColumnPrefs(tenantId: string, userId: string, scope?: string): void {
   try {
-    localStorage.removeItem(prefsKey(tenantId, userId));
+    localStorage.removeItem(prefsKey(tenantId, userId, scope));
   } catch {
     // silent
   }

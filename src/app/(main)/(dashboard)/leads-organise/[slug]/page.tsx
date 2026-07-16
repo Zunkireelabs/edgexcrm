@@ -11,6 +11,7 @@ import {
   getImportSourceReconciliation,
   getTeamMembersWithPositions,
 } from "@/lib/supabase/queries";
+import { getLeadCollaboratorsMap } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
@@ -103,6 +104,7 @@ export default async function LeadsOrganiseCockpitPage({
     formConfigs,
     industryResult,
     entitiesResult,
+    leadCollaboratorsMap,
   ] = await Promise.all([
     getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
     getTeamMembers(tenantData.tenant.id),
@@ -123,6 +125,7 @@ export default async function LeadsOrganiseCockpitPage({
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("position", { ascending: true }),
+    getLeadCollaboratorsMap(serviceClient, tenantData.tenant.id),
   ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
@@ -159,6 +162,7 @@ export default async function LeadsOrganiseCockpitPage({
       <ReconciliationPanel rows={reconciliationRows} />
       <LeadsTable
         leads={leads}
+        leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}
         memberNames={memberNames}
         stages={stages}

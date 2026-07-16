@@ -61,6 +61,28 @@ export async function collaboratorLeadIdsForUser(
   return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
 }
 
+// lead_collaborators rows persist forever (see addLeadCollaborator above), so an unbounded
+// scan grows every reassignment. Cap it like INLINE_ID_CAP above; most-recent pairings win.
+const COLLABORATORS_MAP_CAP = 10000;
+
+/** Batch: every lead→collaborator pairing in a tenant, keyed by lead_id. Powers the Collaborators filter on the leads list. */
+export async function getLeadCollaboratorsMap(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+): Promise<Record<string, string[]>> {
+  const { data } = await db.from("lead_collaborators")
+    .select("lead_id, user_id")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(COLLABORATORS_MAP_CAP);
+  const map: Record<string, string[]> = {};
+  (data ?? []).forEach((r: { lead_id: string; user_id: string }) => {
+    (map[r.lead_id] ??= []).push(r.user_id);
+  });
+  return map;
+}
+
 /** Targeted single-lead check — is this user a collaborator on this lead? */
 export async function isLeadCollaborator(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

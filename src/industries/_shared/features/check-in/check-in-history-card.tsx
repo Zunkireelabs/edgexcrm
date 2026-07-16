@@ -11,6 +11,7 @@ interface CheckInRecord {
   created_at: string;
   user_email: string;
   user_id: string | null;
+  meet_with_id: string | null;
 }
 
 interface CheckInHistoryCardProps {
@@ -82,6 +83,9 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
               const checkedInBy =
                 (record.user_id && (teamMemberNames[record.user_id] ?? teamMemberEmails[record.user_id])) ??
                 record.user_email;
+              const metWith = record.meet_with_id
+                ? (teamMemberNames[record.meet_with_id] ?? teamMemberEmails[record.meet_with_id] ?? null)
+                : null;
 
               const header = (
                 <p className="text-sm font-medium">
@@ -111,6 +115,9 @@ export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }
                     )
                   ) : (
                     <p className="text-xs text-muted-foreground mt-0.5">Walk-in visit</p>
+                  )}
+                  {metWith && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Met with {metWith}</p>
                   )}
                   <p className="text-xs text-muted-foreground mt-0.5">Checked in by {checkedInBy}</p>
                 </div>

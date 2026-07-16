@@ -221,10 +221,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [referralSource, setReferralSource] = useState("");
   const [referredBy, setReferredBy] = useState("");
 
-  // Check-in history state
+  // Check-in history state — every checked-in visitor shows here regardless of tag
+  // (Other-tagged ones also surface separately on the Contacts page).
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
-  // "other" walk-ins belong on the Contacts page only, not Check-In History
-  const visibleCheckIns = checkIns.filter((r) => !(r.tags ?? []).includes("other"));
+  const visibleCheckIns = checkIns;
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -364,7 +364,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     try {
       const name = userId ? memberNameById.get(userId) ?? null : null;
       if (record.is_new) {
-        // New walk-in student/parent → "Assigned To" is the lead's counselor.
+        // New walk-in student → "Assigned To" is the lead's counselor.
         // Assigning it updates the lead (and fires auto-promotion server-side).
         if (!record.lead_id) return;
         const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
@@ -717,7 +717,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           <div className="flex gap-2">
                             {[
                               { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                              { value: "parent", activeClass: "bg-green-100 text-green-700 ring-2 ring-green-300" },
                               { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
                             ].map(({ value, activeClass }) => (
                               <button
@@ -999,7 +998,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     return dashIdx !== -1 ? raw.slice(dashIdx + 3).trim() : "";
                   })();
                   const canAssignThis = canAssignAny || record.checked_in_by_id === currentUserId;
-                  // New walk-in student/parent → the column is the lead's assigned
+                  // New walk-in student → the column is the lead's assigned
                   // counselor (assigned_to). Everyone else → the per-visit "meet with"
                   // person recorded on this note (meet_with_id), independent of the
                   // lead's assignment — so an unselected visit shows no one.
@@ -1038,8 +1037,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
                       {/* Assigned To / Meet with — depends on whether the lead was new (walk-in) or already existed */}
                       {(() => {
-                        const isStudentOrParent = (record.tags ?? []).some((t) => t === "student" || t === "parent");
-                        const isNew = isStudentOrParent && record.is_new;
+                        const isStudent = (record.tags ?? []).includes("student");
+                        const isNew = isStudent && record.is_new;
                         const colLabel = isNew ? "Assigned To" : "Meet with";
                         const colMembers = isNew ? counselorMembers : allBranchMembers;
                         return (
@@ -1189,7 +1188,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                 <div className="flex gap-2">
                   {[
                     { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                    { value: "parent", activeClass: "bg-green-100 text-green-700 ring-2 ring-green-300" },
                     { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
                   ].map(({ value, activeClass }) => {
                     const currentTags = (leadDetails as Record<string, unknown>).tags as string[] || [];
