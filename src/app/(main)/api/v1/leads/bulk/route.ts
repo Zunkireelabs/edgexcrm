@@ -54,8 +54,6 @@ export async function PATCH(request: NextRequest) {
     branch_id?: string | null;
     list_id?: string | null;
     archive_reason?: string;
-    /** it_agency: Fit-Qualified → Sales Leads graduation. Labels the audit/event distinctly. */
-    graduate?: boolean;
   };
   try {
     body = await request.json();
@@ -412,7 +410,7 @@ export async function PATCH(request: NextRequest) {
           }
           ops.push(emitEvent({
             tenantId: auth.tenantId,
-            type: body.graduate ? "lead.graduated" : "lead.list_changed",
+            type: "lead.list_changed",
             entityType: "lead",
             entityId: id,
             payload: {
@@ -429,7 +427,7 @@ export async function PATCH(request: NextRequest) {
         ops.push(createAuditLog({
           tenantId: auth.tenantId,
           userId: auth.userId,
-          action: body.graduate ? "lead.graduated" : "lead.updated",
+          action: "lead.updated",
           entityType: "lead",
           entityId: id,
           changes,

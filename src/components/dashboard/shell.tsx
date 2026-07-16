@@ -50,8 +50,6 @@ import {
   Gauge,
   CalendarClock,
   CalendarCheck,
-  Filter,
-  Target,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -68,7 +66,6 @@ import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
-import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 
@@ -232,7 +229,7 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
-  leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
+  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
@@ -518,93 +515,24 @@ export function DashboardShell({
                     />
                   </Suspense>
                 )}
-                {navAllowed("/leads") && (() => {
-                  // Funnel grouping is it_agency-only — non-it_agency tenants always fall
-                  // through to the ungrouped/All Leads path below, even if a list somehow
-                  // carries a funnel_key (belt-and-suspenders; the write path is gated too).
-                  const processingLists = isItAgency
-                    ? leadLists
-                        .filter((l) => l.funnel_key === "lead_processing")
-                        .sort((a, b) => a.sort_order - b.sort_order)
-                    : [];
-                  const salesLists = isItAgency
-                    ? leadLists
-                        .filter((l) => l.funnel_key === "sales_leads")
-                        .sort((a, b) => a.sort_order - b.sort_order)
-                    : [];
-                  const ungroupedLists = isItAgency
-                    ? leadLists.filter((l) => l.funnel_key == null)
-                    : leadLists;
-                  const isAdminUser = role === "owner" || role === "admin";
-
-                  if (processingLists.length === 0 && salesLists.length === 0) {
-                    return ungroupedLists.length > 0 ? (
-                      <Suspense key="lead-lists-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
-                          <Users className="w-[18px] h-[18px] shrink-0" />
-                          All Leads
-                        </div>
-                      }>
-                        <LeadListsNavGroup
-                          lists={ungroupedLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                    ) : (
-                      renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
-                    );
-                  }
-
-                  return (
-                    <>
-                      <Suspense key="lead-processing-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
-                          <Filter className="w-[18px] h-[18px] shrink-0" />
-                          Lead Processing
-                        </div>
-                      }>
-                        <LeadFunnelNavGroup
-                          funnelKey="lead_processing"
-                          label="Lead Processing"
-                          icon={Filter}
-                          lists={processingLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                      <Suspense key="sales-leads-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
-                          <Target className="w-[18px] h-[18px] shrink-0" />
-                          Sales Leads
-                        </div>
-                      }>
-                        <LeadFunnelNavGroup
-                          funnelKey="sales_leads"
-                          label="Sales Leads"
-                          icon={Target}
-                          lists={salesLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                      {ungroupedLists.length > 0 && (
-                        <Suspense key="lead-lists-nav" fallback={
-                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
-                            <Users className="w-[18px] h-[18px] shrink-0" />
-                            All Leads
-                          </div>
-                        }>
-                          <LeadListsNavGroup
-                            lists={ungroupedLists}
-                            onNavigate={() => setMobileOpen(false)}
-                            isAdmin={isAdminUser}
-                          />
-                        </Suspense>
-                      )}
-                    </>
-                  );
-                })()}
+                {navAllowed("/leads") && (
+                  leadLists.length > 0 ? (
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={leadLists}
+                        onNavigate={() => setMobileOpen(false)}
+                        isAdmin={role === "owner" || role === "admin"}
+                      />
+                    </Suspense>
+                  ) : (
+                    renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                  )
+                )}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}
