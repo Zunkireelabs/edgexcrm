@@ -2,11 +2,12 @@ import { z } from "zod";
 import { canAccessPipeline } from "@/lib/api/permissions";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
+import { optionalString, optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  pipelineId: z.string().uuid().optional().describe("Defaults to the tenant's default pipeline"),
-  createdAfter: z.string().max(40).optional().describe("ISO date/datetime — only count leads created on/after this"),
-  createdBefore: z.string().max(40).optional().describe("ISO date/datetime — only count leads created on/before this"),
+  pipelineId: optionalUuid(z.string().uuid().optional()).describe("Defaults to the tenant's default pipeline"),
+  createdAfter: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only count leads created on/after this"),
+  createdBefore: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only count leads created on/before this"),
 });
 
 export const pipelineSummaryTool: AgentTool<z.infer<typeof inputSchema>> = {
@@ -19,12 +20,35 @@ export const pipelineSummaryTool: AgentTool<z.infer<typeof inputSchema>> = {
   async execute(ctx, input) {
     const { db, auth } = ctx;
 
-    let pipelineId = input.pipelineId ?? null;
+    let pipelineId: string | null = null;
+    if (input.pipelineId) {
+      // A syntactically valid but non-existent uuid is placeholder junk too
+      // (observed live: the model invented a random, never-seen uuid — not
+      // just the NIL one) — verify it's a real pipeline for this tenant
+      // before trusting it, same as any other caller-supplied id would be.
+      const { data: requested } = await db.from("pipelines").select("id").eq("id", input.pipelineId).maybeSingle();
+      pipelineId = (requested as { id: string } | null)?.id ?? null;
+    }
     if (!pipelineId) {
       const { data: defaultPipeline } = await db.from("pipelines").select("id").eq("is_default", true).limit(1).maybeSingle();
       pipelineId = (defaultPipeline as { id: string } | null)?.id ?? null;
     }
-    if (!pipelineId) return { error: "No pipeline found for this tenant." };
+    if (!pipelineId) {
+      // No pipeline flagged default (shouldn't normally happen — a DB trigger
+      // keeps exactly one — but a caller must never invent a pipelineId, so
+      // fall back to listing the tenant's pipelines and let the model pick.
+      const { data: pipelines } = await db.from("pipelines").select("id, name").order("position");
+      const pipelineRows = (pipelines ?? []) as unknown as Array<{ id: string; name: string }>;
+      if (pipelineRows.length === 0) return { error: "No pipeline found for this tenant." };
+      if (pipelineRows.length === 1) {
+        pipelineId = pipelineRows[0].id;
+      } else {
+        return {
+          note: "This tenant has multiple pipelines and none is marked default. Call pipeline_summary again with one of these pipelineId values, or ask the user which pipeline they mean.",
+          pipelines: pipelineRows.map((p) => ({ pipelineId: p.id, name: p.name })),
+        };
+      }
+    }
     if (!canAccessPipeline(auth.permissions, pipelineId)) return { error: "You don't have access to that pipeline." };
 
     let query = db

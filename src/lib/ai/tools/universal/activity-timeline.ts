@@ -3,9 +3,10 @@ import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { requireLeadBranchAccess } from "@/lib/api/auth";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan, getLeadMembership, isLeadCollaborator } from "./lib/lead-visibility";
+import { optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  leadId: z.string().uuid().optional().describe("Omit for tenant-wide recent activity, scoped to leads the caller can see"),
+  leadId: optionalUuid(z.string().uuid().optional()).describe("Omit for tenant-wide recent activity, scoped to leads the caller can see"),
   limit: z.number().int().min(1).max(50).default(50),
 });
 

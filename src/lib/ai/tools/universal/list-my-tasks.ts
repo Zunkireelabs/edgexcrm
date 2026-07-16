@@ -1,12 +1,15 @@
 import { z } from "zod";
 import type { AgentTool } from "../types";
+import { optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  forUserId: z
-    .string()
-    .uuid()
-    .optional()
-    .describe("Look up a specific teammate's tasks by user id — only honored for owner/admin callers, otherwise ignored"),
+  forUserId: optionalUuid(
+    z
+      .string()
+      .uuid()
+      .optional()
+      .describe("Look up a specific teammate's tasks by user id — only honored for owner/admin callers, otherwise ignored"),
+  ),
   status: z.enum(["todo", "in_progress", "done"]).optional(),
   limit: z.number().int().min(1).max(20).default(20),
 });

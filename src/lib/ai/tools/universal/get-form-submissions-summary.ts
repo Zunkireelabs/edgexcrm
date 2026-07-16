@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { INDUSTRIES } from "@/industries/_registry";
 import type { AgentTool } from "../types";
+import { optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  formConfigId: z.string().uuid().optional().describe("Limit to one form; omit for all forms"),
+  formConfigId: optionalUuid(z.string().uuid().optional()).describe("Limit to one form; omit for all forms"),
   days: z.number().int().min(1).max(90).default(30).describe("Look back this many days"),
 });
 

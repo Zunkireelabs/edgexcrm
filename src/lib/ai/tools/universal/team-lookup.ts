@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { canSeeNav } from "@/lib/api/permissions";
 import type { AgentTool } from "../types";
+import { optionalString } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  query: z.string().max(200).optional().describe("Filter by name or email substring"),
+  query: optionalString(z.string().max(200).optional()).describe("Filter by name or email substring"),
   limit: z.number().int().min(1).max(50).default(50),
 });
 

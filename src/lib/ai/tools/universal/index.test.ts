@@ -75,3 +75,33 @@ describe("search_leads input schema bounds", () => {
     expect(result.success).toBe(true);
   });
 });
+
+describe("tool schemas sanitize placeholder junk", () => {
+  const toolset = buildToolset(fixtureAuth());
+
+  it("search_leads: empty strings and the NIL uuid parse away, not into filters", () => {
+    const tool = toolset.find((t) => t.id === "search_leads")!;
+    const result = tool.inputSchema.parse({
+      query: "",
+      stage: "",
+      list: "",
+      assignedToUserId: "00000000-0000-0000-0000-000000000000",
+      createdAfter: "",
+      createdBefore: "",
+      limit: 20,
+    });
+    expect(result).toEqual({ limit: 20 });
+  });
+
+  it("pipeline_summary: the NIL uuid pipelineId parses to undefined, not an invented pipeline", () => {
+    const tool = toolset.find((t) => t.id === "pipeline_summary")!;
+    const result = tool.inputSchema.parse({ pipelineId: "00000000-0000-0000-0000-000000000000" });
+    expect(result.pipelineId).toBeUndefined();
+  });
+
+  it("get_lead: the NIL uuid leadId fails validation instead of querying the all-zero id", () => {
+    const tool = toolset.find((t) => t.id === "get_lead")!;
+    const result = tool.inputSchema.safeParse({ leadId: "00000000-0000-0000-0000-000000000000" });
+    expect(result.success).toBe(false);
+  });
+});

@@ -2,9 +2,13 @@ import { z } from "zod";
 import type { AgentTool } from "../types";
 import { canViewLead } from "./lib/lead-visibility";
 import { leadDisplayName, leadHref } from "./lib/format";
+import { optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  leadId: z.string().uuid().describe("The lead's id (as returned by search_leads)"),
+  // leadId is required in the tool's contract (there's no sane default), but a
+  // NIL-uuid placeholder must still surface as a normal "missing" validation
+  // error rather than silently querying the all-zero id.
+  leadId: optionalUuid(z.string().uuid()).describe("The lead's id (as returned by search_leads)"),
 });
 
 export const getLeadTool: AgentTool<z.infer<typeof inputSchema>> = {

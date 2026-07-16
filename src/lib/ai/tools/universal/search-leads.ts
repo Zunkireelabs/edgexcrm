@@ -5,14 +5,15 @@ import { FEATURES } from "@/industries/_registry";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
+import { optionalString, optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
-  query: z.string().max(200).optional().describe("Free-text search across first name, last name, email, phone"),
-  stage: z.string().max(100).optional().describe("Pipeline stage slug, e.g. \"qualified\" or \"new\""),
-  list: z.string().max(100).optional().describe("Lead list slug (shown as \"Stage\" in the UI), e.g. \"prospects\""),
-  assignedToUserId: z.string().uuid().optional().describe("Filter to a specific teammate's leads by their user id (ignored for own-scope callers)"),
-  createdAfter: z.string().max(40).optional().describe("ISO date/datetime — only leads created on/after this"),
-  createdBefore: z.string().max(40).optional().describe("ISO date/datetime — only leads created on/before this"),
+  query: optionalString(z.string().max(200).optional()).describe("Free-text search across first name, last name, email, phone"),
+  stage: optionalString(z.string().max(100).optional()).describe("Pipeline stage slug, e.g. \"qualified\" or \"new\""),
+  list: optionalString(z.string().max(100).optional()).describe("Lead list slug (shown as \"Stage\" in the UI), e.g. \"prospects\""),
+  assignedToUserId: optionalUuid(z.string().uuid().optional()).describe("Filter to a specific teammate's leads by their user id (ignored for own-scope callers)"),
+  createdAfter: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only leads created on/after this"),
+  createdBefore: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only leads created on/before this"),
   limit: z.number().int().min(1).max(20).default(20),
 });
 
