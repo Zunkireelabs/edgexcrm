@@ -277,6 +277,7 @@ export default async function LeadsPage({
           canEdit={tenantData.permissions.canEditLeads ?? tenantData.role !== "viewer"}
           restrictToSelf={tenantData.permissions.leadScope === "own"}
           userId={tenantData.userId}
+          industryId={tenantData.tenant.industry_id}
         />
       </div>
     );

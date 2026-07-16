@@ -9,9 +9,11 @@ import {
   apiForbidden,
   apiNotFound,
   apiServiceUnavailable,
+  apiValidationError,
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -32,7 +34,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // user with check-in access can log a visit for any lead in the tenant.
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, list_id, assigned_to")
+    .select("id, list_id, assigned_to, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -98,6 +100,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       .eq("tenant_id", auth.tenantId)
       .eq("slug", "prospects")
       .maybeSingle();
+
+    if (
+      prospectsList &&
+      assignedIsCounselor &&
+      auth.industryId === "education_consultancy" &&
+      !hasProspectQualification(lead as Record<string, unknown>)
+    ) {
+      return apiValidationError({
+        academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+      });
+    }
 
     if (prospectsList && assignedIsCounselor) {
       let currentSortOrder: number | null = null;
