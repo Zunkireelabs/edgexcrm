@@ -41,7 +41,6 @@ import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
 import {
-  DEGREE_LEVELS,
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -191,7 +190,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
 
 export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin }: CheckInPageProps) {
   const router = useRouter();
-  const { destinations: destOptions } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
     allBranchMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
   );
@@ -229,6 +228,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   // Student-only education fields (revealed when the Student tag is active)
   const [destination, setDestination] = useState("");
   const [studyLevel, setStudyLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [referralSource, setReferralSource] = useState("");
   const [referredBy, setReferredBy] = useState("");
   const [academics, setAcademics] = useState<Record<string, string>>({});
@@ -537,6 +537,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             ? {
                 destinations: destination ? [destination] : [],
                 degree_level: studyLevel || null,
+                field_of_study: fieldOfStudy || null,
               }
             : {}),
           ...(industryId === "education_consultancy" && leadTag === "student"
@@ -581,6 +582,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setMeetWithId("");
         setDestination("");
         setStudyLevel("");
+        setFieldOfStudy("");
         setReferralSource("");
         setReferredBy("");
         setAcademics({});
@@ -841,9 +843,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                     <SelectValue placeholder="Select level (optional)" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {DEGREE_LEVELS.map((d) => (
-                                      <SelectItem key={d.value} value={d.value}>
-                                        {d.label}
+                                    {studyLevelOptions.map((lvl) => (
+                                      <SelectItem key={lvl} value={lvl}>
+                                        {lvl}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Field of Study</Label>
+                                <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select field (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {fieldOfStudyOptions.map((f) => (
+                                      <SelectItem key={f} value={f}>
+                                        {f}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -1034,6 +1051,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setAssignedTo("");
                           setDestination("");
                           setStudyLevel("");
+                          setFieldOfStudy("");
                           setReferralSource("");
                           setReferredBy("");
                           setAcademics({});

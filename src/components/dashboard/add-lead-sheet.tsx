@@ -35,7 +35,6 @@ import {
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import {
-  DEGREE_LEVELS,
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -221,7 +220,7 @@ export function AddLeadSheet({
   currentUserPositionSlug = null,
 }: AddLeadSheetProps) {
   const router = useRouter();
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1098,7 +1097,7 @@ export function AddLeadSheet({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Label className="text-xs text-gray-600">Interested Study Level</Label>
               <Select
                 value={formData.degreeLevel || "__none__"}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
@@ -1109,8 +1108,8 @@ export function AddLeadSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Select level</SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

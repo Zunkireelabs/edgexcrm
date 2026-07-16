@@ -10,8 +10,15 @@ export interface AgentOption {
 }
 
 export interface PartnerCollegeOption {
+  id: string;
   name: string;
   country: string | null;
+}
+
+export interface ProgramOption {
+  id: string;
+  university_id: string;
+  name: string;
 }
 
 interface ReferenceData {
@@ -116,7 +123,8 @@ async function fetchReferenceData(): Promise<{ data: ReferenceData; failed: stri
   return {
     data: {
       agents: (agentsRes?.data ?? []) as AgentOption[],
-      partnerColleges: ((collegesRes?.data ?? []) as { name: string; country: string | null }[]).map((c) => ({
+      partnerColleges: ((collegesRes?.data ?? []) as { id: string; name: string; country: string | null }[]).map((c) => ({
+        id: c.id,
         name: c.name,
         country: c.country,
       })),
@@ -151,6 +159,31 @@ export function invalidateApplicationReferenceData() {
   cache = null;
   inFlight = null;
   cacheVersion++;
+}
+
+// ── Programs cache (keyed by university_id) ─────────────────────────────────
+const programsCache = new Map<string, ProgramOption[]>();
+const programsInFlight = new Map<string, Promise<ProgramOption[]>>();
+const programSubscribers = new Set<(universityId: string, programs: ProgramOption[]) => void>();
+function broadcastPrograms(universityId: string, programs: ProgramOption[]) {
+  programSubscribers.forEach((setter) => setter(universityId, programs));
+}
+
+async function fetchProgramsForUniversity(universityId: string): Promise<ProgramOption[]> {
+  const res = await fetch(`/api/v1/study-programs?university_id=${universityId}`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return (json.data ?? []) as ProgramOption[];
+}
+
+function loadPrograms(universityId: string): Promise<ProgramOption[]> {
+  const promise = fetchProgramsForUniversity(universityId).then((result) => {
+    programsInFlight.delete(universityId);
+    programsCache.set(universityId, result);
+    return result;
+  });
+  programsInFlight.set(universityId, promise);
+  return promise;
 }
 
 // `enabled` lets sheets that only fetch while open (add-application-sheet.tsx,
@@ -200,11 +233,11 @@ export function useApplicationReferenceData(enabled: boolean = true) {
   // would permanently block the real, in-flight fetch result from ever
   // landing (the same failure mode loadReferenceData's cacheVersion guard
   // exists to prevent for a stale write).
-  async function addPartnerCollege(name: string, country: string | null) {
+  async function addPartnerCollege(id: string, name: string, country: string | null) {
     const loadedData = cache ?? (await (inFlight ?? loadReferenceData()));
     const updated: ReferenceData = {
       ...loadedData,
-      partnerColleges: [...loadedData.partnerColleges, { name, country }].sort((a, b) => a.name.localeCompare(b.name)),
+      partnerColleges: [...loadedData.partnerColleges, { id, name, country }].sort((a, b) => a.name.localeCompare(b.name)),
     };
     // Only persist to the shared cache if the underlying load actually
     // succeeded in full (cache is non-null after the await) — a
@@ -222,7 +255,10 @@ export function useApplicationReferenceData(enabled: boolean = true) {
   // Creates a partner college on the server, then applies it to the shared
   // cache so every mounted Add Application screen sees it immediately. Single
   // home for the "Create '...'" autocomplete flow used by all 3 screens.
-  async function createPartnerCollege(name: string, country: string | null): Promise<boolean> {
+  // Returns the created record (truthy — existing `if (ok)` call sites keep working
+  // unchanged) so callers that need the new id (e.g. to filter/create Programs under
+  // this University) can read it without racing this hook's own stale-closure state.
+  async function createPartnerCollege(name: string, country: string | null): Promise<PartnerCollegeOption | null> {
     try {
       const res = await fetch("/api/v1/partner-colleges", {
         method: "POST",
@@ -233,12 +269,71 @@ export function useApplicationReferenceData(enabled: boolean = true) {
         const err = await res.json();
         throw new Error(err.error?.message ?? "Failed to create college");
       }
-      await addPartnerCollege(name, country);
+      const json = await res.json();
+      const created = json.data as { id: string; name: string; country: string | null };
+      await addPartnerCollege(created.id, created.name, created.country);
       toast.success(`"${name}" added to partner colleges${country ? ` (${country})` : ""}`);
-      return true;
+      return { id: created.id, name: created.name, country: created.country };
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create college");
-      return false;
+      return null;
+    }
+  }
+
+  // ── Programs (tied to a University) ───────────────────────────────────────
+  // Unlike partnerColleges/countries/etc, programs are NOT prefetched — keyed by
+  // university_id and fetched on demand (a tenant may have many universities, each
+  // with its own program list). Still module-level cached so switching between two
+  // already-viewed universities within a session doesn't re-fetch.
+  const [programsByUniversity, setProgramsByUniversity] = useState<Record<string, ProgramOption[]>>({});
+
+  useEffect(() => {
+    const handler = (universityId: string, programs: ProgramOption[]) => {
+      setProgramsByUniversity((prev) => ({ ...prev, [universityId]: programs }));
+    };
+    programSubscribers.add(handler);
+    return () => {
+      programSubscribers.delete(handler);
+    };
+  }, []);
+
+  async function fetchPrograms(universityId: string): Promise<ProgramOption[]> {
+    if (!universityId) return [];
+    const cached = programsCache.get(universityId);
+    if (cached) {
+      setProgramsByUniversity((prev) => ({ ...prev, [universityId]: cached }));
+      return cached;
+    }
+    const result = await (programsInFlight.get(universityId) ?? loadPrograms(universityId));
+    setProgramsByUniversity((prev) => ({ ...prev, [universityId]: result }));
+    return result;
+  }
+
+  // Creates a program under a University on the server, then applies it to the
+  // shared cache so every mounted screen watching this university sees it
+  // immediately — mirrors createPartnerCollege above.
+  async function createProgram(universityId: string, name: string): Promise<ProgramOption | null> {
+    try {
+      const res = await fetch("/api/v1/study-programs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ university_id: universityId, name }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error?.message ?? "Failed to create program");
+      }
+      const json = await res.json();
+      const created = json.data as ProgramOption;
+      const existing = programsCache.get(universityId) ?? [];
+      const updated = [...existing.filter((p) => p.id !== created.id), created].sort((a, b) => a.name.localeCompare(b.name));
+      programsCache.set(universityId, updated);
+      broadcastPrograms(universityId, updated);
+      toast.success(`"${name}" added to programs`);
+      return created;
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to create program");
+      return null;
     }
   }
 
@@ -251,5 +346,8 @@ export function useApplicationReferenceData(enabled: boolean = true) {
     countries: !loaded ? [] : data.countries.length > 0 ? data.countries : FALLBACK_COUNTRIES,
     addPartnerCollege,
     createPartnerCollege,
+    programsByUniversity,
+    fetchPrograms,
+    createProgram,
   };
 }
