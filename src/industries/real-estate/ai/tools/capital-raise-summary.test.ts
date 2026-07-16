@@ -70,28 +70,31 @@ const COMMITMENTS = [
 ];
 
 describe("capital_raise_summary aggregation", () => {
-  it("computes per-offering raised/committed/investor-count and tenant totals", async () => {
+  it("computes per-offering funded/committed/equityRaised/investor-count and tenant totals", async () => {
     const db = fakeDb({ offerings: OFFERINGS, investor_commitments: COMMITMENTS });
     const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db))) as {
-      offerings: Array<{ id: string; raised: number; committedNotYetFunded: number; investorCount: number }>;
-      totals: { raisedToDate: number; committedNotYetFunded: number; investorCount: number };
+      offerings: Array<{ id: string; funded: number; committedNotYetFunded: number; equityRaised: number; investorCount: number }>;
+      totals: { funded: number; committedNotYetFunded: number; equityRaised: number; investorCount: number };
     };
 
     const a = result.offerings.find((o) => o.id === "off-a")!;
     const b = result.offerings.find((o) => o.id === "off-b")!;
-    expect(a.raised).toBe(1_200_000);
+    expect(a.funded).toBe(1_200_000);
     expect(a.committedNotYetFunded).toBe(300_000);
+    expect(a.equityRaised).toBe(1_500_000);
     expect(a.investorCount).toBe(4);
-    expect(b.raised).toBe(850_000);
+    expect(b.funded).toBe(850_000);
     expect(b.committedNotYetFunded).toBe(0);
+    expect(b.equityRaised).toBe(850_000);
     expect(b.investorCount).toBe(2);
 
-    expect(result.totals.raisedToDate).toBe(2_050_000);
+    expect(result.totals.funded).toBe(2_050_000);
     expect(result.totals.committedNotYetFunded).toBe(300_000);
+    expect(result.totals.equityRaised).toBe(2_350_000);
     expect(result.totals.investorCount).toBe(6); // lead-7 excluded (declined)
   });
 
-  it("ranks offerings by raised+committed descending", async () => {
+  it("ranks offerings by equityRaised (funded+committed) descending", async () => {
     const db = fakeDb({ offerings: OFFERINGS, investor_commitments: COMMITMENTS });
     const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db))) as {
       offerings: Array<{ id: string }>;
@@ -104,7 +107,7 @@ describe("capital_raise_summary aggregation", () => {
     const result = await capitalRaiseSummaryTool.execute(fixtureCtx(db));
     expect(result).toEqual({
       offerings: [],
-      totals: { raisedToDate: 0, committedNotYetFunded: 0, targetRaise: 0, investorCount: 0 },
+      totals: { funded: 0, committedNotYetFunded: 0, equityRaised: 0, targetRaise: 0, investorCount: 0 },
     });
   });
 });

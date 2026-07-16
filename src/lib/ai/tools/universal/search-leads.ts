@@ -5,15 +5,23 @@ import { FEATURES } from "@/industries/_registry";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
-import { optionalString, optionalUuid } from "./lib/sanitize";
+import { optionalFilterString, optionalString, optionalUuid } from "./lib/sanitize";
 
 const inputSchema = z.object({
   query: optionalString(z.string().max(200).optional()).describe("Free-text search across first name, last name, email, phone"),
-  stage: optionalString(z.string().max(100).optional()).describe("Pipeline stage slug, e.g. \"qualified\" or \"new\""),
-  list: optionalString(z.string().max(100).optional()).describe("Lead list slug (shown as \"Stage\" in the UI), e.g. \"prospects\""),
+  stage: optionalFilterString(z.string().max(100).optional()).describe(
+    "Pipeline stage slug, e.g. \"qualified\" or \"new\". Omit entirely to include all — never pass \"all\".",
+  ),
+  list: optionalFilterString(z.string().max(100).optional()).describe(
+    "Lead list slug (shown as \"Stage\" in the UI), e.g. \"prospects\". Omit entirely to include all — never pass \"all\".",
+  ),
   assignedToUserId: optionalUuid(z.string().uuid().optional()).describe("Filter to a specific teammate's leads by their user id (ignored for own-scope callers)"),
-  createdAfter: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only leads created on/after this"),
-  createdBefore: optionalString(z.string().max(40).optional()).describe("ISO date/datetime — only leads created on/before this"),
+  createdAfter: optionalString(z.string().max(40).optional()).describe(
+    "ISO date/datetime — only leads created on/after this. Only use when the user explicitly asks about a time window.",
+  ),
+  createdBefore: optionalString(z.string().max(40).optional()).describe(
+    "ISO date/datetime — only leads created on/before this. Only use when the user explicitly asks about a time window.",
+  ),
   limit: z.number().int().min(1).max(20).default(20),
 });
 
@@ -83,9 +91,14 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
 
     if (input.query) {
       const sanitized = input.query.replace(/[,().]/g, "");
-      if (sanitized) {
+      // Split into tokens so a full-name query ("Sarah Chen") matches — no single
+      // column holds the full name. Each token gets its own .or() group; chained
+      // .or() calls AND together in PostgREST, so every token must match somewhere.
+      // Diverges from GET /api/v1/leads, which still does single-string matching.
+      const tokens = sanitized.split(/\s+/).filter(Boolean).slice(0, 4);
+      for (const token of tokens) {
         query = query.or(
-          `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`,
+          `first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%,phone.ilike.%${token}%`,
         );
       }
     }

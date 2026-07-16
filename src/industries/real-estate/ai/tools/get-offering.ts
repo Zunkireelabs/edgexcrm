@@ -43,9 +43,21 @@ export const getOfferingTool: AgentTool<z.infer<typeof inputSchema>> = {
     if (!offering) return { error: "Offering not found." };
     const o = offering as unknown as Offering;
 
-    const { data: cmtData } = await db
+    // Aggregates (funnel, raisedToDate) must cover every commitment, not just the
+    // displayed list — a single offering's commitments are bounded in practice, so
+    // no limit here (matches how /api/v1/insights/real-estate/summary aggregates).
+    const { data: allCmtData } = await db
       .from("investor_commitments")
-      .select("status, amount, lead_id, created_at, leads!investor_commitments_lead_id_fkey(id, first_name, last_name)")
+      .select("status, amount")
+      .eq("offering_id", input.offeringId)
+      .is("deleted_at", null);
+    const allCommitments = (allCmtData ?? []) as unknown as Pick<InvestorCommitment, "status" | "amount">[];
+
+    const { data: cmtData, count: cmtCount } = await db
+      .from("investor_commitments")
+      .select("status, amount, lead_id, created_at, leads!investor_commitments_lead_id_fkey(id, first_name, last_name)", {
+        count: "exact",
+      })
       .eq("offering_id", input.offeringId)
       .is("deleted_at", null)
       .order("created_at", { ascending: true })
@@ -53,7 +65,7 @@ export const getOfferingTool: AgentTool<z.infer<typeof inputSchema>> = {
     const commitments = (cmtData ?? []) as unknown as CommitmentRow[];
 
     const funnel = FUNNEL_COLUMNS.map((status) => {
-      const rows = commitments.filter((c) => c.status === status);
+      const rows = allCommitments.filter((c) => c.status === status);
       return {
         status,
         count: rows.length,
@@ -75,7 +87,7 @@ export const getOfferingTool: AgentTool<z.infer<typeof inputSchema>> = {
       currency: o.currency,
       closeDate: o.close_date,
       description: o.description,
-      raisedToDate: equityRaised(commitments),
+      raisedToDate: equityRaised(allCommitments),
       funnel,
       commitments: commitments.map((c) => ({
         investorName: c.leads ? leadDisplayName(c.leads) : "(unknown investor)",
@@ -84,6 +96,7 @@ export const getOfferingTool: AgentTool<z.infer<typeof inputSchema>> = {
         amount: c.amount,
         status: c.status,
       })),
+      commitmentsTruncated: (cmtCount ?? commitments.length) > commitments.length,
     };
   },
 };

@@ -18,6 +18,23 @@ export function optionalString<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((val) => (isBlankString(val) ? undefined : val), schema);
 }
 
+const FILTER_SENTINELS = new Set(["all", "any", "none", "*"]);
+
+function isFilterSentinel(value: unknown): value is string {
+  return typeof value === "string" && FILTER_SENTINELS.has(value.trim().toLowerCase());
+}
+
+/**
+ * Blank/whitespace-only string, or a plausible "include everything" sentinel
+ * ("all"/"any"/"none"/"*", case-insensitive) -> undefined. For optional
+ * filter fields that resolve via an exact lookup (e.g. a slug), where a
+ * sentinel value silently short-circuits to "not found" / zero rows instead
+ * of surfacing as an obvious placeholder like an empty string would.
+ */
+export function optionalFilterString<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((val) => (isBlankString(val) || isFilterSentinel(val) ? undefined : val), schema);
+}
+
 /** Blank string or the NIL UUID -> undefined. For optional uuid fields. */
 export function optionalUuid<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((val) => {
