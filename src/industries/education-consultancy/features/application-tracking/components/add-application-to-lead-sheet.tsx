@@ -42,6 +42,7 @@ export function AddApplicationToLeadSheet({
 }: AddApplicationToLeadSheetProps) {
   const [submitting, setSubmitting] = useState(false);
   const [universityName, setUniversityName] = useState("");
+  const [universityId, setUniversityId] = useState<string | null>(null);
   const [programName, setProgramName] = useState("");
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
@@ -51,9 +52,10 @@ export function AddApplicationToLeadSheet({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [courses, setCourses] = useState<string[]>([]);
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
-    useApplicationReferenceData(open);
+  const {
+    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    createPartnerCollege, programsByUniversity, fetchPrograms, createProgram,
+  } = useApplicationReferenceData(open);
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -65,6 +67,7 @@ export function AddApplicationToLeadSheet({
   useEffect(() => {
     if (!open) {
       setUniversityName("");
+      setUniversityId(null);
       setProgramName("");
       setIntakeMonth("");
       setIntakeYear("");
@@ -77,24 +80,52 @@ export function AddApplicationToLeadSheet({
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
 
-  // Program suggestions are the one dataset here NOT shared with the other
-  // Add Application screens — this one reads /api/v1/courses (Settings'
-  // Fields of Study), while the standalone board's sheet derives its program
-  // suggestions from real past applications instead. See
-  // use-application-reference-data.ts for the datasets that ARE shared.
+  // Resolve the typed/selected University name to its catalog id — covers both
+  // picking an existing suggestion and a just-created college (handleCreateCollege
+  // also sets this directly). Unresolved (legacy free-typed name not in the
+  // catalog) stays null — Program then falls back to free text, no catalog filter.
   useEffect(() => {
-    if (!open) return;
-    fetch("/api/v1/courses")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (j?.data) setCourses((j.data as { name: string }[]).map((c) => c.name));
-      })
-      .catch(() => {});
-  }, [open]);
+    const trimmed = universityName.trim().toLowerCase();
+    if (!trimmed) { setUniversityId(null); return; }
+    const match = partnerColleges.find((c) => c.name.toLowerCase() === trimmed);
+    setUniversityId(match?.id ?? null);
+  }, [universityName, partnerColleges]);
+
+  useEffect(() => {
+    if (universityId) fetchPrograms(universityId);
+    // fetchPrograms reads a module-level cache; omitting it (a new closure each
+    // render) avoids refiring this effect every render — depending on universityId
+    // alone is enough since a cache hit inside fetchPrograms makes repeats cheap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [universityId]);
+
+  // Empty until a university is chosen; catalog-filtered once the name resolves to
+  // an id. No applications-history dataset exists on this sheet, so an unresolved
+  // (legacy free-typed) university falls back to free text — never blocks entry.
+  const catalogProgramSuggestions = universityId
+    ? (programsByUniversity[universityId] ?? []).map((p) => p.name)
+    : [];
+  const effectiveProgramSuggestions = !universityName.trim()
+    ? []
+    : (universityId ? catalogProgramSuggestions : []);
 
   async function handleCreateCollege(name: string) {
-    const ok = await createPartnerCollege(name, country || null);
-    if (ok) setUniversityName(name);
+    const created = await createPartnerCollege(name, country || null);
+    if (created) {
+      setUniversityName(name);
+      setUniversityId(created.id);
+    }
+  }
+
+  async function handleCreateProgram(name: string) {
+    if (!universityId) {
+      // Legacy/free-typed university not in the catalog — accept the free-text
+      // program as-is rather than blocking.
+      setProgramName(name);
+      return;
+    }
+    const created = await createProgram(universityId, name);
+    if (created) setProgramName(created.name);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -172,6 +203,7 @@ export function AddApplicationToLeadSheet({
               suggestions={collegeSuggestions}
               placeholder="e.g. University of Melbourne"
               onCreateNew={handleCreateCollege}
+              createLabel="university"
             />
           </div>
 
@@ -183,8 +215,10 @@ export function AddApplicationToLeadSheet({
               id="app-program"
               value={programName}
               onChange={setProgramName}
-              suggestions={courses}
-              placeholder="e.g. Master of Computer Science"
+              suggestions={effectiveProgramSuggestions}
+              placeholder={!universityName.trim() ? "Select a university first" : "e.g. Master of Computer Science"}
+              onCreateNew={handleCreateProgram}
+              createLabel="program"
             />
           </div>
 
