@@ -10,6 +10,30 @@ A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-
 
 ---
 
+## Code Graph (Graphify) — query before reading files
+
+This repo has a prebuilt structural knowledge graph at `graphify-out/graph.json`, exposed via the `graphify` MCP server (see `.mcp.json`). MCP tools: `query_graph`, `shortest_path`, `get_node`, `get_neighbors`, `get_community`, `god_nodes`, `graph_stats`, plus PR-impact tools `list_prs`, `triage_prs`, `get_pr_impact`.
+
+> Note: `explain "X"` is a graphify **CLI** command, **not** an MCP tool — the MCP server does not expose it. For "explain X" use the MCP `get_node` + `get_neighbors` (same info), or run the CLI directly: `uv tool run --from graphifyy graphify explain "X" --graph graphify-out/graph.json`.
+
+**For structural / "how is this wired" questions — architecture, "what calls X", "where is Y used", "trace the flow from A to B", locating a symbol — query the graph FIRST, before grepping or reading files.** It returns a scoped subgraph (~hundreds of tokens) instead of loading a dozen files (~tens of thousands). Then open only the 1–2 files you actually need to edit.
+
+Caveats: the graph has **structure, not function bodies** — read the real file for logic/values and for any edit. It's a snapshot (currently `src/` only), so it may be **stale** after recent changes; if a symbol is missing, fall back to reading files, then rebuild.
+
+### Rebuilding / refreshing the graph
+
+When the user asks to rebuild, refresh, regenerate, or update the code graph (e.g. "refresh the code graph", "rebuild graphify"), run **exactly this** and report the resulting node/edge counts:
+
+```bash
+uv tool run --from graphifyy python \
+  ~/Projects/zunkireelabs-org/dev-tools-management/scripts/graphify_build.py \
+  ~/Projects/edgeXcrm --subdir src
+```
+
+**NEVER rebuild with `/graphify src` or `graphify update` / `graphify --watch`** — their parallel AST extraction crashes on this machine ("process pool terminated abruptly") and silently produces a broken, near-empty graph. The script above forces serial extraction, which is the only reliable path here. Add `--obsidian ~/Projects/obsidian-brain/code-graph-sadin/edgeXcrm` to that command only if the user also wants the Obsidian node-vault refreshed (slower; writes ~4k files).
+
+---
+
 ## Industry Scoping Rules
 
 **IMPORTANT: Current development focus is `education_consultancy` ONLY.** ALL new features default to education_consultancy unless the user explicitly says otherwise. If unsure whether a feature is universal or industry-specific, ASK — don't assume. Every new feature MUST have its own folder at `src/industries/education-consultancy/features/<feature-name>/`. When modifying universal components, gate education-only UI with `industryId === "education_consultancy"`.
