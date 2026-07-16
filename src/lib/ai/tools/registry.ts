@@ -11,15 +11,16 @@ export function registerTool(tool: AgentTool): void {
   tools.push(tool);
 }
 
-// TODO(1B): filter on `requiredPermission` once the permission-resolver hookup
-// for AI tools is decided (auth.permissions is a typed ResolvedPermissions shape,
-// not a generic string-keyed map — see src/lib/api/permissions.ts). Until then,
-// tools that declare requiredPermission are still returned; only industry is enforced.
 export function buildToolset(auth: AuthContext): AgentTool[] {
   return tools.filter((tool) => {
-    if (tool.industries === undefined) return true;
-    if (auth.industryId === null) return false;
-    return tool.industries.includes(auth.industryId as IndustryId);
+    if (tool.industries !== undefined) {
+      if (auth.industryId === null) return false;
+      if (!tool.industries.includes(auth.industryId as IndustryId)) return false;
+    }
+    if (tool.requiredPermission !== undefined && auth.permissions[tool.requiredPermission] !== true) {
+      return false;
+    }
+    return true;
   });
 }
 

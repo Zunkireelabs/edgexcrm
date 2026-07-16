@@ -81,6 +81,22 @@ describe("buildToolset", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: null }));
     expect(toolset.find((t) => t.id === "education-only-fixture-3")).toBeUndefined();
   });
+
+  it("excludes a tool with requiredPermission when auth.permissions has it false", () => {
+    registerTool(fixtureTool({ id: "hr-fixture", requiredPermission: "canManageHR" }));
+    const toolset = buildToolset(
+      fixtureAuth({ permissions: { canManageHR: false } as AuthContext["permissions"] })
+    );
+    expect(toolset.find((t) => t.id === "hr-fixture")).toBeUndefined();
+  });
+
+  it("includes a tool with requiredPermission when auth.permissions has it true", () => {
+    registerTool(fixtureTool({ id: "hr-fixture-2", requiredPermission: "canManageHR" }));
+    const toolset = buildToolset(
+      fixtureAuth({ permissions: { canManageHR: true } as AuthContext["permissions"] })
+    );
+    expect(toolset.find((t) => t.id === "hr-fixture-2")).toBeDefined();
+  });
 });
 
 describe("AgentTool inputSchema (zod validation path)", () => {
