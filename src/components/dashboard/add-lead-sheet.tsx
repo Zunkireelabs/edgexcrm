@@ -1109,7 +1109,7 @@ export function AddLeadSheet({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Interested Study Level</Label>
+              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
               <Select
                 value={formData.degreeLevel || "__none__"}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}

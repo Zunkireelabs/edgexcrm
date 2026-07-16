@@ -10,7 +10,7 @@ import {
 interface EduTaxonomy {
   destinations: string[];
   fieldsOfStudy: string[];
-  /** "Interested Study Level" options — sourced from the study_levels catalog,
+  /** "Interested Degree Level" options — sourced from the study_levels catalog,
    *  falling back to the DEGREE_LEVELS labels until the catalog loads/if empty. */
   studyLevels: string[];
   loading: boolean;

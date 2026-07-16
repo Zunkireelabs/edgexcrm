@@ -8,7 +8,6 @@ import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -681,7 +680,7 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
   const effectiveFieldOfStudy = leadWithEdu.field_of_study || distinctFieldOfStudy.join(", ") || null;
   const effectiveDegreeLevel = leadWithEdu.degree_level || distinctDegreeLevel.join(", ") || null;
 
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [destOpen, setDestOpen] = useState(false);
@@ -845,11 +844,11 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
                   <span className="text-muted-foreground">Select level</span>
                 </SelectItem>
                 {/* Same free-text fallback as Field of Study above. */}
-                {draftDegree && !DEGREE_LEVELS.some((d) => d.value === draftDegree) && (
+                {draftDegree && !studyLevels.includes(draftDegree) && (
                   <SelectItem value={draftDegree}>{draftDegree}</SelectItem>
                 )}
-                {DEGREE_LEVELS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                {studyLevels.map((lvl) => (
+                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

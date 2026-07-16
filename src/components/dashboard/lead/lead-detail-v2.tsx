@@ -28,7 +28,6 @@ import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 import { ContactCard } from "./contact-card";
@@ -169,7 +168,7 @@ export function LeadDetailV2({
   const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -1067,8 +1066,8 @@ export function LeadDetailV2({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

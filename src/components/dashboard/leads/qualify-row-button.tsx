@@ -21,7 +21,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { LeadList } from "@/types/database";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 interface QualifyRowButtonProps {
@@ -41,7 +40,7 @@ export function QualifyRowButton({
   qualifiedList,
   onQualified,
 }: QualifyRowButtonProps) {
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [open, setOpen] = useState(false);
   const [dests, setDests] = useState<string[]>(currentDestinations);
   const [fieldOfStudy, setFieldOfStudy] = useState(currentFieldOfStudy ?? "");
@@ -176,8 +175,8 @@ export function QualifyRowButton({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

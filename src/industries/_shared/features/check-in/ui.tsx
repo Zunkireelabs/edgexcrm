@@ -837,7 +837,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                               <div className="space-y-1">
-                                <Label className="text-xs">Interested Study Level</Label>
+                                <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
                                   <SelectTrigger className="h-9">
                                     <SelectValue placeholder="Select level (optional)" />
