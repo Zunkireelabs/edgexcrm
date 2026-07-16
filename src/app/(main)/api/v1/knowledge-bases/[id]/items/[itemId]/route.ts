@@ -12,6 +12,7 @@ import { validate, maxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { getStorageProvider } from "@/lib/storage/provider";
 
 const isHttpUrl = (): ((v: unknown) => string | null) => (v) => {
   if (!v || typeof v !== "string") return null;
@@ -150,12 +151,9 @@ export async function DELETE(
 
   const row = existing as unknown as { type: string; storage_path?: string | null };
   if (row.type === "file" && row.storage_path) {
-    db.raw()
-      .storage.from("knowledge-base-files")
-      .remove([row.storage_path])
-      .then(({ error: storageErr }) => {
-        if (storageErr) log.error({ error: storageErr }, "Storage cleanup failed (non-fatal)");
-      });
+    getStorageProvider()
+      .remove("knowledge-base-files", [row.storage_path])
+      .catch((storageErr) => log.error({ error: storageErr }, "Storage cleanup failed (non-fatal)"));
   }
 
   const { error } = await db.from("knowledge_base_items").delete().eq("id", itemId);
