@@ -34,6 +34,7 @@ import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
+import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
 import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 
 const CONTACT_METHODS = [
@@ -100,6 +101,10 @@ interface KeyInfoSectionProps {
   revertTargetUserId?: string | null;
   revertTargetName?: string | null;
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -148,6 +153,8 @@ export function KeyInfoSection({
   revertTargetUserId,
   revertTargetName,
   revertTargetMembers,
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
@@ -268,6 +275,15 @@ export function KeyInfoSection({
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
               {leadLists && leadLists.length > 0 ? (
+                canMoveWithoutChain && onListChange ? (
+                  <StageMoveSelector
+                    currentListId={lead.list_id ?? null}
+                    activeLists={activeLeadLists ?? leadLists}
+                    accessibleLists={leadLists}
+                    stageAssigneeMap={stageAssigneeMap}
+                    onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
+                  />
+                ) : (
                 <ListStepper
                   readOnly={!(onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)))}
                   currentListId={lead.list_id ?? null}
@@ -282,6 +298,7 @@ export function KeyInfoSection({
                   revertTargetMembers={revertTargetMembers}
                   canRevertOverride={isAdmin || leadScope === "team"}
                 />
+                )
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (

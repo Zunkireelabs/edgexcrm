@@ -77,6 +77,10 @@ interface LeadDetailV2Props {
   revertTargetName?: string | null;
   /** Revert assignee options: the previous holder's same-position peers in their branch. */
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   canManageApplications?: boolean;
   /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
   canManageApplicationPanel?: boolean;
@@ -153,6 +157,8 @@ export function LeadDetailV2({
   revertTargetUserId = null,
   revertTargetName = null,
   revertTargetMembers = [],
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
   canManageApplications,
   canManageApplicationPanel,
   canEnroll,
@@ -831,6 +837,8 @@ export function LeadDetailV2({
             revertTargetUserId={revertTargetUserId}
             revertTargetName={revertTargetName}
             revertTargetMembers={revertTargetMembers}
+            canMoveWithoutChain={canMoveWithoutChain}
+            stageAssigneeMap={stageAssigneeMap}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const targetList = leadLists?.find((l) => l.id === listId);
               if (
