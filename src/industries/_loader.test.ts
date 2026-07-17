@@ -44,14 +44,20 @@ describe("getIndustryAiConfig", () => {
     ]);
   });
 
-  it("returns education_consultancy's config — no promptAddendum yet, but toolIds includes the pre-existing education-gated universal tool", () => {
+  it("returns the populated education_consultancy AiConfig (promptAddendum + toolIds)", () => {
     // get_form_submissions_summary lives in src/lib/ai/tools/universal/ but
     // its own `industries` field gates it to education_consultancy only —
     // discovered as pre-existing drift while building the packs.ts <->
-    // manifest sync test (packs.test.ts); declared here to close it.
-    expect(getIndustryAiConfig("education_consultancy")).toEqual({
-      toolIds: ["get_form_submissions_summary"],
-    });
+    // manifest sync test (packs.test.ts); kept alongside the Phase 3B tools.
+    const config = getIndustryAiConfig("education_consultancy");
+    expect(config?.promptAddendum).toContain("education consultancy");
+    expect(config?.toolIds).toEqual([
+      "search_applications",
+      "get_lead_applications",
+      "application_funnel_summary",
+      "class_enrollment_summary",
+      "get_form_submissions_summary",
+    ]);
   });
 
   it("returns an empty config for an industry with no AI pack (it_agency)", () => {

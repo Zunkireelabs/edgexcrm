@@ -8,3 +8,4 @@
 // in a manifest but never actually registered.
 import "./universal";
 import "@/industries/real-estate/ai/tools";
+import "@/industries/education-consultancy/ai/tools";
