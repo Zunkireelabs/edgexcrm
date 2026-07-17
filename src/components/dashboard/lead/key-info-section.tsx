@@ -87,6 +87,9 @@ interface KeyInfoSectionProps {
   teamMembers: TeamMember[];
   /** Pre-filtered assignable subset for the dropdown; falls back to teamMembers.filter(canEditLeads) if absent. */
   assignableMembers?: TeamMember[];
+  /** Admin/branch-manager (education): Assigned-To options scoped to the lead's CURRENT stage team.
+   *  Non-null overrides assignableMembers for the standalone Assigned-To dropdown. */
+  stageScopedAssignees?: { user_id: string; email: string; name?: string | null }[] | null;
   userId?: string;
   isAdmin: boolean;
   /** admin OR the lead's assignee OR a lead collaborator — gates academic/test field edits. */
@@ -132,6 +135,7 @@ export function KeyInfoSection({
   assignedTo,
   teamMembers,
   assignableMembers,
+  stageScopedAssignees = null,
   userId,
   isAdmin,
   isEditor,
@@ -175,7 +179,12 @@ export function KeyInfoSection({
   // Ensure the currently-assigned member always appears in the dropdown,
   // even if they fall outside the caller's normal assignable chain scope
   // (e.g. a counselor assigned via check-in, viewed by a lead-executive).
-  const baseAssignable = assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false);
+  // stageScopedAssignees (admin/branch-manager, education) takes precedence over the
+  // chain-filtered assignableMembers — scopes Assigned-To to the lead's current stage team.
+  const stageScopedAsTeamMembers: TeamMember[] | null = stageScopedAssignees
+    ? stageScopedAssignees.map((m) => ({ id: m.user_id, user_id: m.user_id, role: "member", email: m.email, name: m.name }))
+    : null;
+  const baseAssignable = stageScopedAsTeamMembers ?? assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false);
   const resolvedAssignable =
     !assignedTo || baseAssignable.some((m) => m.user_id === assignedTo)
       ? baseAssignable
