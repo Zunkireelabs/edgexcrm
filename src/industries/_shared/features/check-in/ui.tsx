@@ -820,22 +820,22 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {/* Student-only structured fields */}
                         {leadTag === "student" && (
                           <div className="rounded-md border bg-muted/30 p-3 space-y-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Destination</Label>
-                              <Select value={destination} onValueChange={setDestination}>
-                                <SelectTrigger className="h-9">
-                                  <SelectValue placeholder="Select destination (optional)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {destOptions.map((d) => (
-                                    <SelectItem key={d} value={d}>
-                                      {d}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
                             <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <Label className="text-xs">Destination</Label>
+                                <Select value={destination} onValueChange={setDestination}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select destination (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {destOptions.map((d) => (
+                                      <SelectItem key={d} value={d}>
+                                        {d}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
                               <div className="space-y-1">
                                 <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
