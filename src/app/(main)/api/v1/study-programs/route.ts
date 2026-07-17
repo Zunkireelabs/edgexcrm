@@ -21,6 +21,21 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const includeInactive = searchParams.get("all") === "true";
   const universityId = searchParams.get("university_id");
+  const distinctNames = searchParams.get("distinct_names") === "true";
+
+  // Distinct program names across the whole tenant (active only), for the "Add
+  // University with Programs" multi-select source — university-agnostic by design.
+  if (distinctNames) {
+    const db = await scopedClient(auth);
+    const { data, error } = await db
+      .from("study_programs")
+      .select("id, name")
+      .eq("is_active", true);
+    if (error) return apiError("DB_ERROR", "Failed to fetch program names", 500);
+    const rows = (data ?? []) as unknown as { id: string; name: string }[];
+    const names = [...new Set(rows.map((r) => r.name))].sort((a, b) => a.localeCompare(b));
+    return apiSuccess(names);
+  }
 
   // The manager (?all=true) lists every program across universities, optionally
   // scoped to one; the picker always scopes to one — no university_id there means

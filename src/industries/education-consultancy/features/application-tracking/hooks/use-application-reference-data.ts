@@ -337,6 +337,20 @@ export function useApplicationReferenceData(enabled: boolean = true) {
     }
   }
 
+  // Distinct program names across the whole tenant (not scoped to a university) — the
+  // multi-select source for "Add University with Programs". Not cached (opened rarely,
+  // via the University create-new flow only) — a plain fetch is enough.
+  async function fetchDistinctProgramNames(): Promise<string[]> {
+    try {
+      const res = await fetch("/api/v1/study-programs?distinct_names=true");
+      if (!res.ok) return [];
+      const json = await res.json();
+      return (json.data ?? []) as string[];
+    } catch {
+      return [];
+    }
+  }
+
   return {
     ...data,
     // Only substitute the generic fallback once a real fetch has confirmed
@@ -349,5 +363,6 @@ export function useApplicationReferenceData(enabled: boolean = true) {
     programsByUniversity,
     fetchPrograms,
     createProgram,
+    fetchDistinctProgramNames,
   };
 }
