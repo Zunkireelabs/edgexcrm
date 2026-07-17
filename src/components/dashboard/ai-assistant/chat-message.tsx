@@ -1,13 +1,18 @@
 "use client";
 
-import { Bot, User, Loader2, Check, AlertTriangle, FileText } from "lucide-react";
+import { Bot, User, Loader2, Check, AlertTriangle, FileText, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isToolUIPart, isTextUIPart, getToolName, type ToolUIPart, type DynamicToolUIPart, type UITools } from "ai";
 import type { AssistantUIMessage } from "./use-assistant-chat";
 import { toolActivityLabel } from "./tool-labels";
+import { ApprovalCard, type ApprovalToolPart } from "./approval-card";
 
 type AnyToolPart = ToolUIPart<UITools> | DynamicToolUIPart;
+
+function isApprovalToolPart(part: AnyToolPart): part is ApprovalToolPart {
+  return part.state === "approval-requested" || part.state === "approval-responded";
+}
 
 interface KnowledgeCitation {
   title: string;
@@ -52,9 +57,11 @@ function extractCitations(output: unknown): KnowledgeCitation[] {
 
 interface ChatMessageProps {
   message: AssistantUIMessage;
+  onApproveTool?: (approvalId: string) => void;
+  onDenyTool?: (approvalId: string) => void;
 }
 
-export function ChatMessage({ message }: ChatMessageProps) {
+export function ChatMessage({ message, onApproveTool, onDenyTool }: ChatMessageProps) {
   const isUser = message.role === "user";
   const textParts = message.parts.filter(isTextUIPart);
   const toolParts = message.parts.filter(isToolUIPart);
@@ -74,9 +81,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
       <div className={`max-w-[80%] flex flex-col gap-1.5 ${isUser ? "items-end" : "items-start"}`}>
         {toolParts.length > 0 && (
           <div className="flex flex-col gap-1">
-            {toolParts.map((part) => (
-              <ToolActivityLine key={part.toolCallId} part={part} />
-            ))}
+            {toolParts.map((part) =>
+              isApprovalToolPart(part) ? (
+                <ApprovalCard
+                  key={part.toolCallId}
+                  part={part}
+                  onApprove={(id) => onApproveTool?.(id)}
+                  onDeny={(id) => onDenyTool?.(id)}
+                />
+              ) : (
+                <ToolActivityLine key={part.toolCallId} part={part} />
+              ),
+            )}
           </div>
         )}
 
@@ -117,6 +133,15 @@ function ToolActivityLine({ part }: { part: AnyToolPart }) {
       <div className="flex items-center gap-1.5 text-xs text-red-500 px-1">
         <AlertTriangle className="w-3 h-3" />
         <span>{label} failed</span>
+      </div>
+    );
+  }
+
+  if (part.state === "output-denied") {
+    return (
+      <div className="flex items-center gap-1.5 text-xs text-gray-400 px-1">
+        <X className="w-3 h-3" />
+        <span>{label} — denied</span>
       </div>
     );
   }

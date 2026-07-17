@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { z } from "zod";
 import { registerTool, buildToolset, __clearRegistryForTests } from "./registry";
 import type { AgentTool } from "./types";
@@ -40,16 +40,49 @@ describe("registerTool", () => {
     __clearRegistryForTests();
   });
 
-  it("throws when registering a write-scope tool", () => {
-    expect(() => registerTool(fixtureTool({ id: "write-fixture", scope: "write" }))).toThrow(
-      "write-scope tools are not permitted before Phase 4"
-    );
+  it("registers a write-scope tool without throwing", () => {
+    expect(() => registerTool(fixtureTool({ id: "write-fixture", scope: "write" }))).not.toThrow();
+  });
+});
+
+describe("buildToolset write-scope gating (AI_WRITE_TOOLS_ENABLED)", () => {
+  const ORIGINAL_FLAG = process.env.AI_WRITE_TOOLS_ENABLED;
+
+  beforeEach(() => {
+    __clearRegistryForTests();
   });
 
-  it("does not add a rejected write-scope tool to the registry", () => {
-    expect(() => registerTool(fixtureTool({ id: "write-fixture", scope: "write" }))).toThrow();
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) delete process.env.AI_WRITE_TOOLS_ENABLED;
+    else process.env.AI_WRITE_TOOLS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it("excludes a write-scope tool when the flag is unset (today's behavior byte-identical)", () => {
+    delete process.env.AI_WRITE_TOOLS_ENABLED;
+    registerTool(fixtureTool({ id: "write-fixture-off", scope: "write" }));
     const toolset = buildToolset(fixtureAuth());
-    expect(toolset.find((t) => t.id === "write-fixture")).toBeUndefined();
+    expect(toolset.find((t) => t.id === "write-fixture-off")).toBeUndefined();
+  });
+
+  it("excludes a write-scope tool when the flag is any value other than 'true'", () => {
+    process.env.AI_WRITE_TOOLS_ENABLED = "false";
+    registerTool(fixtureTool({ id: "write-fixture-falsy", scope: "write" }));
+    const toolset = buildToolset(fixtureAuth());
+    expect(toolset.find((t) => t.id === "write-fixture-falsy")).toBeUndefined();
+  });
+
+  it("includes a write-scope tool when the flag is 'true'", () => {
+    process.env.AI_WRITE_TOOLS_ENABLED = "true";
+    registerTool(fixtureTool({ id: "write-fixture-on", scope: "write" }));
+    const toolset = buildToolset(fixtureAuth());
+    expect(toolset.find((t) => t.id === "write-fixture-on")).toBeDefined();
+  });
+
+  it("still applies industry/permission filters to a write-scope tool", () => {
+    process.env.AI_WRITE_TOOLS_ENABLED = "true";
+    registerTool(fixtureTool({ id: "write-fixture-industry", scope: "write", industries: ["education_consultancy"] }));
+    const toolset = buildToolset(fixtureAuth({ industryId: "it_agency" }));
+    expect(toolset.find((t) => t.id === "write-fixture-industry")).toBeUndefined();
   });
 });
 

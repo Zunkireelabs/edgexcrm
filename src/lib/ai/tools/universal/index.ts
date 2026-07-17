@@ -10,6 +10,7 @@ import { activityTimelineTool } from "./activity-timeline";
 import { searchKnowledgeTool } from "./search-knowledge";
 import { readDocumentTool } from "./read-document";
 import { getFormSubmissionsSummaryTool } from "./get-form-submissions-summary";
+import { createTaskTool } from "./create-task";
 
 registerTool(searchLeadsTool);
 registerTool(getLeadTool);
@@ -20,6 +21,7 @@ registerTool(activityTimelineTool);
 registerTool(searchKnowledgeTool);
 registerTool(readDocumentTool);
 registerTool(getFormSubmissionsSummaryTool);
+registerTool(createTaskTool);
 
 export {
   searchLeadsTool,
@@ -31,4 +33,5 @@ export {
   searchKnowledgeTool,
   readDocumentTool,
   getFormSubmissionsSummaryTool,
+  createTaskTool,
 };

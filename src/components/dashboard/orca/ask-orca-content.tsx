@@ -34,7 +34,7 @@ interface AskOrcaThreadProps {
 }
 
 function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskOrcaThreadProps) {
-  const { messages, status, error, disabled, retry, send } = useAssistantChat({
+  const { messages, status, error, disabled, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     userFirstName,
     onConversationId,
@@ -88,7 +88,14 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex-1 overflow-y-auto space-y-4 py-4">
-        <MessageList messages={messages} status={status} error={error} onRetry={retry} />
+        <MessageList
+          messages={messages}
+          status={status}
+          error={error}
+          onRetry={retry}
+          onApproveTool={approveTool}
+          onDenyTool={denyTool}
+        />
         <div ref={messagesEndRef} />
       </div>
       <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">

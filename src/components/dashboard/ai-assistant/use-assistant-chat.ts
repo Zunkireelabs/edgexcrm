@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, type UIMessage } from "ai";
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from "ai";
 
 export interface AssistantMessageMetadata {
   conversationId?: string;
@@ -59,6 +59,11 @@ export function useAssistantChat({ id, initialMessages, userFirstName, onConvers
     id,
     messages: initialMessages,
     transport,
+    // Read tools still execute fully server-side in one round trip — the ONLY
+    // client round-trip this drives is a tool-approval decision: once the last
+    // assistant message's approval requests are all responded to, resend
+    // automatically so the approved tool's execute() actually runs.
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     onFinish: ({ message }) => {
       const conversationId = message.metadata?.conversationId;
       if (conversationId) onConversationId?.(conversationId);
@@ -79,5 +84,19 @@ export function useAssistantChat({ id, initialMessages, userFirstName, onConvers
     [chat]
   );
 
-  return { ...chat, disabled, retry, send };
+  const approveTool = useCallback(
+    (approvalId: string) => {
+      void chat.addToolApprovalResponse({ id: approvalId, approved: true });
+    },
+    [chat]
+  );
+
+  const denyTool = useCallback(
+    (approvalId: string) => {
+      void chat.addToolApprovalResponse({ id: approvalId, approved: false });
+    },
+    [chat]
+  );
+
+  return { ...chat, disabled, retry, send, approveTool, denyTool };
 }

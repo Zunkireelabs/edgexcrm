@@ -6,12 +6,10 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, required, maxLength, optionalMaxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { resolveUserNames } from "@/lib/supabase/queries";
-import { NotificationTypes, createNotificationsExcept } from "@/lib/notifications";
+import { createTaskForUser } from "@/lib/tasks/create-task";
 import type { TaskStatus, TaskPriority } from "@/types/database";
 
 interface MyTask {
@@ -38,9 +36,6 @@ interface MyTask {
 }
 
 const TASK_STATUSES = ["todo", "in_progress", "done"];
-const TASK_PRIORITIES = ["low", "normal", "high", "urgent"];
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function GET(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -103,142 +98,17 @@ export async function POST(request: NextRequest) {
     return apiError("INVALID_JSON", "Request body must be valid JSON", 400);
   }
 
-  const validationErrors: Record<string, string[]> = {};
-
-  const { valid, errors } = validate(body, {
-    title: [required("title"), maxLength(255)],
-    description: [optionalMaxLength(2000)],
-    priority: [isIn(TASK_PRIORITIES)],
-  });
-  Object.assign(validationErrors, errors);
-
-  if (body.due_date !== undefined && body.due_date !== null) {
-    if (typeof body.due_date !== "string" || !ISO_DATE_RE.test(body.due_date)) {
-      validationErrors.due_date = ["Must be a valid ISO date YYYY-MM-DD or null"];
-    }
-  }
-
-  if (body.lead_id !== undefined && body.lead_id !== null) {
-    if (typeof body.lead_id !== "string" || !UUID_RE.test(body.lead_id)) {
-      validationErrors.lead_id = ["Must be a valid UUID or null"];
-    }
-  }
-
-  if (body.deal_id !== undefined && body.deal_id !== null) {
-    if (typeof body.deal_id !== "string" || !UUID_RE.test(body.deal_id)) {
-      validationErrors.deal_id = ["Must be a valid UUID or null"];
-    }
-  }
-
-  if (body.assignee_id !== undefined && body.assignee_id !== null) {
-    if (typeof body.assignee_id !== "string" || !UUID_RE.test(body.assignee_id)) {
-      validationErrors.assignee_id = ["Must be a valid UUID or null"];
-    }
-  }
-
-  if (!valid || Object.keys(validationErrors).length > 0) {
-    return apiValidationError(validationErrors);
-  }
-
   const db = await scopedClient(auth);
+  const outcome = await createTaskForUser(db, auth, body, { requestId });
 
-  if (body.lead_id) {
-    const { data: lead } = await db
-      .from("leads")
-      .select("id")
-      .eq("id", body.lead_id as string)
-      .maybeSingle();
-    if (!lead) {
-      return apiValidationError({ lead_id: ["Lead not found in this tenant"] });
-    }
+  if (outcome.kind === "validation") {
+    return apiValidationError(outcome.errors);
   }
-
-  if (body.deal_id) {
-    const { data: deal } = await db
-      .from("deals")
-      .select("id")
-      .eq("id", body.deal_id as string)
-      .maybeSingle();
-    if (!deal) {
-      return apiValidationError({ deal_id: ["Deal not found in this tenant"] });
-    }
-  }
-
-  const assigneeId = body.assignee_id ? String(body.assignee_id) : auth.userId;
-  if (assigneeId !== auth.userId) {
-    const { data: member } = await db
-      .from("tenant_users")
-      .select("user_id")
-      .eq("user_id", assigneeId)
-      .maybeSingle();
-    if (!member) {
-      return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
-    }
-  }
-  const assignedById = assigneeId !== auth.userId ? auth.userId : null;
-
-  const insert = {
-    title: String(body.title).trim(),
-    description: body.description ? String(body.description).trim() : null,
-    priority: body.priority ? String(body.priority) : "normal",
-    due_date: body.due_date ? String(body.due_date) : null,
-    lead_id: body.lead_id ? String(body.lead_id) : null,
-    deal_id: body.deal_id ? String(body.deal_id) : null,
-    project_id: null,
-    status: "todo",
-    assignee_id: assigneeId,
-    assigned_by_id: assignedById,
-    is_billable: false,
-    position: 0,
-  };
-
-  const { data: task, error } = await db
-    .from("tasks")
-    .insert(insert)
-    .select()
-    .single();
-
-  if (error) {
-    log.error({ error }, "Failed to create task");
+  if (outcome.kind === "db_error") {
+    log.error({ error: outcome.error }, "Failed to create task");
     return apiError("DB_ERROR", "Failed to create task", 500);
   }
 
-  await Promise.all([
-    emitEvent({
-      tenantId: auth.tenantId,
-      type: "task.created",
-      entityType: "task",
-      entityId: task.id,
-      requestId,
-    }),
-    createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
-      action: "task.created",
-      entityType: "task",
-      entityId: task.id,
-      requestId,
-    }),
-  ]);
-
-  if (assignedById) {
-    const link = task.lead_id
-      ? `/leads/${task.lead_id}`
-      : task.deal_id
-        ? `/deals/${task.deal_id}`
-        : "/home";
-    createNotificationsExcept(auth.userId, [
-      {
-        tenantId: auth.tenantId,
-        userId: assigneeId,
-        type: NotificationTypes.TASK_ASSIGNED,
-        title: "New task assigned",
-        message: task.title,
-        link,
-      },
-    ]);
-  }
-
-  log.info({ taskId: task.id, assigneeId }, "Personal task created");
-  return apiSuccess(task, 201);
+  log.info({ taskId: outcome.task.id, assigneeId: outcome.task.assignee_id }, "Personal task created");
+  return apiSuccess(outcome.task, 201);
 }
