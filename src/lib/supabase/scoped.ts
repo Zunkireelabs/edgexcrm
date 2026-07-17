@@ -84,7 +84,15 @@ function stripTenantId<T extends Record<string, unknown>>(row: T): Omit<T, "tena
   return safe;
 }
 
-export async function scopedClient(auth: AuthContext) {
+/**
+ * Same wrapper as `scopedClient(auth)`, but for callers that have a
+ * `tenantId` without a request-scoped `AuthContext` — today, only the
+ * Phase 2B ingestion pipeline (Inngest functions run outside a request;
+ * `tenantId` there comes from the triggering event, which is only ever
+ * sent by authenticated routes or the backfill script, never model input).
+ * `scopedClient(auth)` delegates here so there is exactly one implementation.
+ */
+export async function scopedClientForTenant(tenantId: string) {
   const raw = await createServiceClient();
 
   function from(table: string) {
@@ -98,21 +106,21 @@ export async function scopedClient(auth: AuthContext) {
       select(columns: string = "*", options?: SelectOptions) {
         const base = raw.from(table);
         const q = options ? base.select(columns, options) : base.select(columns);
-        return q.eq("tenant_id", auth.tenantId);
+        return q.eq("tenant_id", tenantId);
       },
       update(values: Record<string, unknown>) {
         // Strip caller-supplied tenant_id so a malicious or buggy
         // caller cannot SET tenant_id to another tenant.
         const safe = stripTenantId(values);
-        return raw.from(table).update(safe).eq("tenant_id", auth.tenantId);
+        return raw.from(table).update(safe).eq("tenant_id", tenantId);
       },
       delete() {
-        return raw.from(table).delete().eq("tenant_id", auth.tenantId);
+        return raw.from(table).delete().eq("tenant_id", tenantId);
       },
       insert(rows: Record<string, unknown> | Record<string, unknown>[]) {
         const withTenant = Array.isArray(rows)
-          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: auth.tenantId }))
-          : { ...stripTenantId(rows), tenant_id: auth.tenantId };
+          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: tenantId }))
+          : { ...stripTenantId(rows), tenant_id: tenantId };
         return raw.from(table).insert(withTenant);
       },
       // Same tenant_id injection/stripping as insert(), but ON CONFLICT-aware —
@@ -124,8 +132,8 @@ export async function scopedClient(auth: AuthContext) {
         options: { onConflict: string; ignoreDuplicates?: boolean }
       ) {
         const withTenant = Array.isArray(rows)
-          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: auth.tenantId }))
-          : { ...stripTenantId(rows), tenant_id: auth.tenantId };
+          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: tenantId }))
+          : { ...stripTenantId(rows), tenant_id: tenantId };
         return raw.from(table).upsert(withTenant, options);
       },
     };
@@ -149,6 +157,10 @@ export async function scopedClient(auth: AuthContext) {
       return raw;
     },
   };
+}
+
+export async function scopedClient(auth: AuthContext) {
+  return scopedClientForTenant(auth.tenantId);
 }
 
 export type ScopedClient = Awaited<ReturnType<typeof scopedClient>>;

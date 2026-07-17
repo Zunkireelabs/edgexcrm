@@ -13,6 +13,8 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { getStorageProvider } from "@/lib/storage/provider";
+import { isIngestionEnabled } from "@/lib/ai/flag";
+import { inngest } from "@/lib/ai/ingestion/inngest";
 
 const isHttpUrl = (): ((v: unknown) => string | null) => (v) => {
   if (!v || typeof v !== "string") return null;
@@ -78,6 +80,14 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  const ingestionEnabled = isIngestionEnabled();
+  const contentChanged =
+    (itemType === "note" && body.content !== undefined) || (itemType === "link" && body.url !== undefined);
+  if (ingestionEnabled && contentChanged) {
+    updatePayload.status = "pending";
+    updatePayload.processing_error = null;
+  }
+
   updatePayload.updated_at = new Date().toISOString();
 
   const { data: updated, error } = await db
@@ -90,6 +100,12 @@ export async function PATCH(
   if (error) {
     log.error({ error }, "Failed to update knowledge base item");
     return apiError("DB_ERROR", "Failed to update item", 500);
+  }
+
+  if (ingestionEnabled && contentChanged) {
+    inngest
+      .send({ name: "kb/item.ingest.requested", data: { tenantId: auth.tenantId, itemId } })
+      .catch((err) => log.error({ err, itemId }, "Failed to send kb-ingest event (recoverable via backfill)"));
   }
 
   const updatedRow = updated as unknown as Record<string, unknown>;
