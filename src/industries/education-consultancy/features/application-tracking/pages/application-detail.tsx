@@ -627,11 +627,11 @@ export function ApplicationDetailPage({
 
               {/* Country */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Country</Label>
+                <Label className="text-xs text-muted-foreground">Destination</Label>
                 {editing ? (
                   <Select value={country} onValueChange={setCountry}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select country" />
+                      <SelectValue placeholder="Select destination" />
                     </SelectTrigger>
                     <SelectContent>
                       {countries.map((c) => (

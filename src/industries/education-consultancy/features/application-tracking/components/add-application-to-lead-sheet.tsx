@@ -189,10 +189,10 @@ export function AddApplicationToLeadSheet({
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Country</Label>
+            <Label className="text-xs text-gray-600">Destination</Label>
             <Select value={country} onValueChange={setCountry}>
               <SelectTrigger>
-                <SelectValue placeholder="Select country" />
+                <SelectValue placeholder="Select destination" />
               </SelectTrigger>
               <SelectContent>
                 {countries.map((c) => (

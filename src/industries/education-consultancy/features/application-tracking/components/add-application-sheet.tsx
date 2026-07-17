@@ -324,10 +324,10 @@ export function AddApplicationSheet({
             <h3 className="text-sm font-medium text-gray-900">Application Details</h3>
 
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Country</Label>
+              <Label className="text-xs text-gray-600">Destination</Label>
               <Select value={country} onValueChange={setCountry}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select country" />
+                  <SelectValue placeholder="Select destination" />
                 </SelectTrigger>
                 <SelectContent>
                   {countries.map((c) => (
