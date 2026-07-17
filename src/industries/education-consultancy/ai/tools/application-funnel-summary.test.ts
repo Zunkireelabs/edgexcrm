@@ -73,13 +73,13 @@ const APPLICATIONS = [
 describe("application_funnel_summary aggregation", () => {
   it("says application tracking isn't set up when there are zero stages", async () => {
     const db = fakeDb({ application_stages: [], applications: APPLICATIONS });
-    const result = await applicationFunnelSummaryTool.execute(fixtureCtx(db));
+    const result = await applicationFunnelSummaryTool.execute(fixtureCtx(db), {});
     expect(result).toEqual({ note: "Application tracking is not set up yet — no application stages are configured for this tenant." });
   });
 
   it("computes counts per stage, per status, and deadlines within 14 days", async () => {
     const db = fakeDb({ application_stages: STAGES, applications: APPLICATIONS });
-    const result = (await applicationFunnelSummaryTool.execute(fixtureCtx(db))) as {
+    const result = (await applicationFunnelSummaryTool.execute(fixtureCtx(db), {})) as {
       byStage: Array<{ slug: string; count: number }>;
       byStatus: Array<{ status: string; count: number }>;
       deadlinesNext14Days: { count: number; soonest: Array<{ universityName: string }> };
@@ -104,6 +104,7 @@ describe("application_funnel_summary aggregation", () => {
     const db = fakeDb({ application_stages: STAGES, applications: APPLICATIONS, leads: [] });
     const result = (await applicationFunnelSummaryTool.execute(
       fixtureCtx(db, fixtureAuth({ role: "counselor", permissions: COUNSELOR_PERMISSIONS })),
+      {},
     )) as { byStage: Array<{ count: number }>; byStatus: unknown[]; deadlinesNext14Days: { count: number } };
     expect(result.byStage.every((s) => s.count === 0)).toBe(true);
     expect(result.byStatus).toEqual([]);

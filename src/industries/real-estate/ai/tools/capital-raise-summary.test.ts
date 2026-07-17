@@ -72,7 +72,7 @@ const COMMITMENTS = [
 describe("capital_raise_summary aggregation", () => {
   it("computes per-offering funded/committed/equityRaised/investor-count and tenant totals", async () => {
     const db = fakeDb({ offerings: OFFERINGS, investor_commitments: COMMITMENTS });
-    const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db))) as {
+    const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db), {})) as {
       offerings: Array<{ id: string; funded: number; committedNotYetFunded: number; equityRaised: number; investorCount: number }>;
       totals: { funded: number; committedNotYetFunded: number; equityRaised: number; investorCount: number };
     };
@@ -96,7 +96,7 @@ describe("capital_raise_summary aggregation", () => {
 
   it("ranks offerings by equityRaised (funded+committed) descending", async () => {
     const db = fakeDb({ offerings: OFFERINGS, investor_commitments: COMMITMENTS });
-    const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db))) as {
+    const result = (await capitalRaiseSummaryTool.execute(fixtureCtx(db), {})) as {
       offerings: Array<{ id: string }>;
     };
     expect(result.offerings.map((o) => o.id)).toEqual(["off-a", "off-b"]);
@@ -104,7 +104,7 @@ describe("capital_raise_summary aggregation", () => {
 
   it("returns an empty summary when the tenant has no offerings", async () => {
     const db = fakeDb({ offerings: [], investor_commitments: [] });
-    const result = await capitalRaiseSummaryTool.execute(fixtureCtx(db));
+    const result = await capitalRaiseSummaryTool.execute(fixtureCtx(db), {});
     expect(result).toEqual({
       offerings: [],
       totals: { funded: 0, committedNotYetFunded: 0, equityRaised: 0, targetRaise: 0, investorCount: 0 },

@@ -43,7 +43,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     positionSlug: null,
     branchId: null,
     branchMemberIds: [],
-    permissions: { baseTier: "counselor" } as AuthContext["permissions"],
+    permissions: { baseTier: "counselor" } as unknown as AuthContext["permissions"],
     plan: "free",
     entitlements: {} as AuthContext["entitlements"],
     ...overrides,

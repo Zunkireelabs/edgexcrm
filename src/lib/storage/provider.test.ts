@@ -63,7 +63,7 @@ describe("SupabaseStorageProvider", () => {
     const url = await provider.getSignedDownloadUrl("knowledge-base-files", "tenant/kb/item.pdf", 60);
 
     expect(url).toBe("https://storage.example/signed-download");
-    const [, seconds] = createSignedUrl.mock.calls[0];
+    const [, seconds] = createSignedUrl.mock.calls[0] as unknown as [string, number];
     expect(seconds).toBeGreaterThan(60);
   });
 
