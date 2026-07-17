@@ -16,9 +16,9 @@ Audited 2026-07-13: one connected account existed at all (`shrestha.sadin007@gma
 
 ## Track A — Code (this repo)
 
-**Branch:** `feature/connected-inboxes-hardening` (off `origin/stage`)
+**Branch:** `feature/connected-inboxes-hardening` — **MERGED to `stage` 2026-07-17** (PR #198, reviewed + approved by `ani-shh`, deployed green to `dev-lead-crm`).
 
-### Shipped on the branch (12 commits, build + lint clean)
+### Shipped (13 commits, build + lint clean)
 - [x] Encrypt connected Gmail tokens at rest (AES-256-GCM, reusing the existing Unified Inbox key pattern)
 - [x] "Needs reconnect" health badge — surfaces a broken inbox in the UI instead of failing silently forever
 - [x] Revoke the Google OAuth grant on Disconnect (previously only deleted the local row)
@@ -26,13 +26,16 @@ Audited 2026-07-13: one connected account existed at all (`shrestha.sadin007@gma
 - [x] Removed dead legacy Gmail-connect route (unused, weaker security than the live path)
 - [x] Added a version-controlled prod polling GitHub Actions workflow (`email-poll-prod.yml`), replacing an untracked hand-rolled VPS cron script
 - [x] Code-review pass (xhigh effort, 14 confirmed findings) — fixed all of them: guarded every encrypt/decrypt call so failures are recorded (not silently dropped or swallowed), fixed the Reconnect button to target the specific broken account via `login_hint`, added a fetch timeout to the Google revoke call, corrected the prod cron's cadence assumption to GitHub Actions' real ~5-minute floor + added a concurrency guard, switched the health-badge query to a single embedded select, and surfaced the real sync error + last-synced time in the UI
+- [x] Rebased onto latest `origin/stage`, CI green, lead-reviewed, merged
+
+### Also shipped — Google-verification-readiness (separate PR, same feature area)
+- [x] **PR #222** (`feature/google-oauth-verification-readiness`) — merged 2026-07-17, deployed green. Narrowed the requested Gmail scope from `mail.google.com` (restricted tier) to `gmail.readonly` + `gmail.send` (sensitive tier — see Track B decision below); added the public `/privacy` policy page.
+- [x] **PR #224** (`fix/privacy-page-public-access`) — follow-up fix, open. `/privacy` was unreachable without login (auth middleware's public-route allowlist didn't include it — found via curl smoke on deployed stage, returned 307 not 200). One-line fix to `src/lib/supabase/middleware.ts`.
 
 ### Still to do (code)
-- [ ] Rebase onto latest `origin/stage` (it has moved since branching)
-- [ ] Push branch, open PR into `stage`
-- [ ] Get CI green + 1 lead approval (Sadin/Anish), squash-merge
-- [ ] Smoke-test on the deployed staging site (`dev-lead-crm...`) — not just local
-- [ ] Promote to `main`/production (separate gated PR; code-only, no DB migration on this branch)
+- [ ] Merge PR #224 (the `/privacy` reachability fix) once reviewed
+- [ ] Smoke-test the real logged-in OAuth connect/reconnect/disconnect flow on `dev-lead-crm` (not just the curl-level reachability checks done so far)
+- [ ] Promote to `main`/production (separate gated PR; code-only, no DB migration on any of these branches)
 
 ### Infra checks before/at go-live (someone with VPS + GitHub-secrets access)
 - [ ] Confirm `INBOX_TOKEN_ENC_KEY` is actually set on stage **and** prod — commit 1 fails closed without it (clean error, not silent corruption, but connect/send/poll all stop working until it's set)
@@ -45,13 +48,16 @@ Audited 2026-07-13: one connected account existed at all (`shrestha.sadin007@gma
 
 **Current state:** app (`edgeX CRM`, Google Cloud project `Orca Auth`) flipped from Testing → **In production** (2026-07-13). This already removed the 7-day forced-reconnect and the manual test-user-allowlist requirement. **Not removed yet:** the ~100-user lifetime cap, and the "Google hasn't verified this app" warning every connecting user sees.
 
-- [ ] **Decision needed:** keep the broad `https://mail.google.com/` scope (reply-sync stays, but needs Google's restricted-scope verification + likely a paid third-party security assessment — real weeks + cost) vs. narrow to send-only (faster/cheaper verification, but loses the reply-sync feature that's the actual value prop) — **recommendation: keep replies, pay for the assessment**
-- [ ] Draft + host a privacy policy page (Claude can draft the text)
-- [ ] Draft the scope justification for Google's review (Claude can draft this)
-- [ ] Decide branding shown on the consent screen (name/logo/support email)
-- [ ] Record the required demo video of the OAuth flow (needs a human — can't be automated)
-- [ ] Submit for verification through Google Cloud Console
-- [ ] Wait for approval — this is the long pole; nothing else can shorten it once submitted
+- [x] **Decision made (2026-07-17): narrow to `gmail.readonly` + `gmail.send` instead of the broad `mail.google.com` scope.** The live code only ever calls `getProfile`/`history.list`/`messages.get`/`messages.send` — nothing needing full-mailbox access — so nothing was actually lost. This scope tier is classified *sensitive*, not *restricted*, which **skips the CASA Tier 2 paid security audit entirely** (~$540–$1,000 + mandatory annual re-assessment, avoided) while keeping reply-sync fully intact. Shipped in PR #222.
+- [x] Privacy policy page drafted + hosted at `https://edgex.zunkireelabs.com/privacy` (PR #222 + reachability fix #224), including the required Google Limited Use compliance disclosure.
+- [x] Scope justification for Google's review — drafted, ready to paste. See `docs/GOOGLE-OAUTH-VERIFICATION-BRIEF.md` §1.
+- [ ] **Sadin: confirm consent-screen branding** (app name/logo/support email/domain) — defaults proposed in `docs/GOOGLE-OAUTH-VERIFICATION-BRIEF.md` §3, quick confirm-or-change.
+- [ ] **Sadin: verify `zunkireelabs.com` domain ownership in Google Search Console** (required before Google accepts it as an authorized domain).
+- [ ] Record the required demo video of the OAuth flow — **needs a human, can't be automated.** Shot-by-shot script ready in `docs/GOOGLE-OAUTH-VERIFICATION-BRIEF.md` §2.
+- [ ] Submit for verification through Google Cloud Console — step-by-step in `docs/GOOGLE-OAUTH-VERIFICATION-BRIEF.md` §4.
+- [ ] Wait for approval — the long pole, but shorter now that CASA isn't in the path (typical turnaround ~1–2 weeks for sensitive-scope-only apps vs. the CASA path's real weeks + recurring cost).
+
+Full detail, exact text to paste, and the submission checklist: **`docs/GOOGLE-OAUTH-VERIFICATION-BRIEF.md`**.
 
 ---
 
