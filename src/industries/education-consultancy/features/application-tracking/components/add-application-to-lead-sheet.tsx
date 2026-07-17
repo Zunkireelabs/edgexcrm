@@ -24,6 +24,7 @@ import {
 import { AutocompleteInput } from "./autocomplete-input";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import type { ApplicationStage } from "@/types/database";
 
 interface AddApplicationToLeadSheetProps {
@@ -50,6 +51,8 @@ export function AddApplicationToLeadSheet({
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [country, setCountry] = useState("");
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState("");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -59,6 +62,7 @@ export function AddApplicationToLeadSheet({
     agents, partnerColleges, countries, intakeMonths, intakeYears,
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -77,6 +81,8 @@ export function AddApplicationToLeadSheet({
       setIntakeMonth("");
       setIntakeYear("");
       setCountry("");
+      setDegreeLevel("");
+      setFieldOfStudy("");
       setDeadline("");
       setAgentId("");
       setAppliedDate("");
@@ -146,6 +152,8 @@ export function AddApplicationToLeadSheet({
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (country && country !== "__none__") body.country = country;
+      if (degreeLevel && degreeLevel !== "__none__") body.degree_level = degreeLevel;
+      if (fieldOfStudy && fieldOfStudy !== "__none__") body.field_of_study = fieldOfStudy;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
       if (appliedDate) body.applied_date = appliedDate;
@@ -181,10 +189,10 @@ export function AddApplicationToLeadSheet({
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Country</Label>
+            <Label className="text-xs text-gray-600">Destination</Label>
             <Select value={country} onValueChange={setCountry}>
               <SelectTrigger>
-                <SelectValue placeholder="Select country" />
+                <SelectValue placeholder="Select destination" />
               </SelectTrigger>
               <SelectContent>
                 {countries.map((c) => (
@@ -208,6 +216,36 @@ export function AddApplicationToLeadSheet({
               createLabel="university"
               skipConfirm
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Interested Degree Level</Label>
+            <Select value={degreeLevel} onValueChange={setDegreeLevel}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select level</SelectItem>
+                {studyLevels.map((lvl) => (
+                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Field of Study</Label>
+            <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select field" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select field</SelectItem>
+                {fieldsOfStudy.map((f) => (
+                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">

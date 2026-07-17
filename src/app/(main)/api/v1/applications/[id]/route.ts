@@ -105,6 +105,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     "agent_id",
     "applied_date",
     "intake_start_date",
+    "degree_level",
+    "field_of_study",
   ];
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
