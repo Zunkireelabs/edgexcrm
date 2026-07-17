@@ -28,3 +28,13 @@ export function buildToolset(auth: AuthContext): AgentTool[] {
 export function __clearRegistryForTests(): void {
   tools.length = 0;
 }
+
+/**
+ * Returns every registered tool, unfiltered by industry or permission.
+ * Used by packs.test.ts to check the registry stays in sync with each
+ * industry manifest's declared `ai.toolIds` — not for building a live
+ * request's toolset (use buildToolset(auth) for that).
+ */
+export function getRegisteredTools(): readonly AgentTool[] {
+  return tools;
+}

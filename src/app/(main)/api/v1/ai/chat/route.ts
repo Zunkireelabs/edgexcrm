@@ -10,6 +10,7 @@ import "@/lib/ai/tools/packs"; // module-load registration — must run before b
 import { buildToolset } from "@/lib/ai/tools/registry";
 import { toAiSdkTools } from "@/lib/ai/tools/adapter";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
+import { getIndustryAiConfig } from "@/industries/_loader";
 import { model } from "@/lib/ai/provider";
 import { startTrace } from "@/lib/ai/telemetry";
 import { createRequestLogger } from "@/lib/logger";
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
     userFirstName,
     role: auth.role,
     today: new Date().toISOString().slice(0, 10),
+    industryContext: getIndustryAiConfig(auth.industryId)?.promptAddendum,
   });
 
   const result = streamText({

@@ -90,11 +90,24 @@ export interface FeatureRegistration<TConfig = unknown> {
 }
 
 /**
- * Slot for industry-specific AI configuration. Empty today; future
- * work adds prompt, tools, knowledge-base references here.
+ * Per-industry AI configuration, declared in the industry's manifest.
+ * MUST stay JSON-serializable (strings/arrays only — manifests may cross
+ * the RSC boundary; same rule as sidebar icon names).
  */
 export interface AiConfig {
-  systemPrompt?: string;
+  /**
+   * Appended verbatim to the END of the universal assistant system prompt.
+   * Domain context + tool-routing hints for this industry. NOT a replacement
+   * prompt — the universal prompt (role awareness, tool rules, injection
+   * rule) always applies.
+   */
+  promptAddendum?: string;
+  /**
+   * Ids of tools gated to this industry — wherever they live: an industry
+   * pack folder (src/industries/<id>/ai/tools/) or an industries-gated tool
+   * in the universal folder (e.g. get_form_submissions_summary). Kept in
+   * sync with the actual registrations by a consistency test.
+   */
   toolIds?: readonly string[];
 }
 

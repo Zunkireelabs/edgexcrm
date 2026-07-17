@@ -4,19 +4,13 @@ export interface AssistantPromptInput {
   userFirstName: string;
   role: string;
   today: string; // ISO date, e.g. "2026-07-16"
+  /**
+   * Per-industry addendum from that industry's manifest AiConfig
+   * (see src/industries/_loader.ts getIndustryAiConfig). Appended
+   * verbatim at the end of the prompt; absent = no industry context.
+   */
+  industryContext?: string;
 }
-
-// Per-industry system prompt addenda. Only real_estate has one so far —
-// education/it_agency get nothing yet (universal behavior unchanged).
-// TODO(Phase 3): move into each industry manifest's AiConfig.
-const INDUSTRY_CONTEXT: Record<string, string> = {
-  real_estate:
-    "This tenant runs a commercial real estate capital raise. Investors (LPs) live on the leads spine — " +
-    "\"leads\" in the CRM data are investors/LPs, not sales prospects in the usual sense. Offerings are the " +
-    "capital-raise vehicles (deals/funds) being raised for; each investor's commitment to an offering moves " +
-    "through the stages prospect -> soft_commit -> subscribed -> funded. Prefer search_offerings, get_offering, " +
-    "capital_raise_summary, and get_investor_commitments for any question about raises, offerings, or commitments.",
-};
 
 /**
  * Pure function — no DB, unit-testable. Builds the system prompt for the
@@ -24,8 +18,7 @@ const INDUSTRY_CONTEXT: Record<string, string> = {
  * assert on it.
  */
 export function buildSystemPrompt(input: AssistantPromptInput): string {
-  const { tenantName, industryId, userFirstName, role, today } = input;
-  const industryContext = industryId ? INDUSTRY_CONTEXT[industryId] : undefined;
+  const { tenantName, industryId, userFirstName, role, today, industryContext } = input;
 
   return `You are the AI assistant built into ${tenantName}'s CRM, an operating system for their business on EdgeX.
 
