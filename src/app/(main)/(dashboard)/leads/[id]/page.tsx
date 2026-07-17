@@ -205,15 +205,31 @@ export default async function LeadDetailPage({
     (tenantData.permissions.baseTier === "admin" ||
       tenantData.permissions.baseTier === "owner" ||
       isBranchManagerViewer);
+  const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
   const stageAssigneeMap: Record<string, { user_id: string; email: string; name?: string | null }[]> = {};
   if (canMoveWithoutChain) {
     const stepperLists = activeLeadLists ?? accessibleLists;
-    const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
     for (const list of stepperLists) {
       const slug = (list as unknown as { slug: string }).slug;
       stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId, isBranchManagerViewer);
     }
   }
+  // Standalone "Assigned To" dropdown (KEY INFORMATION panel, not the stage-move picker):
+  // for admin/branch-manager viewers, scope it to the lead's CURRENT stage's team instead of
+  // the full chain-filtered roster — same stageAssigneeCandidates fallback (branch line-team →
+  // branch-manager(s) → tenant-wide) so it's never empty. null ⇒ key-info-section falls back
+  // to assignableMembers unchanged (chain members, non-education).
+  const currentStageSlug = currentList ? (currentList as unknown as { slug: string }).slug : null;
+  const rawStageScopedAssignees =
+    canMoveWithoutChain && currentStageSlug
+      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId, isBranchManagerViewer)
+      : null;
+  // A staging/off-funnel stage (e.g. migration-qc, new-leads, archived — not in STAGE_TEAM_MAP)
+  // has no mapped team, so the candidates call above would return []. Treat that the same as
+  // "no stage-scoping" and fall back to the chain-filtered assignableMembers rather than
+  // rendering a dead-empty Assigned-To dropdown.
+  const stageScopedAssignees =
+    rawStageScopedAssignees && rawStageScopedAssignees.length > 0 ? rawStageScopedAssignees : null;
 
   // Revert target: who the ListStepper's "Revert" would hand the lead back to.
   // Absence of a prior handoff row means the current holder is the lead's origin
@@ -266,6 +282,7 @@ export default async function LeadDetailPage({
       canAssign={tenantData.permissions.canAssignLeads}
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}
+      stageScopedAssignees={stageScopedAssignees}
       nextPositionMembers={nextPositionMembers}
       revertTargetUserId={revertTargetUserId}
       revertTargetName={revertTargetName}

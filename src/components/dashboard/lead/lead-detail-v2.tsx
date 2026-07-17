@@ -70,6 +70,9 @@ interface LeadDetailV2Props {
   canEditLeads?: boolean;
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
   assignableMembers?: TeamMember[];
+  /** Admin/branch-manager (education): Assigned-To options scoped to the lead's CURRENT stage team.
+   *  Non-null overrides assignableMembers; null falls back to assignableMembers unchanged. */
+  stageScopedAssignees?: { user_id: string; email: string; name?: string | null }[] | null;
   /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
   nextPositionMembers?: TeamMember[];
   /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
@@ -153,6 +156,7 @@ export function LeadDetailV2({
   canAssign = false,
   canEditLeads = false,
   assignableMembers,
+  stageScopedAssignees = null,
   nextPositionMembers,
   revertTargetUserId = null,
   revertTargetName = null,
@@ -801,6 +805,7 @@ export function LeadDetailV2({
             assignedTo={assignedTo}
             teamMembers={teamMembers}
             assignableMembers={assignableMembers}
+            stageScopedAssignees={stageScopedAssignees}
             userId={userId}
             isAdmin={isAdmin}
             isEditor={isEditor}
