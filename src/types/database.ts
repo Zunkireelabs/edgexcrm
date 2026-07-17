@@ -197,6 +197,24 @@ export interface Lead {
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
   pre_app_fee_amount: number | null;
   pre_app_fee_notes: string | null;
+  // Academic qualification + test scores (education_consultancy — migration 159)
+  see_gpa: string | null;
+  see_institution: string | null;
+  see_passed_year: number | null;
+  plus_two_gpa: string | null;
+  plus_two_institution: string | null;
+  plus_two_passed_year: number | null;
+  bachelor_gpa: string | null;
+  bachelor_institution: string | null;
+  bachelor_passed_year: number | null;
+  masters_gpa: string | null;
+  masters_institution: string | null;
+  masters_passed_year: number | null;
+  ielts_score: string | null;
+  pte_score: string | null;
+  toefl_score: string | null;
+  sat_score: string | null;
+  gre_gmat_score: string | null;
   archive_reason: string | null;
   archived_by: string | null;
   archived_at: string | null;
@@ -220,6 +238,8 @@ export interface LeadList {
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
   pipeline_id: string | null;
+  /** Groups this list under a sidebar funnel (it_agency only). Null = ungrouped. */
+  funnel_key: string | null;
   created_at: string;
   updated_at: string;
   count?: number;
@@ -1084,6 +1104,8 @@ export interface Application {
   agent_id: string | null;
   applied_date: string | null;
   intake_start_date: string | null;
+  degree_level: string | null;
+  field_of_study: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

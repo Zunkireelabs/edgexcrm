@@ -38,6 +38,8 @@ export interface LeadColumnCtx {
   onStageChange?: (leadId: string, stageId: string) => Promise<void>;
   viewMode?: "trash" | "archived" | "normal";
   onRestore?: (leadId: string) => Promise<void>;
+  /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open (todo/in_progress) task. */
+  openTaskLeadIds?: Set<string>;
 }
 
 export interface LeadColumn {
@@ -171,10 +173,6 @@ const STATIC_COLUMNS: LeadColumn[] = [
               Preview
             </button>
           </div>
-          {/* Desktop: phone under the name (grey) */}
-          {lead.phone && (
-            <div className="hidden md:block text-xs text-gray-500 mt-0.5">{lead.phone}</div>
-          )}
           {/* Mobile: email + preview icon */}
           <div className="flex items-center gap-2 md:hidden">
             <div className="text-xs text-gray-500">
@@ -776,6 +774,74 @@ const STATIC_COLUMNS: LeadColumn[] = [
             <span>{ownerName || ownerEmail.split("@")[0]}</span>
           ) : (
             <span className="text-gray-400">—</span>
+          )}
+        </td>
+      );
+    },
+  },
+
+  // ── data_completeness (Lead Processing funnel signal — structure only, no automation)
+  {
+    key: "data_completeness",
+    label: "Data Completeness",
+    group: "industry",
+    industries: ["it_agency"],
+    defaultVisible: true,
+    renderTh: () => (
+      <th key="data_completeness" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">
+        Completeness
+      </th>
+    ),
+    renderTd: (lead) => {
+      const fields = [lead.company_name, lead.prospect_industry, lead.designation, lead.company_email];
+      const filled = fields.filter((f) => !!f && String(f).trim() !== "").length;
+      const total = fields.length;
+      const pct = Math.round((filled / total) * 100);
+      return (
+        <td key="data_completeness" className="px-3 py-1.5 hidden md:table-cell">
+          <div className="flex items-center gap-1.5">
+            <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden shrink-0">
+              <div
+                className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-gray-400"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground tabular-nums">{filled}/{total}</span>
+          </div>
+        </td>
+      );
+    },
+  },
+
+  // ── next_task (Sales Leads "no next task" signal — structure only, no automated alerting)
+  {
+    key: "next_task",
+    label: "Next Task",
+    group: "industry",
+    industries: ["it_agency"],
+    defaultVisible: true,
+    renderTh: () => (
+      <th key="next_task" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[100px]">
+        Next Task
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      if (!ctx.openTaskLeadIds) {
+        return <td key="next_task" className="px-3 py-1.5 hidden md:table-cell" />;
+      }
+      const hasOpenTask = ctx.openTaskLeadIds.has(lead.id);
+      return (
+        <td key="next_task" className="px-3 py-1.5 hidden md:table-cell">
+          {hasOpenTask ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              On track
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+              No next task
+            </span>
           )}
         </td>
       );

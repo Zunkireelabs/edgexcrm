@@ -337,6 +337,23 @@ function PossibleDuplicatesCard({ lead, onMerged }: { lead: Lead; onMerged?: () 
       intake_account: null,
       ref_code: null,
       form_source: null,
+      see_gpa: null,
+      see_institution: null,
+      see_passed_year: null,
+      plus_two_gpa: null,
+      plus_two_institution: null,
+      plus_two_passed_year: null,
+      bachelor_gpa: null,
+      bachelor_institution: null,
+      bachelor_passed_year: null,
+      masters_gpa: null,
+      masters_institution: null,
+      masters_passed_year: null,
+      ielts_score: null,
+      pte_score: null,
+      toefl_score: null,
+      sat_score: null,
+      gre_gmat_score: null,
     };
     setMergeTarget(partial);
     setMergeDialogOpen(true);

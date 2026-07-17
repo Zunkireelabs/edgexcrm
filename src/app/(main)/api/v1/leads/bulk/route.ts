@@ -20,6 +20,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -54,6 +55,8 @@ export async function PATCH(request: NextRequest) {
     branch_id?: string | null;
     list_id?: string | null;
     archive_reason?: string;
+    /** it_agency: Fit-Qualified → Sales Leads graduation. Labels the audit/event distinctly. */
+    graduate?: boolean;
   };
   try {
     body = await request.json();
@@ -219,6 +222,26 @@ export async function PATCH(request: NextRequest) {
 
   if (idsToUpdate.length === 0) {
     return apiValidationError({ ids: ["No valid leads found to update"] });
+  }
+
+  // Prospect-qualification gate (bulk backstop): reject the move if any target lead's
+  // academics don't qualify. Returns failing_ids so the caller (funnel-kanban drags one
+  // card at a time) can react — e.g. open the fill-in modal for that lead.
+  if (targetList?.slug === "prospects" && auth.industryId === "education_consultancy") {
+    const { data: academicRows } = await supabase
+      .from("leads")
+      .select("id, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
+      .eq("tenant_id", auth.tenantId)
+      .in("id", idsToUpdate);
+    const failingIds = (academicRows ?? [])
+      .filter((row) => !hasProspectQualification(row as Record<string, unknown>))
+      .map((row) => (row as { id: string }).id);
+    if (failingIds.length > 0) {
+      return apiValidationError({
+        academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+        academic_failed_ids: failingIds,
+      });
+    }
   }
 
   // Build bulk update payload
@@ -410,7 +433,7 @@ export async function PATCH(request: NextRequest) {
           }
           ops.push(emitEvent({
             tenantId: auth.tenantId,
-            type: "lead.list_changed",
+            type: body.graduate ? "lead.graduated" : "lead.list_changed",
             entityType: "lead",
             entityId: id,
             payload: {
@@ -427,7 +450,7 @@ export async function PATCH(request: NextRequest) {
         ops.push(createAuditLog({
           tenantId: auth.tenantId,
           userId: auth.userId,
-          action: "lead.updated",
+          action: body.graduate ? "lead.graduated" : "lead.updated",
           entityType: "lead",
           entityId: id,
           changes,

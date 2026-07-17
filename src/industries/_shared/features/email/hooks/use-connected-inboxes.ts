@@ -8,6 +8,9 @@ export interface ConnectedInbox {
   display_name: string | null;
   provider: string;
   created_at: string;
+  health: "ok" | "error";
+  last_synced_at: string | null;
+  last_error: string | null;
 }
 
 export function useConnectedInboxes() {

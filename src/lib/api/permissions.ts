@@ -173,6 +173,7 @@ export interface LeadQueryScope {
   userBranchId?: string | null; // own-scope user's branch (for cross-branch pool lookup)
   crossBranchPoolListSlug?: string | null; // list slug for unassigned cross-branch pool
   listId?: string | null;          // filter to one list (lead-lists feature)
+  listIds?: string[] | null;        // filter to any of these lists (it_agency funnel-wide view)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
   onlyDeleted?: boolean;            // recycle bin: show soft-deleted leads (deleted_at NOT NULL)
 }

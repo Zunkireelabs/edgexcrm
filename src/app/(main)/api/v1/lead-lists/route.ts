@@ -24,6 +24,16 @@ function slugify(name: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const VALID_FUNNEL_KEYS = new Set(["lead_processing", "sales_leads"]);
+
+function validateFunnelKey(funnelKey: unknown): string | null {
+  if (funnelKey == null) return null;
+  if (typeof funnelKey !== "string" || !VALID_FUNNEL_KEYS.has(funnelKey)) {
+    return 'funnel_key must be "lead_processing", "sales_leads", or null';
+  }
+  return null;
+}
+
 function validateAccess(access: unknown): string | null {
   if (!access || typeof access !== "object" || Array.isArray(access)) {
     return "access must be an object";
@@ -124,6 +134,13 @@ export async function POST(request: NextRequest) {
   const accessErr = validateAccess(accessVal);
   if (accessErr) return apiValidationError({ access: [accessErr] });
 
+  const funnelKeyErr = validateFunnelKey(body.funnel_key);
+  if (funnelKeyErr) return apiValidationError({ funnel_key: [funnelKeyErr] });
+
+  if (body.funnel_key != null && auth.industryId !== "it_agency") {
+    return apiValidationError({ funnel_key: ["funnel_key is not supported for this industry"] });
+  }
+
   const db = await scopedClient(auth);
   const supabase = await createServiceClient();
 
@@ -154,6 +171,7 @@ export async function POST(request: NextRequest) {
       is_system: false,
       is_archive: body.is_archive === true,
       is_intake: false,
+      funnel_key: (body.funnel_key as string | null | undefined) ?? null,
     })
     .select()
     .single();

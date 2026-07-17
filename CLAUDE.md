@@ -235,6 +235,7 @@ When the user gives ANY development request (build, create, implement, fix, upda
 | `/project-pm` | Orchestrator for all dev tasks |
 | `/coo-it-agency` | Operating-strategy brain for `it_agency` tenants — whole-company product direction, end-to-end workflow design/critique, AI-native touchpoint hunting; sits above crm/hr experts and orchestrates them; advises & routes. One COO skill per industry. |
 | `/pm-it-agency` | Delivery-execution brain for `it_agency` tenants — how projects actually get run (methodology, sprint/milestone/task/status/approval mechanics, resourcing, delivery-health metrics, RAID); optimizes the Delivery surface (Projects/Time Tracking/Approvals/Resourcing/Utilization) and proposes delivery features. Functional expert under coo-it-agency; advises & routes. One PM skill per industry. |
+| `/coo-real-estate` | Operating-strategy brain for `real_estate` (CRE sponsor / capital-raise) tenants — whole-firm product direction, end-to-end investor-raise + IR workflow design/critique (source→structure→raise→subscribe→close→distribute→report→re-up), AI-native touchpoint hunting; knows the CRE-capital domain, competitors (SponsorCloud/Juniper Square/InvestNext/Covercy), and reuse spines. Sits above crm/hr experts and orchestrates them; advises & routes. One COO skill per industry. |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
 | `/hr-expert` | HR/HRMS domain — org/positions, onboarding, leave/attendance, payroll, performance, ESS/MSS; plans people features, reuses existing team/positions spine, routes to dev skills |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
@@ -315,7 +316,7 @@ git fetch origin && git rebase origin/stage   # again right before merge
 # main + stage are BRANCH-PROTECTED — no direct pushes. Everything is a PR.
 # (If GitHub says the PR is out-of-date, click "Update branch" — required to merge.)
 
-# Deploy staging: open + squash-merge a PR to stage (CI must be green, 0 approvals)
+# Deploy staging: open + squash-merge a PR to stage (CI must be green + 1 approval — stage is branch-protected)
 gh pr create --base stage --title "..." --body "..."
 gh pr merge <num> --squash --delete-branch
 

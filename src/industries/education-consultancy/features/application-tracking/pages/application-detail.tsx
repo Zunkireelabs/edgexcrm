@@ -47,6 +47,8 @@ import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
 import { ApplicationTabs } from "../components/application-tabs";
 import { AutocompleteInput } from "../components/autocomplete-input";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
@@ -143,6 +145,8 @@ export function ApplicationDetailPage({
   // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
   const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
   const [country, setCountry] = useState("");
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
   const [offerLetterUrl, setOfferLetterUrl] = useState("");
@@ -153,8 +157,13 @@ export function ApplicationDetailPage({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
-    useApplicationReferenceData();
+  const {
+    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    createPartnerCollege, createProgram, fetchDistinctProgramNames,
+  } = useApplicationReferenceData();
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -177,8 +186,8 @@ export function ApplicationDetailPage({
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
   async function handleCreateCollege(name: string) {
-    const ok = await createPartnerCollege(name, country || null);
-    if (ok) setUniversityName(name);
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
   }
 
   // Fetch team member emails for timeline display
@@ -235,6 +244,8 @@ export function ApplicationDetailPage({
     setIntakeTouched(false);
     setIntakeLegacyAmbiguous(raw.trim() !== "" && (matchedMonth == null || rawYear == null));
     setCountry(application.country ?? "");
+    setDegreeLevel(application.degree_level ?? "");
+    setFieldOfStudy(application.field_of_study ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
     setOfferLetterUrl(application.offer_letter_url ?? "");
@@ -276,6 +287,8 @@ export function ApplicationDetailPage({
         program_name: programName.trim(),
         intake_term: intakeTermPatch,
         country: country.trim() || null,
+        degree_level: degreeLevel && degreeLevel !== "__none__" ? degreeLevel : null,
+        field_of_study: fieldOfStudy && fieldOfStudy !== "__none__" ? fieldOfStudy : null,
         application_deadline: deadline || null,
         offer_type: offerType || null,
         offer_letter_url: offerLetterUrl.trim() || null,
@@ -614,11 +627,11 @@ export function ApplicationDetailPage({
 
               {/* Country */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Country</Label>
+                <Label className="text-xs text-muted-foreground">Destination</Label>
                 {editing ? (
                   <Select value={country} onValueChange={setCountry}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select country" />
+                      <SelectValue placeholder="Select destination" />
                     </SelectTrigger>
                     <SelectContent>
                       {countries.map((c) => (
@@ -641,9 +654,51 @@ export function ApplicationDetailPage({
                     suggestions={collegeSuggestions}
                     placeholder="e.g. University of Melbourne"
                     onCreateNew={handleCreateCollege}
+                    createLabel="university"
+                    skipConfirm
                   />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
+                )}
+              </div>
+
+              {/* Interested Degree Level */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Interested Degree Level</Label>
+                {editing ? (
+                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select level</SelectItem>
+                      {studyLevels.map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.degree_level ?? "—"}</p>
+                )}
+              </div>
+
+              {/* Field of Study */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Field of Study</Label>
+                {editing ? (
+                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select field</SelectItem>
+                      {fieldsOfStudy.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.field_of_study ?? "—"}</p>
                 )}
               </div>
 
@@ -900,6 +955,20 @@ export function ApplicationDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countries}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </div>
   );
 }

@@ -51,10 +51,12 @@ export function ListKanbanView({
 }: ListKanbanViewProps) {
   const router = useRouter();
   const [manageOpen, setManageOpen] = useState(false);
+  // it_agency's per-list kanban columns are called "statuses" (the list itself is the "stage").
+  const useStatusLabel = industryId === "it_agency";
 
   return (
     <div className="flex flex-col flex-1 min-h-0">
-      {/* Kanban header: toggle + manage stages */}
+      {/* Kanban header: toggle + manage stages/statuses */}
       <div className="shrink-0 flex items-center gap-2 mb-2">
         <button
           type="button"
@@ -72,7 +74,7 @@ export function ListKanbanView({
             className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
           >
             <Settings2 className="h-3 w-3 shrink-0" />
-            <span>Manage stages</span>
+            <span>{useStatusLabel ? "Manage statuses" : "Manage stages"}</span>
           </button>
         )}
       </div>
@@ -98,6 +100,7 @@ export function ListKanbanView({
           onClose={() => setManageOpen(false)}
           pipeline={pipeline}
           listStageMode
+          statusMode={useStatusLabel}
         />
       )}
     </div>
