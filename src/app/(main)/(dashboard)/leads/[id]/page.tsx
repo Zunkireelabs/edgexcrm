@@ -18,6 +18,7 @@ import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
+import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -180,13 +181,48 @@ export default async function LeadDetailPage({
     ASSIGN_CHAIN_POSITIONS.has(tenantData.positionSlug) &&
     tenantData.permissions.baseTier === "member";
   const nextSlug = isChainMember ? nextPositionSlug(tenantData.positionSlug) : null;
-  const nextPositionMembers = nextSlug
+  let nextPositionMembers = nextSlug
     ? roster.filter(
         (m) =>
           m.position_slug === nextSlug &&
           (tenantData.branchId == null || m.branch_id === tenantData.branchId),
       )
     : [];
+
+  // Admins and branch-managers have no chain position, so the block above leaves them
+  // with an empty roster and ListStepper hides the assignee picker entirely — the lead
+  // moves with the assignee unchanged. Give them a picker too: the destination stage's
+  // line handler (branch-manager excluded, mirroring the chain hand-off), scoped to the
+  // LEAD's branch (an admin has none of their own).
+  const canMoveWithoutChain =
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    !isChainMember &&
+    (tenantData.permissions.baseTier === "admin" || tenantData.permissions.leadScope === "team");
+  if (canMoveWithoutChain) {
+    const sortedAccessibleLists = [...accessibleLists].sort(
+      (a, b) =>
+        (a as unknown as { sort_order: number }).sort_order -
+        (b as unknown as { sort_order: number }).sort_order,
+    );
+    const currentIdx = sortedAccessibleLists.findIndex((l) => l.id === leadListId);
+    const nextList =
+      currentIdx >= 0
+        ? sortedAccessibleLists
+            .slice(currentIdx + 1)
+            .find((l) => !(l as unknown as { is_archive?: boolean }).is_archive)
+        : undefined;
+    if (nextList) {
+      const nextListSlug = (nextList as unknown as { slug: string }).slug;
+      const handlerSlugs = positionsForStage(nextListSlug).filter((s) => s !== "branch-manager");
+      const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
+      nextPositionMembers = roster.filter(
+        (m) =>
+          m.position_slug != null &&
+          handlerSlugs.includes(m.position_slug) &&
+          (leadBranchId == null || m.branch_id === leadBranchId),
+      );
+    }
+  }
 
   // Revert target: who the ListStepper's "Revert" would hand the lead back to.
   // Absence of a prior handoff row means the current holder is the lead's origin
