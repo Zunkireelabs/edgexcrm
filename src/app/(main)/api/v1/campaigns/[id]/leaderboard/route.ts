@@ -5,7 +5,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { refreshEspnResults } from "@/industries/education-consultancy/features/campaigns/lib/results-espn";
-import { scoreSubmissions, pickMatchWinners } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { annotateIntegrity } from "@/industries/education-consultancy/features/campaigns/lib/integrity";
 import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
@@ -106,43 +106,18 @@ export async function GET(
   const leaderboardFields = config.leaderboard_fields ?? DEFAULT_LEADERBOARD_FIELDS;
   const standings = annotateIntegrity(scoreSubmissions(submissions, resultsMap, config, leaderboardFields));
 
-  // Compute per-match auto-winners and merge persisted manual overrides
-  const autoWinners = pickMatchWinners(standings, resultsMap);
+  // Winner is admin-assigned only — no auto-pick. Resolve the manual override
+  // against standings (any leaderboard applicant, not just this match's predictors).
   const resultsWithWinners = espnResults.map((r) => {
-    if (r.status !== "final") return { ...r, winner: null };
+    if (r.status !== "final" || !r.winner_email) return { ...r, winner: null };
 
-    const manualEmail = r.winner_email ?? null;
-    const effectiveEmail = manualEmail ?? autoWinners.get(r.match_id) ?? null;
+    const resolvedEntry = standings.find((e) => e.email === r.winner_email);
+    if (!resolvedEntry) return { ...r, winner: null };
 
-    if (!effectiveEmail) return { ...r, winner: null };
-
-    const resolvedEntry = standings.find((e) => e.email === effectiveEmail);
-    if (resolvedEntry) {
-      return {
-        ...r,
-        winner: {
-          email: effectiveEmail,
-          name: resolvedEntry.name,
-          source: manualEmail ? "manual" : "auto",
-        } as { email: string; name: string; source: "auto" | "manual" },
-      };
-    }
-
-    // Manual email no longer matches any predictor — fall back to auto
-    if (manualEmail) {
-      const autoEmail = autoWinners.get(r.match_id) ?? null;
-      if (autoEmail) {
-        const autoEntry = standings.find((e) => e.email === autoEmail);
-        if (autoEntry) {
-          return {
-            ...r,
-            winner: { email: autoEmail, name: autoEntry.name, source: "auto" as const },
-          };
-        }
-      }
-    }
-
-    return { ...r, winner: null };
+    return {
+      ...r,
+      winner: { email: r.winner_email, name: resolvedEntry.name },
+    };
   });
 
   // Pending matches = those still scheduled
