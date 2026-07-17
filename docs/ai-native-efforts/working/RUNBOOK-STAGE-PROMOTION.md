@@ -17,7 +17,11 @@ Pending migrations for the stage DB (`dymeudcddasqpomfpjvt`), applied automatica
 staging pipeline's `migrate` job in filename order: **156, 157, 158, 159, 160, 161, 162.**
 All additive, each with rollback notes in-file, ledger-tracked (`schema_migrations`).
 
-## Phase 0 — pre-flight (code, executor work — needs a small Sonnet brief or Opus minimal edits)
+## Phase 0 — pre-flight (code, executor work — brief: `BRIEF-STAGE-PREFLIGHT.md`)
+
+> **2026-07-17 update:** origin/stage independently added migrations numbered 156–163, colliding
+> with all seven of ours. Pre-flight therefore also RENUMBERS our migrations to **164–170** (see
+> the brief). Every "156–162" below reads as "164–170" after pre-flight lands.
 
 1. **Heap bump (real risk, found 2026-07-17):** local builds now OOM on default heap and need
    `--max-old-space-size=6144`. Affected build environments:
