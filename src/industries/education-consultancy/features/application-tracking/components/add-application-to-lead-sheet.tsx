@@ -22,7 +22,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
+import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import type { ApplicationStage } from "@/types/database";
 
 interface AddApplicationToLeadSheetProps {
@@ -42,18 +44,25 @@ export function AddApplicationToLeadSheet({
 }: AddApplicationToLeadSheetProps) {
   const [submitting, setSubmitting] = useState(false);
   const [universityName, setUniversityName] = useState("");
+  const [universityId, setUniversityId] = useState<string | null>(null);
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
   const [programName, setProgramName] = useState("");
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [country, setCountry] = useState("");
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState("");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [courses, setCourses] = useState<string[]>([]);
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
-    useApplicationReferenceData(open);
+  const {
+    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
+  } = useApplicationReferenceData(open);
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -65,10 +74,15 @@ export function AddApplicationToLeadSheet({
   useEffect(() => {
     if (!open) {
       setUniversityName("");
+      setUniversityId(null);
+      setAddUniversityDialogOpen(false);
+      setPendingUniversityName("");
       setProgramName("");
       setIntakeMonth("");
       setIntakeYear("");
       setCountry("");
+      setDegreeLevel("");
+      setFieldOfStudy("");
       setDeadline("");
       setAgentId("");
       setAppliedDate("");
@@ -77,24 +91,49 @@ export function AddApplicationToLeadSheet({
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
 
-  // Program suggestions are the one dataset here NOT shared with the other
-  // Add Application screens — this one reads /api/v1/courses (Settings'
-  // Fields of Study), while the standalone board's sheet derives its program
-  // suggestions from real past applications instead. See
-  // use-application-reference-data.ts for the datasets that ARE shared.
+  // Resolve the typed/selected University name to its catalog id — covers both
+  // picking an existing suggestion and a just-created college (handleCreateCollege
+  // also sets this directly). Unresolved (legacy free-typed name not in the
+  // catalog) stays null — Program then falls back to free text, no catalog filter.
   useEffect(() => {
-    if (!open) return;
-    fetch("/api/v1/courses")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => {
-        if (j?.data) setCourses((j.data as { name: string }[]).map((c) => c.name));
-      })
-      .catch(() => {});
-  }, [open]);
+    const trimmed = universityName.trim().toLowerCase();
+    if (!trimmed) { setUniversityId(null); return; }
+    const match = partnerColleges.find((c) => c.name.toLowerCase() === trimmed);
+    setUniversityId(match?.id ?? null);
+  }, [universityName, partnerColleges]);
+
+  useEffect(() => {
+    if (universityId) fetchPrograms(universityId);
+    // fetchPrograms reads a module-level cache; omitting it (a new closure each
+    // render) avoids refiring this effect every render — depending on universityId
+    // alone is enough since a cache hit inside fetchPrograms makes repeats cheap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [universityId]);
+
+  // Empty until a university is chosen; catalog-filtered once the name resolves to
+  // an id. No applications-history dataset exists on this sheet, so an unresolved
+  // (legacy free-typed) university falls back to free text — never blocks entry.
+  const catalogProgramSuggestions = universityId
+    ? (programsByUniversity[universityId] ?? []).map((p) => p.name)
+    : [];
+  const effectiveProgramSuggestions = !universityName.trim()
+    ? []
+    : (universityId ? catalogProgramSuggestions : []);
 
   async function handleCreateCollege(name: string) {
-    const ok = await createPartnerCollege(name, country || null);
-    if (ok) setUniversityName(name);
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
+  }
+
+  async function handleCreateProgram(name: string) {
+    if (!universityId) {
+      // Legacy/free-typed university not in the catalog — accept the free-text
+      // program as-is rather than blocking.
+      setProgramName(name);
+      return;
+    }
+    const created = await createProgram(universityId, name);
+    if (created) setProgramName(created.name);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -113,6 +152,8 @@ export function AddApplicationToLeadSheet({
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (country && country !== "__none__") body.country = country;
+      if (degreeLevel && degreeLevel !== "__none__") body.degree_level = degreeLevel;
+      if (fieldOfStudy && fieldOfStudy !== "__none__") body.field_of_study = fieldOfStudy;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
       if (appliedDate) body.applied_date = appliedDate;
@@ -148,10 +189,10 @@ export function AddApplicationToLeadSheet({
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Country</Label>
+            <Label className="text-xs text-gray-600">Destination</Label>
             <Select value={country} onValueChange={setCountry}>
               <SelectTrigger>
-                <SelectValue placeholder="Select country" />
+                <SelectValue placeholder="Select destination" />
               </SelectTrigger>
               <SelectContent>
                 {countries.map((c) => (
@@ -172,7 +213,39 @@ export function AddApplicationToLeadSheet({
               suggestions={collegeSuggestions}
               placeholder="e.g. University of Melbourne"
               onCreateNew={handleCreateCollege}
+              createLabel="university"
+              skipConfirm
             />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Interested Degree Level</Label>
+            <Select value={degreeLevel} onValueChange={setDegreeLevel}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select level" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select level</SelectItem>
+                {studyLevels.map((lvl) => (
+                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Field of Study</Label>
+            <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select field" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">Select field</SelectItem>
+                {fieldsOfStudy.map((f) => (
+                  <SelectItem key={f} value={f}>{f}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-1.5">
@@ -183,8 +256,10 @@ export function AddApplicationToLeadSheet({
               id="app-program"
               value={programName}
               onChange={setProgramName}
-              suggestions={courses}
-              placeholder="e.g. Master of Computer Science"
+              suggestions={effectiveProgramSuggestions}
+              placeholder={!universityName.trim() ? "Select a university first" : "e.g. Master of Computer Science"}
+              onCreateNew={handleCreateProgram}
+              createLabel="program"
             />
           </div>
 
@@ -296,6 +371,21 @@ export function AddApplicationToLeadSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countries}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          setUniversityId(university.id);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </Sheet>
   );
 }

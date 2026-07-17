@@ -17,7 +17,7 @@ function signState(userId: string): string {
   return `${userId}.${sig}`;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.EMAIL)) return apiForbidden();
@@ -33,11 +33,35 @@ export async function POST() {
     client_id: clientId,
     redirect_uri: getRedirectUri(),
     response_type: "code",
-    scope: "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email",
+    // Sensitive-tier scopes (not the restricted `mail.google.com` full-mailbox
+    // scope) — readonly covers history/message reads for reply-sync, send
+    // covers outbound. Keeps CASA Tier 2 security assessment out of the
+    // verification path entirely; only standard OAuth review is needed.
+    scope:
+      "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
     access_type: "offline",
     prompt: "consent",
     state,
   });
+
+  // Reconnecting a specific broken inbox: bias Google's account chooser
+  // toward that address so the user doesn't accidentally authorize a
+  // different Google account and end up with a brand-new inbox row while
+  // the one they meant to fix stays broken. A hint only, not enforced —
+  // Google still lets the user pick a different account if they want to.
+  let body: unknown = null;
+  try {
+    body = await request.json();
+  } catch {
+    // No body (or invalid JSON) is fine — this is a plain "connect a new inbox".
+  }
+  const loginHint =
+    body && typeof body === "object" && "login_hint" in body && typeof (body as { login_hint: unknown }).login_hint === "string"
+      ? (body as { login_hint: string }).login_hint
+      : null;
+  if (loginHint) {
+    params.set("login_hint", loginHint);
+  }
 
   return apiSuccess({ url: `${GOOGLE_AUTH_URL}?${params.toString()}` });
 }

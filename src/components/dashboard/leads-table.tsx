@@ -121,6 +121,9 @@ interface LeadsTableProps {
   memberBranchMap?: Record<string, string>;
   /** Slug of the currently active list; enables the Kanban toggle. */
   activeListSlug?: string | null;
+  /** Id of the currently active list, when it's a visible stage (not staging/archive) —
+   *  pre-selects Add-Lead's Stage dropdown so the new lead lands where the creator is looking. */
+  defaultListId?: string;
   /** it_agency funnel key when viewing a whole funnel (no single list active). */
   activeFunnelKey?: string | null;
   /** When true the active list (or funnel) has a pipeline/stages and can show kanban. */
@@ -186,6 +189,7 @@ export function LeadsTable({
   assignableMembers,
   memberBranchMap = {},
   activeListSlug = null,
+  defaultListId,
   activeFunnelKey = null,
   hasListPipeline = false,
   isTeamScoped = false,
@@ -2090,6 +2094,7 @@ export function LeadsTable({
           selectedBranchId={selectedBranchId}
           userBranchId={userBranchId}
           currentUserPositionSlug={currentUserPositionSlug}
+          defaultListId={defaultListId}
         />
       )}
 

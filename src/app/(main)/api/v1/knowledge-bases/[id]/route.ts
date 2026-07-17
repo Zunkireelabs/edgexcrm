@@ -12,6 +12,7 @@ import { validate, maxLength, optionalMaxLength } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { getStorageProvider } from "@/lib/storage/provider";
 
 export async function GET(
   _request: NextRequest,
@@ -169,12 +170,9 @@ export async function DELETE(
     .filter((p): p is string => Boolean(p));
 
   if (paths.length > 0) {
-    db.raw()
-      .storage.from("knowledge-base-files")
-      .remove(paths)
-      .then(({ error: storageErr }) => {
-        if (storageErr) log.error({ error: storageErr }, "Storage cleanup failed (non-fatal)");
-      });
+    getStorageProvider()
+      .remove("knowledge-base-files", paths)
+      .catch((storageErr) => log.error({ error: storageErr }, "Storage cleanup failed (non-fatal)"));
   }
 
   const { error } = await db.from("knowledge_bases").delete().eq("id", id);

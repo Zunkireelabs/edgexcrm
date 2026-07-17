@@ -35,7 +35,6 @@ import {
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import {
-  DEGREE_LEVELS,
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -77,6 +76,9 @@ interface AddLeadSheetProps {
   userBranchId?: string | null;
   /** Current user's position slug — gates the education stage→team assignment cascade. */
   currentUserPositionSlug?: string | null;
+  /** Id of the current stage view (when it's a visible, non-staging/archive list) —
+   *  pre-selects the Stage dropdown so the new lead lands where the creator is looking. */
+  defaultListId?: string;
 }
 
 interface FormData {
@@ -219,9 +221,10 @@ export function AddLeadSheet({
   selectedBranchId = null,
   userBranchId = null,
   currentUserPositionSlug = null,
+  defaultListId,
 }: AddLeadSheetProps) {
   const router = useRouter();
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -242,9 +245,17 @@ export function AddLeadSheet({
 
   useEffect(() => {
     if (open) {
+      // Only pre-select a Stage the dropdown will actually offer (mirrors its own
+      // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
+      // that's since disappeared from leadLists, must fall back to blank, not a dead value.
+      const validDefaultListId =
+        defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
+          ? defaultListId
+          : "";
       setFormData({
         ...initialFormData,
         stageId: defaultStage?.id || "",
+        listId: validDefaultListId,
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
         // Always seed from creator's own branch first; fall back to active branch switcher
@@ -259,7 +270,7 @@ export function AddLeadSheet({
       setAcademics({});
       setTestScores({});
     }
-  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId]);
+  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId, defaultListId, leadLists]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -1098,7 +1109,7 @@ export function AddLeadSheet({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
               <Select
                 value={formData.degreeLevel || "__none__"}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
@@ -1109,8 +1120,8 @@ export function AddLeadSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Select level</SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

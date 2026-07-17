@@ -12,6 +12,7 @@ import { validate, required, isIn, isPositiveInt } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { KB_MAX_FILE_BYTES, KB_ACCEPTED_TYPES } from "@/lib/knowledge-base/constants";
+import { getStorageProvider } from "@/lib/storage/provider";
 
 export async function POST(
   request: NextRequest,
@@ -59,20 +60,18 @@ export async function POST(
   const ext = fileName.includes(".") ? fileName.split(".").pop() || "bin" : "bin";
   const path = `${auth.tenantId}/${id}/${itemId}.${ext}`;
 
-  const { data: signedData, error: storageError } = await db
-    .raw()
-    .storage.from("knowledge-base-files")
-    .createSignedUploadUrl(path);
-
-  if (storageError || !signedData) {
+  let signed: { url: string; token?: string };
+  try {
+    signed = await getStorageProvider().createSignedUploadUrl("knowledge-base-files", path);
+  } catch (storageError) {
     log.error({ error: storageError }, "Failed to create signed upload URL");
     return apiError("STORAGE_ERROR", "Failed to create upload URL", 500);
   }
 
   log.info({ kbId: id, itemId, path }, "Signed upload URL created");
   return apiSuccess({
-    signed_url: signedData.signedUrl,
-    token: signedData.token,
+    signed_url: signed.url,
+    token: signed.token,
     path,
     item_id: itemId,
   });

@@ -325,6 +325,7 @@ export default async function LeadsPage({
         canEditLeads={tenantData.permissions.canEditLeads}
         assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
+        defaultListId={activeList && !activeList.is_staging && !activeList.is_archive ? activeList.id : undefined}
         activeListSlug={activeList?.slug ?? null}
         activeFunnelKey={activeFunnelLists.length > 0 ? funnelParam ?? null : null}
         hasListPipeline={hasListPipeline}

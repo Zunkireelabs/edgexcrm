@@ -28,7 +28,6 @@ import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 import { ContactCard } from "./contact-card";
@@ -41,6 +40,9 @@ import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
+import { InvestorProfileCard } from "@/industries/real-estate/features/investors/components/investor-profile-card";
+import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
+import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
@@ -71,6 +73,9 @@ interface LeadDetailV2Props {
   canEditLeads?: boolean;
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
   assignableMembers?: TeamMember[];
+  /** Admin/branch-manager (education): Assigned-To options scoped to the lead's CURRENT stage team.
+   *  Non-null overrides assignableMembers; null falls back to assignableMembers unchanged. */
+  stageScopedAssignees?: { user_id: string; email: string; name?: string | null }[] | null;
   /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
   nextPositionMembers?: TeamMember[];
   /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
@@ -78,6 +83,10 @@ interface LeadDetailV2Props {
   revertTargetName?: string | null;
   /** Revert assignee options: the previous holder's same-position peers in their branch. */
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   canManageApplications?: boolean;
   /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
   canManageApplicationPanel?: boolean;
@@ -150,10 +159,13 @@ export function LeadDetailV2({
   canAssign = false,
   canEditLeads = false,
   assignableMembers,
+  stageScopedAssignees = null,
   nextPositionMembers,
   revertTargetUserId = null,
   revertTargetName = null,
   revertTargetMembers = [],
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
   canManageApplications,
   canManageApplicationPanel,
   canEnroll,
@@ -169,7 +181,7 @@ export function LeadDetailV2({
   const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -204,6 +216,10 @@ export function LeadDetailV2({
   const [leaving, setLeaving] = useState(false);
 
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate: the lead IS an investor (rides the leads spine). Adds investor
+  // profile + commitments blocks in the right sidebar. Additive — other industries
+  // unaffected.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   const isAdmin = role === "owner" || role === "admin";
   // Position-derived edit capability: admins always, plus members whose position grants
@@ -693,6 +709,11 @@ export function LeadDetailV2({
                   {currentLead.display_id}
                 </span>
               )}
+              {isRealEstate && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-violet-100 text-violet-800 font-medium">
+                  Investor
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
@@ -796,6 +817,7 @@ export function LeadDetailV2({
             assignedTo={assignedTo}
             teamMembers={teamMembers}
             assignableMembers={assignableMembers}
+            stageScopedAssignees={stageScopedAssignees}
             userId={userId}
             isAdmin={isAdmin}
             isEditor={isEditor}
@@ -832,6 +854,8 @@ export function LeadDetailV2({
             revertTargetUserId={revertTargetUserId}
             revertTargetName={revertTargetName}
             revertTargetMembers={revertTargetMembers}
+            canMoveWithoutChain={canMoveWithoutChain}
+            stageAssigneeMap={stageAssigneeMap}
             onListChange={async (listId, archiveReason, assignToUserId) => {
               const targetList = leadLists?.find((l) => l.id === listId);
               if (
@@ -971,6 +995,43 @@ export function LeadDetailV2({
                 />
               )}
             </div>
+          ) : isRealEstate ? (
+            <div className="space-y-4">
+              <InvestorProfileCard
+                leadId={currentLead.id}
+                customFields={customFields}
+                canEdit={canEdit}
+              />
+              <CommitmentsPanel leadId={currentLead.id} canManage={isAdmin} />
+              <InvestorCommsCard leadId={currentLead.id} canManage={isAdmin} />
+              {/* Subscription Agreement — reuses the consent e-sign spine with
+                  real_estate labels + no education processing-fee section. */}
+              <ConsentCard
+                leadId={currentLead.id}
+                tenantId={tenant.id}
+                consentEnabled={true}
+                consentSigned={false}
+                canManage={isAdmin}
+                showProcessingFee={false}
+                labels={{
+                  sectionTitle: "Subscription Agreement",
+                  docLabel: "Subscription Agreement",
+                  requiredTitle: "Subscription Agreement required",
+                  requiredHelp:
+                    "This investor must sign the Subscription Agreement before their commitment can be marked Subscribed.",
+                  awaitingHelp: "Subscription Agreement sent · awaiting investor signature",
+                  signedTitle: "Subscription Agreement signed",
+                }}
+              />
+              <ManagementPanel
+                ref={checklistRef}
+                lead={currentLead}
+                checklists={checklists}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onChecklistsChange={handleChecklistsChange}
+              />
+            </div>
           ) : (
             <ManagementPanel
               ref={checklistRef}
@@ -1067,8 +1128,8 @@ export function LeadDetailV2({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
