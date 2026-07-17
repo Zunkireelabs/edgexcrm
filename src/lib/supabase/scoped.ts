@@ -159,7 +159,7 @@ export async function scopedClientForTenant(tenantId: string) {
     fromGlobal,
     /**
      * Calls a Postgres function that declares a `p_tenant_id` parameter and
-     * enforces it internally (e.g. `knowledge_hybrid_search`, migration 162).
+     * enforces it internally (e.g. `knowledge_hybrid_search`, migration 170).
      * `p_tenant_id` in `args` is force-overwritten with the CURRENT caller's
      * tenant — same spirit as insert()'s tenant injection — so a caller can
      * never pass a foreign tenant id through. Only for functions built to

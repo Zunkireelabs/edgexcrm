@@ -1,7 +1,7 @@
 // Hybrid retrieval (docs/ai-native-efforts/working/BRIEF-PHASE-2C-RETRIEVAL.md).
 //
 // RRF fusion of a vector-similarity arm and a keyword (full-text) arm stays
-// entirely in SQL (knowledge_hybrid_search, migration 162) — this module's
+// entirely in SQL (knowledge_hybrid_search, migration 170) — this module's
 // job is: embed the query, call the RPC, and join the raw chunk rows back to
 // their parent knowledge_base_items for citation display data.
 //

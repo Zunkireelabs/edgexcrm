@@ -3,7 +3,7 @@
 // Vendor call is isolated in this one module — swapping to Voyage (or any
 // other embeddings provider) means changing only what's below this line.
 // `EMBEDDING_MODEL`/`EMBEDDING_DIM` also get stamped onto every
-// `knowledge_chunks` row (migration 161) so a future re-embed is a clean
+// `knowledge_chunks` row (migration 169) so a future re-embed is a clean
 // "rows with a different embedding_model" query, not a guess.
 
 export const EMBEDDING_MODEL = "text-embedding-3-large";
