@@ -33,7 +33,12 @@ export async function POST(request: Request) {
     client_id: clientId,
     redirect_uri: getRedirectUri(),
     response_type: "code",
-    scope: "https://mail.google.com/ https://www.googleapis.com/auth/userinfo.email",
+    // Sensitive-tier scopes (not the restricted `mail.google.com` full-mailbox
+    // scope) — readonly covers history/message reads for reply-sync, send
+    // covers outbound. Keeps CASA Tier 2 security assessment out of the
+    // verification path entirely; only standard OAuth review is needed.
+    scope:
+      "https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email",
     access_type: "offline",
     prompt: "consent",
     state,
