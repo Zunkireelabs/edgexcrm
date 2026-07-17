@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
+import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import type { ApplicationStage } from "@/types/database";
 
@@ -67,9 +68,11 @@ export function AddApplicationSheet({
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
   const [universityId, setUniversityId] = useState<string | null>(null);
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
   const {
     agents, partnerColleges, countries, intakeMonths, intakeYears,
-    createPartnerCollege, programsByUniversity, fetchPrograms, createProgram,
+    createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
@@ -115,6 +118,8 @@ export function AddApplicationSheet({
       setSelectedLead(null);
       setUniversityName("");
       setUniversityId(null);
+      setAddUniversityDialogOpen(false);
+      setPendingUniversityName("");
       setProgramName("");
       setIntakeMonth("");
       setIntakeYear("");
@@ -176,11 +181,8 @@ export function AddApplicationSheet({
   if (!canManageApplications) return null;
 
   async function handleCreateCollege(name: string) {
-    const created = await createPartnerCollege(name, country || null);
-    if (created) {
-      setUniversityName(name);
-      setUniversityId(created.id);
-    }
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
   }
 
   async function handleCreateProgram(name: string) {
@@ -340,6 +342,7 @@ export function AddApplicationSheet({
                   placeholder="e.g. Univ. of Melbourne"
                   onCreateNew={handleCreateCollege}
                   createLabel="university"
+                  skipConfirm
                 />
               </div>
               <div className="space-y-1.5">
@@ -486,6 +489,21 @@ export function AddApplicationSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countries}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          setUniversityId(university.id);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </Sheet>
   );
 }

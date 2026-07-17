@@ -35,12 +35,16 @@ export interface AutocompleteInputProps {
   onCreateNew?: (val: string) => Promise<void>;
   /** Noun for the confirm dialog copy, e.g. "university", "program". Defaults to "item". */
   createLabel?: string;
+  /** Skip the built-in "Create X?" confirm and call onCreateNew immediately on select —
+   *  for callers with their own richer confirmation UI (e.g. University's combined
+   *  create-with-programs dialog). */
+  skipConfirm?: boolean;
 }
 
 // Shared by all 3 Add Application screens (the lead-scoped sheet, the
 // standalone board's sheet, and the application edit page) — previously
 // copy-pasted verbatim into each.
-export function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew, createLabel = "item" }: AutocompleteInputProps) {
+export function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew, createLabel = "item", skipConfirm = false }: AutocompleteInputProps) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
   const [pendingCreate, setPendingCreate] = useState<string | null>(null);
@@ -85,8 +89,13 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
                 <CommandItem
                   value={`__create__${trimmed}`}
                   onSelect={() => {
-                    setPendingCreate(trimmed);
-                    setOpen(false);
+                    if (skipConfirm) {
+                      onCreateNew?.(trimmed);
+                      setOpen(false);
+                    } else {
+                      setPendingCreate(trimmed);
+                      setOpen(false);
+                    }
                   }}
                   className="text-primary font-medium border-t mt-1"
                 >
