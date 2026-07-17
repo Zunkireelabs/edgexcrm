@@ -25,6 +25,8 @@ interface StageEditorProps {
   }) => void;
   stage?: PipelineStageWithCount;
   mode: "edit" | "add";
+  /** it_agency only: relabels "Stage" as "Status". */
+  statusMode?: boolean;
 }
 
 const STAGE_COLORS = [
@@ -44,7 +46,9 @@ export function StageEditor({
   onSave,
   stage,
   mode,
+  statusMode = false,
 }: StageEditorProps) {
+  const stageWord = statusMode ? "Status" : "Stage";
   const [name, setName] = useState(stage?.name || "");
   const [color, setColor] = useState(stage?.color || "#3b82f6");
   const [stageType, setStageType] = useState<"regular" | "won" | "lost">(
@@ -95,14 +99,14 @@ export function StageEditor({
       <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
           <DialogTitle>
-            {mode === "add" ? "Add Stage" : "Edit Stage"}
+            {mode === "add" ? `Add ${stageWord}` : `Edit ${stageWord}`}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 py-4">
-          {/* Stage Name */}
+          {/* Stage/Status Name */}
           <div className="space-y-2">
-            <Label htmlFor="stage-name">Stage Name</Label>
+            <Label htmlFor="stage-name">{stageWord} Name</Label>
             <Input
               id="stage-name"
               placeholder="e.g., Discovery Call"
@@ -133,9 +137,9 @@ export function StageEditor({
             </div>
           </div>
 
-          {/* Stage Type */}
+          {/* Stage/Status Type */}
           <div className="space-y-2">
-            <Label>Stage Type</Label>
+            <Label>{stageWord} Type</Label>
             <div className="space-y-2">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -146,7 +150,7 @@ export function StageEditor({
                   onChange={() => setStageType("regular")}
                   className="h-4 w-4"
                 />
-                <span className="text-sm">Regular stage</span>
+                <span className="text-sm">Regular {stageWord.toLowerCase()}</span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
@@ -182,7 +186,7 @@ export function StageEditor({
               </label>
             </div>
             <p className="text-xs text-muted-foreground">
-              Terminal stages mark leads as converted (won) or closed (lost).
+              Terminal {stageWord.toLowerCase()}s mark leads as converted (won) or closed (lost).
             </p>
           </div>
 
@@ -191,7 +195,7 @@ export function StageEditor({
               Cancel
             </Button>
             <Button type="submit" disabled={isSubmitting || !name.trim()}>
-              {isSubmitting ? "Saving..." : mode === "add" ? "Add Stage" : "Save"}
+              {isSubmitting ? "Saving..." : mode === "add" ? `Add ${stageWord}` : "Save"}
             </Button>
           </DialogFooter>
         </form>

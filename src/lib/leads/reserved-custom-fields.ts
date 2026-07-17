@@ -25,7 +25,22 @@ const PROMOTED_KEYS = new Set([
 // only reserved when the lead actually belongs to that industry.
 const EDUCATION_ONLY_PROMOTED_KEYS = new Set(["field_of_study", "education_level", "countries"]);
 
+// Keys whose only dedicated UI is the real_estate InvestorProfileCard (see
+// src/industries/real-estate/features/investors). Reserved only for real_estate
+// tenants so they don't leak into the generic "Additional Details" list where a
+// dedicated editor already shows them; for every other industry these are
+// ordinary custom fields (no behavior change).
+const REAL_ESTATE_ONLY_PROMOTED_KEYS = new Set([
+  "investor_type",
+  "accreditation_status",
+  "kyc_status",
+  "entity_name",
+  "target_check_size",
+  "preferred_asset_class",
+]);
+
 export function isReservedCustomField(key: string, industryId?: string | null): boolean {
   if (key === "itinerary" || key.startsWith("trip_") || PROMOTED_KEYS.has(key)) return true;
-  return industryId === "education_consultancy" && EDUCATION_ONLY_PROMOTED_KEYS.has(key);
+  if (industryId === "education_consultancy" && EDUCATION_ONLY_PROMOTED_KEYS.has(key)) return true;
+  return industryId === "real_estate" && REAL_ESTATE_ONLY_PROMOTED_KEYS.has(key);
 }

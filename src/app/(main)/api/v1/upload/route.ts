@@ -11,6 +11,7 @@ import {
 import { validate, required, isUUID } from "@/lib/api/validation";
 import { checkRateLimit, FORM_SUBMIT_LIMIT } from "@/lib/api/rate-limit";
 import { createRequestLogger } from "@/lib/logger";
+import { getStorageProvider } from "@/lib/storage/provider";
 
 const DEFAULT_MAX_FILE_SIZE_MB = 10;
 const DEFAULT_ACCEPTED_TYPES = [
@@ -102,12 +103,11 @@ export async function POST(request: NextRequest) {
   const path = `${tenant.slug}/${sessionId}/${fieldName}.${ext}`;
 
   // Create signed upload URL
-  const { data: signedData, error } = await supabase.storage
-    .from("lead-documents")
-    .createSignedUploadUrl(path);
-
-  if (error) {
-    log.error({ err: error }, "Failed to create signed upload URL");
+  let signed: { url: string; token?: string };
+  try {
+    signed = await getStorageProvider().createSignedUploadUrl("lead-documents", path);
+  } catch (err) {
+    log.error({ err }, "Failed to create signed upload URL");
     return apiServiceUnavailable("Failed to generate upload URL");
   }
 
@@ -118,8 +118,8 @@ export async function POST(request: NextRequest) {
   log.info({ path, tenantId }, "Signed upload URL generated");
 
   return apiSuccess({
-    signed_url: signedData.signedUrl,
-    token: signedData.token,
+    signed_url: signed.url,
+    token: signed.token,
     path,
     public_url: publicUrl,
   });

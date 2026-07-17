@@ -215,6 +215,8 @@ export async function POST(request: NextRequest) {
   if (body.agent_id) insert.agent_id = String(body.agent_id);
   if (body.applied_date) insert.applied_date = String(body.applied_date);
   if (body.intake_start_date) insert.intake_start_date = String(body.intake_start_date);
+  if (body.degree_level) insert.degree_level = String(body.degree_level);
+  if (body.field_of_study) insert.field_of_study = String(body.field_of_study);
 
   const { data: created, error } = await db
     .from("applications")

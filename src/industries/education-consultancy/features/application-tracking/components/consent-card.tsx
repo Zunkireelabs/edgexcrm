@@ -42,6 +42,21 @@ interface ConsentStatus {
   link: string | null;
 }
 
+/**
+ * Optional label overrides so non-education industries can reuse this card
+ * verbatim (e.g. real_estate renders it as a "Subscription Agreement"). All
+ * fields default to the education wording, so an education caller that passes
+ * nothing gets byte-identical behavior.
+ */
+interface ConsentCardLabels {
+  sectionTitle?: string;   // collapsible header — default "Pre Application"
+  docLabel?: string;       // sub-label — default "Student Consent"
+  requiredTitle?: string;  // default "Consent required"
+  requiredHelp?: string;   // default the student-must-sign sentence
+  awaitingHelp?: string;   // default "Consent sent · awaiting student signature"
+  signedTitle?: string;    // default "Consent signed"
+}
+
 interface ConsentCardProps {
   leadId: string;
   tenantId: string;
@@ -53,6 +68,9 @@ interface ConsentCardProps {
   feeStatus?: FeeStatus | null;
   feeAmount?: number | null;
   feeNotes?: string | null;
+  // Cross-industry reuse — optional label overrides + fee-section toggle.
+  labels?: ConsentCardLabels;
+  showProcessingFee?: boolean; // default true (education); false hides the fee block
 }
 
 export function ConsentCard({
@@ -63,7 +81,20 @@ export function ConsentCard({
   feeStatus: initialFeeStatus = null,
   feeAmount: initialFeeAmount = null,
   feeNotes: initialFeeNotes = null,
+  labels,
+  showProcessingFee = true,
 }: ConsentCardProps) {
+  // Effective labels — education wording unless a caller overrides.
+  const L = {
+    sectionTitle: labels?.sectionTitle ?? "Pre Application",
+    docLabel: labels?.docLabel ?? "Student Consent",
+    requiredTitle: labels?.requiredTitle ?? "Consent required",
+    requiredHelp:
+      labels?.requiredHelp ??
+      "This student must sign a consent document before an application can be created.",
+    awaitingHelp: labels?.awaitingHelp ?? "Consent sent · awaiting student signature",
+    signedTitle: labels?.signedTitle ?? "Consent signed",
+  };
   const [status, setStatus] = useState<ConsentStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -180,7 +211,7 @@ export function ConsentCard({
             className="flex w-full items-center justify-between"
           >
             <span className="text-sm font-medium text-muted-foreground uppercase tracking-wide">
-              Pre Application
+              {L.sectionTitle}
             </span>
             <ChevronDown
               className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
@@ -189,15 +220,15 @@ export function ConsentCard({
         </CardHeader>
         {open && (
         <CardContent className="pb-4 space-y-3">
-          <p className="text-xs font-medium text-muted-foreground">Student Consent</p>
+          <p className="text-xs font-medium text-muted-foreground">{L.docLabel}</p>
           {consentStatus === "none" && (
             <>
               <div className="flex items-start gap-2 text-amber-600">
                 <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-                <p className="text-sm font-medium">Consent required</p>
+                <p className="text-sm font-medium">{L.requiredTitle}</p>
               </div>
               <p className="text-xs text-muted-foreground">
-                This student must sign a consent document before an application can be created.
+                {L.requiredHelp}
               </p>
               {canManage && (
                 <div className="flex gap-2 flex-wrap">
@@ -228,7 +259,7 @@ export function ConsentCard({
               <p className="text-xs text-muted-foreground">
                 {consentStatus === "expired"
                   ? "The consent link has expired. Resend to generate a new one."
-                  : "Consent sent · awaiting student signature"}
+                  : L.awaitingHelp}
               </p>
               {canManage && (
                 <div className="flex gap-2 flex-wrap">
@@ -260,7 +291,7 @@ export function ConsentCard({
               <div className="flex items-start gap-2 text-green-600">
                 <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
                 <div>
-                  <p className="text-sm font-medium">Consent signed</p>
+                  <p className="text-sm font-medium">{L.signedTitle}</p>
                   {current?.record?.signer_name && (
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {current.record.signer_name}
@@ -285,7 +316,8 @@ export function ConsentCard({
             </>
           )}
 
-          {/* ── Processing Fee (pre-application, lead-level) ── */}
+          {/* ── Processing Fee (pre-application, lead-level) — education only ── */}
+          {showProcessingFee && (
           <div className="border-t pt-3 space-y-3">
             <p className="text-xs font-medium text-muted-foreground">Processing Fee</p>
 
@@ -362,6 +394,7 @@ export function ConsentCard({
               <p className="text-xs text-muted-foreground">Not set</p>
             )}
           </div>
+          )}
         </CardContent>
         )}
       </Card>

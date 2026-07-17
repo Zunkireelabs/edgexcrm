@@ -23,12 +23,26 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
+// Consent e-sign is shared by two industries: education (Student Consent,
+// exposed via the APPLICATION_TRACKING feature) and real_estate (Subscription
+// Agreement — no separate feature; investors ride the leads spine). Additive
+// gate: education access is unchanged, real_estate is newly permitted.
+function consentAccessAllowed(industryId: string | null): boolean {
+  return (
+    getFeatureAccess(industryId, FEATURES.APPLICATION_TRACKING) ||
+    industryId === "real_estate"
+  );
+}
+
 export async function GET(_request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
+  // Consent e-sign is shared by education (Student Consent, gated on
+  // APPLICATION_TRACKING) and real_estate (Subscription Agreement). Additive
+  // widening — education access is unchanged.
+  if (!consentAccessAllowed(auth.industryId)) return apiForbidden();
 
   const supabase = await createServiceClient();
 
@@ -126,7 +140,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) return apiForbidden();
+  if (!consentAccessAllowed(auth.industryId)) return apiForbidden();
   if (!canManageApplications(auth.permissions)) return apiForbidden();
 
   const supabase = await createServiceClient();

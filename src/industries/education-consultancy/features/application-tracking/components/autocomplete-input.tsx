@@ -15,6 +15,16 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogCancel,
+  AlertDialogAction,
+} from "@/components/ui/alert-dialog";
 
 export interface AutocompleteInputProps {
   value: string;
@@ -23,19 +33,27 @@ export interface AutocompleteInputProps {
   placeholder?: string;
   id?: string;
   onCreateNew?: (val: string) => Promise<void>;
+  /** Noun for the confirm dialog copy, e.g. "university", "program". Defaults to "item". */
+  createLabel?: string;
+  /** Skip the built-in "Create X?" confirm and call onCreateNew immediately on select —
+   *  for callers with their own richer confirmation UI (e.g. University's combined
+   *  create-with-programs dialog). */
+  skipConfirm?: boolean;
 }
 
 // Shared by all 3 Add Application screens (the lead-scoped sheet, the
 // standalone board's sheet, and the application edit page) — previously
 // copy-pasted verbatim into each.
-export function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew }: AutocompleteInputProps) {
+export function AutocompleteInput({ value, onChange, suggestions, placeholder, id, onCreateNew, createLabel = "item", skipConfirm = false }: AutocompleteInputProps) {
   const [open, setOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [pendingCreate, setPendingCreate] = useState<string | null>(null);
   const trimmed = value.trim();
   const filtered = suggestions.filter((s) => s.toLowerCase().includes(trimmed.toLowerCase()));
   const exactMatch = suggestions.some((s) => s.toLowerCase() === trimmed.toLowerCase());
   const showCreate = onCreateNew && trimmed.length > 0 && !exactMatch;
   return (
+    <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <div className="relative">
@@ -70,18 +88,19 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
               {showCreate && (
                 <CommandItem
                   value={`__create__${trimmed}`}
-                  disabled={creating}
-                  onSelect={async () => {
-                    if (!onCreateNew) return;
-                    setCreating(true);
-                    await onCreateNew(trimmed);
-                    setCreating(false);
-                    setOpen(false);
+                  onSelect={() => {
+                    if (skipConfirm) {
+                      onCreateNew?.(trimmed);
+                      setOpen(false);
+                    } else {
+                      setPendingCreate(trimmed);
+                      setOpen(false);
+                    }
                   }}
                   className="text-primary font-medium border-t mt-1"
                 >
                   <Plus className="mr-2 h-4 w-4" />
-                  {creating ? "Adding…" : `Create "${trimmed}"`}
+                  {`Create "${trimmed}"`}
                 </CommandItem>
               )}
             </CommandList>
@@ -89,5 +108,35 @@ export function AutocompleteInput({ value, onChange, suggestions, placeholder, i
         </PopoverContent>
       )}
     </Popover>
+
+    <AlertDialog open={pendingCreate !== null} onOpenChange={(v) => { if (!v && !creating) setPendingCreate(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Create &quot;{pendingCreate}&quot;?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will add &ldquo;{pendingCreate}&rdquo; to your {createLabel} list. It becomes available to everyone and appears in Settings.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={creating} onClick={() => setPendingCreate(null)}>
+            Cancel
+          </AlertDialogCancel>
+          <AlertDialogAction
+            disabled={creating}
+            onClick={async (e) => {
+              e.preventDefault();
+              if (!onCreateNew || !pendingCreate) return;
+              setCreating(true);
+              await onCreateNew(pendingCreate);
+              setCreating(false);
+              setPendingCreate(null);
+            }}
+          >
+            {creating ? "Adding…" : "Create"}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

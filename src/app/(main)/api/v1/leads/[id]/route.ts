@@ -27,6 +27,7 @@ import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs, peerSlugs } from "@/indu
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
+import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -68,6 +69,23 @@ const UPDATABLE_FIELDS = [
   "pre_app_fee_status",
   "pre_app_fee_amount",
   "pre_app_fee_notes",
+  "see_gpa",
+  "see_institution",
+  "see_passed_year",
+  "plus_two_gpa",
+  "plus_two_institution",
+  "plus_two_passed_year",
+  "bachelor_gpa",
+  "bachelor_institution",
+  "bachelor_passed_year",
+  "masters_gpa",
+  "masters_institution",
+  "masters_passed_year",
+  "ielts_score",
+  "pte_score",
+  "toefl_score",
+  "sat_score",
+  "gre_gmat_score",
 ] as const;
 
 // Blocked for plain counselors/viewers but NOT for team-scoped branch managers
@@ -551,6 +569,7 @@ export async function PATCH(
       updatePayload[field] = body[field];
     }
   }
+  Object.assign(updatePayload, coerceAcademicPayload(body));
 
   // Mirror lead_type on list move (keeps existing education UI working during transition)
   // Also resolve list names for the audit log so the activity timeline can render them.
@@ -567,6 +586,17 @@ export async function PATCH(
     if (targetList) {
       updatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       newListName = targetList.name;
+
+      // Prospect-qualification gate (server backstop): current lead's academic columns
+      // merged with anything incoming in this same PATCH must satisfy the gate.
+      if (targetList.slug === "prospects" && auth.industryId === "education_consultancy") {
+        const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
+        if (!hasProspectQualification(merged)) {
+          return apiValidationError({
+            academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+          });
+        }
+      }
 
       // Stage-transition governance: on a backward (revert) move in the education funnel,
       // reassign to the previous stage's holder instead of leaving assigned_to untouched.
@@ -724,6 +754,35 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  // Hard-block: assigning a counselor that would auto-promote an unqualified lead into
+  // Prospects. Must run BEFORE the update below — the auto-promote block further down
+  // fires only after the lead is already saved, too late to block.
+  if (
+    auth.industryId === "education_consultancy" &&
+    updatePayload.assigned_to != null &&
+    updatePayload.list_id === undefined
+  ) {
+    const slug = await resolvePositionSlug(supabase, auth.tenantId, updatePayload.assigned_to as string);
+    if (slug === "counselor") {
+      const { data: prospectsList } = await supabase.from("lead_lists")
+        .select("id, sort_order").eq("tenant_id", auth.tenantId).eq("slug", "prospects").maybeSingle();
+      if (prospectsList) {
+        const currentListId = (existingLead as Record<string, unknown>).list_id as string | null;
+        let sort: number | null = null, staging = false;
+        if (currentListId) {
+          const { data: cl } = await supabase.from("lead_lists")
+            .select("sort_order, is_staging").eq("id", currentListId).maybeSingle();
+          sort = cl?.sort_order ?? null; staging = cl?.is_staging ?? false;
+        }
+        const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
+        const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
+        if (wouldPromote && !qualifies) {
+          return apiValidationError({ academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] });
+        }
+      }
+    }
+  }
+
   const { data: updated, error } = await supabase
     .from("leads")
     .update(updatePayload)
@@ -813,7 +872,14 @@ export async function PATCH(
             currentSortOrder = currentList?.sort_order ?? null;
             currentIsStaging = currentList?.is_staging ?? false;
           }
-          if (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order) {
+          const qualifies = hasProspectQualification({
+            ...(existingLead as Record<string, unknown>),
+            ...updatePayload,
+          });
+          if (
+            qualifies &&
+            (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order)
+          ) {
             const promotePayload: Record<string, unknown> = {
               list_id: prospectsList.id,
               lead_type: "prospect",

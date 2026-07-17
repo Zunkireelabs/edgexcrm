@@ -18,6 +18,7 @@ import { validate, required, maxLength, isUUID } from "@/lib/api/validation";
 import { emitEvent } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
+import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
@@ -45,13 +46,23 @@ export async function POST(request: Request) {
   const db = await scopedClient(auth);
 
   // Verify user owns the from_account — 403 rather than 404 to never leak existence of another user's account
-  const { data: account, error: acctErr } = await db
+  const { data: rawAccount, error: acctErr } = await db
     .from("connected_email_accounts")
     .select("*")
     .eq("id", body.from_account_id)
     .eq("user_id", auth.userId)
     .single<ConnectedEmailAccount>();
-  if (acctErr || !account) return apiForbidden();
+  if (acctErr || !rawAccount) return apiForbidden();
+
+  let account: ConnectedEmailAccount;
+  try {
+    account = decryptAccountTokens(rawAccount);
+  } catch (err) {
+    logger.error({ err, from_account_id: rawAccount.id }, "Failed to decrypt stored Gmail token");
+    return apiServiceUnavailable(
+      "Failed to send via Gmail. Check inbox connection in Settings.",
+    );
+  }
 
   // Phase 3: validate reply_context if provided
   let thread: {
@@ -165,18 +176,12 @@ export async function POST(request: Request) {
     );
   }
 
-  // Persist refreshed token if obtained (fire-and-forget — email already sent)
+  // Persist refreshed token if obtained (fire-and-forget — email already sent).
+  // persistRefreshedToken() never throws, so an encrypt/DB failure here is
+  // logged and swallowed rather than surfacing as a 500 after Gmail already
+  // delivered the message.
   if (result.refreshed_credentials) {
-    const { access_token, expiry_date } = result.refreshed_credentials;
-    db.from("connected_email_accounts")
-      .update({
-        access_token,
-        token_expiry: new Date(expiry_date).toISOString(),
-      })
-      .eq("id", account.id)
-      .then(({ error }) => {
-        if (error) logger.error({ error, account_id: account.id }, "Failed to persist refreshed token");
-      });
+    void persistRefreshedToken(db.raw(), account.id, result.refreshed_credentials);
   }
 
   // Persist thread: reuse for reply, create new for fresh compose

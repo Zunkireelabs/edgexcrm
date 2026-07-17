@@ -35,7 +35,6 @@ import {
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import {
-  DEGREE_LEVELS,
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -43,6 +42,11 @@ import { positionsForStage } from "@/industries/education-consultancy/lead-assig
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { COUNTRY_CODES } from "@/lib/country-codes";
 import { parseStoredPhone } from "@/lib/phone-utils";
+import {
+  ACADEMIC_LEVELS,
+  TEST_TYPES,
+  hasProspectQualification,
+} from "@/lib/leads/prospect-qualification";
 
 interface TeamMember {
   user_id: string;
@@ -72,6 +76,9 @@ interface AddLeadSheetProps {
   userBranchId?: string | null;
   /** Current user's position slug — gates the education stage→team assignment cascade. */
   currentUserPositionSlug?: string | null;
+  /** Id of the current stage view (when it's a visible, non-staging/archive list) —
+   *  pre-selects the Stage dropdown so the new lead lands where the creator is looking. */
+  defaultListId?: string;
 }
 
 interface FormData {
@@ -214,24 +221,41 @@ export function AddLeadSheet({
   selectedBranchId = null,
   userBranchId = null,
   currentUserPositionSlug = null,
+  defaultListId,
 }: AddLeadSheetProps) {
   const router = useRouter();
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [academicsOpen, setAcademicsOpen] = useState(false);
+  const [academicsError, setAcademicsError] = useState(false);
+  const [academics, setAcademics] = useState<Record<string, string>>({});
+  const [testScores, setTestScores] = useState<Record<string, string>>({});
+  const updateAcademic = (col: string, value: string) =>
+    setAcademics((prev) => ({ ...prev, [col]: value }));
+  const updateTestScore = (col: string, value: string) =>
+    setTestScores((prev) => ({ ...prev, [col]: value }));
 
   const isAdmin = role === "owner" || role === "admin";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
   useEffect(() => {
     if (open) {
+      // Only pre-select a Stage the dropdown will actually offer (mirrors its own
+      // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
+      // that's since disappeared from leadLists, must fall back to blank, not a dead value.
+      const validDefaultListId =
+        defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
+          ? defaultListId
+          : "";
       setFormData({
         ...initialFormData,
         stageId: defaultStage?.id || "",
+        listId: validDefaultListId,
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
         // Always seed from creator's own branch first; fall back to active branch switcher
@@ -241,8 +265,12 @@ export function AddLeadSheet({
       setIsDirty(false);
       setSourceOpen(false);
       setNotesOpen(false);
+      setAcademicsOpen(false);
+      setAcademicsError(false);
+      setAcademics({});
+      setTestScores({});
     }
-  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId]);
+  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId, defaultListId, leadLists]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -276,6 +304,20 @@ export function AddLeadSheet({
 
   const handleSubmit = async () => {
     if (!validate()) return;
+
+    if (
+      industryId === "education_consultancy" &&
+      selectedStageSlug === "prospects" &&
+      !hasProspectQualification(academics)
+    ) {
+      setAcademicsOpen(true);
+      setAcademicsError(true);
+      toast.error(
+        "Enter the student's highest qualification (%/GPA) before moving to Prospects."
+      );
+      return;
+    }
+    setAcademicsError(false);
 
     setIsSubmitting(true);
     setErrors({});
@@ -315,6 +357,7 @@ export function AddLeadSheet({
         destinations: industryId === "education_consultancy" ? formData.destinations : undefined,
         field_of_study: industryId === "education_consultancy" ? (formData.fieldOfStudy || null) : undefined,
         degree_level: industryId === "education_consultancy" ? (formData.degreeLevel || null) : undefined,
+        ...(industryId === "education_consultancy" ? { ...academics, ...testScores } : {}),
         is_final: true,
         step: 1,
       };
@@ -712,6 +755,77 @@ export function AddLeadSheet({
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {industryId === "education_consultancy" && (
+        <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${
+                academicsOpen ? "rotate-90" : ""
+              }`}
+            />
+            Academic &amp; test details
+            <span className="text-xs text-gray-400 font-normal">(optional)</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-2">
+            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Academic Qualification
+              </p>
+              {ACADEMIC_LEVELS.map((level) => (
+                <div key={level.key} className="space-y-1">
+                  <Label className="text-xs text-gray-600">{level.label}</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input
+                      placeholder="%/GPA"
+                      value={academics[`${level.key}_gpa`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_gpa`, e.target.value)}
+                      disabled={isSubmitting}
+                      className={`h-9 text-sm ${
+                        academicsError && level.gateEligible ? "border-red-500 ring-2 ring-red-200" : ""
+                      }`}
+                    />
+                    <Input
+                      placeholder="School / College"
+                      value={academics[`${level.key}_institution`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_institution`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                    <Input
+                      placeholder="Passed year"
+                      inputMode="numeric"
+                      value={academics[`${level.key}_passed_year`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_passed_year`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Test Report &amp; Score
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {TEST_TYPES.map((t) => (
+                  <div key={t.key} className="space-y-1">
+                    <Label className="text-xs text-gray-600">{t.label}</Label>
+                    <Input
+                      placeholder="Score"
+                      value={testScores[`${t.key}_score`] || ""}
+                      onChange={(e) => updateTestScore(`${t.key}_score`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </>
   );
 
@@ -995,7 +1109,7 @@ export function AddLeadSheet({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
               <Select
                 value={formData.degreeLevel || "__none__"}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
@@ -1006,8 +1120,8 @@ export function AddLeadSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Select level</SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

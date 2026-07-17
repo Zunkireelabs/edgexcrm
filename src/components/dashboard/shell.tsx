@@ -50,6 +50,9 @@ import {
   Gauge,
   CalendarClock,
   CalendarCheck,
+  Filter,
+  Target,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,6 +69,7 @@ import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
+import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 
@@ -132,6 +136,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Package,
   FileSignature,
   Gauge,
+  FolderOpen,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -229,7 +234,7 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
-  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
+  leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   children: React.ReactNode;
@@ -276,6 +281,10 @@ export function DashboardShell({
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate (CRE capital-raise): renders the generic sidebar branch, but the
+  // universal "All Leads" nav item is relabeled "Investors" (investors ride the
+  // leads spine). Additive — no other industry's label changes.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -283,6 +292,7 @@ export function DashboardShell({
       education_consultancy: "edu",
       travel_agency: "travel",
       it_agency: "agency",
+      real_estate: "capital",
     } as Record<string, string>)[tenant.industry_id ?? ""] ?? "";
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
@@ -515,24 +525,93 @@ export function DashboardShell({
                     />
                   </Suspense>
                 )}
-                {navAllowed("/leads") && (
-                  leadLists.length > 0 ? (
-                    <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
-                        <Users className="w-[18px] h-[18px] shrink-0" />
-                        All Leads
-                      </div>
-                    }>
-                      <LeadListsNavGroup
-                        lists={leadLists}
-                        onNavigate={() => setMobileOpen(false)}
-                        isAdmin={role === "owner" || role === "admin"}
-                      />
-                    </Suspense>
-                  ) : (
-                    renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
-                  )
-                )}
+                {navAllowed("/leads") && (() => {
+                  // Funnel grouping is it_agency-only — non-it_agency tenants always fall
+                  // through to the ungrouped/All Leads path below, even if a list somehow
+                  // carries a funnel_key (belt-and-suspenders; the write path is gated too).
+                  const processingLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "lead_processing")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const salesLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "sales_leads")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const ungroupedLists = isItAgency
+                    ? leadLists.filter((l) => l.funnel_key == null)
+                    : leadLists;
+                  const isAdminUser = role === "owner" || role === "admin";
+
+                  if (processingLists.length === 0 && salesLists.length === 0) {
+                    return ungroupedLists.length > 0 ? (
+                      <Suspense key="lead-lists-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Users className="w-[18px] h-[18px] shrink-0" />
+                          All Leads
+                        </div>
+                      }>
+                        <LeadListsNavGroup
+                          lists={ungroupedLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                    ) : (
+                      renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                    );
+                  }
+
+                  return (
+                    <>
+                      <Suspense key="lead-processing-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Filter className="w-[18px] h-[18px] shrink-0" />
+                          Lead Processing
+                        </div>
+                      }>
+                        <LeadFunnelNavGroup
+                          funnelKey="lead_processing"
+                          label="Lead Processing"
+                          icon={Filter}
+                          lists={processingLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                      <Suspense key="sales-leads-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Target className="w-[18px] h-[18px] shrink-0" />
+                          Sales Leads
+                        </div>
+                      }>
+                        <LeadFunnelNavGroup
+                          funnelKey="sales_leads"
+                          label="Sales Leads"
+                          icon={Target}
+                          lists={salesLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                      {ungroupedLists.length > 0 && (
+                        <Suspense key="lead-lists-nav" fallback={
+                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                            <Users className="w-[18px] h-[18px] shrink-0" />
+                            All Leads
+                          </div>
+                        }>
+                          <LeadListsNavGroup
+                            lists={ungroupedLists}
+                            onNavigate={() => setMobileOpen(false)}
+                            isAdmin={isAdminUser}
+                          />
+                        </Suspense>
+                      )}
+                    </>
+                  );
+                })()}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}
@@ -568,6 +647,45 @@ export function DashboardShell({
                 {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
                 {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
                 {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
+              </>
+            );
+          })() : isRealEstate ? (() => {
+            // real_estate (CRE capital-raise): departmental sidebar mirroring the
+            // it_agency branch. Investors ride the universal /leads spine (relabeled);
+            // Offerings + Data Room come from the industry manifest via reItem().
+            const reItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+
+                {/* Capital Raise */}
+                <NavSectionHeader label="Capital Raise" />
+                {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
+                {reItem("/offerings") && renderIndustryEntry(reItem("/offerings")!)}
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+                {reItem("/data-room") && renderIndustryEntry(reItem("/data-room")!)}
+
+                {/* Investor Relations — header omitted until Distributions/Statements
+                    land (avoids an empty-section header). Add it here when they do. */}
+
+                {/* People */}
+                <NavSectionHeader label="People" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
+                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
+
+                {/* Comms */}
+                <NavSectionHeader label="Comms" />
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
               </>
             );
           })() : (
@@ -607,7 +725,7 @@ export function DashboardShell({
                 }
                 const node = renderNavItem(
                   item.href === "/leads"
-                    ? { ...item, badge: counts.unread_leads || undefined }
+                    ? { ...item, label: isRealEstate ? "Investors" : item.label, badge: counts.unread_leads || undefined }
                     : item
                 );
                 if (item.href === "/home") {
@@ -778,7 +896,7 @@ export function DashboardShell({
 
           {/* AI Assistant Panel */}
           <div className="print:hidden">
-            <AIAssistantPanel />
+            <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
           </div>
         </div>
       </div>
