@@ -8,20 +8,21 @@
 Branch `feature/ai-assistant-foundation` (25 commits ahead of origin/stage). **Scope note —
 this branch was cut from `feature/real-estate-vertical`, so promoting it brings BOTH:**
 
-- Real-estate vertical (offerings, commitments, funnel; migrations 156–159) — its human visual
+- Real-estate vertical (offerings, commitments, funnel; migrations 164–167) — its human visual
   pass is still owed; it lands on stage as a side effect of branch ancestry.
 - AI foundation: assistant (1A–1C), knowledge layer (2A–2C), industry packs (3A–3B, RE + education
-  packs); migrations 160–162.
+  packs); migrations 168–170.
 
 Pending migrations for the stage DB (`dymeudcddasqpomfpjvt`), applied automatically by the
-staging pipeline's `migrate` job in filename order: **156, 157, 158, 159, 160, 161, 162.**
-All additive, each with rollback notes in-file, ledger-tracked (`schema_migrations`).
+staging pipeline's `migrate` job in filename order: **164, 165, 166, 167, 168, 169, 170**
+(plus stage's own 156–163, already merged into the branch). All additive, each with rollback
+notes in-file, ledger-tracked (`schema_migrations`).
 
 ## Phase 0 — pre-flight (code, executor work — brief: `BRIEF-STAGE-PREFLIGHT.md`)
 
 > **2026-07-17 update:** origin/stage independently added migrations numbered 156–163, colliding
-> with all seven of ours. Pre-flight therefore also RENUMBERS our migrations to **164–170** (see
-> the brief). Every "156–162" below reads as "164–170" after pre-flight lands.
+> with all seven of ours. Pre-flight RENUMBERED our migrations to **164–170** (done — see the
+> brief and the executor report). Every "156–162" below has been updated to "164–170".
 
 1. **Heap bump (real risk, found 2026-07-17):** local builds now OOM on default heap and need
    `--max-old-space-size=6144`. Affected build environments:
@@ -63,9 +64,9 @@ start; consider a dedicated Inngest env per deploy environment later.
 1. `gh pr create --base stage` from the rebased branch. CI must be green (watch the build/tsc
    steps for OOM — that's what Phase 0.1 prevents).
 2. Squash-merge. Push to `stage` triggers `deploy-staging.yml`:
-   checks → GHCR image build → **migrate job applies 156–162 to the stage DB** → SSH deploy
+   checks → GHCR image build → **migrate job applies 164–170 to the stage DB** → SSH deploy
    (`docker compose pull && up -d`) → container health + `/login` 200 check.
-3. **Watch the migrate job log specifically at 161** — it runs `CREATE EXTENSION IF NOT EXISTS
+3. **Watch the migrate job log specifically at 169** — it runs `CREATE EXTENSION IF NOT EXISTS
    vector`. This should succeed as the `postgres` role on hosted Supabase; if it errors, enable
    the extension once via Supabase Studio (stage project → Database → Extensions → vector), then
    re-run the failed job. The script is safe to re-run (ledger + ON_ERROR_STOP; committed files
@@ -73,7 +74,7 @@ start; consider a dedicated Inngest env per deploy environment later.
 
 ## Phase 3 — post-deploy verification on `dev-lead-crm.zunkireelabs.com`
 
-1. **DB:** `schema_migrations` has 156–162; `\dx` shows vector; `knowledge_chunks` +
+1. **DB:** `schema_migrations` has 164–170; `\dx` shows vector; `knowledge_chunks` +
    `knowledge_hybrid_search` exist; RLS on.
 2. **Assistant streams through Traefik (SSE buffering check):** log in (any stage user,
    password `edgexdev123`), open the sparkle panel, ask anything — the reply must render
@@ -93,7 +94,7 @@ start; consider a dedicated Inngest env per deploy environment later.
 ## Rollback
 
 - Code: revert PR (roll-forward preferred) or `rollback.yml` (CODE ONLY — announce first).
-- DB: migrations are additive; each file 156–162 carries its own rollback statements. Assistant
+- DB: migrations are additive; each file 164–170 carries its own rollback statements. Assistant
   can be disabled instantly without any deploy: set `AI_ASSISTANT_ENABLED=false` (+
   `AI_INGESTION_ENABLED=false`) in the VPS `.env.local` and `docker compose up -d`.
 

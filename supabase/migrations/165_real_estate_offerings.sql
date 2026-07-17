@@ -1,4 +1,4 @@
--- Migration 157: real_estate — offerings table (capital-raise vehicles)
+-- Migration 165: real_estate — offerings table (capital-raise vehicles)
 --
 -- An "offering" is a capital-raise vehicle a CRE sponsor markets to investors
 -- (e.g. "Industrial Value-Add Fund II"). New tenant-owned table; NOT an
@@ -70,7 +70,7 @@ CREATE TRIGGER trigger_offerings_updated_at
   BEFORE UPDATE ON offerings
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-INSERT INTO public.schema_migrations (version) VALUES ('157_real_estate_offerings.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('165_real_estate_offerings.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

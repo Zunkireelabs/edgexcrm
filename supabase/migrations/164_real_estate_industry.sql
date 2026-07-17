@@ -1,4 +1,4 @@
--- Migration 156: real_estate industry — relabel entity terms for CRE capital vertical
+-- Migration 164: real_estate industry — relabel entity terms for CRE capital vertical
 --
 -- The `real_estate` industries row shipped with brokerage-oriented labels
 -- ("Property Types" / "Property Type"). The EdgeX real_estate vertical is a
@@ -29,7 +29,7 @@ UPDATE public.industries
    AND (entity_type_label IS DISTINCT FROM 'Asset Classes'
         OR entity_type_singular IS DISTINCT FROM 'Asset Class');
 
-INSERT INTO public.schema_migrations (version) VALUES ('156_real_estate_industry.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('164_real_estate_industry.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

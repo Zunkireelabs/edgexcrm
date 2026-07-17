@@ -28,6 +28,8 @@ jobs:
       - run: npx eslint --max-warnings 50
 
       - run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
       - uses: actions/cache@v4
         with:
@@ -41,6 +43,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NODE_OPTIONS: --max-old-space-size=6144
 
   build-push:
     name: Build & Push Image

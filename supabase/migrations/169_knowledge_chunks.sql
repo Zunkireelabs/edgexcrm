@@ -1,4 +1,4 @@
--- Migration 161: pgvector + knowledge_chunks (Phase 2A storage seam & schema)
+-- Migration 169: pgvector + knowledge_chunks (Phase 2A storage seam & schema)
 --
 -- Phase 2A plumbing (docs/ai-native-efforts/02-PHASE-2-KNOWLEDGE-LAYER.md
 -- workstream B / docs/ai-native-efforts/working/BRIEF-PHASE-2A-STORAGE-SEAM-SCHEMA.md).
@@ -66,7 +66,7 @@ ALTER TABLE knowledge_base_items ADD COLUMN IF NOT EXISTS processing_error TEXT;
 ALTER TABLE knowledge_base_items ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
 ALTER TABLE knowledge_base_items ADD COLUMN IF NOT EXISTS chunk_count INT;
 
-INSERT INTO public.schema_migrations (version) VALUES ('161_knowledge_chunks.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('169_knowledge_chunks.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

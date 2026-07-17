@@ -1,4 +1,4 @@
--- Migration 162: knowledge_hybrid_search RPC (Phase 2C retrieval)
+-- Migration 170: knowledge_hybrid_search RPC (Phase 2C retrieval)
 --
 -- Hybrid retrieval over knowledge_chunks (migration 161): a vector-similarity
 -- arm and a Postgres full-text-search arm, merged via Reciprocal Rank Fusion
@@ -112,7 +112,7 @@ ALTER TABLE ai_usage_events DROP CONSTRAINT IF EXISTS ai_usage_events_surface_ch
 ALTER TABLE ai_usage_events ADD CONSTRAINT ai_usage_events_surface_check
   CHECK (surface IN ('assistant', 'ingestion', 'background_agent', 'retrieval'));
 
-INSERT INTO public.schema_migrations (version) VALUES ('162_knowledge_hybrid_search.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('170_knowledge_hybrid_search.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

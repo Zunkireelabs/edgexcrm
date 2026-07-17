@@ -1,4 +1,4 @@
--- Migration 159: real_estate — offering_documents table (per-offering data room)
+-- Migration 167: real_estate — offering_documents table (per-offering data room)
 --
 -- A "data room" is the per-offering document vault a CRE sponsor exposes to
 -- investors (PPM, Operating Agreement, financials, other). New tenant-owned
@@ -55,7 +55,7 @@ CREATE POLICY "offering_documents_delete" ON offering_documents
 CREATE INDEX IF NOT EXISTS idx_offering_documents_tenant_offering
   ON offering_documents (tenant_id, offering_id) WHERE deleted_at IS NULL;
 
-INSERT INTO public.schema_migrations (version) VALUES ('159_real_estate_offering_documents.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('167_real_estate_offering_documents.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

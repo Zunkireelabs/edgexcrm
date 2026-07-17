@@ -24,6 +24,8 @@ jobs:
       - run: npm ci
       - run: npx eslint --max-warnings 50
       - run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
   build-push:
     name: Build & Push Image

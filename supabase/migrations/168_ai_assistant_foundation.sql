@@ -1,4 +1,4 @@
--- Migration 160: AI assistant foundation — conversations, messages, usage events
+-- Migration 168: AI assistant foundation — conversations, messages, usage events
 --
 -- Phase 1A plumbing (docs/ai-native-efforts/01-PHASE-1-ASSISTANT-FOUNDATION.md).
 -- No app code writes to these tables yet — 1A ships zero registered tools and no
@@ -114,7 +114,7 @@ CREATE TRIGGER trigger_ai_conversations_updated_at
   BEFORE UPDATE ON ai_conversations
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-INSERT INTO public.schema_migrations (version) VALUES ('160_ai_assistant_foundation.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('168_ai_assistant_foundation.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

@@ -1,4 +1,4 @@
--- Migration 158: real_estate — investor_commitments (investor <-> offering link)
+-- Migration 166: real_estate — investor_commitments (investor <-> offering link)
 --
 -- The connective tissue of the CRE vertical: one row = one investor's (lead's)
 -- position on one offering. Its `status` drives the PER-OFFERING raise funnel
@@ -78,7 +78,7 @@ CREATE TRIGGER trigger_investor_commitments_updated_at
   BEFORE UPDATE ON investor_commitments
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
-INSERT INTO public.schema_migrations (version) VALUES ('158_real_estate_investor_commitments.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('166_real_estate_investor_commitments.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
