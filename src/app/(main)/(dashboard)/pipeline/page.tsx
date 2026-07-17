@@ -64,7 +64,11 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     const [leadsPerList, teamMembers] = await Promise.all([
       Promise.all(
         visibleLists.map((list) =>
-          getLeads(tenantData.tenant.id, { ...pipelineScope, listId: list.id })
+          getLeads(tenantData.tenant.id, {
+            ...pipelineScope,
+            listId: list.id,
+            excludeOtherType: tenantData.tenant.industry_id === "education_consultancy",
+          })
         )
       ),
       getTeamMembers(tenantData.tenant.id),
@@ -121,6 +125,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     getLeadsForPipeline(tenantData.tenant.id, {
       ...pipelineScope,
       pipelineId: selectedPipelineId,
+      excludeOtherType: tenantData.tenant.industry_id === "education_consultancy",
     }),
     getTeamMembers(tenantData.tenant.id),
     // Fetch industry if tenant has one

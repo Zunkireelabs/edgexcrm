@@ -28,7 +28,6 @@ import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 import { ContactCard } from "./contact-card";
@@ -36,6 +35,8 @@ import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
+import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
@@ -79,6 +80,10 @@ interface LeadDetailV2Props {
   revertTargetName?: string | null;
   /** Revert assignee options: the previous holder's same-position peers in their branch. */
   revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   canManageApplications?: boolean;
   /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
   canManageApplicationPanel?: boolean;
@@ -155,6 +160,8 @@ export function LeadDetailV2({
   revertTargetUserId = null,
   revertTargetName = null,
   revertTargetMembers = [],
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
   canManageApplications,
   canManageApplicationPanel,
   canEnroll,
@@ -170,7 +177,7 @@ export function LeadDetailV2({
   const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -260,6 +267,116 @@ export function LeadDetailV2({
       fetchTeamMembers();
     }
   }, [isAdmin, canAssign, fetchTeamMembers]);
+
+  // Academic/test field edit gate (§ Prospect-qualification brief): admin OR the lead's
+  // assignee OR a lead collaborator may edit. Assignee is known synchronously; collaborator
+  // status needs a fetch.
+  const [isCollaboratorUser, setIsCollaboratorUser] = useState(false);
+  const fetchCollaboratorStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${currentLead.id}/collaborators`);
+      if (res.ok) {
+        const json = await res.json();
+        const collabs = (json.data?.collaborators ?? []) as { user_id: string }[];
+        setIsCollaboratorUser(collabs.some((c) => c.user_id === userId));
+      }
+    } catch {
+      // silently fail — falls back to isAdmin/isAssignee
+    }
+  }, [currentLead.id, userId]);
+
+  useEffect(() => {
+    fetchCollaboratorStatus();
+  }, [fetchCollaboratorStatus]);
+
+  const isAssignee = userId === currentLead.assigned_to;
+  const isEditor = isAdmin || isAssignee || isCollaboratorUser;
+
+  // Move-into-Prospects gate: when the target list requires a qualifying %/GPA the lead
+  // doesn't have yet, the move is deferred until this fill-in dialog is confirmed.
+  const [pendingProspectMove, setPendingProspectMove] = useState<{
+    listId: string;
+    archiveReason?: string;
+    assignToUserId?: string | null;
+  } | null>(null);
+
+  // Assign-a-counselor gate (§6b hard-block): the server now rejects assigning a
+  // counselor when that assignment would auto-promote an unqualified lead into
+  // Prospects. Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{ userId: string } | null>(null);
+
+  async function performListMove(
+    listId: string,
+    archiveReason?: string,
+    assignToUserId?: string | null,
+    academicPatch?: Record<string, string>
+  ) {
+    const prevLead = currentLead;
+    const prevStageId = stageId;
+    const willHandOff =
+      assignToUserId !== undefined && assignToUserId !== null && assignToUserId !== userId;
+    if (willHandOff) setLeaving(true);
+    const targetList = leadLists?.find((l) => l.id === listId);
+    const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
+    setCurrentLead((prev) => ({
+      ...prev,
+      list_id: listId,
+      lead_type: newLeadType,
+      archive_reason: archiveReason ?? null,
+      ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
+      ...(academicPatch ?? {}),
+    } as Lead));
+    if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
+    try {
+      const body: Record<string, unknown> = {
+        list_id: listId,
+        archive_reason: archiveReason ?? null,
+        ...(academicPatch ?? {}),
+      };
+      if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
+      const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to move lead");
+      }
+      const json = await res.json();
+      const updated = json.data as Lead;
+      // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
+      if (updated.stage_id !== stageId) {
+        setStageId(updated.stage_id);
+        setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
+      }
+      // Server may derive a reassignment on revert (stage-transition governance)
+      // even when the client didn't pass assigned_to — sync it back.
+      if (updated.assigned_to !== prevLead.assigned_to) {
+        setAssignedTo(updated.assigned_to ?? "");
+        setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
+        router.refresh();
+      }
+      toast.success(`Moved to ${targetList?.name ?? "list"}`);
+      // Handed off to someone else (send-to-next / revert to another holder):
+      // the lead leaves this user's control and is now read-only for them, so
+      // close the detail and return to the list it moved out of.
+      if (updated.assigned_to && updated.assigned_to !== userId) {
+        router.back();
+        router.refresh();
+        return;
+      }
+      // Predicted a handoff (spinner shown) but the server kept the lead
+      // with us — restore the detail instead of hanging on the spinner.
+      if (willHandOff) setLeaving(false);
+    } catch (err) {
+      setCurrentLead(prevLead);
+      setStageId(prevStageId);
+      if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
+      setLeaving(false);
+      toast.error(err instanceof Error ? err.message : "Failed to move lead");
+    }
+  }
 
   useEffect(() => {
     if (!lead.converted_contact_id || !isItAgency) return;
@@ -430,7 +547,17 @@ export function LeadDetailV2({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assigned_to: value }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && value) {
+          setAssignedTo(lead.assigned_to || "");
+          toast.error(academicMsg);
+          setPendingAssignGate({ userId: value });
+          return;
+        }
+        throw new Error(errJson?.error?.message);
+      }
       toast.success("Assignment updated");
       // revertTargetUserId/Name are computed server-side from the lead's
       // assignment history — refresh so the Revert confirm dialog reflects
@@ -441,6 +568,29 @@ export function LeadDetailV2({
       setAssignedTo(lead.assigned_to || "");
     }
   };
+
+  async function confirmAssignQualification(patch: Record<string, string>) {
+    if (!pendingAssignGate) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: pendingAssignGate.userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to update assignment");
+      }
+      const json = await res.json();
+      setCurrentLead(json.data as Lead);
+      setAssignedTo(pendingAssignGate.userId);
+      toast.success("Assignment updated");
+      setPendingAssignGate(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update assignment");
+    }
+  }
 
   const handleDeleteLead = async () => {
     if (!confirm("Are you sure you want to delete this lead? This cannot be undone.")) return;
@@ -651,6 +801,7 @@ export function LeadDetailV2({
             editErrors={editErrors}
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
@@ -664,6 +815,7 @@ export function LeadDetailV2({
             assignableMembers={assignableMembers}
             userId={userId}
             isAdmin={isAdmin}
+            isEditor={isEditor}
             canEdit={canEdit}
             canAssign={canAssign}
             onStageChange={handleStageChange}
@@ -697,72 +849,19 @@ export function LeadDetailV2({
             revertTargetUserId={revertTargetUserId}
             revertTargetName={revertTargetName}
             revertTargetMembers={revertTargetMembers}
+            canMoveWithoutChain={canMoveWithoutChain}
+            stageAssigneeMap={stageAssigneeMap}
             onListChange={async (listId, archiveReason, assignToUserId) => {
-              const prevLead = currentLead;
-              const prevStageId = stageId;
-              const willHandOff =
-                assignToUserId !== undefined &&
-                assignToUserId !== null &&
-                assignToUserId !== userId;
-              if (willHandOff) setLeaving(true);
               const targetList = leadLists?.find((l) => l.id === listId);
-              const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
-              setCurrentLead((prev) => ({
-                ...prev,
-                list_id: listId,
-                lead_type: newLeadType,
-                archive_reason: archiveReason ?? null,
-                ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
-              } as Lead));
-              if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
-              try {
-                const body: Record<string, unknown> = { list_id: listId, archive_reason: archiveReason ?? null };
-                if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
-                const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(body),
-                });
-                if (!res.ok) {
-                  const errJson = await res.json().catch(() => null);
-                  throw new Error(errJson?.error?.message || "Failed to move lead");
-                }
-                const json = await res.json();
-                const updated = json.data as Lead;
-                // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
-                if (updated.stage_id !== stageId) {
-                  setStageId(updated.stage_id);
-                  setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
-                }
-                // Server may derive a reassignment on revert (stage-transition governance)
-                // even when the client didn't pass assigned_to — sync it back.
-                if (updated.assigned_to !== prevLead.assigned_to) {
-                  setAssignedTo(updated.assigned_to ?? "");
-                  setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
-                  // Same staleness issue as handleAssignmentChange: refresh so
-                  // revertTargetUserId/Name (computed server-side) reflect the
-                  // new assignee, not whoever it was when the page first loaded.
-                  router.refresh();
-                }
-                toast.success(`Moved to ${targetList?.name ?? "list"}`);
-                // Handed off to someone else (send-to-next / revert to another holder):
-                // the lead leaves this user's control and is now read-only for them, so
-                // close the detail and return to the list it moved out of.
-                if (updated.assigned_to && updated.assigned_to !== userId) {
-                  router.back();
-                  router.refresh();
-                  return;
-                }
-                // Predicted a handoff (spinner shown) but the server kept the lead
-                // with us — restore the detail instead of hanging on the spinner.
-                if (willHandOff) setLeaving(false);
-              } catch (err) {
-                setCurrentLead(prevLead);
-                setStageId(prevStageId);
-                if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
-                setLeaving(false);
-                toast.error(err instanceof Error ? err.message : "Failed to move lead");
+              if (
+                tenant.industry_id === "education_consultancy" &&
+                targetList?.slug === "prospects" &&
+                !hasProspectQualification(currentLead as unknown as Record<string, unknown>)
+              ) {
+                setPendingProspectMove({ listId, archiveReason, assignToUserId });
+                return;
               }
+              await performListMove(listId, archiveReason, assignToUserId);
             }}
             onSaveTripFields={async (fields) => {
               // Merge against live state (not the stale `lead` prop) so a trip
@@ -826,6 +925,7 @@ export function LeadDetailV2({
             industryId={tenant.industry_id}
             tenantName={tenant.name}
             tenantLogoUrl={tenant.logo_url}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.
@@ -1023,8 +1123,8 @@ export function LeadDetailV2({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -1060,6 +1160,29 @@ export function LeadDetailV2({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProspectQualificationDialog
+        lead={currentLead as unknown as Record<string, unknown>}
+        open={!!pendingProspectMove}
+        onConfirm={async (patch) => {
+          if (!pendingProspectMove) return;
+          await performListMove(
+            pendingProspectMove.listId,
+            pendingProspectMove.archiveReason,
+            pendingProspectMove.assignToUserId,
+            patch
+          );
+          setPendingProspectMove(null);
+        }}
+        onCancel={() => setPendingProspectMove(null)}
+      />
+
+      <ProspectQualificationDialog
+        lead={currentLead as unknown as Record<string, unknown>}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
+      />
     </div>
   );
 }

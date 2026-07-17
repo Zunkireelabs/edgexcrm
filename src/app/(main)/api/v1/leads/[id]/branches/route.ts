@@ -284,10 +284,16 @@ export async function GET(
     ),
   ];
   const emailMap = new Map<string, string>();
+  const nameMap = new Map<string, string>();
   await Promise.all(
     distinctAssignees.map(async (userId) => {
       const { data: u } = await supabase.auth.admin.getUserById(userId);
-      if (u?.user?.email) emailMap.set(userId, u.user.email);
+      const email = u?.user?.email;
+      if (!email) return;
+      emailMap.set(userId, email);
+      const meta = u?.user?.user_metadata as Record<string, unknown> | undefined;
+      const name = ((meta?.name ?? meta?.full_name) as string | undefined)?.trim();
+      nameMap.set(userId, name || email.split("@")[0]);
     }),
   );
 
@@ -297,6 +303,7 @@ export async function GET(
       branch_name: branchMap.get(r.branch_id) ?? r.branch_id,
       is_origin: r.is_origin,
       assigned_to: r.assigned_to ?? null,
+      assigned_to_name: r.assigned_to ? (nameMap.get(r.assigned_to) ?? null) : null,
       assigned_to_email: r.assigned_to ? (emailMap.get(r.assigned_to) ?? null) : null,
     }))
     .sort((a: { is_origin: boolean; branch_name: string }, b: { is_origin: boolean; branch_name: string }) => {

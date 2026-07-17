@@ -6,6 +6,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
 import { createHmac } from "crypto";
 import { getProfileEmail, createOAuth2Client } from "@/industries/_shared/features/email/lib/gmail-client";
+import { encryptAccountToken } from "@/industries/_shared/features/email/lib/token-crypto";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -117,15 +118,28 @@ export async function GET(request: NextRequest) {
       ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
       : null;
 
+    const encryptedRefreshToken = encryptAccountToken(tokenData.refresh_token);
+    const encryptedAccessToken = tokenData.access_token
+      ? encryptAccountToken(tokenData.access_token)
+      : null;
+
     if (existing) {
       await supabase
         .from("connected_email_accounts")
         .update({
-          refresh_token: tokenData.refresh_token,
-          access_token: tokenData.access_token,
+          refresh_token: encryptedRefreshToken,
+          access_token: encryptedAccessToken,
           token_expiry: tokenExpiry,
         })
         .eq("id", existing.id);
+
+      // Clear any error streak immediately so the "needs reconnect" badge
+      // drops right away instead of waiting for the next poll cycle to
+      // notice the connection is healthy again.
+      await supabase
+        .from("email_sync_state")
+        .update({ consecutive_error_count: 0, last_error: null })
+        .eq("connected_email_account_id", existing.id);
 
       log.info({ email, userId: auth.userId }, "Updated existing inbox Gmail connection");
     } else {
@@ -135,8 +149,8 @@ export async function GET(request: NextRequest) {
         provider: "gmail",
         email,
         display_name: email,
-        refresh_token: tokenData.refresh_token,
-        access_token: tokenData.access_token,
+        refresh_token: encryptedRefreshToken,
+        access_token: encryptedAccessToken,
         token_expiry: tokenExpiry,
       });
 

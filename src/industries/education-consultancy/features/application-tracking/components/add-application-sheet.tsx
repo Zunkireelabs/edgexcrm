@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { AutocompleteInput } from "./autocomplete-input";
+import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import type { ApplicationStage } from "@/types/database";
 
@@ -66,13 +67,49 @@ export function AddApplicationSheet({
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const [programSuggestions, setProgramSuggestions] = useState<string[]>([]);
   const [consentBlocked, setConsentBlocked] = useState(false);
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
-    useApplicationReferenceData(open);
+  const [universityId, setUniversityId] = useState<string | null>(null);
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
+  const {
+    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
+  } = useApplicationReferenceData(open);
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
   // one — see getCollegeSuggestions().
   const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
+
+  // Resolve the typed/selected University name to its catalog id — covers both
+  // picking an existing suggestion and a just-created college (handleCreateCollege
+  // also sets this directly). Unresolved (legacy free-typed name not in the
+  // catalog) stays null — Program then falls back to free text, no catalog filter.
+  useEffect(() => {
+    const trimmed = universityName.trim().toLowerCase();
+    if (!trimmed) { setUniversityId(null); return; }
+    const match = partnerColleges.find((c) => c.name.toLowerCase() === trimmed);
+    setUniversityId(match?.id ?? null);
+  }, [universityName, partnerColleges]);
+
+  useEffect(() => {
+    if (universityId) fetchPrograms(universityId);
+    // fetchPrograms reads a module-level cache; omitting it (a new closure each
+    // render) avoids refiring this effect every render — depending on universityId
+    // alone is enough since a cache hit inside fetchPrograms makes repeats cheap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [universityId]);
+
+  // Empty until a university is chosen; catalog-filtered once the name resolves to
+  // an id; falls back to the applications-history suggestions for a legacy
+  // free-typed university that isn't in the catalog (never blocks entry).
+  const catalogProgramSuggestions = universityId
+    ? (programsByUniversity[universityId] ?? []).map((p) => p.name)
+    : [];
+  const effectiveProgramSuggestions = !universityName.trim()
+    ? []
+    : universityId
+      ? catalogProgramSuggestions
+      : programSuggestions;
 
   useEffect(() => {
     if (!open) {
@@ -80,6 +117,9 @@ export function AddApplicationSheet({
       setLeadOptions([]);
       setSelectedLead(null);
       setUniversityName("");
+      setUniversityId(null);
+      setAddUniversityDialogOpen(false);
+      setPendingUniversityName("");
       setProgramName("");
       setIntakeMonth("");
       setIntakeYear("");
@@ -141,8 +181,19 @@ export function AddApplicationSheet({
   if (!canManageApplications) return null;
 
   async function handleCreateCollege(name: string) {
-    const ok = await createPartnerCollege(name, country || null);
-    if (ok) setUniversityName(name);
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
+  }
+
+  async function handleCreateProgram(name: string) {
+    if (!universityId) {
+      // Legacy/free-typed university not in the catalog — accept the free-text
+      // program as-is rather than blocking.
+      setProgramName(name);
+      return;
+    }
+    const created = await createProgram(universityId, name);
+    if (created) setProgramName(created.name);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -290,6 +341,8 @@ export function AddApplicationSheet({
                   suggestions={collegeSuggestions}
                   placeholder="e.g. Univ. of Melbourne"
                   onCreateNew={handleCreateCollege}
+                  createLabel="university"
+                  skipConfirm
                 />
               </div>
               <div className="space-y-1.5">
@@ -300,8 +353,10 @@ export function AddApplicationSheet({
                   id="app-program"
                   value={programName}
                   onChange={setProgramName}
-                  suggestions={programSuggestions}
-                  placeholder="e.g. MSc Computer Science"
+                  suggestions={effectiveProgramSuggestions}
+                  placeholder={!universityName.trim() ? "Select a university first" : "e.g. MSc Computer Science"}
+                  onCreateNew={handleCreateProgram}
+                  createLabel="program"
                 />
               </div>
             </div>
@@ -434,6 +489,21 @@ export function AddApplicationSheet({
           </div>
         </SheetFooter>
       </SheetContent>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countries}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          setUniversityId(university.id);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </Sheet>
   );
 }

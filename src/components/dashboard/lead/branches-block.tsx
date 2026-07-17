@@ -26,6 +26,7 @@ interface Membership {
   branch_name: string;
   is_origin: boolean;
   assigned_to: string | null;
+  assigned_to_name: string | null;
   assigned_to_email: string | null;
 }
 
@@ -165,9 +166,9 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                       )}
                     </div>
 
-                    {m.assigned_to_email && (
+                    {(m.assigned_to_name || m.assigned_to_email) && (
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.assigned_to_email}
+                        {m.assigned_to_name || m.assigned_to_email}
                       </p>
                     )}
                   </div>

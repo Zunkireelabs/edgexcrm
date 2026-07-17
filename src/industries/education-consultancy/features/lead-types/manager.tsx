@@ -143,7 +143,7 @@ export function LeadTypesManager() {
           <div>
             <CardTitle>Lead Types</CardTitle>
             <CardDescription>
-              Customise the Lead Type dropdown shown on every lead (e.g. Student, Parent, B2B).
+              Customise the Lead Type dropdown shown on every lead (e.g. Student, Other, B2B).
             </CardDescription>
           </div>
           <Button size="sm" onClick={openCreate} className="shrink-0">

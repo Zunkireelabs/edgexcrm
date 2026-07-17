@@ -118,7 +118,8 @@ export interface IncomingLeadFields {
 // Returns only the keys that would actually change — empty object = no update needed.
 // Fill-empty: scalars only written to canonical if the canonical value is null/empty.
 // JSONB fields (custom_fields, file_urls): existing keys win — never drops data.
-// tags: union — new tags added, existing never removed.
+// tags: fill-empty too — tags[0] is the lead's single category (migration 098_lead_types.sql),
+// so it must never be unioned with incoming (that produced ["other","student"] on one lead).
 export function applyCanonicalUpdate(
   existing: Lead,
   incoming: IncomingLeadFields
@@ -161,12 +162,9 @@ export function applyCanonicalUpdate(
     }
   }
 
-  // tags: union
-  if (incoming.tags && incoming.tags.length > 0) {
-    const merged = Array.from(new Set([...(existing.tags ?? []), ...incoming.tags]));
-    if (merged.length !== (existing.tags ?? []).length) {
-      patch.tags = merged;
-    }
+  // tags: fill-empty (single category, never union — see note above)
+  if (incoming.tags && incoming.tags.length > 0 && (!existing.tags || existing.tags.length === 0)) {
+    patch.tags = incoming.tags;
   }
 
   return patch;

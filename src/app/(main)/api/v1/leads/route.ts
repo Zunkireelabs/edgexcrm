@@ -49,6 +49,7 @@ import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignme
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -515,6 +516,7 @@ async function handlePost(request: NextRequest) {
     destinations: Array.isArray(body.destinations) ? body.destinations : [],
     field_of_study: (body.field_of_study as string | null | undefined) || null,
     degree_level: (body.degree_level as string | null | undefined) || null,
+    ...coerceAcademicPayload(body),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
 
@@ -594,6 +596,23 @@ async function handlePost(request: NextRequest) {
     }
     leadPayload.list_id = explicitListId;
     if (body.archive_reason) leadPayload.archive_reason = body.archive_reason as string;
+  }
+
+  // Prospect-qualification gate (server backstop). Covers BOTH create paths — the check-in
+  // auto-route above and an explicit list_id from AddLeadSheet — since either can resolve
+  // leadPayload.list_id to the Prospects list.
+  if (tenant.industry_id === "education_consultancy" && leadPayload.list_id) {
+    const { data: finalList } = await supabase
+      .from("lead_lists")
+      .select("slug")
+      .eq("id", leadPayload.list_id as string)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (finalList?.slug === "prospects" && !hasProspectQualification(leadPayload)) {
+      return apiValidationError({
+        academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+      });
+    }
   }
 
   // Education defense-in-depth: mirror the Add-Lead cascade server-side. On manual dashboard

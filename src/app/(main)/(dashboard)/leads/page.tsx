@@ -1,6 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
+import { getLeadCollaboratorsMap } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
@@ -168,7 +169,7 @@ export default async function LeadsPage({
       ? await getListPipeline(activeList.id, tenantData.tenant.id)
       : null;
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
+  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, leadCollaboratorsMap] =
     await Promise.all([
       getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
       getTeamMembers(tenantData.tenant.id),
@@ -187,6 +188,7 @@ export default async function LeadsPage({
         .eq("tenant_id", tenantData.tenant.id)
         .eq("is_active", true)
         .order("position", { ascending: true }),
+      getLeadCollaboratorsMap(serviceClient, tenantData.tenant.id),
     ]);
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
@@ -275,6 +277,7 @@ export default async function LeadsPage({
           canEdit={tenantData.permissions.canEditLeads ?? tenantData.role !== "viewer"}
           restrictToSelf={tenantData.permissions.leadScope === "own"}
           userId={tenantData.userId}
+          industryId={tenantData.tenant.industry_id}
         />
       </div>
     );
@@ -296,6 +299,7 @@ export default async function LeadsPage({
       <LeadsTable
         leads={leads}
         openTaskLeadIds={openTaskLeadIds}
+        leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}
         memberNames={memberNames}
         stages={stages}
@@ -321,6 +325,7 @@ export default async function LeadsPage({
         canEditLeads={tenantData.permissions.canEditLeads}
         assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
+        defaultListId={activeList && !activeList.is_staging && !activeList.is_archive ? activeList.id : undefined}
         activeListSlug={activeList?.slug ?? null}
         activeFunnelKey={activeFunnelLists.length > 0 ? funnelParam ?? null : null}
         hasListPipeline={hasListPipeline}

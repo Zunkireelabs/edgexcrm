@@ -8,6 +8,8 @@ import { TenantLocaleManager } from "@/components/dashboard/settings/tenant-loca
 import { PartnerCollegesManager } from "@/components/dashboard/settings/partner-colleges-manager";
 import { CountriesManager } from "@/components/dashboard/settings/countries-manager";
 import { CoursesManager } from "@/components/dashboard/settings/courses-manager";
+import { StudyLevelsManager } from "@/components/dashboard/settings/study-levels-manager";
+import { ProgramsManager } from "@/components/dashboard/settings/programs-manager";
 import { IntakeMonthsManager } from "@/components/dashboard/settings/intake-months-manager";
 import { IntakeYearsManager } from "@/components/dashboard/settings/intake-years-manager";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
@@ -47,8 +49,10 @@ export function OrganizationPanel() {
             <IndustryEntitiesManager industry={industry} initialEntities={entities} />
           )}
           {hasPartnerColleges && <PartnerCollegesManager />}
+          {hasPartnerColleges && <ProgramsManager />}
           {hasPartnerColleges && <CountriesManager />}
           {hasPartnerColleges && <CoursesManager />}
+          {hasPartnerColleges && <StudyLevelsManager />}
           {hasPartnerColleges && <IntakeMonthsManager />}
           {hasPartnerColleges && <IntakeYearsManager />}
           <BranchesManager maxBranches={maxBranches} />

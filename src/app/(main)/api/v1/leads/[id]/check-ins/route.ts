@@ -53,10 +53,11 @@ export async function GET(
   ) return apiNotFound("Lead");
   if (!requireLeadBranchAccess(auth, lead, membership)) return apiNotFound("Lead");
 
-  // Fetch all check-in notes for this lead
+  // Fetch all check-in notes for this lead. meet_with_id = who the visitor met on
+  // that visit (surfaced on the lead's Check-In History card).
   const { data, error } = await supabase
     .from("lead_notes")
-    .select("id, content, created_at, user_email, user_id")
+    .select("id, content, created_at, user_email, user_id, meet_with_id")
     .eq("lead_id", id)
     .like("content", "[CHECK-IN]%")
     .order("created_at", { ascending: false });

@@ -316,7 +316,7 @@ git fetch origin && git rebase origin/stage   # again right before merge
 # main + stage are BRANCH-PROTECTED — no direct pushes. Everything is a PR.
 # (If GitHub says the PR is out-of-date, click "Update branch" — required to merge.)
 
-# Deploy staging: open + squash-merge a PR to stage (CI must be green, 0 approvals)
+# Deploy staging: open + squash-merge a PR to stage (CI must be green + 1 approval — stage is branch-protected)
 gh pr create --base stage --title "..." --body "..."
 gh pr merge <num> --squash --delete-branch
 

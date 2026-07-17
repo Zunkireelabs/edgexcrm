@@ -15,6 +15,8 @@ import {
 import { toast } from "sonner";
 import { PipelineColumn } from "@/components/pipeline/PipelineColumn";
 import { LeadCard } from "@/components/pipeline/LeadCard";
+import { ProspectQualificationDialog } from "./prospect-qualification-dialog";
+import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { LeadList, PipelineLead, PipelineStage } from "@/types/database";
 
 interface FunnelKanbanBoardProps {
@@ -26,6 +28,7 @@ interface FunnelKanbanBoardProps {
   canEdit: boolean;
   restrictToSelf?: boolean;
   userId: string;
+  industryId?: string | null;
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
@@ -71,13 +74,14 @@ function findLeadColumn(columns: ColumnsState, leadId: string): string | null {
  * the lead between lists (via the bulk API, which already syncs pipeline_id/stage_id to
  * the target list's own status pipeline). Distinct from ListKanbanView, whose columns are
  * one list's own statuses. */
-export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = false, userId }: FunnelKanbanBoardProps) {
+export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = false, userId, industryId }: FunnelKanbanBoardProps) {
   // DnD-kit and Radix generate ids that differ between the SSR pass and the client's first
   // render — mirrors the same guard in PipelineBoard. Render a skeleton until mounted.
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() => groupByList(leads, lists));
   const [activeId, setActiveId] = useState<string | null>(null);
   const prevColumnsRef = useRef<ColumnsState | null>(null);
+  const [pendingMove, setPendingMove] = useState<{ leadId: string; targetListId: string; lead: PipelineLead } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -153,6 +157,19 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
       return;
     }
 
+    // Prospect-qualification gate: block the move and open the fill-in dialog instead.
+    const targetList = lists.find((l) => l.id === targetListId);
+    if (
+      industryId === "education_consultancy" &&
+      targetList?.slug === "prospects" &&
+      !hasProspectQualification(lead as unknown as Record<string, unknown>)
+    ) {
+      if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
+      prevColumnsRef.current = null;
+      setPendingMove({ leadId, targetListId, lead: lead as PipelineLead });
+      return;
+    }
+
     try {
       const res = await fetch("/api/v1/leads/bulk", {
         method: "PATCH",
@@ -176,6 +193,35 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
     }
 
     prevColumnsRef.current = null;
+  }
+
+  async function handleConfirmQualification(patch: Record<string, string>) {
+    if (!pendingMove) return;
+    const { leadId, targetListId, lead } = pendingMove;
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ list_id: targetListId, ...patch }),
+      });
+      if (!res.ok) throw new Error("Failed to move lead");
+
+      setColumns((prev) => {
+        const updated: ColumnsState = {};
+        for (const listId of Object.keys(prev)) {
+          updated[listId] = prev[listId].filter((l) => l.id !== leadId);
+        }
+        updated[targetListId] = [...(updated[targetListId] || []), { ...lead, ...patch, list_id: targetListId }];
+        return updated;
+      });
+      setPendingMove(null);
+    } catch {
+      toast.error("Failed to move lead. Please try again.");
+    }
+  }
+
+  function handleCancelQualification() {
+    setPendingMove(null);
   }
 
   if (!mounted) {
@@ -211,6 +257,12 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
         </div>
         <DragOverlay>{activeLead ? <LeadCard lead={activeLead} disabled /> : null}</DragOverlay>
       </DndContext>
+      <ProspectQualificationDialog
+        lead={(pendingMove?.lead as unknown as Record<string, unknown>) ?? null}
+        open={!!pendingMove}
+        onConfirm={handleConfirmQualification}
+        onCancel={handleCancelQualification}
+      />
     </div>
   );
 }
