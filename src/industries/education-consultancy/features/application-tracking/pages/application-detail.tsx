@@ -47,6 +47,7 @@ import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
 import { ApplicationTabs } from "../components/application-tabs";
 import { AutocompleteInput } from "../components/autocomplete-input";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
@@ -153,8 +154,12 @@ export function ApplicationDetailPage({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const { agents, partnerColleges, countries, intakeMonths, intakeYears, createPartnerCollege } =
-    useApplicationReferenceData();
+  const {
+    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    createPartnerCollege, createProgram, fetchDistinctProgramNames,
+  } = useApplicationReferenceData();
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -177,8 +182,8 @@ export function ApplicationDetailPage({
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
   async function handleCreateCollege(name: string) {
-    const ok = await createPartnerCollege(name, country || null);
-    if (ok) setUniversityName(name);
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
   }
 
   // Fetch team member emails for timeline display
@@ -642,6 +647,7 @@ export function ApplicationDetailPage({
                     placeholder="e.g. University of Melbourne"
                     onCreateNew={handleCreateCollege}
                     createLabel="university"
+                    skipConfirm
                   />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
@@ -901,6 +907,20 @@ export function ApplicationDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countries}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </div>
   );
 }
