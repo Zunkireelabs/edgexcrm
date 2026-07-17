@@ -47,6 +47,7 @@ import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
 import { ApplicationTabs } from "../components/application-tabs";
 import { AutocompleteInput } from "../components/autocomplete-input";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -144,6 +145,8 @@ export function ApplicationDetailPage({
   // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
   const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
   const [country, setCountry] = useState("");
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
   const [offerLetterUrl, setOfferLetterUrl] = useState("");
@@ -158,6 +161,7 @@ export function ApplicationDetailPage({
     agents, partnerColleges, countries, intakeMonths, intakeYears,
     createPartnerCollege, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData();
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
   const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
   const [pendingUniversityName, setPendingUniversityName] = useState("");
 
@@ -240,6 +244,8 @@ export function ApplicationDetailPage({
     setIntakeTouched(false);
     setIntakeLegacyAmbiguous(raw.trim() !== "" && (matchedMonth == null || rawYear == null));
     setCountry(application.country ?? "");
+    setDegreeLevel(application.degree_level ?? "");
+    setFieldOfStudy(application.field_of_study ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
     setOfferLetterUrl(application.offer_letter_url ?? "");
@@ -281,6 +287,8 @@ export function ApplicationDetailPage({
         program_name: programName.trim(),
         intake_term: intakeTermPatch,
         country: country.trim() || null,
+        degree_level: degreeLevel && degreeLevel !== "__none__" ? degreeLevel : null,
+        field_of_study: fieldOfStudy && fieldOfStudy !== "__none__" ? fieldOfStudy : null,
         application_deadline: deadline || null,
         offer_type: offerType || null,
         offer_letter_url: offerLetterUrl.trim() || null,
@@ -651,6 +659,46 @@ export function ApplicationDetailPage({
                   />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
+                )}
+              </div>
+
+              {/* Interested Degree Level */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Interested Degree Level</Label>
+                {editing ? (
+                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select level</SelectItem>
+                      {studyLevels.map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.degree_level ?? "—"}</p>
+                )}
+              </div>
+
+              {/* Field of Study */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Field of Study</Label>
+                {editing ? (
+                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select field</SelectItem>
+                      {fieldsOfStudy.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.field_of_study ?? "—"}</p>
                 )}
               </div>
 

@@ -24,6 +24,7 @@ import {
 import { AutocompleteInput } from "./autocomplete-input";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import type { ApplicationStage } from "@/types/database";
 
 interface LeadOption {
@@ -60,6 +61,8 @@ export function AddApplicationSheet({
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [country, setCountry] = useState("");
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState(defaultStage?.id ?? "");
   const [deadline, setDeadline] = useState("");
   const [agentId, setAgentId] = useState("");
@@ -74,6 +77,7 @@ export function AddApplicationSheet({
     agents, partnerColleges, countries, intakeMonths, intakeYears,
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
 
   // Colleges tagged to the selected country (+ untagged) rank first; every
   // college stays selectable so the autocomplete's dedupe check never misses
@@ -124,6 +128,8 @@ export function AddApplicationSheet({
       setIntakeMonth("");
       setIntakeYear("");
       setCountry("");
+      setDegreeLevel("");
+      setFieldOfStudy("");
       setDeadline("");
       setAgentId("");
       setAppliedDate("");
@@ -212,6 +218,8 @@ export function AddApplicationSheet({
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
       if (country && country !== "__none__") body.country = country;
+      if (degreeLevel && degreeLevel !== "__none__") body.degree_level = degreeLevel;
+      if (fieldOfStudy && fieldOfStudy !== "__none__") body.field_of_study = fieldOfStudy;
       if (deadline) body.application_deadline = deadline;
       if (agentId && agentId !== "__none__") body.agent_id = agentId;
       if (appliedDate) body.applied_date = appliedDate;
@@ -329,36 +337,66 @@ export function AddApplicationSheet({
               </Select>
             </div>
 
+            <div className="space-y-1.5">
+              <Label htmlFor="app-university" className="text-xs text-gray-600">
+                University <span className="text-destructive">*</span>
+              </Label>
+              <AutocompleteInput
+                id="app-university"
+                value={universityName}
+                onChange={setUniversityName}
+                suggestions={collegeSuggestions}
+                placeholder="e.g. Univ. of Melbourne"
+                onCreateNew={handleCreateCollege}
+                createLabel="university"
+                skipConfirm
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <Label htmlFor="app-university" className="text-xs text-gray-600">
-                  University <span className="text-destructive">*</span>
-                </Label>
-                <AutocompleteInput
-                  id="app-university"
-                  value={universityName}
-                  onChange={setUniversityName}
-                  suggestions={collegeSuggestions}
-                  placeholder="e.g. Univ. of Melbourne"
-                  onCreateNew={handleCreateCollege}
-                  createLabel="university"
-                  skipConfirm
-                />
+                <Label className="text-xs text-gray-600">Interested Degree Level</Label>
+                <Select value={degreeLevel} onValueChange={setDegreeLevel}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select level</SelectItem>
+                    {studyLevels.map((lvl) => (
+                      <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="app-program" className="text-xs text-gray-600">
-                  Program <span className="text-destructive">*</span>
-                </Label>
-                <AutocompleteInput
-                  id="app-program"
-                  value={programName}
-                  onChange={setProgramName}
-                  suggestions={effectiveProgramSuggestions}
-                  placeholder={!universityName.trim() ? "Select a university first" : "e.g. MSc Computer Science"}
-                  onCreateNew={handleCreateProgram}
-                  createLabel="program"
-                />
+                <Label className="text-xs text-gray-600">Field of Study</Label>
+                <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select field" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select field</SelectItem>
+                    {fieldsOfStudy.map((f) => (
+                      <SelectItem key={f} value={f}>{f}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="app-program" className="text-xs text-gray-600">
+                Program <span className="text-destructive">*</span>
+              </Label>
+              <AutocompleteInput
+                id="app-program"
+                value={programName}
+                onChange={setProgramName}
+                suggestions={effectiveProgramSuggestions}
+                placeholder={!universityName.trim() ? "Select a university first" : "e.g. MSc Computer Science"}
+                onCreateNew={handleCreateProgram}
+                createLabel="program"
+              />
             </div>
 
             <div className="space-y-1.5">

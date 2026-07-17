@@ -1104,6 +1104,8 @@ export interface Application {
   agent_id: string | null;
   applied_date: string | null;
   intake_start_date: string | null;
+  degree_level: string | null;
+  field_of_study: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
