@@ -5,6 +5,7 @@ import { emitEvent } from "@/lib/api/audit";
 import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
 import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/_shared/features/email/lib/gmail-client";
 import type { ParsedMessage } from "@/industries/_shared/features/email/lib/gmail-client";
+import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 interface EmailThread {
@@ -15,23 +16,6 @@ interface EmailThread {
   contact_id: string | null;
   gmail_thread_id: string;
   connected_email_account_id: string;
-}
-
-export async function persistRefreshedToken(
-  supabase: SupabaseClient,
-  accountId: string,
-  refreshed: { access_token: string; expiry_date: number },
-): Promise<void> {
-  const { error } = await supabase
-    .from("connected_email_accounts")
-    .update({
-      access_token: refreshed.access_token,
-      token_expiry: new Date(refreshed.expiry_date).toISOString(),
-    })
-    .eq("id", accountId);
-  if (error) {
-    logger.warn({ error, accountId }, "Failed to persist refreshed token (non-fatal)");
-  }
 }
 
 async function matchInboundToThread(
@@ -89,47 +73,56 @@ async function matchInboundToThread(
 
 export async function pollOneAccount(
   supabase: SupabaseClient,
-  account: ConnectedEmailAccount,
+  rawAccount: ConnectedEmailAccount,
 ): Promise<{ newInboundCount: number }> {
-  // Load sync state (create baseline if first poll)
+  // Load sync state BEFORE decrypting/using the account, so the catch below
+  // always has a baseline to record against — an account whose token can't
+  // even be decrypted must still trip the "needs reconnect" badge, not
+  // disappear from tracking because nothing wrote to email_sync_state yet.
   const { data: existingState } = await supabase
     .from("email_sync_state")
     .select("*")
-    .eq("connected_email_account_id", account.id)
+    .eq("connected_email_account_id", rawAccount.id)
     .maybeSingle();
 
-  let lastHistoryId: string | null = existingState?.last_history_id ?? null;
-
-  // First-time poll: bootstrap baseline from current profile.historyId
-  if (!lastHistoryId) {
-    const refreshed = await refreshAccessTokenIfNeeded(account);
-    const client = createOAuth2Client(account.refresh_token);
-    if (refreshed) {
-      client.setCredentials({
-        refresh_token: account.refresh_token,
-        access_token: refreshed.access_token,
-        expiry_date: refreshed.expiry_date,
-      });
-    }
-    const profile = await google.gmail({ version: "v1", auth: client }).users.getProfile({ userId: "me" });
-    lastHistoryId = String(profile.data.historyId);
-    await supabase.from("email_sync_state").upsert(
-      {
-        connected_email_account_id: account.id,
-        last_history_id: lastHistoryId,
-        last_synced_at: new Date().toISOString(),
-        consecutive_error_count: 0,
-        last_error: null,
-      },
-      { onConflict: "connected_email_account_id" },
-    );
-    if (refreshed) {
-      await persistRefreshedToken(supabase, account.id, refreshed);
-    }
-    return { newInboundCount: 0 };
-  }
-
   try {
+    // Decrypt once here so every downstream call (refresh, history, get-message)
+    // sees plaintext tokens without needing to know about encryption. A
+    // decrypt failure now falls into this try's catch below instead of
+    // throwing before any error is ever recorded.
+    const account = decryptAccountTokens(rawAccount);
+
+    const lastHistoryId: string | null = existingState?.last_history_id ?? null;
+
+    // First-time poll: bootstrap baseline from current profile.historyId
+    if (!lastHistoryId) {
+      const refreshed = await refreshAccessTokenIfNeeded(account);
+      const client = createOAuth2Client(account.refresh_token);
+      if (refreshed) {
+        client.setCredentials({
+          refresh_token: account.refresh_token,
+          access_token: refreshed.access_token,
+          expiry_date: refreshed.expiry_date,
+        });
+      }
+      const profile = await google.gmail({ version: "v1", auth: client }).users.getProfile({ userId: "me" });
+      const bootstrapHistoryId = String(profile.data.historyId);
+      await supabase.from("email_sync_state").upsert(
+        {
+          connected_email_account_id: account.id,
+          last_history_id: bootstrapHistoryId,
+          last_synced_at: new Date().toISOString(),
+          consecutive_error_count: 0,
+          last_error: null,
+        },
+        { onConflict: "connected_email_account_id" },
+      );
+      if (refreshed) {
+        await persistRefreshedToken(supabase, account.id, refreshed);
+      }
+      return { newInboundCount: 0 };
+    }
+
     const { historyId, messageAddedIds, refreshed_credentials, expired } = await listHistory(
       account,
       lastHistoryId,
@@ -298,15 +291,22 @@ export async function pollOneAccount(
 
     return { newInboundCount };
   } catch (err) {
-    logger.error({ err, account_id: account.id }, "Poll failed for account");
+    logger.error({ err, account_id: rawAccount.id }, "Poll failed for account");
+    // upsert (not update): this catch can now fire before any email_sync_state
+    // row exists at all — e.g. a decrypt failure or bootstrap failure on an
+    // account's very first poll — so a plain update() would silently match
+    // zero rows and the "needs reconnect" badge would never trip.
     await supabase
       .from("email_sync_state")
-      .update({
-        last_synced_at: new Date().toISOString(),
-        last_error: String(err).substring(0, 500),
-        consecutive_error_count: (existingState?.consecutive_error_count ?? 0) + 1,
-      })
-      .eq("connected_email_account_id", account.id);
+      .upsert(
+        {
+          connected_email_account_id: rawAccount.id,
+          last_synced_at: new Date().toISOString(),
+          last_error: String(err).substring(0, 500),
+          consecutive_error_count: (existingState?.consecutive_error_count ?? 0) + 1,
+        },
+        { onConflict: "connected_email_account_id" },
+      );
     throw err; // propagate to allSettled — counted as error in caller
   }
 }
