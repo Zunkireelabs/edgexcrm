@@ -181,7 +181,7 @@ export default async function LeadDetailPage({
     ASSIGN_CHAIN_POSITIONS.has(tenantData.positionSlug) &&
     tenantData.permissions.baseTier === "member";
   const nextSlug = isChainMember ? nextPositionSlug(tenantData.positionSlug) : null;
-  let nextPositionMembers = nextSlug
+  const nextPositionMembers = nextSlug
     ? roster.filter(
         (m) =>
           m.position_slug === nextSlug &&
