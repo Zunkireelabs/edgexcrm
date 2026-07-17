@@ -560,7 +560,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         const checkInRes = await fetch(`/api/v1/leads/${newLeadId}/check-in`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: notes.trim() || undefined }),
+          body: JSON.stringify({ meet_with_id: meetWithId || null, reason: notes.trim() || undefined }),
         });
         if (checkInRes.ok) {
           toast.success("Lead added and checked in");
