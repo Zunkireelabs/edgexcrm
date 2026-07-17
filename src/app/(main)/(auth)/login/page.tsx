@@ -421,7 +421,7 @@ function LoginPageContent() {
         </div>
         <div className="login-footer-links">
           <a href="#">Terms of service</a>
-          <a href="#">Privacy policy</a>
+          <Link href="/privacy">Privacy policy</Link>
           <span>&copy;2026 Zunkireelabs</span>
         </div>
       </div>
