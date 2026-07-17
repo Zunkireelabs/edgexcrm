@@ -192,28 +192,32 @@ export default async function LeadDetailPage({
   // Admins and branch-managers have no chain position, so the block above leaves them
   // with an empty roster and ListStepper hides the assignee picker entirely — the lead
   // moves with the assignee unchanged. Give them a picker too: the destination stage's
-  // line handler (branch-manager excluded, mirroring the chain hand-off), scoped to the
-  // LEAD's branch (an admin has none of their own).
+  // handlers (per STAGE_TEAM_MAP — the line position plus branch-manager, who can own a
+  // lead at any stage), scoped to the LEAD's branch (an admin has none of their own).
+  // Sourced from the same list activeLeadLists ?? accessibleLists ListStepper itself uses
+  // (key-info-section.tsx's `activeLists`) so the picker's destination can't diverge from
+  // what the stepper actually moves the lead to (e.g. in a funnel-scoped view).
   const canMoveWithoutChain =
     tenantData.tenant.industry_id === "education_consultancy" &&
     !isChainMember &&
     (tenantData.permissions.baseTier === "admin" || tenantData.permissions.leadScope === "team");
   if (canMoveWithoutChain) {
-    const sortedAccessibleLists = [...accessibleLists].sort(
+    const stepperLists = activeLeadLists ?? accessibleLists;
+    const sortedStepperLists = [...stepperLists].sort(
       (a, b) =>
         (a as unknown as { sort_order: number }).sort_order -
         (b as unknown as { sort_order: number }).sort_order,
     );
-    const currentIdx = sortedAccessibleLists.findIndex((l) => l.id === leadListId);
+    const currentIdx = sortedStepperLists.findIndex((l) => l.id === leadListId);
     const nextList =
       currentIdx >= 0
-        ? sortedAccessibleLists
+        ? sortedStepperLists
             .slice(currentIdx + 1)
             .find((l) => !(l as unknown as { is_archive?: boolean }).is_archive)
         : undefined;
     if (nextList) {
       const nextListSlug = (nextList as unknown as { slug: string }).slug;
-      const handlerSlugs = positionsForStage(nextListSlug).filter((s) => s !== "branch-manager");
+      const handlerSlugs = positionsForStage(nextListSlug);
       const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
       nextPositionMembers = roster.filter(
         (m) =>

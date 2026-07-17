@@ -1,10 +1,14 @@
 -- Migration 163: Clean the auto-seeded academic catalog (universities + programs)
 --
--- Data-only, transactional. Never touches the applications table.
+-- Data-only, transactional, scoped to education_consultancy tenants. Never touches
+-- the applications table.
 --   Expected before/after row counts: partner_colleges 148 -> ~87; study_programs 80 -> ~3
 --     (dry-run verified on stage before applying — see PR description).
 --   Rollback: none — deletes junk seed data; re-add via UI if needed. Applications untouched.
---   Applied: stage 2026-07-17 (148->87 partner_colleges, 80->3 study_programs; applications 513->513 unchanged) / prod HELD.
+--   Applied: stage 2026-07-17, pre-industry-scope version (148->87 partner_colleges, 80->3
+--     study_programs; applications 513->513 unchanged) — result is identical with the added
+--     tenant_id scope (only education_consultancy tenants had matching rows), NOT re-run on
+--     stage. Prod runs this (scoped) version.
 --
 -- Migration 160's backfill inserted name-only partner_colleges rows (no country, no
 -- description) from applications.university_name for any name without an existing
@@ -25,6 +29,7 @@ DO $$ DECLARE u INT; p INT; BEGIN
 DELETE FROM partner_colleges pc
 WHERE pc.country IS NULL
   AND pc.description IS NULL
+  AND pc.tenant_id IN (SELECT id FROM tenants WHERE industry_id = 'education_consultancy')
   AND EXISTS (
     SELECT 1 FROM applications a
     WHERE a.tenant_id = pc.tenant_id
@@ -33,9 +38,10 @@ WHERE pc.country IS NULL
 
 -- (b) Delete any remaining junk-pattern programs still attached to surviving (original-87) unis.
 DELETE FROM study_programs
-WHERE name ~ '(^|\s)[0-9]+\.'        -- "1." "2." concatenations
+WHERE (name ~ '(^|\s)[0-9]+\.'        -- "1." "2." concatenations
    OR name ILIKE '%not specified%'
-   OR TRIM(name) = '';
+   OR TRIM(name) = '')
+  AND tenant_id IN (SELECT id FROM tenants WHERE industry_id = 'education_consultancy');
 
 DO $$ DECLARE u INT; p INT; BEGIN
   SELECT count(*) INTO u FROM partner_colleges; SELECT count(*) INTO p FROM study_programs;
