@@ -17,7 +17,7 @@ function signState(userId: string): string {
   return `${userId}.${sig}`;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.EMAIL)) return apiForbidden();
@@ -43,6 +43,25 @@ export async function POST() {
     prompt: "consent",
     state,
   });
+
+  // Reconnecting a specific broken inbox: bias Google's account chooser
+  // toward that address so the user doesn't accidentally authorize a
+  // different Google account and end up with a brand-new inbox row while
+  // the one they meant to fix stays broken. A hint only, not enforced —
+  // Google still lets the user pick a different account if they want to.
+  let body: unknown = null;
+  try {
+    body = await request.json();
+  } catch {
+    // No body (or invalid JSON) is fine — this is a plain "connect a new inbox".
+  }
+  const loginHint =
+    body && typeof body === "object" && "login_hint" in body && typeof (body as { login_hint: unknown }).login_hint === "string"
+      ? (body as { login_hint: string }).login_hint
+      : null;
+  if (loginHint) {
+    params.set("login_hint", loginHint);
+  }
 
   return apiSuccess({ url: `${GOOGLE_AUTH_URL}?${params.toString()}` });
 }
