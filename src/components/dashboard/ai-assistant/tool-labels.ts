@@ -6,6 +6,7 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   team_lookup: "Checking the team",
   activity_timeline: "Reading activity",
   search_knowledge: "Searching knowledge",
+  read_document: "Reading document",
   get_form_submissions_summary: "Checking form submissions",
 };
 

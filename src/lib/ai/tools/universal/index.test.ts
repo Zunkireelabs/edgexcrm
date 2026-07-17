@@ -11,6 +11,7 @@ const UNIVERSAL_TOOL_IDS = [
   "team_lookup",
   "activity_timeline",
   "search_knowledge",
+  "read_document",
   "get_form_submissions_summary",
 ];
 
@@ -33,7 +34,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
 }
 
 describe("universal tool registration", () => {
-  it("registers all 8 universal tools", () => {
+  it("registers all 9 universal tools", () => {
     const toolset = buildToolset(fixtureAuth());
     const ids = toolset.map((t) => t.id);
     for (const id of UNIVERSAL_TOOL_IDS) {
@@ -51,7 +52,7 @@ describe("universal tool registration", () => {
     expect(toolset.find((t) => t.id === "get_form_submissions_summary")).toBeUndefined();
   });
 
-  it("keeps the other 7 tools universal (present for it_agency too)", () => {
+  it("keeps the other 8 tools universal (present for it_agency too)", () => {
     const toolset = buildToolset(fixtureAuth({ industryId: "it_agency" }));
     const ids = toolset.map((t) => t.id);
     for (const id of UNIVERSAL_TOOL_IDS.filter((i) => i !== "get_form_submissions_summary")) {

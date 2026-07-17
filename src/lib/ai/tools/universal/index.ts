@@ -8,6 +8,7 @@ import { listMyTasksTool } from "./list-my-tasks";
 import { teamLookupTool } from "./team-lookup";
 import { activityTimelineTool } from "./activity-timeline";
 import { searchKnowledgeTool } from "./search-knowledge";
+import { readDocumentTool } from "./read-document";
 import { getFormSubmissionsSummaryTool } from "./get-form-submissions-summary";
 
 registerTool(searchLeadsTool);
@@ -17,6 +18,7 @@ registerTool(listMyTasksTool);
 registerTool(teamLookupTool);
 registerTool(activityTimelineTool);
 registerTool(searchKnowledgeTool);
+registerTool(readDocumentTool);
 registerTool(getFormSubmissionsSummaryTool);
 
 export {
@@ -27,5 +29,6 @@ export {
   teamLookupTool,
   activityTimelineTool,
   searchKnowledgeTool,
+  readDocumentTool,
   getFormSubmissionsSummaryTool,
 };

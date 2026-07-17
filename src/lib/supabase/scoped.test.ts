@@ -109,6 +109,33 @@ describe("scopedClientForTenant", () => {
     const db = await scopedClientForTenant("tenant-1");
     expect(db.raw()).toEqual({ from: fromMock });
   });
+
+  it("rpc() force-overwrites a caller-supplied p_tenant_id with the current tenant", async () => {
+    const rpcMock = vi.fn(() => "rpc-result");
+    fromMock.mockReturnValue({});
+    const db = await scopedClientForTenant("tenant-1");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db.raw() as any).rpc = rpcMock;
+
+    db.rpc("knowledge_hybrid_search", { p_query: "hello", p_tenant_id: "attacker-tenant" });
+
+    expect(rpcMock).toHaveBeenCalledWith("knowledge_hybrid_search", {
+      p_query: "hello",
+      p_tenant_id: "tenant-1",
+    });
+  });
+
+  it("rpc() defaults args to {} and still injects p_tenant_id", async () => {
+    const rpcMock = vi.fn(() => "rpc-result");
+    fromMock.mockReturnValue({});
+    const db = await scopedClientForTenant("tenant-1");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (db.raw() as any).rpc = rpcMock;
+
+    db.rpc("some_fn");
+
+    expect(rpcMock).toHaveBeenCalledWith("some_fn", { p_tenant_id: "tenant-1" });
+  });
 });
 
 describe("scopedClient", () => {

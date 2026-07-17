@@ -1,7 +1,14 @@
 /**
  * Backfill script: sends kb/item.ingest.requested for knowledge base items
- * that are 'ready' but were never chunked (chunk_count IS NULL) — e.g. items
- * created before AI_INGESTION_ENABLED was flipped on, or a dropped send.
+ * that need (re-)ingestion:
+ *   - status='ready' AND chunk_count IS NULL — e.g. items created before
+ *     AI_INGESTION_ENABLED was flipped on, or a dropped send.
+ *   - status IN ('pending','processing') AND updated_at < 15 minutes ago —
+ *     a dropped Inngest event (e.g. the dev server was down when the item
+ *     was created) leaves the item stuck mid-pipeline forever; this happened
+ *     live during Phase 2B verification. 15 minutes is comfortably past the
+ *     ingestion function's own retry window, so a legitimately in-flight
+ *     item is never mistaken for a stuck one.
  *
  * Usage:
  *   npx tsx scripts/backfill-kb-ingestion.ts                # all tenants
@@ -30,13 +37,17 @@ async function getTenantIds(): Promise<string[]> {
   return ((data ?? []) as Array<{ id: string }>).map((t) => t.id);
 }
 
+const STUCK_THRESHOLD_MINUTES = 15;
+
 async function backfillTenant(tenantId: string): Promise<number> {
   const db = await scopedClientForTenant(tenantId);
+  const stuckBefore = new Date(Date.now() - STUCK_THRESHOLD_MINUTES * 60 * 1000).toISOString();
   const { data, error } = await db
     .from("knowledge_base_items")
     .select("id")
-    .eq("status", "ready")
-    .is("chunk_count", null);
+    .or(
+      `and(status.eq.ready,chunk_count.is.null),and(status.in.(pending,processing),updated_at.lt.${stuckBefore})`,
+    );
 
   if (error) throw new Error(`Failed to query tenant ${tenantId}: ${error.message}`);
   const items = (data ?? []) as unknown as Array<{ id: string }>;

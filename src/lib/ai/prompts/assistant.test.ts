@@ -34,6 +34,11 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("never invent or prepend a domain");
   });
 
+  it("instructs the model to cite knowledge results by document title", () => {
+    expect(prompt).toContain("cite the source document by title inline");
+    expect(prompt).toContain("Never fabricate a citation");
+  });
+
   it("is a pure function — no DB access, same input produces same output", () => {
     const again = buildSystemPrompt({
       tenantName: "Admizz Education",

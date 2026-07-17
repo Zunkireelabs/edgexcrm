@@ -30,6 +30,11 @@
  *   const { data: users } = await db.fromGlobal("auth.users").select("*");
  *   //                              ^ for tables WITHOUT tenant_id
  *
+ *   const { data } = await db.rpc("knowledge_hybrid_search", { p_query_embedding, p_query, p_limit });
+ *   //   ^ p_tenant_id is force-set to auth.tenantId, overwriting anything the
+ *   //     caller passes — only for functions that trust a p_tenant_id param
+ *   //     (see the rpc() docstring below)
+ *
  *   await db.raw().auth.admin.listUsers();
  *   //  ^ escape hatch for service-level operations (auth.admin etc.)
  *
@@ -152,6 +157,20 @@ export async function scopedClientForTenant(tenantId: string) {
   return {
     from,
     fromGlobal,
+    /**
+     * Calls a Postgres function that declares a `p_tenant_id` parameter and
+     * enforces it internally (e.g. `knowledge_hybrid_search`, migration 162).
+     * `p_tenant_id` in `args` is force-overwritten with the CURRENT caller's
+     * tenant — same spirit as insert()'s tenant injection — so a caller can
+     * never pass a foreign tenant id through. Only for functions built to
+     * this trust model (REVOKEd from `authenticated`/`anon`, service-role-only,
+     * tenant-filtered by parameter, not by session/RLS). Do not use for
+     * functions that expect the caller's tenant to come from RLS instead —
+     * those go through `raw().rpc(...)`, as `sales_leads_by_owner` etc. do today.
+     */
+    rpc(fn: string, args: Record<string, unknown> = {}) {
+      return raw.rpc(fn, { ...args, p_tenant_id: tenantId });
+    },
     /** Escape hatch — returns the unwrapped service client for cross-tenant operations (admin backfills, support tooling, auth.admin). */
     raw(): RawClient {
       return raw;

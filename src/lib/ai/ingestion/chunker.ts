@@ -23,7 +23,9 @@ export interface Chunk {
 
 const CHARS_PER_TOKEN = 4;
 export const TARGET_CHARS = 2048; // ~512 tokens at the chars/4 estimate
-const OVERLAP_CHARS = Math.round(TARGET_CHARS * 0.12);
+// Exported: read-document's chunk-reassembly needs the exact same figure to
+// recognize (and strip) the overlap prefix applyOverlap() prepends below.
+export const OVERLAP_CHARS = Math.round(TARGET_CHARS * 0.12);
 
 export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
