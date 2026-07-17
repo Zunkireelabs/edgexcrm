@@ -18,7 +18,7 @@ import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
-import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
+import { stageAssigneeCandidates } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -189,42 +189,29 @@ export default async function LeadDetailPage({
       )
     : [];
 
-  // Admins and branch-managers have no chain position, so the block above leaves them
-  // with an empty roster and ListStepper hides the assignee picker entirely — the lead
-  // moves with the assignee unchanged. Give them a picker too: the destination stage's
-  // handlers (per STAGE_TEAM_MAP — the line position plus branch-manager, who can own a
-  // lead at any stage), scoped to the LEAD's branch (an admin has none of their own).
+  // Admins, owners, and branch-managers have no chain position, so the block above leaves
+  // them with an empty roster and ListStepper hides the assignee picker entirely — the lead
+  // moves with the assignee unchanged. They get a different control entirely (StageMoveSelector):
+  // a dropdown of every active stage (any direction), each coupled to that stage's own assignee
+  // picker — branch line-team, admin/owner also sees the branch-manager, with a
+  // branch-manager → tenant-wide-line-team fallback so the picker is never empty.
   // Sourced from the same list activeLeadLists ?? accessibleLists ListStepper itself uses
-  // (key-info-section.tsx's `activeLists`) so the picker's destination can't diverge from
-  // what the stepper actually moves the lead to (e.g. in a funnel-scoped view).
+  // (key-info-section.tsx's `activeLists`) so the destinations can't diverge from what the
+  // control actually moves the lead to (e.g. in a funnel-scoped view).
+  const isBranchManagerViewer = tenantData.permissions.leadScope === "team";
   const canMoveWithoutChain =
     tenantData.tenant.industry_id === "education_consultancy" &&
     !isChainMember &&
-    (tenantData.permissions.baseTier === "admin" || tenantData.permissions.leadScope === "team");
+    (tenantData.permissions.baseTier === "admin" ||
+      tenantData.permissions.baseTier === "owner" ||
+      isBranchManagerViewer);
+  const stageAssigneeMap: Record<string, { user_id: string; email: string; name?: string | null }[]> = {};
   if (canMoveWithoutChain) {
     const stepperLists = activeLeadLists ?? accessibleLists;
-    const sortedStepperLists = [...stepperLists].sort(
-      (a, b) =>
-        (a as unknown as { sort_order: number }).sort_order -
-        (b as unknown as { sort_order: number }).sort_order,
-    );
-    const currentIdx = sortedStepperLists.findIndex((l) => l.id === leadListId);
-    const nextList =
-      currentIdx >= 0
-        ? sortedStepperLists
-            .slice(currentIdx + 1)
-            .find((l) => !(l as unknown as { is_archive?: boolean }).is_archive)
-        : undefined;
-    if (nextList) {
-      const nextListSlug = (nextList as unknown as { slug: string }).slug;
-      const handlerSlugs = positionsForStage(nextListSlug);
-      const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
-      nextPositionMembers = roster.filter(
-        (m) =>
-          m.position_slug != null &&
-          handlerSlugs.includes(m.position_slug) &&
-          (leadBranchId == null || m.branch_id === leadBranchId),
-      );
+    const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
+    for (const list of stepperLists) {
+      const slug = (list as unknown as { slug: string }).slug;
+      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId, isBranchManagerViewer);
     }
   }
 
@@ -283,6 +270,8 @@ export default async function LeadDetailPage({
       revertTargetUserId={revertTargetUserId}
       revertTargetName={revertTargetName}
       revertTargetMembers={revertTargetMembers}
+      canMoveWithoutChain={canMoveWithoutChain}
+      stageAssigneeMap={stageAssigneeMap}
       canManageApplications={tenantData.permissions.canManageApplications}
       canManageApplicationPanel={canCreateOrReorderApplications(tenantData, lead)}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
