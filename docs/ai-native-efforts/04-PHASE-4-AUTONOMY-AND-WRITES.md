@@ -4,7 +4,7 @@
 
 ---
 
-## §0.1 AMENDMENT (PROPOSED 2026-07-17, Opus — pending Sadin sign-off): the INTERACTIVE-writes track ships first
+## §0.1 AMENDMENT (ACCEPTED — signed off by Sadin 2026-07-17): the INTERACTIVE-writes track ships first
 
 **Context drift this amendment resolves.** This doc was written assuming "Phase 3" = background agents (doc 03: `agent_identities`, `agent_runs`, draft-only operation). What actually shipped as Phase 3 (2026-07-17, on stage) is the manifest `AiConfig` industry packs — background agents were **skipped, not built**. The gates in §0 below (2 weeks of draft-only prod operation, per-agent acceptance rates, kill switch "proven in Phase 3 acceptance") therefore reference a phase that doesn't exist yet.
 
@@ -16,7 +16,7 @@
 **Gate status for Track 1 (verified 2026-07-17):**
 - CI `Test` job is **required-blocking** on both `stage` and `main` (verified via the branch-protection API; no `continue-on-error` in ci.yml). ✅
 - Dedicated tenant-isolation/counselor-scoping suites for the REST write paths do **not** exist yet (only AI-tool scoping tests with mocked clients). ⚠️ Track 1 therefore carries its own gate work: **each write slice must land unit + live-DB isolation coverage for the exact write path it introduces** (executor invariants, cross-tenant probes, scope refusals) before merge, and the ADR-D4 "full isolation suites" gate keeps blocking Track 2.
-- ADR-001 D4's ladder order (draft-only background agents *before* real writes) is amended by this proposal: interactive user-approved writes are a **lower-autonomy rung than draft-only background agents** (the approving human sees the exact input and the write executes under their own permissions — identical blast radius to them clicking the UI), so they may ship first. **This is a constitution change → requires Sadin's explicit sign-off before 4A merges.**
+- ADR-001 D4's ladder order (draft-only background agents *before* real writes) is amended: interactive user-approved writes are a **lower-autonomy rung than draft-only background agents** (the approving human sees the exact input and the write executes under their own permissions — identical blast radius to them clicking the UI), so they ship first. **Constitution change ACCEPTED by Sadin 2026-07-17** (recorded in ADR-001 D4 + Decision Log).
 
 **Track-1 invariants (all slices; unit-tested, not prompt-enforced):** every write through `scopedClient(auth)` with a mandatory row-level filter; single-row effect per call; idempotency on `tool_call_id` (approval resends/retries never double-write); every proposal/decision/execution recorded in `ai_write_actions` (mig 172) + the existing `audit_logs`/`events` spine; write tools excluded from the toolset entirely unless `AI_WRITE_TOOLS_ENABLED=true` (new flag, off everywhere until sign-off); the model is prompted to *propose* actions and never claim execution without a confirmed tool result. Prompt-injection containment is inherent: retrieved content can at most produce a *proposal card* the human reads.
 

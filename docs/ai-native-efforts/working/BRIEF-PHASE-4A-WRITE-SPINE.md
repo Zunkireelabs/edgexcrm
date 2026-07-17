@@ -3,7 +3,7 @@
 **For:** Sonnet executor session · **From:** Opus planner · **Date:** 2026-07-17
 **Branch:** `feature/ai-phase-4-writes` (already exists, off `origin/stage`, housekeeping commit `79c5abd` on it — do NOT create a new branch)
 **Plan context:** `docs/ai-native-efforts/04-PHASE-4-AUTONOMY-AND-WRITES.md` **§0.1 amendment** (read it first) + ADR-001 D2/D4.
-**Depends on Sadin's sign-off** of the §0.1 ladder amendment — build may proceed locally, but flag stays off and nothing merges until he approves.
+**§0.1 ladder amendment SIGNED OFF by Sadin 2026-07-17** (ADR-001 Decision Log #6) — build is unblocked. Flag still ships off everywhere but local.
 
 ---
 

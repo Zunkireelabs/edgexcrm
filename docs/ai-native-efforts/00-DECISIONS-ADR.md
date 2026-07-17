@@ -64,6 +64,8 @@ These decisions are the constitution for everything in `docs/ai-native-efforts/`
 3. **Draft-only writes** (Phase 3): background agents produce drafts/suggestions (`human_led`), never touch live records. Gate: Langfuse tracing live + eval baseline recorded.
 4. **Real writes behind approval** (Phase 4): `agent_human` (act + notify) and `fully_automated` (act alone) per tool per tenant. **Hard gate: the tenant-isolation/RLS + counselor-scoping automated test suites (already planned on the CI track) are merged and required-blocking in CI.** Near-zero test coverage + write-capable agents is the one combination that is vetoed outright.
 
+**AMENDED 2026-07-17 (Sadin sign-off; details in 04-PHASE-4 §0.1):** a rung **2b — interactive user-approved assistant writes** — is inserted between rungs 2 and 3 and ships before draft-only background agents (rung 3, which was skipped when "Phase 3" became the manifest AiConfig packs). Rung 2b is *lower* autonomy than rung 3: the assistant acts as the logged-in user (D2 assistant mode), and every write requires that user's explicit in-chat approval of the exact tool input before execution — identical blast radius to the user clicking the UI. Gate for 2b: CI `Test` job required-blocking (verified true on stage+main 2026-07-17) + each write slice lands unit + live-DB isolation coverage for the write path it introduces. The full rung-3/4 gates (draft-only soak, acceptance rates, full isolation suites) continue to block autonomous writes.
+
 **Non-negotiable safety rules (all phases):**
 - Every tool executes through `scopedClient(ctx.auth)`; raw `createServiceClient()` inside a tool is a review-blocking defect.
 - Write tools must supply a row-level filter (the known `scopedClient.update()/delete()` footgun — an unfiltered write hits the whole tenant).
@@ -94,3 +96,4 @@ These decisions are the constitution for everything in `docs/ai-native-efforts/`
 | 3 | PII / compliance approach? | **Decision 5 above** (delegated to recommendation, 2026-07-07). |
 | 4 | Langfuse Cloud vs self-host? | **Cloud + PII masking** (per recommendation, no objection; revisit at Phase 2 privacy checklist / any tenant data-residency demand). |
 | 5 | Embedding vendor (carried from KB blueprint)? | **OpenAI `text-embedding-3-large` @ 1024d** (per recommendation, no objection; Voyage stays a one-line swap behind the seam). |
+| 6 | D4 ladder reorder — interactive user-approved assistant writes (rung 2b) before draft-only background agents? | **ACCEPTED** (Sadin, 2026-07-17) — see D4 amendment + 04-PHASE-4 §0.1. |
