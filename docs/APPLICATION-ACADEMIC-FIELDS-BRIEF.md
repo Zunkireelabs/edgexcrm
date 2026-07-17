@@ -29,8 +29,8 @@ Add **Interested Degree Level** and **Field of Study** to the Application object
 
 ## Plan
 
-### 1. Migration — `supabase/migrations/164_application_academic_fields.sql`
-(164 is the next free number as of this writing — re-check `ls supabase/migrations | sort` immediately before authoring, this repo's migration numbers move fast.)
+### 1. Migration — `supabase/migrations/171_application_academic_fields.sql`
+(Originally authored as 164; renumbered to 171 after a large unrelated merge — AI foundation + real-estate vertical, migrations 164–170 — landed on `stage` first and took 164. Re-check `ls supabase/migrations | sort` immediately before authoring in this repo; migration numbers move fast.)
 
 ```sql
 BEGIN;
@@ -41,7 +41,7 @@ ALTER TABLE applications ADD COLUMN IF NOT EXISTS field_of_study TEXT;
 -- Before/after counts: 0 rows affected — new nullable columns, no backfill (data never existed).
 -- Rollback: ALTER TABLE applications DROP COLUMN degree_level, DROP COLUMN field_of_study;
 
-INSERT INTO public.schema_migrations (version) VALUES ('164_application_academic_fields.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('171_application_academic_fields.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

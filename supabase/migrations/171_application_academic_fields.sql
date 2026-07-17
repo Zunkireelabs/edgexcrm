@@ -1,4 +1,4 @@
--- Migration 164: Interested Degree Level + Field of Study on applications
+-- Migration 171: Interested Degree Level + Field of Study on applications
 --
 -- Additive only. Adds two nullable TEXT columns so a per-application academic
 -- interest can be captured (a lead may apply to multiple programs across
@@ -18,7 +18,7 @@ BEGIN;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS degree_level TEXT;
 ALTER TABLE applications ADD COLUMN IF NOT EXISTS field_of_study TEXT;
 
-INSERT INTO public.schema_migrations (version) VALUES ('164_application_academic_fields.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('171_application_academic_fields.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;
