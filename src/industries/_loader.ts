@@ -8,7 +8,7 @@
  */
 
 import { INDUSTRIES, type FeatureId, type IndustryId } from "./_registry";
-import type { IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
+import type { AiConfig, IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
 import { canSeeNav, type ResolvedPermissions } from "@/lib/api/permissions";
 
 import { manifest as educationConsultancyManifest } from "./education-consultancy/manifest";
@@ -108,6 +108,16 @@ export function getIndustrySidebarItems(
     }
     return isItemAllowed(entry) ? [entry] : [];
   });
+}
+
+/**
+ * Returns the tenant's industry AI configuration (prompt addendum + tool
+ * ids), if any. Mirrors getManifest's fallback semantics — a null/unknown
+ * industryId resolves to the general manifest's `ai` config rather than
+ * undefined.
+ */
+export function getIndustryAiConfig(industryId: string | null | undefined): AiConfig | undefined {
+  return getManifest(industryId).ai;
 }
 
 /**

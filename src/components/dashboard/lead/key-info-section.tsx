@@ -6,6 +6,13 @@ import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agen
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import {
+  ACCREDITATION_BADGE,
+  ACCREDITATION_LABELS,
+  INVESTOR_TYPE_LABELS,
+  labelFor,
+  type AccreditationStatus,
+} from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
@@ -233,6 +240,34 @@ export function KeyInfoSection({
 
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
+
+          {/* ── INVESTOR badges — real_estate only (reads custom_fields, no fetch) ── */}
+          {industryId === "real_estate" && (() => {
+            const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+            const accred = cf.accreditation_status ? String(cf.accreditation_status) : null;
+            const invType = cf.investor_type ? String(cf.investor_type) : null;
+            return (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {accred && (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      ACCREDITATION_BADGE[accred as AccreditationStatus] ?? "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {labelFor(accred, ACCREDITATION_LABELS)}
+                  </span>
+                )}
+                {invType && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 font-medium">
+                    {labelFor(invType, INVESTOR_TYPE_LABELS)}
+                  </span>
+                )}
+                {!accred && !invType && (
+                  <span className="text-xs text-muted-foreground">No investor profile yet</span>
+                )}
+              </div>
+            );
+          })()}
 
           {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list,
               and for Other-tagged Contacts (never in the pipeline). */}

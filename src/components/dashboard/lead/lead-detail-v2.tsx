@@ -40,6 +40,9 @@ import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
+import { InvestorProfileCard } from "@/industries/real-estate/features/investors/components/investor-profile-card";
+import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
+import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
@@ -213,6 +216,10 @@ export function LeadDetailV2({
   const [leaving, setLeaving] = useState(false);
 
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate: the lead IS an investor (rides the leads spine). Adds investor
+  // profile + commitments blocks in the right sidebar. Additive — other industries
+  // unaffected.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   const isAdmin = role === "owner" || role === "admin";
   // Position-derived edit capability: admins always, plus members whose position grants
@@ -702,6 +709,11 @@ export function LeadDetailV2({
                   {currentLead.display_id}
                 </span>
               )}
+              {isRealEstate && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-violet-100 text-violet-800 font-medium">
+                  Investor
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               Submitted {new Date(currentLead.created_at).toLocaleDateString()} at{" "}
@@ -982,6 +994,43 @@ export function LeadDetailV2({
                   teamMemberEmails={teamMemberEmails}
                 />
               )}
+            </div>
+          ) : isRealEstate ? (
+            <div className="space-y-4">
+              <InvestorProfileCard
+                leadId={currentLead.id}
+                customFields={customFields}
+                canEdit={canEdit}
+              />
+              <CommitmentsPanel leadId={currentLead.id} canManage={isAdmin} />
+              <InvestorCommsCard leadId={currentLead.id} canManage={isAdmin} />
+              {/* Subscription Agreement — reuses the consent e-sign spine with
+                  real_estate labels + no education processing-fee section. */}
+              <ConsentCard
+                leadId={currentLead.id}
+                tenantId={tenant.id}
+                consentEnabled={true}
+                consentSigned={false}
+                canManage={isAdmin}
+                showProcessingFee={false}
+                labels={{
+                  sectionTitle: "Subscription Agreement",
+                  docLabel: "Subscription Agreement",
+                  requiredTitle: "Subscription Agreement required",
+                  requiredHelp:
+                    "This investor must sign the Subscription Agreement before their commitment can be marked Subscribed.",
+                  awaitingHelp: "Subscription Agreement sent · awaiting investor signature",
+                  signedTitle: "Subscription Agreement signed",
+                }}
+              />
+              <ManagementPanel
+                ref={checklistRef}
+                lead={currentLead}
+                checklists={checklists}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onChecklistsChange={handleChecklistsChange}
+              />
             </div>
           ) : (
             <ManagementPanel
