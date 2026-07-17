@@ -1355,46 +1355,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
               <LeadExtraDetails details={leadDetails} />
             )}
 
-            {/* Tag selector — education only */}
-            {leadDetails && industryId !== "travel_agency" && (
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Tag</p>
-                <div className="flex gap-2">
-                  {[
-                    { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                    { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
-                  ].map(({ value, activeClass }) => {
-                    const currentTags = (leadDetails as Record<string, unknown>).tags as string[] || [];
-                    const isActive = currentTags.includes(value);
-                    return (
-                      <button
-                        key={value}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                          isActive ? activeClass : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                        }`}
-                        onClick={async () => {
-                          const newTags = [value];
-                          try {
-                            await fetch(`/api/v1/leads/${selectedLead.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ tags: newTags }),
-                            });
-                            setLeadDetails((prev) => prev ? { ...prev, tags: newTags } : prev);
-                            toast.success(`Tagged as ${value}`);
-                          } catch {
-                            toast.error("Failed to update tag");
-                          }
-                        }}
-                      >
-                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {/* Meet with — who the visitor is meeting today */}
             <div className="mb-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Meet with</p>
