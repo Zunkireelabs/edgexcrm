@@ -48,11 +48,8 @@ export const INTAKE_SOURCES = [
 // check-in flow. Values map to leads.intake_source (free text); the "referral"
 // option additionally captures a referrer name into leads.intake_campaign.
 export const HEARD_ABOUT_US = [
-  { value: "referral", label: "Referral" },
-  { value: "social_media", label: "Social Media" },
-  { value: "google", label: "Google / Online Search" },
-  { value: "trade_show", label: "Education Fair / Event" },
-  { value: "website", label: "Website" },
-  { value: "newspaper", label: "Newspaper / Advertisement" },
-  { value: "other", label: "Other" },
+  { value: "referral", label: "Student referral" },
+  { value: "social_media", label: "Social media" },
+  { value: "trade_show", label: "Seminar / Event" },
+  { value: "google", label: "Direct / Google" },
 ] as const;
