@@ -223,6 +223,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
   const [leadTag, setLeadTag] = useState<string>("student");
+  const [leadTypeOptions, setLeadTypeOptions] = useState<{ slug: string; label: string; is_default: boolean }[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   // Student-only education fields (revealed when the Student tag is active)
@@ -261,6 +262,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Lead types (Student, Other, and any admin-added types) — mirrors the picker
+  // on the lead detail page (contact-card.tsx) instead of a hardcoded pair.
+  // Only education_consultancy has lead_types rows; the API 403s for other
+  // industries, and this block is hidden for travel_agency anyway (see below).
+  useEffect(() => {
+    if (industryId !== "education_consultancy") return;
+    fetch("/api/v1/lead-types")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (json?.data) setLeadTypeOptions(json.data); })
+      .catch(() => {});
+  }, [industryId]);
 
   // Set default pipeline
   useEffect(() => {
@@ -522,7 +535,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           phone: phone || null,
           pipeline_id: pipelineId,
           stage_id: stageId,
-          assigned_to: (leadTag === "other" ? meetWithId : assignedTo) || null,
+          assigned_to: (leadTag !== "student" ? meetWithId : assignedTo) || null,
           intake_source: referralSource || "walk_in",
           intake_campaign:
             (referralSource === "referral" || referralSource === "other") &&
@@ -798,20 +811,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       <div className="space-y-3">
                         <div className="space-y-1">
                           <Label className="text-xs">Tag</Label>
-                          <div className="flex gap-2">
-                            {[
-                              { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                              { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
-                            ].map(({ value, activeClass }) => (
+                          <div className="flex gap-2 flex-wrap">
+                            {(leadTypeOptions.length > 0
+                              ? leadTypeOptions
+                              : [{ slug: "student", label: "Student", is_default: true }, { slug: "other", label: "Other", is_default: false }]
+                            ).map(({ slug, label, is_default }) => (
                               <button
-                                key={value}
+                                key={slug}
                                 type="button"
                                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                                  leadTag === value ? activeClass : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                  leadTag === slug
+                                    ? is_default
+                                      ? "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                                      : "bg-amber-100 text-amber-700 ring-2 ring-amber-300"
+                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                                 }`}
-                                onClick={() => setLeadTag(value)}
+                                onClick={() => setLeadTag(slug)}
                               >
-                                {value.charAt(0).toUpperCase() + value.slice(1)}
+                                {label}
                               </button>
                             ))}
                           </div>
@@ -983,7 +1000,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     )}
 
                     {/* Assign Counselor / Meet with */}
-                    {leadTag === "other" ? (
+                    {leadTag !== "student" ? (
                       <div className="space-y-1">
                         <Label className="text-xs">Meet with</Label>
                         <Select value={meetWithId || "__none__"} onValueChange={(v) => setMeetWithId(v === "__none__" ? "" : v)}>
