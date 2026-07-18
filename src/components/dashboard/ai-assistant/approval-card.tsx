@@ -25,9 +25,34 @@ function describeCreateTaskInput(input: unknown): PreviewRow[] {
   return rows;
 }
 
+function describeUpdateLeadStageInput(input: unknown): PreviewRow[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const rows: PreviewRow[] = [];
+  if (typeof i.leadId === "string" && i.leadId) rows.push({ label: "Lead", value: i.leadId });
+  const stage = (typeof i.stageName === "string" && i.stageName) || (typeof i.stageId === "string" && i.stageId) || "";
+  rows.push({ label: "Stage", value: stage || "—" });
+  return rows;
+}
+
+function describeAssignLeadInput(input: unknown): PreviewRow[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const rows: PreviewRow[] = [];
+  if (typeof i.leadId === "string" && i.leadId) rows.push({ label: "Lead", value: i.leadId });
+  rows.push({ label: "Assignee", value: typeof i.assigneeId === "string" && i.assigneeId ? i.assigneeId : "—" });
+  return rows;
+}
+
+function describeUndoLeadActionInput(input: unknown): PreviewRow[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  return [{ label: "Action", value: typeof i.actionId === "string" && i.actionId ? i.actionId : "most recent" }];
+}
+
 /** Per-tool preview renderers. Falls back to a generic key/value dump for any write tool without one. */
 const INPUT_DESCRIBERS: Record<string, (input: unknown) => PreviewRow[]> = {
   create_task: describeCreateTaskInput,
+  update_lead_stage: describeUpdateLeadStageInput,
+  assign_lead: describeAssignLeadInput,
+  undo_lead_action: describeUndoLeadActionInput,
 };
 
 function describeInput(toolName: string, input: unknown): PreviewRow[] {
@@ -43,6 +68,9 @@ function describeInput(toolName: string, input: unknown): PreviewRow[] {
 /** Imperative, proposal-framed labels ("Create a task") — distinct from tool-labels.ts's present-continuous activity labels ("Creating task") used once a decision is running/done. */
 const APPROVAL_ACTION_LABELS: Record<string, string> = {
   create_task: "Create a task",
+  update_lead_stage: "Move a lead to another stage",
+  assign_lead: "Assign a lead",
+  undo_lead_action: "Undo a lead action",
 };
 
 function approvalActionLabel(toolName: string): string {

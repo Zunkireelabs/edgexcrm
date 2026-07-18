@@ -154,6 +154,64 @@ describe("toAiSdkTools — write-tool idempotency + audit wrapper", () => {
     });
   });
 
+  it("on success with no undoOf in the result, records undo_of: null", async () => {
+    const { db, inserts } = fakeWriteDb({ existingRow: null });
+    const tools = toAiSdkTools([writeFixtureTool(async () => ({ taskId: "t9" }))], fixtureCtx(db));
+
+    await tools.write_fixture.execute!({ title: "x" }, fixtureExecOptions("tc-3b"));
+
+    expect(inserts[0]).toMatchObject({ undo_of: null });
+  });
+
+  it("copies a result's `undoOf` into the row's `undo_of` column (BRIEF-PHASE-4B undoOf adapter convention)", async () => {
+    const { db, inserts } = fakeWriteDb({ existingRow: null });
+    const tools = toAiSdkTools(
+      [writeFixtureTool(async () => ({ leadId: "lead-1", undoOf: "action-123", note: "Action undone." }))],
+      fixtureCtx(db),
+    );
+
+    const result = await tools.write_fixture.execute!({}, fixtureExecOptions("tc-9"));
+
+    expect(result).toEqual({ leadId: "lead-1", undoOf: "action-123", note: "Action undone." });
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0]).toMatchObject({
+      status: "executed",
+      undo_of: "action-123",
+      // result is stored verbatim — undoOf is not stripped out of it.
+      result: { leadId: "lead-1", undoOf: "action-123", note: "Action undone." },
+    });
+  });
+
+  it("copies `undoOf` into the repaired row on a stale-row UNIQUE-violation race", async () => {
+    const { db, updates } = fakeWriteDb({
+      existingRow: null,
+      insertError: { code: "23505" },
+      racedRow: { status: "failed", result: { error: "stale" } },
+    });
+    const tools = toAiSdkTools(
+      [writeFixtureTool(async () => ({ leadId: "lead-1", undoOf: "action-456" }))],
+      fixtureCtx(db),
+    );
+
+    const result = await tools.write_fixture.execute!({}, fixtureExecOptions("tc-10"));
+
+    expect(result).toEqual({ leadId: "lead-1", undoOf: "action-456" });
+    expect(updates).toHaveLength(1);
+    expect(updates[0]).toMatchObject({ status: "executed", undo_of: "action-456" });
+  });
+
+  it("does not treat a non-string `undoOf` as a link (defensive: ignores malformed tool output)", async () => {
+    const { db, inserts } = fakeWriteDb({ existingRow: null });
+    const tools = toAiSdkTools(
+      [writeFixtureTool(async () => ({ undoOf: 12345 }))],
+      fixtureCtx(db),
+    );
+
+    await tools.write_fixture.execute!({}, fixtureExecOptions("tc-11"));
+
+    expect(inserts[0]).toMatchObject({ undo_of: null });
+  });
+
   it("on a thrown error, records a 'failed' row and still returns the generic model-visible error (never crashes the stream)", async () => {
     const { db, inserts } = fakeWriteDb({ existingRow: null });
     const tools = toAiSdkTools(

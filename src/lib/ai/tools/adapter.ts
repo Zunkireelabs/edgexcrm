@@ -87,6 +87,19 @@ function classifyWriteOutcome(result: unknown): { status: "executed" | "failed";
 }
 
 /**
+ * A write tool's result may carry `undoOf: <ai_write_actions.id>` (e.g.
+ * undo_lead_action's result) to link its row back to the action it undid.
+ * Extracted here so the insert/repair paths below can copy it into the
+ * row's `undo_of` column — BRIEF-PHASE-4B-LEAD-WRITES.md §4's "undoOf
+ * adapter convention". `result` itself is stored verbatim either way.
+ */
+function extractUndoOf(result: unknown): string | null {
+  if (typeof result !== "object" || result === null || Array.isArray(result)) return null;
+  const undoOf = (result as { undoOf?: unknown }).undoOf;
+  return typeof undoOf === "string" ? undoOf : null;
+}
+
+/**
  * Idempotency + audit wrapper around a write tool's execute(), per
  * BRIEF-PHASE-4A-WRITE-SPINE.md §3:
  *   1. Idempotency check on tool_call_id — an existing 'executed' row short-circuits
@@ -145,6 +158,7 @@ async function executeWriteTool(
   }
 
   const outcome = classifyWriteOutcome(result);
+  const undoOf = extractUndoOf(result);
 
   const { error: insertError } = await ctx.db.from("ai_write_actions").insert({
     user_id: ctx.auth.userId,
@@ -155,6 +169,7 @@ async function executeWriteTool(
     status: outcome.status,
     result,
     error: outcome.error,
+    undo_of: undoOf,
   });
 
   if (insertError) {
@@ -176,7 +191,7 @@ async function executeWriteTool(
         // at a superseded result (BRIEF-PHASE-4A-FIXUP item 3c).
         const { error: repairError } = await ctx.db
           .from("ai_write_actions")
-          .update({ status: outcome.status, result, error: outcome.error })
+          .update({ status: outcome.status, result, error: outcome.error, undo_of: undoOf })
           .eq("tool_call_id", toolCallId);
         if (repairError) log.error({ err: repairError, toolCallId }, "ai_write_actions stale-row repair failed");
         return result;

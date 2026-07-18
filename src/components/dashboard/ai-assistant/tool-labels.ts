@@ -9,6 +9,9 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   read_document: "Reading document",
   get_form_submissions_summary: "Checking form submissions",
   create_task: "Creating task",
+  update_lead_stage: "Moving lead stage",
+  assign_lead: "Assigning lead",
+  undo_lead_action: "Undoing action",
 };
 
 export function toolActivityLabel(toolName: string): string {

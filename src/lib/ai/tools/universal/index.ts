@@ -11,6 +11,9 @@ import { searchKnowledgeTool } from "./search-knowledge";
 import { readDocumentTool } from "./read-document";
 import { getFormSubmissionsSummaryTool } from "./get-form-submissions-summary";
 import { createTaskTool } from "./create-task";
+import { updateLeadStageTool } from "./update-lead-stage";
+import { assignLeadTool } from "./assign-lead";
+import { undoLeadActionTool } from "./undo-lead-action";
 
 registerTool(searchLeadsTool);
 registerTool(getLeadTool);
@@ -22,6 +25,9 @@ registerTool(searchKnowledgeTool);
 registerTool(readDocumentTool);
 registerTool(getFormSubmissionsSummaryTool);
 registerTool(createTaskTool);
+registerTool(updateLeadStageTool);
+registerTool(assignLeadTool);
+registerTool(undoLeadActionTool);
 
 export {
   searchLeadsTool,
@@ -34,4 +40,7 @@ export {
   readDocumentTool,
   getFormSubmissionsSummaryTool,
   createTaskTool,
+  updateLeadStageTool,
+  assignLeadTool,
+  undoLeadActionTool,
 };
