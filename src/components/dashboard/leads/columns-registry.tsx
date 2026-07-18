@@ -1002,22 +1002,35 @@ export function getLeadColumns(
     return industryId != null && col.industries.includes(industryId);
   });
 
-  const customCols: LeadColumn[] = customFieldKeys.map((key) => ({
-    key: `cf:${key}`,
-    label: humanizeKey(key),
-    group: "custom" as const,
-    defaultVisible: false,
-    renderTh: () => (
-      <th key={`cf:${key}`} className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[120px]">
-        {humanizeKey(key)}
-      </th>
-    ),
-    renderTd: (lead) => (
-      <td key={`cf:${key}`} className="px-3 py-1.5 text-sm font-normal text-[#787871]">
-        {String(lead.custom_fields?.[key] ?? "") || <span className="text-gray-400">—</span>}
-      </td>
-    ),
-  }));
+  // "field_of_study" and "countries" were promoted to real leads columns
+  // (field_of_study, destinations — migration 059/087), but older leads may
+  // still only have the value in custom_fields. Prefer the real column so
+  // current write paths (check-in, add-lead) show up; fall back to the
+  // legacy custom_fields value so old data isn't hidden.
+  const PROMOTED_CF_VALUE: Record<string, (lead: Lead) => string> = {
+    field_of_study: (lead) => lead.field_of_study ?? "",
+    countries: (lead) => (lead.destinations ?? []).join(", "),
+  };
+
+  const customCols: LeadColumn[] = customFieldKeys.map((key) => {
+    const promoted = PROMOTED_CF_VALUE[key];
+    return {
+      key: `cf:${key}`,
+      label: humanizeKey(key),
+      group: "custom" as const,
+      defaultVisible: false,
+      renderTh: () => (
+        <th key={`cf:${key}`} className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[120px]">
+          {humanizeKey(key)}
+        </th>
+      ),
+      renderTd: (lead) => (
+        <td key={`cf:${key}`} className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {(promoted?.(lead) || String(lead.custom_fields?.[key] ?? "")) || <span className="text-gray-400">—</span>}
+        </td>
+      ),
+    };
+  });
 
   return [...staticCols, ...customCols];
 }
