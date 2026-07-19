@@ -331,6 +331,8 @@ export interface LeadNote {
   content: string;
   created_at: string;
   edited_at: string | null;
+  /** Phase 4C provenance — 'ai_assistant' when written by the AI assistant via create_lead_note, not a human. Optional/defaulted on the client: treat as human unless exactly 'ai_assistant'. */
+  created_via?: "human" | "ai_assistant";
 }
 
 export interface FormAttribution {

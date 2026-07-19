@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { buildToolset } from "../registry";
 import "./index"; // module-load registration
 import type { AuthContext } from "@/lib/api/auth";
@@ -57,6 +57,53 @@ describe("universal tool registration", () => {
     const ids = toolset.map((t) => t.id);
     for (const id of UNIVERSAL_TOOL_IDS.filter((i) => i !== "get_form_submissions_summary")) {
       expect(ids).toContain(id);
+    }
+  });
+});
+
+describe("create_task tool gating (AI_WRITE_TOOLS_ENABLED)", () => {
+  const ORIGINAL_FLAG = process.env.AI_WRITE_TOOLS_ENABLED;
+
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) delete process.env.AI_WRITE_TOOLS_ENABLED;
+    else process.env.AI_WRITE_TOOLS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it("is excluded from the toolset when the flag is unset", () => {
+    delete process.env.AI_WRITE_TOOLS_ENABLED;
+    const toolset = buildToolset(fixtureAuth());
+    expect(toolset.find((t) => t.id === "create_task")).toBeUndefined();
+  });
+
+  it("is included when the flag is 'true'", () => {
+    process.env.AI_WRITE_TOOLS_ENABLED = "true";
+    const toolset = buildToolset(fixtureAuth());
+    expect(toolset.find((t) => t.id === "create_task")).toBeDefined();
+  });
+});
+
+describe("create_lead_note / create_knowledge_item tool gating (Phase 4C, AI_WRITE_TOOLS_ENABLED)", () => {
+  const ORIGINAL_FLAG = process.env.AI_WRITE_TOOLS_ENABLED;
+
+  afterEach(() => {
+    if (ORIGINAL_FLAG === undefined) delete process.env.AI_WRITE_TOOLS_ENABLED;
+    else process.env.AI_WRITE_TOOLS_ENABLED = ORIGINAL_FLAG;
+  });
+
+  it("both are excluded from the toolset when the flag is unset", () => {
+    delete process.env.AI_WRITE_TOOLS_ENABLED;
+    const toolset = buildToolset(fixtureAuth());
+    expect(toolset.find((t) => t.id === "create_lead_note")).toBeUndefined();
+    expect(toolset.find((t) => t.id === "create_knowledge_item")).toBeUndefined();
+  });
+
+  it("both are included, universally (no industries restriction), when the flag is 'true'", () => {
+    process.env.AI_WRITE_TOOLS_ENABLED = "true";
+    const educationToolset = buildToolset(fixtureAuth({ industryId: "education_consultancy" }));
+    const itAgencyToolset = buildToolset(fixtureAuth({ industryId: "it_agency" }));
+    for (const toolset of [educationToolset, itAgencyToolset]) {
+      expect(toolset.find((t) => t.id === "create_lead_note")).toBeDefined();
+      expect(toolset.find((t) => t.id === "create_knowledge_item")).toBeDefined();
     }
   });
 });

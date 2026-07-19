@@ -29,5 +29,6 @@ export const aiConfig: AiConfig = {
     "application_funnel_summary",
     "class_enrollment_summary",
     "get_form_submissions_summary",
+    "update_lead_stage",
   ],
 };

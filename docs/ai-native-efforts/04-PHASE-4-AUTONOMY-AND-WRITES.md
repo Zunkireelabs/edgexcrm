@@ -4,6 +4,26 @@
 
 ---
 
+## §0.1 AMENDMENT (ACCEPTED — signed off by Sadin 2026-07-17): the INTERACTIVE-writes track ships first
+
+**Context drift this amendment resolves.** This doc was written assuming "Phase 3" = background agents (doc 03: `agent_identities`, `agent_runs`, draft-only operation). What actually shipped as Phase 3 (2026-07-17, on stage) is the manifest `AiConfig` industry packs — background agents were **skipped, not built**. The gates in §0 below (2 weeks of draft-only prod operation, per-agent acceptance rates, kill switch "proven in Phase 3 acceptance") therefore reference a phase that doesn't exist yet.
+
+**Decision (proposed).** Split Phase 4 into two tracks, and ship the smaller one first:
+
+- **Track 1 — INTERACTIVE assistant writes (this track, slices 4A/4B/4C).** The *chat assistant* gains write tools. It acts strictly **as the logged-in user** (ADR-001 D2 "assistant mode" — inherits `AuthContext` verbatim, no agent identity), and **every write requires an explicit in-chat approval click from that user** before execution. Mechanically this is the AI SDK v7 native tool-approval flow (`needsApproval` on the tool → approval-request part streams to the client → user clicks Approve/Deny → `addToolApprovalResponse` → the tool's `execute` runs server-side on the follow-up request, with signature verification via the SDK's `InvalidToolApprovalSignatureError` machinery). No `agent_tool_policies` matrix, no Inngest `waitForEvent`, no automation levels — a human is present and decides each action, which is *stricter* than `agent_human`.
+- **Track 2 — AUTONOMOUS agents (doc 03 + the rest of this doc: automation levels, approval queue, MCP).** Unchanged, still gated by the original §0 gates, planned only after Track 1 has soaked.
+
+**Gate status for Track 1 (verified 2026-07-17):**
+- CI `Test` job is **required-blocking** on both `stage` and `main` (verified via the branch-protection API; no `continue-on-error` in ci.yml). ✅
+- Dedicated tenant-isolation/counselor-scoping suites for the REST write paths do **not** exist yet (only AI-tool scoping tests with mocked clients). ⚠️ Track 1 therefore carries its own gate work: **each write slice must land unit + live-DB isolation coverage for the exact write path it introduces** (executor invariants, cross-tenant probes, scope refusals) before merge, and the ADR-D4 "full isolation suites" gate keeps blocking Track 2.
+- ADR-001 D4's ladder order (draft-only background agents *before* real writes) is amended: interactive user-approved writes are a **lower-autonomy rung than draft-only background agents** (the approving human sees the exact input and the write executes under their own permissions — identical blast radius to them clicking the UI), so they ship first. **Constitution change ACCEPTED by Sadin 2026-07-17** (recorded in ADR-001 D4 + Decision Log).
+
+**Track-1 invariants (all slices; unit-tested, not prompt-enforced):** every write through `scopedClient(auth)` with a mandatory row-level filter; single-row effect per call; idempotency on `tool_call_id` (approval resends/retries never double-write); every proposal/decision/execution recorded in `ai_write_actions` (mig 172) + the existing `audit_logs`/`events` spine; write tools excluded from the toolset entirely unless `AI_WRITE_TOOLS_ENABLED=true` (new flag, off everywhere until sign-off); the model is prompted to *propose* actions and never claim execution without a confirmed tool result. Prompt-injection containment is inherent: retrieved content can at most produce a *proposal card* the human reads.
+
+**Track-1 slices:** **4A** = write spine + `create_task` end-to-end (brief: `working/BRIEF-PHASE-4A-WRITE-SPINE.md`). **4B** = `update_lead_stage` + `assign_lead` + undo (requires extracting the `PATCH /leads/[id]` governance — ADMIN_ONLY_FIELDS / `canAssignLeads` / position-chain / §4.2 branch guard / revert rules — into a shared service both the route and the tools call; the hard slice). **4C** = `create_lead_note` + `create_knowledge_item` with agent provenance. **Parked:** `send_email` (highest risk), MCP server, all of Track 2.
+
+---
+
 ## 0. HARD GATES — no code from this phase merges until all are true
 
 1. **Tenant-isolation/RLS + counselor-scoping automated test suites** (the planned CI track) merged and **required-blocking** in CI. Write-capable agents on a near-zero-coverage codebase is vetoed (ADR-001 Decision 4).

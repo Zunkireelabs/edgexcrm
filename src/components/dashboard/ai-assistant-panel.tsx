@@ -120,7 +120,7 @@ interface AssistantPanelThreadProps {
 }
 
 function AssistantPanelThread({ conversationId, initialMessages, userFirstName, onConversationId }: AssistantPanelThreadProps) {
-  const { messages, status, error, disabled, retry, send } = useAssistantChat({
+  const { messages, status, error, disabled, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     initialMessages,
     userFirstName,
@@ -149,7 +149,14 @@ function AssistantPanelThread({ conversationId, initialMessages, userFirstName, 
             </div>
           </div>
         )}
-        <MessageList messages={messages} status={status} error={error} onRetry={retry} />
+        <MessageList
+          messages={messages}
+          status={status}
+          error={error}
+          onRetry={retry}
+          onApproveTool={approveTool}
+          onDenyTool={denyTool}
+        />
         <div ref={messagesEndRef} />
       </div>
       <ChatInput onSend={send} disabled={status === "submitted" || status === "streaming"} />

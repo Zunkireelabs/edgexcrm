@@ -9,3 +9,10 @@ export function isAssistantEnabled(): boolean {
 export function isIngestionEnabled(): boolean {
   return process.env.AI_INGESTION_ENABLED === "true";
 }
+
+// Phase 4A prod-safety switch: flag off => buildToolset() excludes every
+// scope:"write" tool, so today's read-only toolset is byte-identical. Ships
+// dark everywhere but local until Sadin signs off flipping stage (04-PHASE-4 §0.1).
+export function isWriteToolsEnabled(): boolean {
+  return process.env.AI_WRITE_TOOLS_ENABLED === "true";
+}

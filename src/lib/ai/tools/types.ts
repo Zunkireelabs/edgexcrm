@@ -10,6 +10,8 @@ export interface ToolContext {
   db: ScopedClient; // ALWAYS scopedClient(auth) — never the service client
   logger: Logger; // request logger, child-scoped per tool call
   runId: string; // correlates audit rows + telemetry trace
+  conversationId?: string; // ai_conversations.id, when known — recorded on ai_write_actions rows (mig 173)
+  toolCallId?: string; // set only for scope:"write" tools (Phase 4C) — the SDK's per-call id, known at execute time unlike ai_write_actions.id
 }
 
 /** Boolean grant keys of ResolvedPermissions ("canManageHR", "canExport", ...). */
@@ -21,7 +23,7 @@ export interface AgentTool<In = unknown, Out = unknown> {
   id: string;
   description: string; // written for the model — concrete, with when-to-use
   inputSchema: z.ZodType<In>;
-  scope: "read" | "write"; // 1A registry REJECTS "write" at registration
+  scope: "read" | "write"; // "write" tools are excluded from buildToolset() unless AI_WRITE_TOOLS_ENABLED=true (Phase 4A)
   requiredPermission?: ToolPermissionKey; // boolean grant checked against auth.permissions before inclusion
   industries?: IndustryId[]; // undefined = universal
   execute(ctx: ToolContext, input: In): Promise<Out>;

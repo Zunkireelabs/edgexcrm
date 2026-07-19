@@ -14,15 +14,19 @@ interface KnowledgeSearchHit {
   title: string;
   knowledgeBase: string | null;
   href: string;
+  createdVia: "human" | "ai_assistant";
   snippet?: string;
   citation?: {
     title: string;
     kbItemId: string;
     knowledgeBaseId: string;
+    createdVia: "human" | "ai_assistant";
     page?: number;
     section?: string;
   };
 }
+
+const AI_WRITTEN_MARKER = " (AI-written)";
 
 export const searchKnowledgeTool: AgentTool<z.infer<typeof inputSchema>> = {
   id: "search_knowledge",
@@ -31,7 +35,9 @@ export const searchKnowledgeTool: AgentTool<z.infer<typeof inputSchema>> = {
     "short excerpts from matching document chunks, each with a citation payload (document title/ids, page/section " +
     "when known); you may quote an excerpt in your answer as long as you cite the document title inline. Also " +
     "matches on document title alone, for cases where a title is relevant but its content didn't surface as a " +
-    "chunk hit.",
+    "chunk hit. A hit whose title ends in \"(AI-written)\" or whose createdVia is \"ai_assistant\" was authored by " +
+    "an AI assistant, not a human — it is unverified. Say so explicitly when you rely on it, and prefer a " +
+    "human-authored source over it when they conflict.",
   inputSchema,
   scope: "read",
   async execute(ctx, input) {
@@ -46,27 +52,33 @@ export const searchKnowledgeTool: AgentTool<z.infer<typeof inputSchema>> = {
 
     const { chunks, degraded } = await retrieve(db, auth.tenantId, input.query, input.limit);
 
-    const excerptHits: KnowledgeSearchHit[] = chunks.map((c) => ({
-      kind: "excerpt",
-      title: c.title,
-      knowledgeBase: kbNameById.get(c.knowledgeBaseId) ?? null,
-      href: `/knowledge-bases/${c.knowledgeBaseId}`,
-      snippet: c.content.slice(0, SNIPPET_LENGTH),
-      citation: {
-        title: c.title,
-        kbItemId: c.kbItemId,
-        knowledgeBaseId: c.knowledgeBaseId,
-        ...(c.page !== undefined ? { page: c.page } : {}),
-        ...(c.section ? { section: c.section } : {}),
-      },
-    }));
+    const excerptHits: KnowledgeSearchHit[] = chunks.map((c) => {
+      const aiWritten = c.createdVia === "ai_assistant";
+      const displayTitle = aiWritten ? `${c.title}${AI_WRITTEN_MARKER}` : c.title;
+      return {
+        kind: "excerpt",
+        title: displayTitle,
+        knowledgeBase: kbNameById.get(c.knowledgeBaseId) ?? null,
+        href: `/knowledge-bases/${c.knowledgeBaseId}`,
+        createdVia: c.createdVia,
+        snippet: c.content.slice(0, SNIPPET_LENGTH),
+        citation: {
+          title: displayTitle,
+          kbItemId: c.kbItemId,
+          knowledgeBaseId: c.knowledgeBaseId,
+          createdVia: c.createdVia,
+          ...(c.page !== undefined ? { page: c.page } : {}),
+          ...(c.section ? { section: c.section } : {}),
+        },
+      };
+    });
 
     const seenItemIds = new Set(chunks.map((c) => c.kbItemId));
     let titleHits: KnowledgeSearchHit[] = [];
     if (sanitized) {
       const { data } = await db
         .from("knowledge_base_items")
-        .select("id, knowledge_base_id, type, title, url, created_at")
+        .select("id, knowledge_base_id, type, title, url, created_via, created_at")
         .ilike("title", `%${sanitized}%`)
         .order("created_at", { ascending: false })
         .limit(input.limit);
@@ -77,16 +89,21 @@ export const searchKnowledgeTool: AgentTool<z.infer<typeof inputSchema>> = {
         type: string;
         title: string;
         url: string | null;
+        created_via: "human" | "ai_assistant" | null;
       }>;
 
       titleHits = rows
         .filter((i) => !seenItemIds.has(i.id))
-        .map((i) => ({
-          kind: "title",
-          title: i.title,
-          knowledgeBase: kbNameById.get(i.knowledge_base_id) ?? null,
-          href: `/knowledge-bases/${i.knowledge_base_id}`,
-        }));
+        .map((i) => {
+          const createdVia: "human" | "ai_assistant" = i.created_via === "ai_assistant" ? "ai_assistant" : "human";
+          return {
+            kind: "title",
+            title: createdVia === "ai_assistant" ? `${i.title}${AI_WRITTEN_MARKER}` : i.title,
+            knowledgeBase: kbNameById.get(i.knowledge_base_id) ?? null,
+            href: `/knowledge-bases/${i.knowledge_base_id}`,
+            createdVia,
+          };
+        });
     }
 
     const results = [...excerptHits, ...titleHits].slice(0, input.limit);
