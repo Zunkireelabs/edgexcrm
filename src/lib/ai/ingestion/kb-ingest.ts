@@ -14,6 +14,7 @@ import { parseFileBytes, parseLink, type ParsedResult } from "./parser";
 import { chunkDocument, estimateTokens } from "./chunker";
 import { embedTexts, EMBEDDING_MODEL, EMBEDDING_DIM } from "@/lib/ai/embeddings";
 import { startTrace } from "@/lib/ai/telemetry";
+import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
 
 const CHUNK_INSERT_BATCH_SIZE = 100;
 const MAX_PROCESSING_ERROR_LENGTH = 500;
@@ -78,6 +79,22 @@ export const kbIngest = inngest.createFunction(
     const runId = crypto.randomUUID();
     const trace = startTrace({ runId, tenantId, industryId: null, surface: "ingestion" });
     trace.span("kb-ingest.start", { itemId });
+
+    // ADR-001 Decision 5: every ingestion path (the item routes, the backfill
+    // script, a hand-fired event, an Inngest replay) converges here — this is
+    // the one place a check holds regardless of caller. Send nothing to
+    // OpenAI (no parse, no embed) for a tenant without the per-tenant grant.
+    // Not a failure: land the item exactly where the routes' disabled path
+    // already leaves a fresh item — status 'ready', untouched otherwise.
+    if (!(await isIngestionEnabledForTenant(tenantId))) {
+      await step.run("skip-tenant-disabled", async () => {
+        const db = await scopedClientForTenant(tenantId);
+        await db.from("knowledge_base_items").update({ status: "ready" }).eq("id", itemId);
+      });
+      trace.span("kb-ingest.skipped", { itemId, reason: "tenant AI disabled" });
+      trace.end({ ok: true, skipped: true });
+      return { skipped: true, reason: "tenant AI disabled" };
+    }
 
     const item = await step.run("mark-processing", async () => {
       const db = await scopedClientForTenant(tenantId);
