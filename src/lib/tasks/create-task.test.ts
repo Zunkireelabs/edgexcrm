@@ -6,7 +6,7 @@ import { createTaskForUser } from "./create-task";
 const { createAuditLogMock, emitEventMock, createNotificationsExceptMock } = vi.hoisted(() => ({
   createAuditLogMock: vi.fn(async () => {}),
   emitEventMock: vi.fn(async () => "event-1"),
-  createNotificationsExceptMock: vi.fn(async (_actorUserId: string | null, _params: unknown[]) => {}),
+  createNotificationsExceptMock: vi.fn(async () => {}),
 }));
 
 vi.mock("@/lib/api/audit", () => ({
@@ -174,7 +174,12 @@ describe("createTaskForUser — happy paths", () => {
     expect(outcome.notified).toBe(true);
     expect(insertedRows[0]).toMatchObject({ assignee_id: MEMBER_ID, assigned_by_id: USER_ID });
     expect(createNotificationsExceptMock).toHaveBeenCalledTimes(1);
-    const [actorId, notifications] = createNotificationsExceptMock.mock.calls[0];
+    // Param-less mock (avoids unused-param lint warnings); cast at the access
+    // site instead — same pattern as the other tool test suites.
+    const [actorId, notifications] = createNotificationsExceptMock.mock.calls[0] as unknown as [
+      string | null,
+      Array<Record<string, unknown>>,
+    ];
     expect(actorId).toBe(USER_ID);
     expect(notifications[0]).toMatchObject({ userId: MEMBER_ID, type: "task.assigned" });
   });
