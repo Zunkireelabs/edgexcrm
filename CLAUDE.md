@@ -458,7 +458,8 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 - **Prod DB connection**: `postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik%23@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
 - **Stage DB connection (direct)**: `postgresql://postgres:Zunkiree%40123%25%5E%26@db.dymeudcddasqpomfpjvt.supabase.co:5432/postgres` (password `Zunkiree@123%^&`)
 - **Keys**: in each environment's `.env.local`. The DB pointer lives in **two places per environment** — `docker-compose*.yml` build args (`NEXT_PUBLIC_*`, baked at build) **and** the VPS `.env.local` (`SUPABASE_SERVICE_ROLE_KEY` + the `NEXT_PUBLIC_*` runtime copies). Change both in lockstep or you get a prod/stage split-brain (client one DB, server the other).
-- **Stage = sanitized clone of prod** (point-in-time 2026-06-21): identical schema + all rows, but end-customer PII scrubbed and **every auth password reset to `edgexdev123`**. Log into dev/local as any prod email (e.g. `admin@zunkireelabs.com`, `hello@admizz.org`) with password `edgexdev123`.
+- **Stage = clone of prod** (point-in-time 2026-06-21): identical schema + all rows, with **every auth password reset to `edgexdev123`**. Log into dev/local as any prod email (e.g. `admin@zunkireelabs.com`, `hello@admizz.org`) with password `edgexdev123`.
+- ⚠️ **Stage customer data is NOT anonymized.** This doc previously claimed "end-customer PII scrubbed" — that is false and was corrected 2026-07-19 after it misled a privacy assessment. Verified on the stage DB: of Admizz's 16,684 leads, **16,436 carry a real phone number** and only 38 are obvious test rows. Names and phone numbers came across intact; only passwords were reset. Treat stage lead data as **real customer PII**, especially before pointing any third-party service (AI providers, analytics, external APIs) at it. Anonymizing stage's customer columns is tracked as open work.
 
 ### Migration workflow (dev-first)
 
