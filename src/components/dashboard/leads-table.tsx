@@ -1225,7 +1225,7 @@ export function LeadsTable({
                     .map(([userId, email]) => ({
                       value: userId,
                       label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
-                      description: email,
+                      description: memberMeta(userId) || email,
                     })),
                 ]
               : [
@@ -1260,7 +1260,7 @@ export function LeadsTable({
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
-                description: email,
+                description: eduStageGated ? (memberMeta(userId) || email) : email,
               })),
           } satisfies FilterDef,
         ]
