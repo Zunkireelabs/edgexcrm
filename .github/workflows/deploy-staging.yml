@@ -107,6 +107,14 @@ jobs:
               echo "OPENAI_API_KEY=$OPENAI_API_KEY"
               echo "AI_ASSISTANT_ENABLED=true"
               echo "AI_INGESTION_ENABLED=true"
+              # Phase 4 write tools on stage. Still double-gated: a tenant also
+              # needs tenants.ai_enabled (mig 174), and every write is
+              # approval-gated in the UI before it runs. Prod stays off.
+              echo "AI_WRITE_TOOLS_ENABLED=true"
+              # Pinned explicitly rather than inferred from which API key exists —
+              # this value determines which third party receives customer data, so
+              # changing it is a privacy-disclosure event (ADR-001 D5).
+              echo "AI_PROVIDER=openai"
               echo "INNGEST_EVENT_KEY=$INNGEST_EVENT_KEY"
               echo "INNGEST_SIGNING_KEY=$INNGEST_SIGNING_KEY"
               echo "LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY"
