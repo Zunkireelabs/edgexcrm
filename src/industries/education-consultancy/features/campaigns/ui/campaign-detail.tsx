@@ -434,15 +434,18 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
 
   const sortedResults = useMemo(() => {
     if (!data) return [];
+    // Serial tournament order — earliest kickoff first. Matches missing a
+    // kickoff date (ESPN refresh gap) always sort after dated ones instead
+    // of interleaving, tie-broken by ESPN's own event id ascending.
     return [...data.results].sort((a, b) => {
       if (a.match_date && b.match_date) {
-        return new Date(b.match_date).getTime() - new Date(a.match_date).getTime();
+        return new Date(a.match_date).getTime() - new Date(b.match_date).getTime();
       }
       if (a.match_date && !b.match_date) return -1;
       if (!a.match_date && b.match_date) return 1;
       const aId = parseInt(a.match_id.replace("espn-", ""), 10);
       const bId = parseInt(b.match_id.replace("espn-", ""), 10);
-      return bId - aId;
+      return aId - bId;
     });
   }, [data]);
 
