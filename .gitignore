@@ -57,3 +57,6 @@ temp_ss/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 .aider*
+
+# Graphify knowledge-graph output (regenerated locally; .mcp.json stays tracked)
+graphify-out/
