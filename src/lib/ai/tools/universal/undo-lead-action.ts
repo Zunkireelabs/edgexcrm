@@ -4,7 +4,8 @@ import type { AgentTool } from "../types";
 import { optionalUuid } from "./lib/sanitize";
 import { leadPatchErrorResult, UNDOABLE_LEAD_FIELDS } from "./lib/lead-patch-result";
 
-const UNDOABLE_TOOL_IDS = ["update_lead_stage", "assign_lead"];
+/** Also used by the approval-card resolver (resolve-approval-refs route) to build the undo preview sentence. */
+export const UNDOABLE_TOOL_IDS = ["update_lead_stage", "assign_lead"];
 
 const inputSchema = z.object({
   actionId: optionalUuid(z.string().uuid().optional()).describe(
