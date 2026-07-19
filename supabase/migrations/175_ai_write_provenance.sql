@@ -1,4 +1,4 @@
--- Migration 173: AI-write provenance on lead_notes and knowledge_base_items
+-- Migration 175: AI-write provenance on lead_notes and knowledge_base_items
 --
 -- Phase 4C (docs/ai-native-efforts/working/BRIEF-PHASE-4C-NOTE-AND-KB-WRITES.md).
 -- There is no provenance column anywhere in the schema today: lead_notes has
@@ -62,7 +62,7 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_lead_notes_ai_tool_call ON public.lead_notes(ai_tool_call_id) WHERE ai_tool_call_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_kb_items_ai_tool_call  ON public.knowledge_base_items(ai_tool_call_id) WHERE ai_tool_call_id IS NOT NULL;
 
-INSERT INTO public.schema_migrations (version) VALUES ('173_ai_write_provenance.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('175_ai_write_provenance.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

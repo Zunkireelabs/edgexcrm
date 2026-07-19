@@ -1,4 +1,4 @@
--- Migration 172: ai_write_actions — audit + idempotency spine for AI write tools
+-- Migration 173: ai_write_actions — audit + idempotency spine for AI write tools
 --
 -- Phase 4A (docs/ai-native-efforts/working/BRIEF-PHASE-4A-WRITE-SPINE.md). Every
 -- scope:"write" tool proposal/decision/execution is recorded here, keyed by the
@@ -49,7 +49,7 @@ DROP POLICY IF EXISTS "ai_write_actions_select" ON ai_write_actions;
 CREATE POLICY "ai_write_actions_select" ON ai_write_actions
   FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
 
-INSERT INTO public.schema_migrations (version) VALUES ('172_ai_write_actions.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('173_ai_write_actions.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

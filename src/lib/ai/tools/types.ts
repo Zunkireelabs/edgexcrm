@@ -10,7 +10,7 @@ export interface ToolContext {
   db: ScopedClient; // ALWAYS scopedClient(auth) — never the service client
   logger: Logger; // request logger, child-scoped per tool call
   runId: string; // correlates audit rows + telemetry trace
-  conversationId?: string; // ai_conversations.id, when known — recorded on ai_write_actions rows (mig 172)
+  conversationId?: string; // ai_conversations.id, when known — recorded on ai_write_actions rows (mig 173)
   toolCallId?: string; // set only for scope:"write" tools (Phase 4C) — the SDK's per-call id, known at execute time unlike ai_write_actions.id
 }
 

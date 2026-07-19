@@ -23,7 +23,7 @@ export interface RetrievedChunk {
   title: string;
   type: string;
   url: string | null;
-  /** Phase 4C provenance chain — read from the parent item's `created_via` (the mig-173 CHECK-guarded source of truth), falling back to the chunk's metadata snapshot only when absent. Defaults to "human" for items predating migration 173. */
+  /** Phase 4C provenance chain — read from the parent item's `created_via` (the mig-175 CHECK-guarded source of truth), falling back to the chunk's metadata snapshot only when absent. Defaults to "human" for items predating migration 175. */
   createdVia: "human" | "ai_assistant";
   page?: number;
   section?: string;
@@ -118,10 +118,10 @@ async function joinToKbItems(db: ScopedClient, rows: HybridSearchRow[]): Promise
     const item = itemById.get(row.kb_item_id);
     if (!item) continue; // item deleted between chunk write and this read — skip rather than error
     const metadata = row.metadata as { page?: number; section?: string; created_via?: string };
-    // Item row's created_via is the guarded source of truth (mig 173 CHECK
+    // Item row's created_via is the guarded source of truth (mig 175 CHECK
     // constraint); chunk metadata is only a denormalized snapshot from ingest
     // time, kept for debugging/direct-chunk consumers. Fall back to it only
-    // when the item value is absent (shouldn't happen post-mig-173, but the
+    // when the item value is absent (shouldn't happen post-mig-175, but the
     // item row is fetched by id and could theoretically miss the column on a
     // stale read path).
     const createdVia = item.created_via ?? metadata.created_via;
