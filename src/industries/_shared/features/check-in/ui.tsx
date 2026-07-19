@@ -36,6 +36,7 @@ import {
   MapPin,
   Globe,
   FileText,
+  User,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
@@ -61,6 +62,8 @@ interface LeadResult {
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
+  list_name: string | null;
+  assigned_to_name: string | null;
   created_at: string;
 }
 
@@ -1473,11 +1476,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   <span>{selectedLead.phone}</span>
                 </div>
               )}
-              {selectedLead.pipeline_name && (
-                <div className="flex items-center gap-3 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span>{selectedLead.pipeline_name}</span>
-                </div>
+              {industryId === "education_consultancy" ? (
+                <>
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Stage: {selectedLead.list_name || "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Assigned To: {selectedLead.assigned_to_name || "Unassigned"}</span>
+                  </div>
+                </>
+              ) : (
+                selectedLead.pipeline_name && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>{selectedLead.pipeline_name}</span>
+                  </div>
+                )
               )}
               <div className="flex items-center gap-3 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
