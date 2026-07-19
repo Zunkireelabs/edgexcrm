@@ -5,6 +5,7 @@ import { CheckInPage } from "@/industries/_shared/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
+import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import type { PipelineStage } from "@/types/database";
 
@@ -79,6 +80,7 @@ export default async function CheckInRoute() {
         canAssignOwnCheckIns={canAssignOwnCheckIns}
         currentUserId={tenantData.userId}
         isAdmin={tenantData.permissions.baseTier === "owner" || tenantData.permissions.baseTier === "admin"}
+        bypassQualification={canBypassProspectQualification(baseTier, tenantData.positionSlug)}
       />
     </div>
   );
