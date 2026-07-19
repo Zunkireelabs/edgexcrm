@@ -84,10 +84,10 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
         {application.intake_term && (
           <div className="text-xs text-muted-foreground truncate pl-[18px]">{application.intake_term}</div>
         )}
-        {application.country && (
+        {application.countries && application.countries.length > 0 && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate">{application.country}</span>
+            <span className="truncate">{application.countries.join(", ")}</span>
           </div>
         )}
         {application.application_deadline && (

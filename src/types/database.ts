@@ -1092,6 +1092,7 @@ export interface Application {
   program_name: string;
   intake_term: string | null;
   country: string | null;
+  countries: string[] | null;
   stage_id: string;
   status: string;
   offer_type: "conditional" | "unconditional" | null;

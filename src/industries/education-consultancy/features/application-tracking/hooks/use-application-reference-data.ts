@@ -66,12 +66,12 @@ const FALLBACK_COUNTRIES = [
 // AutocompleteInput's exact-match check can't see it, offers "Create" for a
 // name that already exists, and the create POST 409s on the tenant+name
 // unique constraint with no way to recover.
-export function getCollegeSuggestions(colleges: PartnerCollegeOption[], country: string): string[] {
-  if (!country) return colleges.map((c) => c.name);
+export function getCollegeSuggestions(colleges: PartnerCollegeOption[], countries: string[]): string[] {
+  if (countries.length === 0) return colleges.map((c) => c.name);
   return [...colleges]
     .sort((a, b) => {
-      const aMatch = a.country === country || !a.country;
-      const bMatch = b.country === country || !b.country;
+      const aMatch = (a.country && countries.includes(a.country)) || !a.country;
+      const bMatch = (b.country && countries.includes(b.country)) || !b.country;
       return aMatch === bMatch ? 0 : aMatch ? -1 : 1;
     })
     .map((c) => c.name);

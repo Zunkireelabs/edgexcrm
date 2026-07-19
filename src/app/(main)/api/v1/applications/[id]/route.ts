@@ -94,7 +94,6 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     "university_name",
     "program_name",
     "intake_term",
-    "country",
     "offer_type",
     "application_deadline",
     "application_fee_paid",
@@ -111,6 +110,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
   }
+  if (Array.isArray(body.countries)) patch.countries = body.countries;
 
   if (Object.keys(patch).length === 0) return apiSuccess(existingRow);
 

@@ -25,6 +25,7 @@ import { AutocompleteInput } from "./autocomplete-input";
 import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-dialog";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import type { ApplicationStage } from "@/types/database";
 
 interface LeadOption {
@@ -60,7 +61,9 @@ export function AddApplicationSheet({
   const [programName, setProgramName] = useState("");
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
-  const [country, setCountry] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
+  const toggleCountry = (c: string) =>
+    setCountries((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState(defaultStage?.id ?? "");
@@ -74,15 +77,15 @@ export function AddApplicationSheet({
   const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
   const [pendingUniversityName, setPendingUniversityName] = useState("");
   const {
-    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    agents, partnerColleges, countries: countryOptions, intakeMonths, intakeYears,
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
   const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
 
-  // Colleges tagged to the selected country (+ untagged) rank first; every
-  // college stays selectable so the autocomplete's dedupe check never misses
-  // one — see getCollegeSuggestions().
-  const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
+  // Colleges tagged to any of the selected countries (+ untagged) rank first;
+  // every college stays selectable so the autocomplete's dedupe check never
+  // misses one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, countries);
 
   // Resolve the typed/selected University name to its catalog id — covers both
   // picking an existing suggestion and a just-created college (handleCreateCollege
@@ -127,7 +130,7 @@ export function AddApplicationSheet({
       setProgramName("");
       setIntakeMonth("");
       setIntakeYear("");
-      setCountry("");
+      setCountries([]);
       setDegreeLevel("");
       setFieldOfStudy("");
       setDeadline("");
@@ -217,7 +220,7 @@ export function AddApplicationSheet({
       if (stageId) body.stage_id = stageId;
       const intakeTerm = [intakeMonth, intakeYear].filter(Boolean).join(" ");
       if (intakeTerm) body.intake_term = intakeTerm;
-      if (country && country !== "__none__") body.country = country;
+      if (countries.length > 0) body.countries = countries;
       if (degreeLevel && degreeLevel !== "__none__") body.degree_level = degreeLevel;
       if (fieldOfStudy && fieldOfStudy !== "__none__") body.field_of_study = fieldOfStudy;
       if (deadline) body.application_deadline = deadline;
@@ -323,19 +326,13 @@ export function AddApplicationSheet({
           <div className="space-y-4">
             <h3 className="text-sm font-medium text-gray-900">Application Details</h3>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Destination</Label>
-              <Select value={country} onValueChange={setCountry}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select destination" />
-                </SelectTrigger>
-                <SelectContent>
-                  {countries.map((c) => (
-                    <SelectItem key={c} value={c}>{c}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <DestinationsMultiSelect
+              selected={countries}
+              onToggle={toggleCountry}
+              options={countryOptions}
+              label="Destination"
+              optional={false}
+            />
 
             <div className="space-y-1.5">
               <Label htmlFor="app-university" className="text-xs text-gray-600">
@@ -532,7 +529,7 @@ export function AddApplicationSheet({
         open={addUniversityDialogOpen}
         onOpenChange={setAddUniversityDialogOpen}
         initialName={pendingUniversityName}
-        countries={countries}
+        countries={countryOptions}
         createPartnerCollege={createPartnerCollege}
         createProgram={createProgram}
         fetchDistinctProgramNames={fetchDistinctProgramNames}

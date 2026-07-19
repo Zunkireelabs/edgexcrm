@@ -197,7 +197,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     created_by: auth.userId,
   };
   if (body.intake_term) insert.intake_term = String(body.intake_term);
-  if (body.country) insert.country = String(body.country);
+  if (Array.isArray(body.countries)) insert.countries = body.countries;
   if (body.application_deadline) insert.application_deadline = String(body.application_deadline);
   if (body.application_fee_paid !== undefined) insert.application_fee_paid = Boolean(body.application_fee_paid);
   if (body.tuition_fee !== undefined && body.tuition_fee !== null) insert.tuition_fee = Number(body.tuition_fee);
