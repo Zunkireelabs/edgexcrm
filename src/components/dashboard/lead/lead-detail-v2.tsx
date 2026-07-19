@@ -1071,11 +1071,7 @@ export function LeadDetailV2({
             {/* Destinations multi-select */}
             <DestinationsMultiSelect
               selected={qualifyDests}
-              onToggle={(dest) =>
-                setQualifyDests((prev) =>
-                  prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
-                )
-              }
+              onChange={setQualifyDests}
               options={destOptions}
               label="Interested Destinations"
               optional={false}

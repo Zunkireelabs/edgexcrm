@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { ChevronDown } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -13,20 +13,29 @@ import { Label } from "@/components/ui/label";
 // Settings > Organization > Destination Countries.
 export function DestinationsMultiSelect({
   selected,
-  onToggle,
+  onChange,
   disabled,
   options,
   label = "Interested Destination",
   optional = true,
 }: {
   selected: string[];
-  onToggle: (dest: string) => void;
+  onChange: (next: string[]) => void;
   disabled?: boolean;
   options: string[];
   label?: string;
   optional?: boolean;
 }) {
+  // Toggle membership lives here, not in each caller — this is the one place
+  // that logic should exist now that rendering is already centralized.
+  function toggle(dest: string) {
+    onChange(selected.includes(dest) ? selected.filter((d) => d !== dest) : [...selected, dest]);
+  }
   const [open, setOpen] = useState(false);
+  // Unique per mounted instance — prevents duplicate DOM ids (and the
+  // mislabeled-checkbox bug that causes) when two of these are open at once
+  // (e.g. a lead's Study Interest panel left in edit mode behind its Qualify dialog).
+  const instanceId = useId();
   return (
     <div className="space-y-1.5">
       <Label className="text-xs text-gray-600">
@@ -49,12 +58,12 @@ export function DestinationsMultiSelect({
           {options.map((dest) => (
             <div key={dest} className="flex items-center gap-2">
               <Checkbox
-                id={`dest-${dest}`}
+                id={`${instanceId}-${dest}`}
                 checked={selected.includes(dest)}
                 disabled={disabled}
-                onCheckedChange={() => onToggle(dest)}
+                onCheckedChange={() => toggle(dest)}
               />
-              <label htmlFor={`dest-${dest}`} className="text-xs cursor-pointer select-none">
+              <label htmlFor={`${instanceId}-${dest}`} className="text-xs cursor-pointer select-none">
                 {dest}
               </label>
             </div>

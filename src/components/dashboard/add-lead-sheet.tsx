@@ -234,14 +234,8 @@ export function AddLeadSheet({
     }
   };
 
-  const toggleDestination = (dest: string) => {
-    setFormData((prev) => {
-      const current = prev.destinations;
-      const next = current.includes(dest)
-        ? current.filter((d) => d !== dest)
-        : [...current, dest];
-      return { ...prev, destinations: next };
-    });
+  const setDestinations = (next: string[]) => {
+    setFormData((prev) => ({ ...prev, destinations: next }));
     setIsDirty(true);
   };
 
@@ -1038,7 +1032,7 @@ export function AddLeadSheet({
         {industryId === "education_consultancy" && (
           <DestinationsMultiSelect
             selected={formData.destinations}
-            onToggle={toggleDestination}
+            onChange={setDestinations}
             disabled={isSubmitting}
             options={destOptions}
           />

@@ -235,10 +235,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   // Student-only education fields (revealed when the Student tag is active)
   const [destinations, setDestinations] = useState<string[]>([]);
-  const toggleDestination = (dest: string) =>
-    setDestinations((prev) =>
-      prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
-    );
   const [studyLevel, setStudyLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [referralSource, setReferralSource] = useState("");
@@ -918,7 +914,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                             <div className="grid grid-cols-2 gap-3">
                               <DestinationsMultiSelect
                                 selected={destinations}
-                                onToggle={toggleDestination}
+                                onChange={setDestinations}
                                 options={destOptions}
                                 label="Destination"
                               />

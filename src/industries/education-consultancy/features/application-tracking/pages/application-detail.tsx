@@ -146,8 +146,6 @@ export function ApplicationDetailPage({
   // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
   const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
   const [countries, setCountries] = useState<string[]>([]);
-  const toggleCountry = (c: string) =>
-    setCountries((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -633,7 +631,7 @@ export function ApplicationDetailPage({
                 {editing ? (
                   <DestinationsMultiSelect
                     selected={countries}
-                    onToggle={toggleCountry}
+                    onChange={setCountries}
                     options={countryOptions}
                     label="Destination"
                     optional={false}

@@ -62,8 +62,6 @@ export function AddApplicationSheet({
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
-  const toggleCountry = (c: string) =>
-    setCountries((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState(defaultStage?.id ?? "");
@@ -328,7 +326,7 @@ export function AddApplicationSheet({
 
             <DestinationsMultiSelect
               selected={countries}
-              onToggle={toggleCountry}
+              onChange={setCountries}
               options={countryOptions}
               label="Destination"
               optional={false}

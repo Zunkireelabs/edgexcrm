@@ -14,7 +14,7 @@ const inputSchema = z.object({
     "Application stage slug, e.g. \"applied\" or \"conditional_offer\". Omit entirely to include all — never pass \"all\".",
   ),
   status: optionalString(z.string().max(100).optional()).describe("Filter by application status (matches the current stage slug)"),
-  country: optionalString(z.string().max(100).optional()).describe("Filter by destination country"),
+  country: optionalString(z.string().max(100).optional()).describe("Filter by destination country (matches if it's any one of an application's destination countries)"),
   intakeTerm: optionalString(z.string().max(100).optional()).describe("Filter by intake term, e.g. \"Fall 2026\""),
   limit: z.number().int().min(1).max(50).default(20),
 });
@@ -25,7 +25,7 @@ type ApplicationRow = {
   lead_id: string;
   university_name: string;
   program_name: string;
-  country: string | null;
+  countries: string[] | null;
   intake_term: string | null;
   status: string;
   offer_type: string | null;
@@ -67,7 +67,7 @@ export const searchApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
     let query = db
       .from("applications")
       .select(
-        "id, lead_id, university_name, program_name, country, intake_term, status, offer_type, " +
+        "id, lead_id, university_name, program_name, countries, intake_term, status, offer_type, " +
           "application_deadline, application_fee_paid, " +
           "application_stages!applications_stage_id_fkey(id,name,slug)",
         { count: "exact" },
@@ -76,7 +76,7 @@ export const searchApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
 
     if (stageId) query = query.eq("stage_id", stageId);
     if (input.status) query = query.eq("status", input.status);
-    if (input.country) query = query.eq("country", input.country);
+    if (input.country) query = query.contains("countries", [input.country]);
     if (input.intakeTerm) query = query.eq("intake_term", input.intakeTerm);
 
     // Counselor scoping mirrors GET /api/v1/applications (route.ts) — assigned_to
@@ -115,7 +115,7 @@ export const searchApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
         leadHref: leadHref(a.lead_id),
         universityName: a.university_name,
         programName: a.program_name,
-        country: a.country,
+        countries: a.countries ?? [],
         intakeTerm: a.intake_term,
         stage: a.application_stages ? { slug: a.application_stages.slug, name: a.application_stages.name } : null,
         status: a.status,

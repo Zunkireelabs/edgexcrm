@@ -57,12 +57,6 @@ export function QualifyRowButton({
     setOpen(true);
   }
 
-  function toggleDest(dest: string) {
-    setDests((prev) =>
-      prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
-    );
-  }
-
   async function handleSubmit() {
     setQualifying(true);
     try {
@@ -120,7 +114,7 @@ export function QualifyRowButton({
           <div className="space-y-4 py-2">
             <DestinationsMultiSelect
               selected={dests}
-              onToggle={toggleDest}
+              onChange={setDests}
               options={destOptions}
               label="Interested Destinations"
               optional={false}

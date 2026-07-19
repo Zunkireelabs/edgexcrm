@@ -774,11 +774,6 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
     setEditing(true);
   }
 
-  function toggleDest(d: string) {
-    setDraftDests((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
-    );
-  }
 
   async function handleSave() {
     if (!onSave) return;
@@ -837,7 +832,7 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
           {/* Destinations multi-select */}
           <DestinationsMultiSelect
             selected={draftDests}
-            onToggle={toggleDest}
+            onChange={setDraftDests}
             options={destOptions}
             label="Interested Destinations"
             optional={false}

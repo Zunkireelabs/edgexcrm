@@ -110,7 +110,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
   }
-  if (Array.isArray(body.countries)) patch.countries = body.countries;
+  if (body.countries !== undefined) {
+    if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {
+      return apiValidationError({ countries: ["Must be an array of strings"] });
+    }
+    patch.countries = body.countries;
+  }
 
   if (Object.keys(patch).length === 0) return apiSuccess(existingRow);
 

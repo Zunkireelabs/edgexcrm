@@ -52,8 +52,6 @@ export function AddApplicationToLeadSheet({
   const [intakeMonth, setIntakeMonth] = useState("");
   const [intakeYear, setIntakeYear] = useState("");
   const [countries, setCountries] = useState<string[]>([]);
-  const toggleCountry = (c: string) =>
-    setCountries((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [stageId, setStageId] = useState("");
@@ -193,7 +191,7 @@ export function AddApplicationToLeadSheet({
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
           <DestinationsMultiSelect
             selected={countries}
-            onToggle={toggleCountry}
+            onChange={setCountries}
             options={countryOptions}
             label="Destination"
             optional={false}
