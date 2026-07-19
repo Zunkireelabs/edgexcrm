@@ -26,8 +26,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
@@ -38,6 +37,7 @@ import {
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { COUNTRY_CODES } from "@/lib/country-codes";
@@ -152,58 +152,6 @@ const initialFormData: FormData = {
   fieldOfStudy: "",
   degreeLevel: "",
 };
-
-function DestinationsField({
-  selected,
-  onToggle,
-  disabled,
-  options,
-}: {
-  selected: string[];
-  onToggle: (dest: string) => void;
-  disabled: boolean;
-  options: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-gray-600">
-        Interested Destination
-        <span className="ml-1 text-gray-400">(optional)</span>
-      </Label>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background hover:bg-accent transition-colors"
-      >
-        <span className={selected.length === 0 ? "text-muted-foreground" : ""}>
-          {selected.length === 0
-            ? "Select destinations"
-            : selected.join(", ")}
-        </span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
-          {options.map((dest) => (
-            <div key={dest} className="flex items-center gap-2">
-              <Checkbox
-                id={`dest-${dest}`}
-                checked={selected.includes(dest)}
-                disabled={disabled}
-                onCheckedChange={() => onToggle(dest)}
-              />
-              <label htmlFor={`dest-${dest}`} className="text-xs cursor-pointer select-none">
-                {dest}
-              </label>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function AddLeadSheet({
   open,
@@ -1088,7 +1036,7 @@ export function AddLeadSheet({
 
         {/* Study Interest — education_consultancy only */}
         {industryId === "education_consultancy" && (
-          <DestinationsField
+          <DestinationsMultiSelect
             selected={formData.destinations}
             onToggle={toggleDestination}
             disabled={isSubmitting}
