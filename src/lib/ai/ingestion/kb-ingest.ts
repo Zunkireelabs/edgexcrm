@@ -25,6 +25,8 @@ interface KbItemRow {
   mime_type: string | null;
   url: string | null;
   content: string | null;
+  created_via: "human" | "ai_assistant";
+  ai_tool_call_id: string | null;
 }
 
 async function fetchAndParse(item: KbItemRow): Promise<ParsedResult> {
@@ -108,6 +110,8 @@ export const kbIngest = inngest.createFunction(
         embedding: embeddings[i],
         metadata: {
           source: item.type,
+          created_via: item.created_via,
+          ...(item.ai_tool_call_id ? { ai_tool_call_id: item.ai_tool_call_id } : {}),
           ...(item.mime_type ? { mime: item.mime_type } : {}),
           ...(c.page !== undefined ? { page: c.page } : {}),
           ...(c.section ? { section: c.section } : {}),

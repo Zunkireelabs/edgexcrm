@@ -11,12 +11,8 @@ import {
   apiValidationError,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import {
-  createNotificationsExcept,
-  NotificationTypes,
-} from "@/lib/notifications";
-import { createAuditLog } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { createLeadNote } from "@/lib/leads/create-lead-note";
 
 export async function GET(
   _request: NextRequest,
@@ -98,104 +94,28 @@ export async function POST(
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
 
-  const supabase = await createServiceClient();
-
-  const { data: lead } = await supabase
-    .from("leads")
-    .select("id, first_name, last_name, assigned_to, branch_id, tags")
-    .eq("id", id)
-    .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null)
-    .single();
-
-  if (!lead) return apiNotFound("Lead");
-
-  // Exception: walk-in "other" contacts are writable by any user in their branch.
-  const membership = await getLeadMembership(supabase, auth.tenantId, id);
-  if (
-    shouldRestrictToSelf(auth.permissions) &&
-    !isOwnBranchContact(auth, lead) &&
-    !(membership.some((m) => m.assigned_to === auth.userId) || lead.assigned_to === auth.userId) &&
-    !(await isLeadCollaborator(supabase, auth.tenantId, id, auth.userId))
-  )
-    return apiNotFound("Lead");
-  if (!requireLeadBranchAccess(auth, lead, membership)) return apiNotFound("Lead");
-
   const body = await request.json().catch(() => null);
   const content = typeof body?.content === "string" ? body.content.trim() : "";
   const mentionedUserIds: string[] = Array.isArray(body?.mentioned_user_ids)
     ? body.mentioned_user_ids.filter((x: unknown): x is string => typeof x === "string")
     : [];
 
-  if (!content) {
-    return apiValidationError({ content: ["Note content is required"] });
+  const outcome = await createLeadNote(
+    auth,
+    id,
+    { content, mentionedUserIds, createdVia: "human", aiToolCallId: null },
+    { requestId },
+  );
+
+  switch (outcome.kind) {
+    case "not_found":
+      return apiNotFound("Lead");
+    case "validation":
+      return apiValidationError(outcome.errors);
+    case "db_error":
+      log.error({ err: outcome.error }, "Failed to create note");
+      return apiServiceUnavailable("Failed to add note");
+    case "ok":
+      return apiSuccess(outcome.note, 201);
   }
-
-  const { data: note, error } = await supabase
-    .from("lead_notes")
-    .insert({
-      lead_id: id,
-      user_id: auth.userId,
-      user_email: auth.email,
-      content,
-    })
-    .select()
-    .single();
-
-  if (error || !note) {
-    log.error({ err: error }, "Failed to create note");
-    return apiServiceUnavailable("Failed to add note");
-  }
-
-  // Record the note in the lead's System Activity timeline (audit_logs).
-  await createAuditLog({
-    tenantId: auth.tenantId,
-    userId: auth.userId,
-    action: "lead.note_added",
-    entityType: "lead",
-    entityId: id,
-    changes: { note_id: { old: null, new: note.id } },
-    requestId,
-  });
-
-  // Notify mentioned users — but only those that genuinely belong to the
-  // lead's branch/tenant (don't trust the client's id list blindly).
-  if (mentionedUserIds.length > 0) {
-    let memberQuery = supabase
-      .from("tenant_users")
-      .select("user_id")
-      .eq("tenant_id", auth.tenantId)
-      .in("user_id", mentionedUserIds);
-    if (lead.branch_id) memberQuery = memberQuery.eq("branch_id", lead.branch_id);
-
-    const { data: validRows } = await memberQuery;
-    const validIds = new Set(
-      ((validRows ?? []) as unknown as { user_id: string }[]).map((r) => r.user_id)
-    );
-    const toNotify = mentionedUserIds.filter((uid) => validIds.has(uid));
-
-    if (toNotify.length > 0) {
-      // Resolve the author's display name for the message.
-      const { data: authorData } = await supabase.auth.admin.getUserById(auth.userId);
-      const meta = authorData?.user?.user_metadata as Record<string, unknown> | undefined;
-      const authorName =
-        (meta?.name as string) || (meta?.full_name as string) || auth.email || "Someone";
-      const leadName =
-        [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "a lead";
-
-      await createNotificationsExcept(
-        auth.userId,
-        toNotify.map((uid) => ({
-          tenantId: auth.tenantId,
-          userId: uid,
-          type: NotificationTypes.NOTE_MENTION,
-          title: "You were mentioned in a note",
-          message: `${authorName} mentioned you in a note on ${leadName}`,
-          link: `/leads/${id}`,
-        }))
-      );
-    }
-  }
-
-  return apiSuccess(note, 201);
 }

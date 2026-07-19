@@ -142,7 +142,7 @@ async function executeWriteTool(
 
   let result: unknown;
   try {
-    result = await agentTool.execute(ctx, input);
+    result = await agentTool.execute({ ...ctx, toolCallId }, input);
   } catch (err) {
     const { error: failInsertError } = await ctx.db.from("ai_write_actions").insert({
       user_id: ctx.auth.userId,

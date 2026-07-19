@@ -22,13 +22,13 @@ function selectChain(rows: Row[]) {
   return c;
 }
 
-const KB_ITEM_ROWS: Row[] = [{ id: "item-1", title: "Doc.pdf", knowledge_base_id: "kb-1", type: "file", url: null }];
+const KB_ITEM_ROWS: Row[] = [{ id: "item-1", title: "Doc.pdf", knowledge_base_id: "kb-1", type: "file", url: null, created_via: null }];
 
-function fakeDb(opts: { rpcResult?: Row[]; rpcError?: { message: string }; keywordRows?: Row[] }): ScopedClient {
+function fakeDb(opts: { rpcResult?: Row[]; rpcError?: { message: string }; keywordRows?: Row[]; kbItemRows?: Row[] }): ScopedClient {
   const insertMock = vi.fn(() => Promise.resolve({ data: null, error: null }));
   return {
     from: (table: string) => {
-      if (table === "knowledge_base_items") return selectChain(KB_ITEM_ROWS);
+      if (table === "knowledge_base_items") return selectChain(opts.kbItemRows ?? KB_ITEM_ROWS);
       if (table === "knowledge_chunks") return selectChain(opts.keywordRows ?? []);
       if (table === "ai_usage_events") return { insert: insertMock };
       throw new Error(`unexpected table ${table}`);
@@ -75,6 +75,7 @@ describe("retrieve", () => {
         title: "Doc.pdf",
         type: "file",
         url: null,
+        createdVia: "human",
         page: 3,
       },
     ]);
@@ -101,6 +102,7 @@ describe("retrieve", () => {
         title: "Doc.pdf",
         type: "file",
         url: null,
+        createdVia: "human",
       },
     ]);
   });
@@ -119,5 +121,62 @@ describe("retrieve", () => {
     const result = await retrieve(db, "tenant-1", "query", 8);
     expect(result.chunks).toEqual([]);
     expect(result.degraded).toBe(false);
+  });
+
+  it("marks a chunk createdVia:'ai_assistant' when its metadata carries that provenance (Phase 4C)", async () => {
+    embedTextsMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    const db = fakeDb({
+      rpcResult: [
+        {
+          chunk_id: "chunk-1",
+          kb_item_id: "item-1",
+          chunk_index: 0,
+          content: "hello",
+          metadata: { created_via: "ai_assistant", ai_tool_call_id: "tc-1" },
+          rrf_score: 0.05,
+        },
+      ],
+    });
+
+    const result = await retrieve(db, "tenant-1", "query", 8);
+    expect(result.chunks[0].createdVia).toBe("ai_assistant");
+  });
+
+  it("defaults createdVia to 'human' when metadata carries no created_via (pre-migration/human-authored chunks)", async () => {
+    embedTextsMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    const db = fakeDb({
+      rpcResult: [
+        { chunk_id: "chunk-1", kb_item_id: "item-1", chunk_index: 0, content: "hello", metadata: {}, rrf_score: 0.05 },
+      ],
+    });
+
+    const result = await retrieve(db, "tenant-1", "query", 8);
+    expect(result.chunks[0].createdVia).toBe("human");
+  });
+
+  it("prefers the parent item row's created_via over chunk metadata (Phase 4C fixup finding 3 — the item row is the guarded source of truth, chunk metadata is a denormalized snapshot that re-ingest/backfill can skew)", async () => {
+    embedTextsMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    const db = fakeDb({
+      rpcResult: [
+        { chunk_id: "chunk-1", kb_item_id: "item-1", chunk_index: 0, content: "hello", metadata: {}, rrf_score: 0.05 },
+      ],
+      kbItemRows: [{ id: "item-1", title: "Doc.pdf", knowledge_base_id: "kb-1", type: "file", url: null, created_via: "ai_assistant" }],
+    });
+
+    const result = await retrieve(db, "tenant-1", "query", 8);
+    expect(result.chunks[0].createdVia).toBe("ai_assistant");
+  });
+
+  it("falls back to chunk metadata when the item row's created_via is absent", async () => {
+    embedTextsMock.mockResolvedValue([[0.1, 0.2, 0.3]]);
+    const db = fakeDb({
+      rpcResult: [
+        { chunk_id: "chunk-1", kb_item_id: "item-1", chunk_index: 0, content: "hello", metadata: { created_via: "ai_assistant" }, rrf_score: 0.05 },
+      ],
+      kbItemRows: [{ id: "item-1", title: "Doc.pdf", knowledge_base_id: "kb-1", type: "file", url: null, created_via: null }],
+    });
+
+    const result = await retrieve(db, "tenant-1", "query", 8);
+    expect(result.chunks[0].createdVia).toBe("ai_assistant");
   });
 });

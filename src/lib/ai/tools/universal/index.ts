@@ -14,6 +14,8 @@ import { createTaskTool } from "./create-task";
 import { updateLeadStageTool } from "./update-lead-stage";
 import { assignLeadTool } from "./assign-lead";
 import { undoLeadActionTool } from "./undo-lead-action";
+import { createLeadNoteTool } from "./create-lead-note";
+import { createKnowledgeItemTool } from "./create-knowledge-item";
 
 registerTool(searchLeadsTool);
 registerTool(getLeadTool);
@@ -28,6 +30,8 @@ registerTool(createTaskTool);
 registerTool(updateLeadStageTool);
 registerTool(assignLeadTool);
 registerTool(undoLeadActionTool);
+registerTool(createLeadNoteTool);
+registerTool(createKnowledgeItemTool);
 
 export {
   searchLeadsTool,
@@ -43,4 +47,6 @@ export {
   updateLeadStageTool,
   assignLeadTool,
   undoLeadActionTool,
+  createLeadNoteTool,
+  createKnowledgeItemTool,
 };

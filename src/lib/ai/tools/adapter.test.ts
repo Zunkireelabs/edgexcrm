@@ -291,6 +291,51 @@ describe("toAiSdkTools — write-tool idempotency + audit wrapper", () => {
     expect(updates[0]).toMatchObject({ status: "executed", result: { taskId: "fresh" }, error: null });
   });
 
+  it("threads toolCallId onto ctx for a write-scope tool's execute (Phase 4C)", async () => {
+    const { db } = fakeWriteDb({ existingRow: null });
+    const captured: ToolContext[] = [];
+    const tools = toAiSdkTools(
+      [
+        writeFixtureTool(async (ctx) => {
+          captured.push(ctx);
+          return { ok: true };
+        }),
+      ],
+      fixtureCtx(db),
+    );
+
+    await tools.write_fixture.execute!({}, fixtureExecOptions("tc-12"));
+
+    expect(captured[0]?.toolCallId).toBe("tc-12");
+  });
+
+  it("leaves ctx.toolCallId unset for a read-scope tool", async () => {
+    const captured: ToolContext[] = [];
+    const tools = toAiSdkTools(
+      [
+        readFixtureTool(async (ctx) => {
+          captured.push(ctx);
+          return { ok: true };
+        }),
+      ],
+      fixtureCtx({
+        from: () => {
+          throw new Error("read tools must not touch the DB via the write-audit path");
+        },
+        fromGlobal: () => {
+          throw new Error("not used");
+        },
+        raw: () => {
+          throw new Error("not used");
+        },
+      } as unknown as ScopedClient),
+    );
+
+    await tools.read_fixture.execute!({}, fixtureExecOptions("tc-13"));
+
+    expect(captured[0]?.toolCallId).toBeUndefined();
+  });
+
   it("never touches ai_write_actions for a read-scope tool", async () => {
     const throwingDb = {
       from: () => {

@@ -12,6 +12,8 @@ const TOOL_ACTIVITY_LABELS: Record<string, string> = {
   update_lead_stage: "Moving lead stage",
   assign_lead: "Assigning lead",
   undo_lead_action: "Undoing action",
+  create_lead_note: "Adding note",
+  create_knowledge_item: "Saving to knowledge base",
 };
 
 export function toolActivityLabel(toolName: string): string {

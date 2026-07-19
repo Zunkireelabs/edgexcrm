@@ -11,6 +11,14 @@ export type ApprovalToolPart = ApprovalRequestedPart | ApprovalRespondedPart;
 interface PreviewRow {
   label: string;
   value: string;
+  /**
+   * Renders in a scrollable full-text block instead of a single inline line.
+   * Used for the exact text a write tool would create (a note's content, a
+   * knowledge item's body) — Phase 4C requirement: the full text being
+   * written must be visible on the card before approval, never truncated.
+   * An approval a user cannot actually read is not consent.
+   */
+  long?: boolean;
 }
 
 function describeCreateTaskInput(input: unknown): PreviewRow[] {
@@ -47,12 +55,34 @@ function describeUndoLeadActionInput(input: unknown): PreviewRow[] {
   return [{ label: "Action", value: typeof i.actionId === "string" && i.actionId ? i.actionId : "most recent" }];
 }
 
+function describeCreateLeadNoteInput(input: unknown): PreviewRow[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const rows: PreviewRow[] = [];
+  if (typeof i.leadId === "string" && i.leadId) rows.push({ label: "Lead", value: i.leadId });
+  rows.push({ label: "Note", value: typeof i.content === "string" && i.content ? i.content : "—", long: true });
+  return rows;
+}
+
+function describeCreateKnowledgeItemInput(input: unknown): PreviewRow[] {
+  const i = (input ?? {}) as Record<string, unknown>;
+  const rows: PreviewRow[] = [];
+  rows.push({
+    label: "Knowledge base",
+    value: typeof i.knowledgeBaseId === "string" && i.knowledgeBaseId ? i.knowledgeBaseId : "—",
+  });
+  rows.push({ label: "Title", value: typeof i.title === "string" && i.title ? i.title : "—" });
+  rows.push({ label: "Content", value: typeof i.content === "string" && i.content ? i.content : "—", long: true });
+  return rows;
+}
+
 /** Per-tool preview renderers. Falls back to a generic key/value dump for any write tool without one. */
 const INPUT_DESCRIBERS: Record<string, (input: unknown) => PreviewRow[]> = {
   create_task: describeCreateTaskInput,
   update_lead_stage: describeUpdateLeadStageInput,
   assign_lead: describeAssignLeadInput,
   undo_lead_action: describeUndoLeadActionInput,
+  create_lead_note: describeCreateLeadNoteInput,
+  create_knowledge_item: describeCreateKnowledgeItemInput,
 };
 
 function describeInput(toolName: string, input: unknown): PreviewRow[] {
@@ -71,6 +101,8 @@ const APPROVAL_ACTION_LABELS: Record<string, string> = {
   update_lead_stage: "Move a lead to another stage",
   assign_lead: "Assign a lead",
   undo_lead_action: "Undo a lead action",
+  create_lead_note: "Add a note to a lead",
+  create_knowledge_item: "Save a note to a knowledge base",
 };
 
 function approvalActionLabel(toolName: string): string {
@@ -102,13 +134,22 @@ export function ApprovalCard({ part, onApprove, onDeny }: ApprovalCardProps) {
       <div className="text-xs font-semibold text-amber-900">{approvalActionLabel(toolName)} — approval needed</div>
 
       {rows.length > 0 && (
-        <dl className="flex flex-col gap-0.5">
-          {rows.map((row) => (
-            <div key={row.label} className="flex gap-2 text-xs">
-              <dt className="text-amber-700 shrink-0">{row.label}:</dt>
-              <dd className="text-amber-900 break-words">{row.value}</dd>
-            </div>
-          ))}
+        <dl className="flex flex-col gap-1">
+          {rows.map((row) =>
+            row.long ? (
+              <div key={row.label} className="flex flex-col gap-0.5 text-xs">
+                <dt className="text-amber-700">{row.label}:</dt>
+                <dd className="text-amber-900 whitespace-pre-wrap break-words max-h-40 overflow-y-auto rounded border border-amber-200 bg-amber-100/50 px-2 py-1.5">
+                  {row.value}
+                </dd>
+              </div>
+            ) : (
+              <div key={row.label} className="flex gap-2 text-xs">
+                <dt className="text-amber-700 shrink-0">{row.label}:</dt>
+                <dd className="text-amber-900 break-words">{row.value}</dd>
+              </div>
+            ),
+          )}
         </dl>
       )}
 
