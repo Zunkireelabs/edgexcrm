@@ -53,3 +53,13 @@ export function coerceAcademicPayload(body: Record<string, unknown>): Record<str
   }
   return out;
 }
+
+// Owner/admin and branch managers bypass the Prospects qualification gate — they may
+// move/assign leads into Prospects without academic %/GPA on file. Everyone else must
+// fill the gate-eligible qualification first.
+export function canBypassProspectQualification(
+  baseTier: "owner" | "admin" | "member",
+  positionSlug: string | null | undefined,
+): boolean {
+  return baseTier === "owner" || baseTier === "admin" || positionSlug === "branch-manager";
+}

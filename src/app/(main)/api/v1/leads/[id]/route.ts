@@ -27,7 +27,7 @@ import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs, peerSlugs } from "@/indu
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
-import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -589,7 +589,11 @@ export async function PATCH(
 
       // Prospect-qualification gate (server backstop): current lead's academic columns
       // merged with anything incoming in this same PATCH must satisfy the gate.
-      if (targetList.slug === "prospects" && auth.industryId === "education_consultancy") {
+      if (
+        targetList.slug === "prospects" &&
+        auth.industryId === "education_consultancy" &&
+        !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
+      ) {
         const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
         if (!hasProspectQualification(merged)) {
           return apiValidationError({
