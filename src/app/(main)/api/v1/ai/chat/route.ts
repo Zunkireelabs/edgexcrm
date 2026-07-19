@@ -216,6 +216,9 @@ export async function POST(request: NextRequest) {
           model: event.model?.modelId,
           inputTokens: event.usage.inputTokens,
           outputTokens: event.usage.outputTokens,
+          // A run that used up every step but still wanted to call more
+          // tools — the failure mode that hid the 4E bugs for weeks.
+          stepBudgetExhausted: event.finishReason === "tool-calls" && event.steps.length >= MAX_TOOL_STEPS,
         });
       } catch (err) {
         log.error({ err }, "chat onFinish persistence failed");
