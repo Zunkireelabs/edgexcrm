@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       list_id, assigned_to,
       pipeline_stages(name, color),
       pipelines(name),
-      lead_lists(name)
+      lead_lists!leads_list_id_fkey(name)
     `)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
