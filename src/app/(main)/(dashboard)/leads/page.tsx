@@ -11,6 +11,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
+import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
 
 const FUNNEL_LABELS: Record<string, string> = {
@@ -278,6 +279,9 @@ export default async function LeadsPage({
           restrictToSelf={tenantData.permissions.leadScope === "own"}
           userId={tenantData.userId}
           industryId={tenantData.tenant.industry_id}
+          bypassQualification={canBypassProspectQualification(
+            tenantData.permissions.baseTier, tenantData.positionSlug
+          )}
         />
       </div>
     );

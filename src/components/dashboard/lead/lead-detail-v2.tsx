@@ -36,7 +36,7 @@ import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
-import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
@@ -69,6 +69,8 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
+  /** Owner/admin + branch managers skip the Prospects academic-qualification dialog. */
+  bypassQualification?: boolean;
   canAssign?: boolean;
   canEditLeads?: boolean;
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
@@ -156,6 +158,7 @@ export function LeadDetailV2({
   industry,
   userBranchId,
   leadScope,
+  bypassQualification = false,
   canAssign = false,
   canEditLeads = false,
   assignableMembers,
@@ -860,6 +863,7 @@ export function LeadDetailV2({
               const targetList = leadLists?.find((l) => l.id === listId);
               if (
                 tenant.industry_id === "education_consultancy" &&
+                !bypassQualification &&
                 targetList?.slug === "prospects" &&
                 !hasProspectQualification(currentLead as unknown as Record<string, unknown>)
               ) {

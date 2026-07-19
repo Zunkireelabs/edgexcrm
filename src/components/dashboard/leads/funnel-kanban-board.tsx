@@ -29,6 +29,7 @@ interface FunnelKanbanBoardProps {
   restrictToSelf?: boolean;
   userId: string;
   industryId?: string | null;
+  bypassQualification?: boolean;
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
@@ -74,7 +75,7 @@ function findLeadColumn(columns: ColumnsState, leadId: string): string | null {
  * the lead between lists (via the bulk API, which already syncs pipeline_id/stage_id to
  * the target list's own status pipeline). Distinct from ListKanbanView, whose columns are
  * one list's own statuses. */
-export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = false, userId, industryId }: FunnelKanbanBoardProps) {
+export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false }: FunnelKanbanBoardProps) {
   // DnD-kit and Radix generate ids that differ between the SSR pass and the client's first
   // render — mirrors the same guard in PipelineBoard. Render a skeleton until mounted.
   const [mounted, setMounted] = useState(false);
@@ -161,6 +162,7 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
     const targetList = lists.find((l) => l.id === targetListId);
     if (
       industryId === "education_consultancy" &&
+      !bypassQualification &&
       targetList?.slug === "prospects" &&
       !hasProspectQualification(lead as unknown as Record<string, unknown>)
     ) {

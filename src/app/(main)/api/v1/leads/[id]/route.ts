@@ -27,7 +27,7 @@ import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs, peerSlugs } from "@/indu
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
-import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -589,7 +589,11 @@ export async function PATCH(
 
       // Prospect-qualification gate (server backstop): current lead's academic columns
       // merged with anything incoming in this same PATCH must satisfy the gate.
-      if (targetList.slug === "prospects" && auth.industryId === "education_consultancy") {
+      if (
+        targetList.slug === "prospects" &&
+        auth.industryId === "education_consultancy" &&
+        !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
+      ) {
         const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
         if (!hasProspectQualification(merged)) {
           return apiValidationError({
@@ -754,6 +758,10 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  // Owner/admin + branch managers skip the Prospects academic-qualification requirement:
+  // for them qualification reads as satisfied at both the hard-block and the auto-promote below.
+  const bypassQual = canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug);
+
   // Hard-block: assigning a counselor that would auto-promote an unqualified lead into
   // Prospects. Must run BEFORE the update below — the auto-promote block further down
   // fires only after the lead is already saved, too late to block.
@@ -776,7 +784,7 @@ export async function PATCH(
         }
         const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
         const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
-        if (wouldPromote && !qualifies) {
+        if (wouldPromote && !qualifies && !bypassQual) {
           return apiValidationError({ academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] });
         }
       }
@@ -877,7 +885,7 @@ export async function PATCH(
             ...updatePayload,
           });
           if (
-            qualifies &&
+            (qualifies || bypassQual) &&
             (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order)
           ) {
             const promotePayload: Record<string, unknown> = {
