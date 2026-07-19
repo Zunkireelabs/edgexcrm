@@ -3,10 +3,14 @@ import type { NextRequest } from "next/server";
 import type { AuthContext } from "@/lib/api/auth";
 
 const isAssistantEnabledMock = vi.fn();
+const isAssistantEnabledForTenantMock = vi.fn();
 const authenticateRequestMock = vi.fn();
 const scopedClientMock = vi.fn();
 
-vi.mock("@/lib/ai/flag", () => ({ isAssistantEnabled: isAssistantEnabledMock }));
+vi.mock("@/lib/ai/flag", () => ({
+  isAssistantEnabled: isAssistantEnabledMock,
+  isAssistantEnabledForTenant: isAssistantEnabledForTenantMock,
+}));
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 
@@ -46,15 +50,29 @@ function fakeDbWithConversation(conversationRow: Record<string, unknown> | null,
 describe("GET /api/v1/ai/conversations/[id]", () => {
   beforeEach(() => {
     isAssistantEnabledMock.mockReset();
+    isAssistantEnabledForTenantMock.mockReset().mockResolvedValue(true);
     authenticateRequestMock.mockReset();
     scopedClientMock.mockReset();
   });
 
-  it("returns 404 when the assistant flag is off", async () => {
+  it("returns 404 when the env flag is off", async () => {
     isAssistantEnabledMock.mockReturnValue(false);
     const { GET } = await import("./route");
     const res = await GET(fakeReq(), params("c1"));
     expect(res.status).toBe(404);
+    expect(authenticateRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the env flag is on but the tenant lacks the per-tenant grant", async () => {
+    isAssistantEnabledMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue(OWNER_AUTH);
+    isAssistantEnabledForTenantMock.mockResolvedValue(false);
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq(), params("c1"));
+
+    expect(res.status).toBe(404);
+    expect(scopedClientMock).not.toHaveBeenCalled();
   });
 
   it("404s when the conversation belongs to a different user (own-only)", async () => {
@@ -115,15 +133,29 @@ describe("GET /api/v1/ai/conversations/[id]", () => {
 describe("DELETE /api/v1/ai/conversations/[id]", () => {
   beforeEach(() => {
     isAssistantEnabledMock.mockReset();
+    isAssistantEnabledForTenantMock.mockReset().mockResolvedValue(true);
     authenticateRequestMock.mockReset();
     scopedClientMock.mockReset();
   });
 
-  it("returns 404 when the assistant flag is off", async () => {
+  it("returns 404 when the env flag is off", async () => {
     isAssistantEnabledMock.mockReturnValue(false);
     const { DELETE } = await import("./route");
     const res = await DELETE(fakeReq(), params("c1"));
     expect(res.status).toBe(404);
+    expect(authenticateRequestMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 404 when the env flag is on but the tenant lacks the per-tenant grant", async () => {
+    isAssistantEnabledMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue(OWNER_AUTH);
+    isAssistantEnabledForTenantMock.mockResolvedValue(false);
+
+    const { DELETE } = await import("./route");
+    const res = await DELETE(fakeReq(), params("c1"));
+
+    expect(res.status).toBe(404);
+    expect(scopedClientMock).not.toHaveBeenCalled();
   });
 
   it("404s deleting another user's conversation (cross-user)", async () => {

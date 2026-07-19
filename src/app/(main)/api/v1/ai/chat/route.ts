@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamText, stepCountIs, convertToModelMessages, generateText, type UIMessage } from "ai";
-import { isAssistantEnabled } from "@/lib/ai/flag";
+import { isAssistantEnabled, isAssistantEnabledForTenant } from "@/lib/ai/flag";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
@@ -59,6 +59,10 @@ export async function POST(request: NextRequest) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+
+  // Same 404 shape as the env-flag-off path above — a tenant without the
+  // per-tenant grant (migration 174) is indistinguishable from AI being off.
+  if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
 
   const rate = await checkRateLimit(`ai_chat:${auth.userId}`, AI_CHAT_LIMIT);
   if (!rate.allowed) return apiRateLimited(rate.retryAfterSeconds);

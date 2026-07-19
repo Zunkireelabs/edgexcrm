@@ -4,7 +4,7 @@ import type { AuthContext } from "@/lib/api/auth";
 
 const authenticateRequestMock = vi.fn();
 const scopedClientMock = vi.fn();
-const isIngestionEnabledMock = vi.fn();
+const isIngestionEnabledForTenantMock = vi.fn();
 const sendMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({
@@ -12,7 +12,7 @@ vi.mock("@/lib/api/auth", () => ({
   requireAdmin: () => true,
 }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
-vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabled: isIngestionEnabledMock }));
+vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabledForTenant: isIngestionEnabledForTenantMock }));
 vi.mock("@/lib/ai/ingestion/inngest", () => ({ inngest: { send: sendMock } }));
 vi.mock("@/lib/api/audit", () => ({
   createAuditLog: vi.fn(async () => {}),
@@ -47,14 +47,14 @@ function fakeDb(createdItem: Record<string, unknown>) {
 beforeEach(() => {
   authenticateRequestMock.mockReset();
   scopedClientMock.mockReset();
-  isIngestionEnabledMock.mockReset();
+  isIngestionEnabledForTenantMock.mockReset();
   sendMock.mockReset();
   authenticateRequestMock.mockResolvedValue(AUTH);
 });
 
 describe("POST /api/v1/knowledge-bases/[id]/items — ingestion trigger", () => {
-  it("flag off: creates the item as 'ready' and does not send an ingest event", async () => {
-    isIngestionEnabledMock.mockReturnValue(false);
+  it("disabled (env off, or tenant lacks the per-tenant grant): creates the item as 'ready' and does not send an ingest event", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(false);
     const created = { id: "item-1", type: "note", status: "ready" };
     const db = fakeDb(created);
     scopedClientMock.mockResolvedValue(db);
@@ -65,10 +65,11 @@ describe("POST /api/v1/knowledge-bases/[id]/items — ingestion trigger", () => 
     expect(res.status).toBe(201);
     expect(db.itemsTable.insert).toHaveBeenCalledWith(expect.objectContaining({ status: "ready" }));
     expect(sendMock).not.toHaveBeenCalled();
+    expect(isIngestionEnabledForTenantMock).toHaveBeenCalledWith("tenant-1");
   });
 
-  it("flag on: creates the item as 'pending' and sends an ingest event", async () => {
-    isIngestionEnabledMock.mockReturnValue(true);
+  it("enabled (env on and tenant.ai_enabled true): creates the item as 'pending' and sends an ingest event", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
     const created = { id: "item-2", type: "note", status: "pending" };
     const db = fakeDb(created);
     scopedClientMock.mockResolvedValue(db);

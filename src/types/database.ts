@@ -57,6 +57,7 @@ export interface Tenant {
   timezone: string;
   weekend_days: number[];
   default_currency: string;
+  ai_enabled: boolean;
   created_at: string;
   updated_at: string;
 }

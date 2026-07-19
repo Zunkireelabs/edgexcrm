@@ -237,6 +237,8 @@ interface DashboardShellProps {
   leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
+  /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
+  aiAssistantEnabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -256,6 +258,7 @@ export function DashboardShell({
   leadLists = [],
   stagingLists = [],
   archiveLists = [],
+  aiAssistantEnabled = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -852,18 +855,20 @@ export function DashboardShell({
 
           {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
           <div className="flex items-center gap-3">
-            {/* AI Assistant Button */}
-            <button
-              onClick={toggleAssistant}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                isAssistantOpen
-                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
-              <span className="text-sm font-medium hidden sm:inline">Assistant</span>
-            </button>
+            {/* AI Assistant Button — hidden entirely (not just its requests 404) when disabled */}
+            {aiAssistantEnabled && (
+              <button
+                onClick={toggleAssistant}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                  isAssistantOpen
+                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
+                    : "hover:bg-gray-100 text-gray-700"
+                }`}
+              >
+                <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
+                <span className="text-sm font-medium hidden sm:inline">Assistant</span>
+              </button>
+            )}
 
             {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
             <BranchSwitcher
@@ -894,10 +899,13 @@ export function DashboardShell({
             {children}
           </main>
 
-          {/* AI Assistant Panel */}
-          <div className="print:hidden">
-            <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
-          </div>
+          {/* AI Assistant Panel — not mounted at all when disabled, so a disabled
+              tenant has no path to open it (button hidden above; this is belt-and-braces). */}
+          {aiAssistantEnabled && (
+            <div className="print:hidden">
+              <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
+            </div>
+          )}
         </div>
       </div>
     </div>

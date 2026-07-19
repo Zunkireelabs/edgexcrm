@@ -13,7 +13,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { getStorageProvider } from "@/lib/storage/provider";
-import { isIngestionEnabled } from "@/lib/ai/flag";
+import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
 import { inngest } from "@/lib/ai/ingestion/inngest";
 
 const isHttpUrl = (): ((v: unknown) => string | null) => (v) => {
@@ -80,7 +80,7 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
-  const ingestionEnabled = isIngestionEnabled();
+  const ingestionEnabled = await isIngestionEnabledForTenant(auth.tenantId);
   const contentChanged =
     (itemType === "note" && body.content !== undefined) || (itemType === "link" && body.url !== undefined);
   if (ingestionEnabled && contentChanged) {
