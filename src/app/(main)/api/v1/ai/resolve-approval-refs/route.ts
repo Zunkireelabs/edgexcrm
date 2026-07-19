@@ -107,41 +107,25 @@ interface WriteActionRow {
 }
 
 /**
- * Mirrors undo_lead_action's own "which row am I undoing" lookup (by id, or
- * — when the model omitted actionId — the caller's most recent undoable
- * action) so the preview always describes the row the tool would actually
- * target. Builds a full sentence, never an id (BRIEF-PHASE-4D).
- *
- * The by-id branch filters on `user_id` too — undo-lead-action.ts refuses to
- * execute another user's action, but that check runs only at execute time,
- * after this preview has already rendered. Without the same filter here, the
- * preview would describe an action the tool will end up refusing — the
- * refusal is correct but the content already leaked (BRIEF-PHASE-4D-FIXUP
- * finding 2). A non-owned action id must resolve exactly like a nonexistent
- * one.
+ * Mirrors undo_lead_action's own "which row am I undoing" lookup — the
+ * caller's most recent undoable action — so the preview always describes the
+ * row the tool would actually target. Builds a full sentence, never an id
+ * (BRIEF-PHASE-4D). No by-id path: the tool no longer accepts an actionId
+ * (BRIEF-PHASE-4F — execute() runs before the ai_write_actions insert, so no
+ * tool result ever contains a real row id for the model to supply). The
+ * `.eq("user_id", auth.userId)` filter below is the ownership guarantee.
  */
-async function resolveUndoAction(db: ScopedClient, auth: AuthContext, id: string | null, now: Date): Promise<ResolvedRef> {
-  let target: WriteActionRow | null = null;
-  if (id) {
-    const { data } = await db
-      .from("ai_write_actions")
-      .select("id, tool_id, user_id, input, result, created_at")
-      .eq("id", id)
-      .eq("user_id", auth.userId)
-      .maybeSingle();
-    target = data as unknown as WriteActionRow | null;
-  } else {
-    const { data } = await db
-      .from("ai_write_actions")
-      .select("id, tool_id, user_id, input, result, created_at")
-      .eq("user_id", auth.userId)
-      .eq("status", "executed")
-      .in("tool_id", UNDOABLE_TOOL_IDS)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    target = data as unknown as WriteActionRow | null;
-  }
+async function resolveUndoAction(db: ScopedClient, auth: AuthContext, now: Date): Promise<ResolvedRef> {
+  const { data } = await db
+    .from("ai_write_actions")
+    .select("id, tool_id, user_id, input, result, created_at")
+    .eq("user_id", auth.userId)
+    .eq("status", "executed")
+    .in("tool_id", UNDOABLE_TOOL_IDS)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const target = data as unknown as WriteActionRow | null;
   if (!target) return { notFound: true };
 
   const relativeTime = formatRelativeTime(target.created_at, now);
@@ -167,8 +151,9 @@ async function resolveUndoAction(db: ScopedClient, auth: AuthContext, id: string
     return { label: buildUndoDescription({ kind: "assignment", leadLabel: leadLbl, from: oldLbl, to: newLbl, relativeTime }) };
   }
 
-  // Defensive fallback: an actionId can be hand-supplied and point at any tool's row, not just
-  // an undoable one. The tool's own execute() independently refuses non-undoable tool_ids.
+  // Unreachable in practice — the query above already constrains tool_id to
+  // UNDOABLE_TOOL_IDS — kept only because TypeScript can't prove that from a
+  // string-typed column; a type-completeness backstop, not a governance path.
   return { label: buildUndoDescription({ kind: "generic", toolId: target.tool_id, relativeTime }) };
 }
 
@@ -182,7 +167,7 @@ async function resolveRef(db: ScopedClient, auth: AuthContext, ref: EntityRef, n
     case "knowledge_base":
       return ref.id ? resolveKnowledgeBase(db, ref.id) : { notFound: true };
     case "undo_action":
-      return resolveUndoAction(db, auth, ref.id, now);
+      return resolveUndoAction(db, auth, now);
   }
 }
 

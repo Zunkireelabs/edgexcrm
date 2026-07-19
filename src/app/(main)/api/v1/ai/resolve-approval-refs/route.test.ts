@@ -86,7 +86,6 @@ interface FakeDbOpts {
   tenantUsers?: Set<string>;
   knowledgeBases?: Record<string, unknown>;
   leadLists?: Record<string, unknown>;
-  aiWriteActionsById?: Record<string, { user_id: string; [key: string]: unknown }>;
   aiWriteActionsMostRecent?: unknown;
   getUserById?: ReturnType<typeof vi.fn>;
 }
@@ -113,13 +112,15 @@ function fakeDb(opts: FakeDbOpts) {
           return chainableTable(() => null);
         case "ai_write_actions":
           return chainableTable((f) => {
-            if (f.id) {
-              const row = opts.aiWriteActionsById?.[f.id as string];
-              if (!row) return null;
-              if (f.user_id && row.user_id !== f.user_id) return null;
-              return row;
-            }
-            return opts.aiWriteActionsMostRecent ?? null;
+            const recent = opts.aiWriteActionsMostRecent;
+            if (!recent || typeof recent !== "object") return null;
+            // Models the real query's .eq("user_id", auth.userId) — a fixture
+            // belonging to a different user must never surface to this caller
+            // (BRIEF-PHASE-4F: the most-recent query is the only path now, so
+            // this filter IS the ownership guarantee, not a post-fetch check).
+            const row = recent as { user_id: string };
+            if (f.user_id && row.user_id !== f.user_id) return null;
+            return row;
           });
         default:
           throw new Error(`unexpected table: ${table}`);
@@ -271,34 +272,32 @@ describe("POST /api/v1/ai/resolve-approval-refs", () => {
     expect(body.data.resolved[`knowledge_base:${KB_ID}`]).toEqual({ label: "Sales playbook" });
   });
 
-  it("describes an undo_lead_action target (update_lead_stage) as a sentence, not an id", async () => {
+  it("describes an undo_lead_action target (update_lead_stage) as a sentence, not an id — BRIEF-PHASE-4F: undo_action always resolves the caller's most recent action, id is always null", async () => {
     scopedClientMock.mockResolvedValue(
       fakeDb({
         leads: { [LEAD_ID]: RIYA },
         leadLists: { [LIST_ID]: { name: "Pre-qualified" } },
-        aiWriteActionsById: {
-          [ACTION_ID]: {
-            id: ACTION_ID,
-            tool_id: "update_lead_stage",
-            user_id: ADMIN_AUTH.userId,
-            input: { leadId: LEAD_ID },
-            result: { stage: "Qualified", previous: { list_id: LIST_ID } },
-            created_at: "2026-07-19T11:55:00.000Z",
-          },
+        aiWriteActionsMostRecent: {
+          id: ACTION_ID,
+          tool_id: "update_lead_stage",
+          user_id: ADMIN_AUTH.userId,
+          input: { leadId: LEAD_ID },
+          result: { stage: "Qualified", previous: { list_id: LIST_ID } },
+          created_at: "2026-07-19T11:55:00.000Z",
         },
       }),
     );
     const { POST } = await import("./route");
-    const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: ACTION_ID }] }));
+    const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: null }] }));
     const body = await res.json();
-    const resolved = body.data.resolved[`undo_action:${ACTION_ID}`];
+    const resolved = body.data.resolved["undo_action:latest"];
     expect(resolved.notFound).toBeUndefined();
     expect(resolved.label).toContain("Riya Sharma (ADM-001)");
     expect(resolved.label).toContain("Pre-qualified → Qualified");
     expect(resolved.label).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/);
   });
 
-  it("resolves undo_action with no actionId (the 'most recent' sentinel) to NOT FOUND when the user has no undoable action", async () => {
+  it("resolves undo_action with no undoable action to NOT FOUND", async () => {
     scopedClientMock.mockResolvedValue(fakeDb({ aiWriteActionsMostRecent: null }));
     const { POST } = await import("./route");
     const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: null }] }));
@@ -321,7 +320,7 @@ describe("POST /api/v1/ai/resolve-approval-refs", () => {
     expect(Object.keys(body.data.resolved)).toEqual([`lead:${LEAD_ID}`]);
   });
 
-  describe("undo user-scope restriction (BRIEF-PHASE-4D-FIXUP finding 2)", () => {
+  describe("undo user-scope restriction (BRIEF-PHASE-4D-FIXUP finding 2 — enforced via the most-recent query's own .eq(\"user_id\", ...) since BRIEF-PHASE-4F removed the by-id path)", () => {
     const OTHER_USER_ACTION = {
       id: ACTION_ID,
       tool_id: "update_lead_stage",
@@ -331,33 +330,33 @@ describe("POST /api/v1/ai/resolve-approval-refs", () => {
       created_at: "2026-07-19T11:55:00.000Z",
     };
 
-    it("an action id owned by another user resolves as NOT FOUND, even though it exists", async () => {
+    it("a most-recent-action fixture belonging to a different user never resolves for this caller", async () => {
       scopedClientMock.mockResolvedValue(
         fakeDb({
           leads: { [LEAD_ID]: RIYA },
           leadLists: { [LIST_ID]: { name: "Pre-qualified" } },
-          aiWriteActionsById: { [ACTION_ID]: OTHER_USER_ACTION },
+          aiWriteActionsMostRecent: OTHER_USER_ACTION,
         }),
       );
       const { POST } = await import("./route");
-      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: ACTION_ID }] }));
+      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: null }] }));
       const body = await res.json();
-      expect(body.data.resolved[`undo_action:${ACTION_ID}`]).toEqual({ notFound: true });
+      expect(body.data.resolved["undo_action:latest"]).toEqual({ notFound: true });
     });
 
-    it("an action id owned by the caller resolves normally", async () => {
+    it("the caller's own most-recent action resolves normally", async () => {
       scopedClientMock.mockResolvedValue(
         fakeDb({
           leads: { [LEAD_ID]: RIYA },
           leadLists: { [LIST_ID]: { name: "Pre-qualified" } },
-          aiWriteActionsById: { [ACTION_ID]: { ...OTHER_USER_ACTION, user_id: ADMIN_AUTH.userId } },
+          aiWriteActionsMostRecent: { ...OTHER_USER_ACTION, user_id: ADMIN_AUTH.userId },
         }),
       );
       const { POST } = await import("./route");
-      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: ACTION_ID }] }));
+      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: null }] }));
       const body = await res.json();
-      expect(body.data.resolved[`undo_action:${ACTION_ID}`].notFound).toBeUndefined();
-      expect(body.data.resolved[`undo_action:${ACTION_ID}`].label).toContain("Riya Sharma (ADM-001)");
+      expect(body.data.resolved["undo_action:latest"].notFound).toBeUndefined();
+      expect(body.data.resolved["undo_action:latest"].label).toContain("Riya Sharma (ADM-001)");
     });
 
     it("an undo whose target lead is outside the caller's scope shows the lead as NOT FOUND, rest of the sentence intact", async () => {
@@ -366,22 +365,20 @@ describe("POST /api/v1/ai/resolve-approval-refs", () => {
         fakeDb({
           leads: { [OTHER_LEAD_ID]: { ...RIYA, assigned_to: "someone-else" } },
           leadLists: { [LIST_ID]: { name: "Pre-qualified" } },
-          aiWriteActionsById: {
-            [ACTION_ID]: {
-              id: ACTION_ID,
-              tool_id: "update_lead_stage",
-              user_id: COUNSELOR_AUTH.userId,
-              input: { leadId: OTHER_LEAD_ID },
-              result: { stage: "Qualified", previous: { list_id: LIST_ID } },
-              created_at: "2026-07-19T11:55:00.000Z",
-            },
+          aiWriteActionsMostRecent: {
+            id: ACTION_ID,
+            tool_id: "update_lead_stage",
+            user_id: COUNSELOR_AUTH.userId,
+            input: { leadId: OTHER_LEAD_ID },
+            result: { stage: "Qualified", previous: { list_id: LIST_ID } },
+            created_at: "2026-07-19T11:55:00.000Z",
           },
         }),
       );
       const { POST } = await import("./route");
-      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: ACTION_ID }] }));
+      const res = await POST(fakeReq({ refs: [{ kind: "undo_action", id: null }] }));
       const body = await res.json();
-      const label: string = body.data.resolved[`undo_action:${ACTION_ID}`].label;
+      const label: string = body.data.resolved["undo_action:latest"].label;
       expect(label).toContain(`NOT FOUND (${OTHER_LEAD_ID})`);
       expect(label).toContain("Pre-qualified → Qualified");
       expect(label).not.toContain("Riya Sharma");

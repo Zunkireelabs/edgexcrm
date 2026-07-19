@@ -61,44 +61,38 @@ beforeEach(() => {
 });
 
 describe("undo_lead_action — input schema", () => {
-  it("actionId is optional", () => {
+  it("takes no input", () => {
     expect(undoLeadActionTool.inputSchema.safeParse({}).success).toBe(true);
   });
 
-  it("a NIL-uuid actionId is treated as omitted", () => {
-    const result = undoLeadActionTool.inputSchema.safeParse({ actionId: "00000000-0000-0000-0000-000000000000" });
+  it("silently strips an actionId if a model still sends one — the field no longer exists (BRIEF-PHASE-4F: no tool result ever contains a real one, so nothing should ever rely on it reaching execute())", () => {
+    const result = undoLeadActionTool.inputSchema.safeParse({ actionId: ACTION_ID });
     expect(result.success).toBe(true);
-    expect(result.success && result.data.actionId).toBeUndefined();
+    expect(result.success && result.data).toEqual({});
   });
 });
 
 describe("undo_lead_action — guards", () => {
-  it("no actionId and no recent undoable action -> a friendly 'nothing to undo' error", async () => {
+  it("no recent undoable action -> a friendly 'nothing to undo' error", async () => {
     const db = fakeDb([{ data: null }]);
     const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "You have no recent action to undo." });
     expect(applyLeadPatchMock).not.toHaveBeenCalled();
   });
 
-  it("an explicit actionId that doesn't exist -> 'No such action found.'", async () => {
-    const db = fakeDb([{ data: null }]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
-    expect(result).toEqual({ error: "No such action found." });
-  });
-
-  it("cannot undo another user's action", async () => {
+  it("cannot undo another user's action (defense-in-depth — the query already filters .eq(\"user_id\", auth.userId), this check stays per BRIEF-PHASE-4F: governance checks are unchanged)", async () => {
     const db = fakeDb([
       { data: { id: ACTION_ID, tool_id: "update_lead_stage", user_id: "someone-else", status: "executed", input: { leadId: LEAD_ID }, result: { previous: { list_id: "old" } } } },
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "You can only undo your own actions." });
   });
 
-  it("cannot undo a tool outside the undoable allowlist", async () => {
+  it("cannot undo a tool outside the undoable allowlist (defense-in-depth — the query already filters .in(\"tool_id\", UNDOABLE_TOOL_IDS))", async () => {
     const db = fakeDb([
       { data: { id: ACTION_ID, tool_id: "create_task", user_id: "user-1", status: "executed", input: {}, result: {} } },
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: 'Action "create_task" cannot be undone.' });
   });
 
@@ -107,7 +101,7 @@ describe("undo_lead_action — guards", () => {
       { data: { id: ACTION_ID, tool_id: "assign_lead", user_id: "user-1", status: "executed", input: { leadId: LEAD_ID }, result: { previous: { assigned_to: "old" } } } },
       { data: { id: "undo-row-1" } }, // existingUndo lookup finds a prior undo
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "This action was already undone." });
     expect(applyLeadPatchMock).not.toHaveBeenCalled();
   });
@@ -117,7 +111,7 @@ describe("undo_lead_action — guards", () => {
       { data: { id: ACTION_ID, tool_id: "assign_lead", user_id: "user-1", status: "executed", input: { leadId: LEAD_ID }, result: {} } },
       { data: null },
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "No prior state was recorded for this action — cannot undo." });
   });
 
@@ -126,7 +120,7 @@ describe("undo_lead_action — guards", () => {
       { data: { id: ACTION_ID, tool_id: "assign_lead", user_id: "user-1", status: "executed", input: { leadId: LEAD_ID }, result: { previous: { owner_id: "x" } } } },
       { data: null },
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "No prior state was recorded for this action — cannot undo." });
   });
 
@@ -135,13 +129,13 @@ describe("undo_lead_action — guards", () => {
       { data: { id: ACTION_ID, tool_id: "assign_lead", user_id: "user-1", status: "executed", input: {}, result: { previous: { assigned_to: "old" } } } },
       { data: null },
     ]);
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "Could not determine which lead to restore." });
   });
 });
 
 describe("undo_lead_action — happy path", () => {
-  it("restores only the allowlisted fields from the previous snapshot and returns undoOf", async () => {
+  it("resolves the caller's most recent executed update_lead_stage/assign_lead action and restores only the allowlisted fields", async () => {
     const db = fakeDb([
       {
         data: {
@@ -160,7 +154,7 @@ describe("undo_lead_action — happy path", () => {
     applyLeadPatchMock.mockResolvedValue({ kind: "ok", lead: { id: LEAD_ID }, changes: {}, previousValues: {} });
 
     const ctx = fixtureCtx(db);
-    const result = await undoLeadActionTool.execute(ctx, { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(ctx, {} as never);
 
     expect(applyLeadPatchMock).toHaveBeenCalledWith(
       ctx.auth,
@@ -176,7 +170,7 @@ describe("undo_lead_action — happy path", () => {
     });
   });
 
-  it("omitting actionId resolves the caller's most recent executed update_lead_stage/assign_lead action", async () => {
+  it("resolves an assign_lead action equivalently", async () => {
     const db = fakeDb([
       {
         data: {
@@ -212,7 +206,7 @@ describe("undo_lead_action — happy path", () => {
     ]);
     applyLeadPatchMock.mockResolvedValue({ kind: "forbidden", message: "First holder cannot revert this lead" });
 
-    const result = await undoLeadActionTool.execute(fixtureCtx(db), { actionId: ACTION_ID } as never);
+    const result = await undoLeadActionTool.execute(fixtureCtx(db), {} as never);
     expect(result).toEqual({ error: "First holder cannot revert this lead" });
   });
 });

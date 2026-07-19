@@ -84,10 +84,10 @@ function describeAssignLeadInput(input: unknown): PreviewRow[] {
   return rows;
 }
 
-function describeUndoLeadActionInput(input: unknown): PreviewRow[] {
-  const i = (input ?? {}) as Record<string, unknown>;
-  const actionId = str(i.actionId) ?? null;
-  return [{ label: "Action", ref: { kind: "undo_action", id: actionId }, long: true }];
+function describeUndoLeadActionInput(): PreviewRow[] {
+  // No actionId (BRIEF-PHASE-4F) — undo always targets the caller's most
+  // recent undoable action, so this ref's id is always the "latest" sentinel.
+  return [{ label: "Action", ref: { kind: "undo_action", id: null }, long: true }];
 }
 
 function describeCreateLeadNoteInput(input: unknown): PreviewRow[] {

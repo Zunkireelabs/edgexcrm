@@ -82,12 +82,7 @@ describe("describeApprovalRows — every id field resolves via a ref, never a ra
     });
   });
 
-  it("undo_lead_action: actionId becomes a ref", () => {
-    const rows = describeApprovalRows("undo_lead_action", { actionId: "44444444-4444-4444-4444-444444444444" });
-    expect(rows).toEqual([{ label: "Action", ref: { kind: "undo_action", id: "44444444-4444-4444-4444-444444444444" }, long: true }]);
-  });
-
-  it("undo_lead_action: omitted actionId becomes a ref with id: null (the 'most recent' sentinel), not a raw string", () => {
+  it("undo_lead_action: always a ref with id: null (the 'most recent' sentinel) — BRIEF-PHASE-4F removed actionId, there is no other value it could ever be", () => {
     const rows = describeApprovalRows("undo_lead_action", {});
     expect(rows).toEqual([{ label: "Action", ref: { kind: "undo_action", id: null }, long: true }]);
   });

@@ -1,18 +1,16 @@
 import { z } from "zod";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
 import type { AgentTool } from "../types";
-import { optionalUuid } from "./lib/sanitize";
 import { leadPatchErrorResult, UNDOABLE_LEAD_FIELDS } from "./lib/lead-patch-result";
 
 /** Also used by the approval-card resolver (resolve-approval-refs route) to build the undo preview sentence. */
 export const UNDOABLE_TOOL_IDS = ["update_lead_stage", "assign_lead"];
 
-const inputSchema = z.object({
-  actionId: optionalUuid(z.string().uuid().optional()).describe(
-    "The id of the ai_write_actions row to undo (from a prior tool result's undoOf/action reference). " +
-      "Omit to undo your own most recent update_lead_stage or assign_lead action.",
-  ),
-});
+// No input: execute() runs before the ai_write_actions insert, so a real row
+// id doesn't exist yet when a tool result reaches the model — there is no
+// source it could ever correctly fill an actionId from. Undo always targets
+// the caller's most recent undoable action instead (BRIEF-PHASE-4F).
+const inputSchema = z.object({});
 
 type UndoLeadActionInput = z.infer<typeof inputSchema>;
 
@@ -28,39 +26,29 @@ interface WriteActionRow {
 export const undoLeadActionTool: AgentTool<UndoLeadActionInput> = {
   id: "undo_lead_action",
   description:
-    "Undo your own most recent update_lead_stage or assign_lead action, or a specific one by its action id, " +
-    "restoring the lead's prior stage/assignee/status. This is a write action requiring approval. Undo obeys the " +
-    "same governance rules as the original action — e.g. a chain member's undo of a forward hand-off is itself a " +
-    "revert and may be refused by the revert rules (\"First holder cannot revert this lead\"). A refusal here is " +
-    "expected behavior, not an error — report it plainly.",
+    "Undo your own most recent update_lead_stage or assign_lead action, restoring the lead's prior " +
+    "stage/assignee/status. This is a write action requiring approval. Undo obeys the same governance rules as " +
+    "the original action — e.g. a chain member's undo of a forward hand-off is itself a revert and may be " +
+    "refused by the revert rules (\"First holder cannot revert this lead\"). A refusal here is expected behavior, " +
+    "not an error — report it plainly.",
   inputSchema,
   scope: "write",
-  async execute(ctx, input) {
+  async execute(ctx) {
     const { db, auth, runId } = ctx;
 
-    let target: WriteActionRow | null = null;
-    if (input.actionId) {
-      const { data } = await db
-        .from("ai_write_actions")
-        .select("id, tool_id, user_id, status, input, result")
-        .eq("id", input.actionId)
-        .maybeSingle();
-      target = data as unknown as WriteActionRow | null;
-    } else {
-      const { data } = await db
-        .from("ai_write_actions")
-        .select("id, tool_id, user_id, status, input, result")
-        .eq("user_id", auth.userId)
-        .eq("status", "executed")
-        .in("tool_id", UNDOABLE_TOOL_IDS)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      target = data as unknown as WriteActionRow | null;
-    }
+    const { data } = await db
+      .from("ai_write_actions")
+      .select("id, tool_id, user_id, status, input, result")
+      .eq("user_id", auth.userId)
+      .eq("status", "executed")
+      .in("tool_id", UNDOABLE_TOOL_IDS)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const target = data as unknown as WriteActionRow | null;
 
     if (!target) {
-      return { error: input.actionId ? "No such action found." : "You have no recent action to undo." };
+      return { error: "You have no recent action to undo." };
     }
     if (target.user_id !== auth.userId) {
       return { error: "You can only undo your own actions." };
