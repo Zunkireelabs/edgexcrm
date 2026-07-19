@@ -465,6 +465,47 @@ describe("applyLeadPatch — governance branches", () => {
     });
   });
 
+  // Regression guard for PRs #235/#236, whose bypass lived in the PATCH route
+  // before Phase 4B extracted that route's body into apply-lead-patch.ts. The
+  // extraction predated the bypass, so rebasing onto stage dropped it here
+  // silently — this file was new on the branch, so git merged it clean while
+  // the only conflict surfaced in the route it came from. These three assert
+  // the bypass survives any future move of this logic.
+  const PROSPECT_MOVE_DB = {
+    leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: "list-qualified", status: "s" },
+    leadLists: {
+      "list-qualified": { id: "list-qualified", slug: "qualified", name: "Qualified", is_archive: false, sort_order: 10 },
+      "list-prospects": { id: "list-prospects", slug: "prospects", name: "Prospects", pipeline_id: null, is_archive: false, sort_order: 20, access: { mode: "all" } },
+    },
+  };
+
+  it("prospect gate — an owner may move an unqualified lead to Prospects (bypass)", async () => {
+    await setFakeDb(PROSPECT_MOVE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "all", baseTier: "owner" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects" }, OPTS);
+    expect(outcome.kind).not.toBe("validation");
+  });
+
+  it("prospect gate — an admin may move an unqualified lead to Prospects (bypass)", async () => {
+    await setFakeDb(PROSPECT_MOVE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "all", baseTier: "admin" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects" }, OPTS);
+    expect(outcome.kind).not.toBe("validation");
+  });
+
+  it("prospect gate — a branch-manager may move an unqualified lead to Prospects (bypass)", async () => {
+    await setFakeDb(PROSPECT_MOVE_DB);
+    const auth = fixtureAuth({
+      positionSlug: "branch-manager",
+      permissions: { leadScope: "all" } as ResolvedPermissions,
+    });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { list_id: "list-prospects" }, OPTS);
+    expect(outcome.kind).not.toBe("validation");
+  });
+
   it("happy path — a forward stage move returns previousValues with the pre-move list_id/status/stage_id/pipeline_id", async () => {
     await setFakeDb({
       leads: {

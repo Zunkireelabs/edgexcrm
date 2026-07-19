@@ -18,7 +18,11 @@ import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs, peerSlugs } from "@/indu
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { sendLeadAssignedEmail } from "@/lib/email/send-lead-assigned";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
-import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import {
+  coerceAcademicPayload,
+  hasProspectQualification,
+  canBypassProspectQualification,
+} from "@/lib/leads/prospect-qualification";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -130,6 +134,20 @@ export async function applyLeadPatch(
   });
 
   const supabase = await createServiceClient();
+
+  // Owner/admin + branch managers skip the Prospects academic-qualification
+  // requirement: for them qualification reads as satisfied at the hard gate,
+  // the assign-counselor hard-block, and the auto-promote below.
+  //
+  // Ported from PRs #235/#236, which added this to the PATCH route BEFORE
+  // Phase 4B extracted that route's body into this file. The extraction was
+  // made from the pre-bypass version, so rebasing onto stage silently dropped
+  // it here — this file is new on the Phase 4 branch, so git merged it clean
+  // while the only conflict appeared in the route it was extracted from. Every
+  // sibling path (leads/route.ts, bulk, check-in, the UI pages) kept the
+  // bypass; without this, an admin could promote via bulk but not via the lead
+  // detail page — exactly the "remaining client flows" gap #236 closed.
+  const bypassQual = canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug);
 
   // Fetch existing lead for audit diff + access check
   const { data: existingLead } = await supabase
@@ -528,7 +546,11 @@ export async function applyLeadPatch(
 
       // Prospect-qualification gate (server backstop): current lead's academic columns
       // merged with anything incoming in this same PATCH must satisfy the gate.
-      if (targetList.slug === "prospects" && auth.industryId === "education_consultancy") {
+      if (
+        targetList.slug === "prospects" &&
+        auth.industryId === "education_consultancy" &&
+        !bypassQual
+      ) {
         const merged = { ...(existingLead as Record<string, unknown>), ...updatePayload };
         if (!hasProspectQualification(merged)) {
           return {
@@ -716,7 +738,7 @@ export async function applyLeadPatch(
         }
         const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
         const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
-        if (wouldPromote && !qualifies) {
+        if (wouldPromote && !qualifies && !bypassQual) {
           return { kind: "validation", errors: { academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] } };
         }
       }
@@ -817,7 +839,7 @@ export async function applyLeadPatch(
             ...updatePayload,
           });
           if (
-            qualifies &&
+            (qualifies || bypassQual) &&
             (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order)
           ) {
             const promotePayload: Record<string, unknown> = {
