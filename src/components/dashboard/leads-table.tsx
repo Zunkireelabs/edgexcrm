@@ -73,6 +73,7 @@ import {
   type LeadColumnCtx,
 } from "@/components/dashboard/leads/columns-registry";
 import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/column-prefs";
+import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 
@@ -286,6 +287,10 @@ export function LeadsTable({
   const canEditRows = canEditLeads ?? role !== "viewer";
   const showItAgencyFields = industryId === "it_agency";
   const showBranches = maxBranches > 1;
+  const eduStageGated = industryId === "education_consultancy" && !!activeListSlug && !!STAGE_FRONTLINE[activeListSlug];
+  const allowedAssigneePositions = eduStageGated
+    ? allowedAssigneePositionsForStage(activeListSlug, role, currentUserPositionSlug)
+    : null;
 
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
@@ -1192,18 +1197,41 @@ export function LeadsTable({
               setCounselorFilter(val);
               setCurrentPage(1);
             },
-            options: [
-              {
-                value: "unassigned",
-                label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
-                description: "Leads not assigned yet",
-              },
-              ...counselors.map(([userId, email]) => ({
-                value: userId,
-                label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
-                description: email,
-              })),
-            ],
+            options: allowedAssigneePositions
+              ? [
+                  ...((counselorCounts.get("unassigned") ?? 0) > 0
+                    ? [
+                        {
+                          value: "unassigned",
+                          label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                          description: "Leads not assigned yet",
+                        },
+                      ]
+                    : []),
+                  ...counselors
+                    .filter(
+                      ([userId]) =>
+                        (counselorCounts.get(userId) ?? 0) > 0 &&
+                        allowedAssigneePositions.has(positionSlugMap?.[userId] ?? "")
+                    )
+                    .map(([userId, email]) => ({
+                      value: userId,
+                      label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+                      description: email,
+                    })),
+                ]
+              : [
+                  {
+                    value: "unassigned",
+                    label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                    description: "Leads not assigned yet",
+                  },
+                  ...counselors.map(([userId, email]) => ({
+                    value: userId,
+                    label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+                    description: email,
+                  })),
+                ],
           } satisfies FilterDef,
         ]
       : []),
@@ -1220,6 +1248,7 @@ export function LeadsTable({
               setCurrentPage(1);
             },
             options: counselors
+              .filter(([userId]) => !eduStageGated || (collaboratorCounts.get(userId) ?? 0) > 0)
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
