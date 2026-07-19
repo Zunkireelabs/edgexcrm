@@ -20,6 +20,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import {
   Table,
   TableBody,
   TableCell,
@@ -431,6 +440,8 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const [gearOpen, setGearOpen] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<EspnResult | null>(null);
+  const [openWinnerFor, setOpenWinnerFor] = useState<string | null>(null);
+  const [winnerSearch, setWinnerSearch] = useState("");
 
   const sortedResults = useMemo(() => {
     if (!data) return [];
@@ -642,6 +653,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">#</TableHead>
                 <TableHead>Match</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead>Outcome</TableHead>
@@ -653,12 +665,12 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             <TableBody>
               {sortedResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-6">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-6">
                     No results yet. Click &ldquo;Refresh results&rdquo; to fetch from ESPN.
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedResults.map((r) => {
+                sortedResults.map((r, index) => {
                   const isMatchExpanded = expandedMatch === r.match_id;
                   return (
                     <>
@@ -667,6 +679,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                         className="cursor-pointer"
                         onClick={() => setExpandedMatch(isMatchExpanded ? null : r.match_id)}
                       >
+                        <TableCell className="text-sm text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="font-medium text-sm">
                           <span className="flex items-center gap-1.5">
                             {isMatchExpanded
@@ -703,7 +716,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                       </TableRow>
                       {isMatchExpanded && (
                         <TableRow key={`${r.match_id}-predictors`}>
-                          <TableCell colSpan={6} className="pb-3 pt-0">
+                          <TableCell colSpan={7} className="pb-3 pt-0">
                             <div className="rounded-md border bg-muted/30 text-xs">
                               <table className="w-full">
                                 <thead>
@@ -730,21 +743,56 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                               <span className="font-normal text-muted-foreground">No winner selected</span>
                                             )}
                                           </span>
-                                          <select
-                                            value={r.winner?.email ?? "__none__"}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) =>
-                                              handleSetWinner(r.match_id, e.target.value === "__none__" ? null : e.target.value)
-                                            }
-                                            className="h-7 rounded-md border bg-background px-2 text-xs"
+                                          <Popover
+                                            open={openWinnerFor === r.match_id}
+                                            onOpenChange={(v) => { setOpenWinnerFor(v ? r.match_id : null); setWinnerSearch(""); }}
                                           >
-                                            <option value="__none__">— No winner selected —</option>
-                                            {allApplicants.map((p) => (
-                                              <option key={p.email} value={p.email}>
-                                                {p.name}
-                                              </option>
-                                            ))}
-                                          </select>
+                                            <PopoverTrigger asChild>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 text-xs"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                {r.winner ? "Change winner" : "Set winner"}
+                                              </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                              className="w-64 p-0"
+                                              align="start"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <Command shouldFilter={false}>
+                                                <CommandInput
+                                                  placeholder="Search applicants…"
+                                                  value={winnerSearch}
+                                                  onValueChange={setWinnerSearch}
+                                                />
+                                                <CommandList className="max-h-64">
+                                                  <CommandEmpty>No matches</CommandEmpty>
+                                                  <CommandItem
+                                                    value="__none__"
+                                                    onSelect={() => { handleSetWinner(r.match_id, null); setOpenWinnerFor(null); }}
+                                                  >
+                                                    <Check className={cn("mr-2 h-4 w-4", !r.winner ? "opacity-100" : "opacity-0")} />
+                                                    <span className="text-muted-foreground">— No winner selected —</span>
+                                                  </CommandItem>
+                                                  {allApplicants
+                                                    .filter((p) => p.name.toLowerCase().includes(winnerSearch.trim().toLowerCase()))
+                                                    .map((p) => (
+                                                      <CommandItem
+                                                        key={p.email}
+                                                        value={p.email}
+                                                        onSelect={() => { handleSetWinner(r.match_id, p.email); setOpenWinnerFor(null); }}
+                                                      >
+                                                        <Check className={cn("mr-2 h-4 w-4", r.winner?.email === p.email ? "opacity-100" : "opacity-0")} />
+                                                        {p.name}
+                                                      </CommandItem>
+                                                    ))}
+                                                </CommandList>
+                                              </Command>
+                                            </PopoverContent>
+                                          </Popover>
                                           <span className="text-muted-foreground">Does not change the match result — the masked winner name is shown on the public leaderboard.</span>
                                         </div>
                                       </td>
