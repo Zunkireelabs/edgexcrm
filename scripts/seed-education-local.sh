@@ -88,14 +88,21 @@ VALUES
   ('22222222-2222-2222-2222-000000000023', '22222222-2222-2222-2222-000000000010', '$TENANT_ID', 'Rejected',   'rejected',   3, '#ef4444', false, true)
 ON CONFLICT (id) DO NOTHING;
 
--- 5. Lead lists (education funnel stages — called "Stage" in UI)
-INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access)
+-- 5. Lead lists (education funnel stages — called "Stage" in UI).
+--    pipeline_id MUST be set to the seeded pipeline (step 3) — apply-lead-patch.ts
+--    nulls out leads.pipeline_id when the target list's own pipeline_id is unset,
+--    which then violates leads.pipeline_id's NOT NULL constraint on any real
+--    update_lead_stage write. On stage, real tenants always set this; only this
+--    local fixture omitted it (see BRIEF-PHASE-4E-ID-RESOLUTION.md live-verification).
+--    ON CONFLICT repairs pipeline_id on existing rows too, not just new ones —
+--    a re-run must fix a DB left over from before this line existed.
+INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access, pipeline_id)
 VALUES
-  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, true,  '#6366f1', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000031', '$TENANT_ID', 'Qualified',      'qualified',       2, true, false, '#3b82f6', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000032', '$TENANT_ID', 'Prospects',      'prospects',       3, true, false, '#f97316', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000033', '$TENANT_ID', 'Applications',   'applications',    4, true, false, '#22c55e', '{"mode":"all"}'::jsonb)
-ON CONFLICT (id) DO NOTHING;
+  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, true,  '#6366f1', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000031', '$TENANT_ID', 'Qualified',      'qualified',       2, true, false, '#3b82f6', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000032', '$TENANT_ID', 'Prospects',      'prospects',       3, true, false, '#f97316', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000033', '$TENANT_ID', 'Applications',   'applications',    4, true, false, '#22c55e', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010')
+ON CONFLICT (id) DO UPDATE SET pipeline_id = EXCLUDED.pipeline_id;
 
 -- 6. Positions (counselor, lead-executive, branch-manager)
 --    permissions MUST carry nav / pipelines / dashboard. resolvePermissions()
