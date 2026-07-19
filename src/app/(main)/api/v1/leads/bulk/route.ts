@@ -20,7 +20,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
-import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -227,7 +227,11 @@ export async function PATCH(request: NextRequest) {
   // Prospect-qualification gate (bulk backstop): reject the move if any target lead's
   // academics don't qualify. Returns failing_ids so the caller (funnel-kanban drags one
   // card at a time) can react — e.g. open the fill-in modal for that lead.
-  if (targetList?.slug === "prospects" && auth.industryId === "education_consultancy") {
+  if (
+    targetList?.slug === "prospects" &&
+    auth.industryId === "education_consultancy" &&
+    !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
+  ) {
     const { data: academicRows } = await supabase
       .from("leads")
       .select("id, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
