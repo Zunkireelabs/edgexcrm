@@ -1052,6 +1052,14 @@ export function LeadsTable({
     [branches],
   );
 
+  // Position · Branch label for member pickers — education-gated so non-education
+  // tenants keep the position-only label unchanged.
+  const memberMeta = (userId: string, fallbackRole?: string | null) => {
+    const pos = roleMap?.[userId] ?? fallbackRole ?? "";
+    const branch = industryId === "education_consultancy" ? branchMap[memberBranchMap[userId] ?? ""] : undefined;
+    return [pos, branch].filter(Boolean).join(" · ");
+  };
+
   const columnCtx: LeadColumnCtx = useMemo(
     () => ({
       memberMap,
@@ -1864,7 +1872,7 @@ export function LeadsTable({
                     <SelectItem key={member.user_id} value={member.user_id}>
                       <div className="flex items-center gap-2">
                         <span>{member.name}</span>
-                        <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
+                        <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
                       </div>
                     </SelectItem>
                   ))}
@@ -2055,7 +2063,7 @@ export function LeadsTable({
                           <SelectItem key={member.user_id} value={member.user_id}>
                             <div className="flex items-center gap-2">
                               <span>{member.name}</span>
-                              <span className="text-xs text-muted-foreground">({roleMap?.[member.user_id] ?? member.role})</span>
+                              <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
                             </div>
                           </SelectItem>
                         ))}
