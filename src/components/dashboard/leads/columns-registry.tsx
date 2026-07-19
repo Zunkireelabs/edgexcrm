@@ -330,11 +330,18 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Location
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-        {lead.city || <span className="text-gray-400">—</span>}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the real column; fall back to the legacy custom_fields value
+      // for leads whose city answer was never promoted (form-submitted leads
+      // that posted it nested under custom_fields instead of top-level).
+      const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+      const city = lead.city || (typeof cf.city === "string" ? cf.city : null);
+      return (
+        <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
+          {city || <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
   },
 
   // ── assigned
@@ -478,17 +485,24 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Form Source
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-        {lead.form_source ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-            {lead.form_source}
-          </span>
-        ) : (
-          <span className="text-gray-400">—</span>
-        )}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the dedicated form_source column; fall back to intake_account
+      // (the page/slug the lead's form posted from) — the public Form
+      // Builder submit API never writes form_source, so this column would
+      // otherwise show blank for every one of those leads.
+      const display = lead.form_source || lead.intake_account;
+      return (
+        <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+          {display ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+              {display}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      );
+    },
   },
 
   // ── medium (intake_medium)

@@ -70,7 +70,9 @@ export function ApplicationsTable({ applications, stages }: ApplicationsTablePro
                 <td className="px-4 py-3 text-muted-foreground">{app.university_name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{app.program_name}</td>
                 <td className="px-4 py-3 text-muted-foreground">{app.intake_term ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">{app.country ?? "—"}</td>
+                <td className="px-4 py-3 text-muted-foreground">
+                  {app.countries && app.countries.length > 0 ? app.countries.join(", ") : "—"}
+                </td>
                 <td className="px-4 py-3">
                   {stage ? (
                     <StatusBadge

@@ -46,7 +46,8 @@ function ApplicationBody({
     (app.application_stages as ApplicationStage | null) ??
     stages.find((s) => s.id === app.stage_id) ??
     null;
-  const intakeCountry = [app.intake_term, app.country].filter(Boolean).join(" · ");
+  const countriesLabel = app.countries && app.countries.length > 0 ? app.countries.join(", ") : null;
+  const intakeCountry = [app.intake_term, countriesLabel].filter(Boolean).join(" · ");
   return (
     <Link
       href={`/applications/${app.id}?from=lead&leadId=${leadId}`}

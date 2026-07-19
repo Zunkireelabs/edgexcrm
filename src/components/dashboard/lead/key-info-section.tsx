@@ -16,10 +16,10 @@ import {
 import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -744,7 +744,6 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [destOpen, setDestOpen] = useState(false);
   const [draftDests, setDraftDests] = useState<string[]>(leadWithEdu.destinations ?? []);
   const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
   const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
@@ -772,15 +771,9 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
       testScores[`${t.key}_score`] = String(leadRecord[`${t.key}_score`] ?? "");
     }
     setDraftTestScores(testScores);
-    setDestOpen(false);
     setEditing(true);
   }
 
-  function toggleDest(d: string) {
-    setDraftDests((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
-    );
-  }
 
   async function handleSave() {
     if (!onSave) return;
@@ -837,33 +830,13 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
       {editing ? (
         <div className="space-y-2">
           {/* Destinations multi-select */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Interested Destinations</p>
-            <button
-              type="button"
-              onClick={() => setDestOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-2 py-1.5 border border-input rounded text-xs bg-background"
-            >
-              <span className={draftDests.length === 0 ? "text-muted-foreground" : ""}>
-                {draftDests.length === 0 ? "Select destinations" : draftDests.join(", ")}
-              </span>
-              <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${destOpen ? "rotate-180" : ""}`} />
-            </button>
-            {destOpen && (
-              <div className="mt-1 border border-input rounded p-2 grid grid-cols-2 gap-1 bg-background">
-                {destOptions.map((dest) => (
-                  <div key={dest} className="flex items-center gap-1.5">
-                    <Checkbox
-                      id={`kd-${dest}`}
-                      checked={draftDests.includes(dest)}
-                      onCheckedChange={() => toggleDest(dest)}
-                    />
-                    <label htmlFor={`kd-${dest}`} className="text-xs cursor-pointer">{dest}</label>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <DestinationsMultiSelect
+            selected={draftDests}
+            onChange={setDraftDests}
+            options={destOptions}
+            label="Interested Destinations"
+            optional={false}
+          />
           {/* Field of Study */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">Field of Study</p>

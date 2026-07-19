@@ -54,7 +54,7 @@ export function ApplicationsWorkspace({
   ], [stages]);
 
   const countryOptions = useMemo(() => {
-    const countries = Array.from(new Set(applications.map((a) => a.country).filter(Boolean))) as string[];
+    const countries = Array.from(new Set(applications.flatMap((a) => a.countries ?? [])));
     return [
       { value: "all", label: "All countries" },
       ...countries.map((c) => ({ value: c, label: c })),
@@ -72,7 +72,7 @@ export function ApplicationsWorkspace({
       );
     }
     if (stageFilter !== "all") result = result.filter((a) => a.stage_id === stageFilter);
-    if (countryFilter !== "all") result = result.filter((a) => a.country === countryFilter);
+    if (countryFilter !== "all") result = result.filter((a) => (a.countries ?? []).includes(countryFilter));
 
     result = [...result].sort((a, b) => {
       let aVal: string | null = null;

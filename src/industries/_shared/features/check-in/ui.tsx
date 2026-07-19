@@ -45,6 +45,7 @@ import {
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import {
   ACADEMIC_LEVELS,
   TEST_TYPES,
@@ -236,7 +237,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [submitting, setSubmitting] = useState(false);
 
   // Student-only education fields (revealed when the Student tag is active)
-  const [destination, setDestination] = useState("");
+  const [destinations, setDestinations] = useState<string[]>([]);
   const [studyLevel, setStudyLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [referralSource, setReferralSource] = useState("");
@@ -624,7 +625,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           // Student-only structured education fields
           ...(industryId !== "travel_agency" && leadTag === "student"
             ? {
-                destinations: destination ? [destination] : [],
+                destinations,
                 degree_level: studyLevel || null,
                 field_of_study: fieldOfStudy || null,
               }
@@ -669,7 +670,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setNotes("");
         setAssignedTo("");
         setMeetWithId("");
-        setDestination("");
+        setDestinations([]);
         setStudyLevel("");
         setFieldOfStudy("");
         setReferralSource("");
@@ -914,21 +915,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {leadTag === "student" && (
                           <div className="rounded-md border bg-muted/30 p-3 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <Label className="text-xs">Destination</Label>
-                                <Select value={destination} onValueChange={setDestination}>
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Select destination (optional)" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {destOptions.map((d) => (
-                                      <SelectItem key={d} value={d}>
-                                        {d}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
+                              <DestinationsMultiSelect
+                                selected={destinations}
+                                onChange={setDestinations}
+                                options={destOptions}
+                                label="Destination"
+                              />
                               <div className="space-y-1">
                                 <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
@@ -1142,7 +1134,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setPhone("");
                           setNotes("");
                           setAssignedTo("");
-                          setDestination("");
+                          setDestinations([]);
                           setStudyLevel("");
                           setFieldOfStudy("");
                           setReferralSource("");

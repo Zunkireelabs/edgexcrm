@@ -27,7 +27,7 @@ type ApplicationRow = {
   id: string;
   university_name: string;
   program_name: string;
-  country: string | null;
+  countries: string[] | null;
   intake_term: string | null;
   status: string;
   offer_type: string | null;
@@ -68,7 +68,7 @@ export const getLeadApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
     const { data: appData } = await db
       .from("applications")
       .select(
-        "id, university_name, program_name, country, intake_term, status, offer_type, application_deadline, " +
+        "id, university_name, program_name, countries, intake_term, status, offer_type, application_deadline, " +
           "tuition_fee, application_fee_paid, deposit_paid, application_stages!applications_stage_id_fkey(id,name,slug)",
       )
       .eq("lead_id", input.leadId)
@@ -92,7 +92,7 @@ export const getLeadApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
       applications: applications.map((a) => ({
         universityName: a.university_name,
         programName: a.program_name,
-        country: a.country,
+        countries: a.countries ?? [],
         intakeTerm: a.intake_term,
         stage: a.application_stages ? { slug: a.application_stages.slug, name: a.application_stages.name } : null,
         status: a.status,
