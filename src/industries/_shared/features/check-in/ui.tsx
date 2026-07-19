@@ -202,6 +202,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;
+  // education_consultancy shows Assigned To + Meet With as two independent columns;
+  // every other industry keeps the single flip-column (new-walk-in vs meet-with).
+  const eduCols = industryId === "education_consultancy";
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [meetWithId, setMeetWithId] = useState<string>("");
@@ -451,6 +454,72 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         );
         toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
       }
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Assigned To always writes the lead's counselor (assigned_to),
+  // independent of Meet With — mirrors handleAssign's is_new branch for every row.
+  const handleAssignCounselor = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    if (!record.lead_id) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && userId) {
+          toast.error(academicMsg);
+          setPendingAssignGate({ record, userId });
+          return;
+        }
+        toast.error("Failed to assign lead");
+        return;
+      }
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Lead assigned" : "Lead unassigned");
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Meet With always writes the per-visit note field
+  // (meet_with_id), independent of the lead's counselor assignment.
+  const handleAssignMeetWith = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      const res = await fetch(`/api/v1/check-ins/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meet_with_id: userId }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to update meet-with");
+        return;
+      }
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, meet_with_id: userId, meet_with_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
     } catch {
       toast.error("Failed to update");
     } finally {
@@ -1230,19 +1299,16 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-xs font-medium truncate">{checkedInByName}</div>
                       </div>
 
-                      {/* Assigned To / Meet with — depends on whether the lead was new (walk-in) or already existed */}
-                      {(() => {
-                        const isStudent = (record.tags ?? []).includes("student");
-                        const isNew = isStudent && record.is_new;
-                        const colLabel = isNew ? "Assigned To" : "Meet with";
-                        const colMembers = isNew ? counselorMembers : allBranchMembers;
-                        return (
-                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
-                            <div className="text-[10px] text-muted-foreground">{colLabel}</div>
-                            {meetWithId == null && canAssignThis ? (
+                      {/* Assigned To / Meet with — education_consultancy gets both as independent
+                          columns; every other industry keeps the flip-column (new-walk-in vs meet-with). */}
+                      {eduCols ? (
+                        <>
+                          <div className="w-32 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Assigned To</div>
+                            {record.assigned_to == null && canAssignThis ? (
                               <Select
                                 value="__unassigned__"
-                                onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                onValueChange={(v) => handleAssignCounselor(record, v === "__unassigned__" ? null : v)}
                                 disabled={assigningId === record.id}
                               >
                                 <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
@@ -1250,7 +1316,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__unassigned__">Not selected</SelectItem>
-                                  {colMembers.map((m) => (
+                                  {counselorMembers.map((m) => (
                                     <SelectItem key={m.user_id} value={m.user_id}>
                                       {m.name || m.email.split("@")[0]}
                                     </SelectItem>
@@ -1258,11 +1324,69 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              <div className="text-xs font-medium truncate">{record.assigned_to_name || <span className="text-muted-foreground italic">—</span>}</div>
                             )}
                           </div>
-                        );
-                      })()}
+
+                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Meet With</div>
+                            {record.meet_with_id == null && canAssignThis ? (
+                              <Select
+                                value="__unassigned__"
+                                onValueChange={(v) => handleAssignMeetWith(record, v === "__unassigned__" ? null : v)}
+                                disabled={assigningId === record.id}
+                              >
+                                <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                  {allBranchMembers.map((m) => (
+                                    <SelectItem key={m.user_id} value={m.user_id}>
+                                      {m.name || m.email.split("@")[0]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-xs font-medium truncate">{record.meet_with_name || <span className="text-muted-foreground italic">—</span>}</div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        (() => {
+                          const isStudent = (record.tags ?? []).includes("student");
+                          const isNew = isStudent && record.is_new;
+                          const colLabel = isNew ? "Assigned To" : "Meet with";
+                          const colMembers = isNew ? counselorMembers : allBranchMembers;
+                          return (
+                            <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-[10px] text-muted-foreground">{colLabel}</div>
+                              {meetWithId == null && canAssignThis ? (
+                                <Select
+                                  value="__unassigned__"
+                                  onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                  disabled={assigningId === record.id}
+                                >
+                                  <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                    <SelectValue placeholder="Select..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                    {colMembers.map((m) => (
+                                      <SelectItem key={m.user_id} value={m.user_id}>
+                                        {m.name || m.email.split("@")[0]}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
 
                       {/* Notes */}
                       <div className="flex-1 min-w-0">
