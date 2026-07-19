@@ -11,8 +11,8 @@ const MAX_CONTENT_LENGTH = 10000;
 
 const inputSchema = z.object({
   knowledgeBaseId: optionalUuid(z.string().uuid()).describe(
-    "The target knowledge base's id. Required — ask the user which knowledge base if you don't already know it; " +
-      "never invent one.",
+    "The target knowledge base's id. Required — call list_knowledge_bases first to get the real id, or ask the " +
+      "user which knowledge base if it's still ambiguous; never invent one.",
   ),
   title: z
     .string()

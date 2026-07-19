@@ -59,18 +59,18 @@ describe("update_lead_stage — input schema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects when both stageName and stageId are provided", () => {
+  it("accepts both stageName and stageId — precedence is execute()'s job, not the schema's", () => {
     const result = updateLeadStageTool.inputSchema.safeParse({
       leadId: LEAD_ID,
       stageName: "Qualified",
       stageId: LEAD_ID,
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it("rejects when neither stageName nor stageId is provided", () => {
+  it("accepts neither stageName nor stageId at the schema level — execute() reports the clean error instead", () => {
     const result = updateLeadStageTool.inputSchema.safeParse({ leadId: LEAD_ID });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("accepts leadId + stageName alone", () => {
@@ -125,6 +125,35 @@ describe("update_lead_stage — stage resolution", () => {
     const ctx = fixtureCtx([{ id: "list-1", name: "Qualified", access: ACCESSIBLE }]);
     await updateLeadStageTool.execute(ctx, { leadId: LEAD_ID, stageId: "list-1" } as never);
     expect(applyLeadPatchMock).toHaveBeenCalledWith(ctx.auth, LEAD_ID, { list_id: "list-1" }, expect.any(Object));
+  });
+
+  it("prefers stageId over stageName when both are supplied and stageId resolves", async () => {
+    applyLeadPatchMock.mockResolvedValue({ kind: "ok", lead: {}, changes: {}, previousValues: {} });
+    const ctx = fixtureCtx([
+      { id: "list-1", name: "Qualified", access: ACCESSIBLE },
+      { id: "list-2", name: "Applications", access: ACCESSIBLE },
+    ]);
+    await updateLeadStageTool.execute(ctx, { leadId: LEAD_ID, stageName: "Applications", stageId: "list-1" } as never);
+    expect(applyLeadPatchMock).toHaveBeenCalledWith(ctx.auth, LEAD_ID, { list_id: "list-1" }, expect.any(Object));
+  });
+
+  it("falls back to stageName when a supplied stageId doesn't resolve to any accessible stage (observed live — a model can supply a correct stageName alongside a fabricated stageId)", async () => {
+    applyLeadPatchMock.mockResolvedValue({ kind: "ok", lead: {}, changes: {}, previousValues: {} });
+    const ctx = fixtureCtx([{ id: "list-1", name: "Qualified", access: ACCESSIBLE }]);
+    const NONEXISTENT_ID = "99999999-9999-4999-8999-999999999999";
+    const result = await updateLeadStageTool.execute(
+      ctx,
+      { leadId: LEAD_ID, stageName: "Qualified", stageId: NONEXISTENT_ID } as never,
+    );
+    expect(applyLeadPatchMock).toHaveBeenCalledWith(ctx.auth, LEAD_ID, { list_id: "list-1" }, expect.any(Object));
+    expect(result).toMatchObject({ stage: "Qualified" });
+  });
+
+  it("returns a clean error when neither stageName nor stageId is provided, without querying accessible lists", async () => {
+    const ctx = fixtureCtx([{ id: "list-1", name: "Qualified", access: ACCESSIBLE }]);
+    const result = await updateLeadStageTool.execute(ctx, { leadId: LEAD_ID } as never);
+    expect(result).toEqual({ error: "Provide either stageName or stageId to identify the target Stage." });
+    expect(applyLeadPatchMock).not.toHaveBeenCalled();
   });
 });
 

@@ -8,6 +8,7 @@ import { listMyTasksTool } from "./list-my-tasks";
 import { teamLookupTool } from "./team-lookup";
 import { activityTimelineTool } from "./activity-timeline";
 import { searchKnowledgeTool } from "./search-knowledge";
+import { listKnowledgeBasesTool } from "./list-knowledge-bases";
 import { readDocumentTool } from "./read-document";
 import { getFormSubmissionsSummaryTool } from "./get-form-submissions-summary";
 import { createTaskTool } from "./create-task";
@@ -24,6 +25,7 @@ registerTool(listMyTasksTool);
 registerTool(teamLookupTool);
 registerTool(activityTimelineTool);
 registerTool(searchKnowledgeTool);
+registerTool(listKnowledgeBasesTool);
 registerTool(readDocumentTool);
 registerTool(getFormSubmissionsSummaryTool);
 registerTool(createTaskTool);
@@ -41,6 +43,7 @@ export {
   teamLookupTool,
   activityTimelineTool,
   searchKnowledgeTool,
+  listKnowledgeBasesTool,
   readDocumentTool,
   getFormSubmissionsSummaryTool,
   createTaskTool,

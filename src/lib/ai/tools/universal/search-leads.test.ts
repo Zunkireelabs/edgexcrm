@@ -95,3 +95,38 @@ describe("search_leads full-name query tokenization", () => {
     expect(orCalls).toEqual([]);
   });
 });
+
+describe("search_leads display id matching", () => {
+  it("matches a display-id-shaped token exactly against display_id, not the fuzzy name/email/phone columns", async () => {
+    const orCalls: string[] = [];
+    const row = { id: "lead-1", display_id: "ADM-009", first_name: "Riya", last_name: "Sharma" };
+    const db = fakeDb([row], orCalls);
+    const result = await searchLeadsTool.execute(fixtureCtx(db), { query: "ADM-009", limit: 20 });
+    expect(orCalls).toEqual(["display_id.ilike.ADM-009"]);
+    expect(result).toMatchObject({ leads: [{ id: "lead-1", displayId: "ADM-009" }] });
+  });
+
+  it("matches a lowercase display-id-shaped token case-insensitively", async () => {
+    const orCalls: string[] = [];
+    const db = fakeDb([], orCalls);
+    await searchLeadsTool.execute(fixtureCtx(db), { query: "adm-009", limit: 20 });
+    expect(orCalls).toEqual(["display_id.ilike.adm-009"]);
+  });
+
+  it("does not treat a plain name token as a display id", async () => {
+    const orCalls: string[] = [];
+    const db = fakeDb([], orCalls);
+    await searchLeadsTool.execute(fixtureCtx(db), { query: "Manisha", limit: 20 });
+    expect(orCalls).toEqual(["first_name.ilike.%Manisha%,last_name.ilike.%Manisha%,email.ilike.%Manisha%,phone.ilike.%Manisha%"]);
+  });
+
+  it("mixes an exact display-id match with fuzzy name matching across a multi-token query", async () => {
+    const orCalls: string[] = [];
+    const db = fakeDb([], orCalls);
+    await searchLeadsTool.execute(fixtureCtx(db), { query: "ADM-009 Sharma", limit: 20 });
+    expect(orCalls).toEqual([
+      "display_id.ilike.ADM-009",
+      "first_name.ilike.%Sharma%,last_name.ilike.%Sharma%,email.ilike.%Sharma%,phone.ilike.%Sharma%",
+    ]);
+  });
+});

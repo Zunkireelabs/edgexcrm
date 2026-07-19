@@ -7,8 +7,13 @@ import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-v
 import { formatLeadRow } from "./lib/format";
 import { optionalFilterString, optionalString, optionalUuid } from "./lib/sanitize";
 
+const DISPLAY_ID_RE = /^[A-Z]{2,5}-\d+$/i;
+
 const inputSchema = z.object({
-  query: optionalString(z.string().max(200).optional()).describe("Free-text search across first name, last name, email, phone"),
+  query: optionalString(z.string().max(200).optional()).describe(
+    "Free-text search across first name, last name, email, phone, and display id (e.g. \"ADM-009\") — a token " +
+      "shaped like a display id matches it exactly, so pass the id staff actually use rather than guessing a uuid.",
+  ),
   stage: optionalFilterString(z.string().max(100).optional()).describe(
     "Pipeline stage slug, e.g. \"qualified\" or \"new\". Omit entirely to include all — never pass \"all\".",
   ),
@@ -61,7 +66,7 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
     let query = db
       .from("leads")
       .select(
-        "id, first_name, last_name, email, phone, status, stage_id, pipeline_id, list_id, assigned_to, created_at, last_activity_at, tags",
+        "id, display_id, first_name, last_name, email, phone, status, stage_id, pipeline_id, list_id, assigned_to, created_at, last_activity_at, tags",
         { count: "exact" },
       )
       .is("deleted_at", null)
@@ -97,9 +102,12 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
       // Diverges from GET /api/v1/leads, which still does single-string matching.
       const tokens = sanitized.split(/\s+/).filter(Boolean).slice(0, 4);
       for (const token of tokens) {
-        query = query.or(
-          `first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%,phone.ilike.%${token}%`,
-        );
+        // A display-id-shaped token (e.g. "ADM-009") is an unambiguous identifier —
+        // match it exactly against display_id instead of competing with the fuzzy
+        // name/email/phone columns, which would never match it anyway.
+        query = DISPLAY_ID_RE.test(token)
+          ? query.or(`display_id.ilike.${token}`)
+          : query.or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%,phone.ilike.%${token}%`);
       }
     }
 
