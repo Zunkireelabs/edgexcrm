@@ -14,6 +14,7 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
@@ -279,6 +280,9 @@ export default async function LeadDetailPage({
       industry={industry}
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
+      bypassQualification={canBypassProspectQualification(
+        tenantData.permissions.baseTier, tenantData.positionSlug
+      )}
       canAssign={tenantData.permissions.canAssignLeads}
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}

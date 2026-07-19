@@ -13,7 +13,7 @@ import {
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -105,7 +105,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       prospectsList &&
       assignedIsCounselor &&
       auth.industryId === "education_consultancy" &&
-      !hasProspectQualification(lead as Record<string, unknown>)
+      !hasProspectQualification(lead as Record<string, unknown>) &&
+      !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
     ) {
       return apiValidationError({
         academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],

@@ -48,6 +48,7 @@ import {
   ACADEMIC_LEVELS,
   TEST_TYPES,
   hasProspectQualification,
+  canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
 import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 
@@ -100,6 +101,8 @@ interface CheckInPageProps {
   canAssignOwnCheckIns: boolean;
   currentUserId: string;
   isAdmin: boolean;
+  /** Owner/admin + branch managers skip the Prospects academic-qualification dialog. */
+  bypassQualification?: boolean;
 }
 
 type DateFilter = "today" | "yesterday" | "last7" | "last30" | "custom";
@@ -188,7 +191,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
@@ -509,6 +512,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
     if (
       industryId === "education_consultancy" &&
+      !bypassQualification &&
       leadTag === "student" &&
       assignedTo &&
       !hasProspectQualification(academics)

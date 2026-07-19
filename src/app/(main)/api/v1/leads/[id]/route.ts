@@ -758,6 +758,10 @@ export async function PATCH(
     return apiValidationError({ body: ["No valid fields to update"] });
   }
 
+  // Owner/admin + branch managers skip the Prospects academic-qualification requirement:
+  // for them qualification reads as satisfied at both the hard-block and the auto-promote below.
+  const bypassQual = canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug);
+
   // Hard-block: assigning a counselor that would auto-promote an unqualified lead into
   // Prospects. Must run BEFORE the update below — the auto-promote block further down
   // fires only after the lead is already saved, too late to block.
@@ -780,7 +784,7 @@ export async function PATCH(
         }
         const wouldPromote = sort === null || staging || sort < prospectsList.sort_order;
         const qualifies = hasProspectQualification({ ...(existingLead as Record<string, unknown>), ...updatePayload });
-        if (wouldPromote && !qualifies) {
+        if (wouldPromote && !qualifies && !bypassQual) {
           return apiValidationError({ academic: ["Add the student's highest qualification (%/GPA) before assigning a counselor."] });
         }
       }
@@ -881,7 +885,7 @@ export async function PATCH(
             ...updatePayload,
           });
           if (
-            qualifies &&
+            (qualifies || bypassQual) &&
             (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order)
           ) {
             const promotePayload: Record<string, unknown> = {

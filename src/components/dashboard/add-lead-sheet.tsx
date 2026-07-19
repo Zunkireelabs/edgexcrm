@@ -46,6 +46,7 @@ import {
   ACADEMIC_LEVELS,
   TEST_TYPES,
   hasProspectQualification,
+  canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
 
 interface TeamMember {
@@ -224,6 +225,11 @@ export function AddLeadSheet({
   defaultListId,
 }: AddLeadSheetProps) {
   const router = useRouter();
+  // Owner/admin + branch managers skip the Prospects academic-qualification dialog.
+  const bypassQualification = canBypassProspectQualification(
+    role === "owner" ? "owner" : role === "admin" ? "admin" : "member",
+    currentUserPositionSlug,
+  );
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
@@ -307,6 +313,7 @@ export function AddLeadSheet({
 
     if (
       industryId === "education_consultancy" &&
+      !bypassQualification &&
       selectedStageSlug === "prospects" &&
       !hasProspectQualification(academics)
     ) {

@@ -49,7 +49,7 @@ import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignme
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
-import { coerceAcademicPayload, hasProspectQualification } from "@/lib/leads/prospect-qualification";
+import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -608,7 +608,11 @@ async function handlePost(request: NextRequest) {
       .eq("id", leadPayload.list_id as string)
       .eq("tenant_id", tenantId)
       .maybeSingle();
-    if (finalList?.slug === "prospects" && !hasProspectQualification(leadPayload)) {
+    if (
+      finalList?.slug === "prospects" &&
+      !hasProspectQualification(leadPayload) &&
+      !(dashAuth && canBypassProspectQualification(dashAuth.permissions.baseTier, dashAuth.positionSlug))
+    ) {
       return apiValidationError({
         academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
       });
