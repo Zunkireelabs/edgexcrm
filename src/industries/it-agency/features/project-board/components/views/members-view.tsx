@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { ChevronRight, ChevronDown, Users } from "lucide-react";
 import { StatusPill } from "../status-pill";
 import { PriorityPill } from "../priority-pill";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Account, Task, TaskPriority, ProjectStatus } from "@/types/database";
 import type { TeamMember, ProjectWithMetrics } from "../../hooks/use-projects";
 import type { WorkspaceFilters } from "../../hooks/use-workspace-filters";
@@ -22,14 +23,6 @@ interface MemberSection {
   member: TeamMember;
   ownedProjects: Array<ProjectWithMetrics & { account_name: string }>;
   openTasks: TaskWithProject[];
-}
-
-function initials(email: string): string {
-  const parts = email.split("@")[0].split(/[._-]/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function matchesDue(dueDate: string | null, keyword: string): boolean {
@@ -207,9 +200,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
               ) : (
                 <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
               )}
-              <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-100 border border-gray-300 text-gray-500 text-xs font-medium shrink-0">
-                {initials(member.email)}
-              </span>
+              <MemberAvatar userId={member.user_id} name={member.name || member.email.split("@")[0]} size={32} />
               <span className="text-sm font-medium text-[#0f0f10] truncate flex-1">
                 {member.email}
               </span>

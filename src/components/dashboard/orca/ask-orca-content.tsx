@@ -61,9 +61,7 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
             What can I do for you?
           </h1>
 
-          <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">
-            <ChatInput onSend={send} placeholder="Ask anything or start a task..." />
-          </div>
+          <ChatInput onSend={send} placeholder="Ask anything or start a task..." />
 
           <div className="mt-4">
             <p className="text-xs text-muted-foreground text-center mb-3">Try asking Orca:</p>
@@ -98,14 +96,12 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
         />
         <div ref={messagesEndRef} />
       </div>
-      <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">
-        <ChatInput
-          onSend={send}
-          disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
-          disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
-          placeholder="Ask anything or start a task..."
-        />
-      </div>
+      <ChatInput
+        onSend={send}
+        disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
+        disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
+        placeholder="Ask anything or start a task..."
+      />
     </div>
   );
 }

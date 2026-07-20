@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 
 interface Collaborator {
   user_id: string;
@@ -142,11 +143,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
                     </button>
                   )}
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                      <span className="text-[10px] font-medium text-primary">
-                        {(c.name || c.email)[0]?.toUpperCase() ?? "?"}
-                      </span>
-                    </div>
+                    <MemberAvatar userId={c.user_id} name={c.name || c.email} size={20} />
                     <span className="text-sm truncate">{c.name || c.email.split("@")[0]}</span>
                   </div>
                 </>
@@ -167,11 +164,7 @@ export function CollaboratorsBlock({ leadId, teamMembers = [], canManage = false
               {addableMembers.map((m) => (
                 <SelectItem key={m.user_id} value={m.user_id}>
                   <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-[9px] font-medium text-primary">
-                        {(m.name || m.email)[0]?.toUpperCase() ?? "?"}
-                      </span>
-                    </div>
+                    <MemberAvatar userId={m.user_id} name={m.name || m.email} size={16} />
                     <span>{m.name || m.email.split("@")[0]}</span>
                   </div>
                 </SelectItem>

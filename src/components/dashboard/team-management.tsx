@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X } from "lucide-react";
 import { toast } from "sonner";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Branch } from "@/types/database";
 
 interface TeamMember {
@@ -346,9 +347,7 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                 className="flex items-center justify-between py-2 border-b last:border-0"
               >
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
-                    {(member.name || member.email).charAt(0).toUpperCase()}
-                  </div>
+                  <MemberAvatar userId={member.user_id} name={member.name || member.email} size={32} />
                   <div>
                     <p className="text-sm font-medium">{member.name || member.email}</p>
                     <p className="text-xs text-muted-foreground">

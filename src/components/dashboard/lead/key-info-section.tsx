@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { ChevronDown, UserCircle, Building } from "lucide-react";
+import { ChevronDown, UserCircle, Building, Check } from "lucide-react";
 import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
@@ -35,6 +35,20 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -64,6 +78,10 @@ interface TeamMember {
   name?: string | null;
   canEditLeads?: boolean;
   position_name?: string | null;
+}
+
+function teamMemberLabel(m: TeamMember): string {
+  return m.name || m.position_name || m.email.split("@")[0];
 }
 
 interface LeadDraftSubset {
@@ -170,6 +188,7 @@ export function KeyInfoSection({
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
   const [pendingStageId, setPendingStageId] = useState<string | null>(null);
+  const [assignedToOpen, setAssignedToOpen] = useState(false);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
@@ -375,41 +394,64 @@ export function KeyInfoSection({
             (industryId === "education_consultancy"
               ? canAssign && (!assignedTo || userId === assignedTo)
               : canAssign) ? (
-              <Select
-                value={assignedTo || "unassigned"}
-                onValueChange={onAssignmentChange}
-              >
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="unassigned">
-                    <span className="text-muted-foreground">Unassigned</span>
-                  </SelectItem>
-                  {resolvedAssignable.map((m) => (
-                      <SelectItem key={m.user_id} value={m.user_id}>
-                        <div className="flex items-center gap-2">
-                          <div className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center">
-                            <span className="text-[10px] font-medium text-primary">
-                              {getInitials(m.email)}
-                            </span>
-                          </div>
-                          <span className="truncate">{m.name || m.position_name || m.email.split("@")[0]}</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <Popover open={assignedToOpen} onOpenChange={setAssignedToOpen}>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    className="border-input flex w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 h-8 text-sm hover:bg-accent/30 transition-colors"
+                  >
+                    {assignedTo && assignedMember ? (
+                      <span className="flex items-center gap-2 min-w-0">
+                        <MemberAvatar userId={assignedMember.user_id} name={teamMemberLabel(assignedMember)} size={18} />
+                        <span className="truncate">{teamMemberLabel(assignedMember)}</span>
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Unassigned</span>
+                    )}
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Assign to…" />
+                    <CommandList>
+                      <CommandEmpty>No members found.</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="unassigned"
+                          onSelect={() => {
+                            onAssignmentChange("unassigned");
+                            setAssignedToOpen(false);
+                          }}
+                        >
+                          <Check className={!assignedTo ? "" : "opacity-0"} />
+                          <span className="text-muted-foreground">Unassigned</span>
+                        </CommandItem>
+                        {resolvedAssignable.map((m) => (
+                          <CommandItem
+                            key={m.user_id}
+                            value={teamMemberLabel(m) + " " + m.email}
+                            onSelect={() => {
+                              onAssignmentChange(m.user_id);
+                              setAssignedToOpen(false);
+                            }}
+                          >
+                            <Check className={m.user_id === assignedTo ? "" : "opacity-0"} />
+                            <MemberAvatar userId={m.user_id} name={teamMemberLabel(m)} />
+                            <span className="truncate">{teamMemberLabel(m)}</span>
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             ) : (
               <div className="flex items-center gap-2">
                 {assignedMember ? (
                   <>
-                    <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-[10px] font-medium text-primary">
-                        {getInitials(assignedMember.email)}
-                      </span>
-                    </div>
-                    <span className="text-sm font-medium truncate">{assignedMember.name || assignedMember.position_name || assignedMember.email.split("@")[0]}</span>
+                    <MemberAvatar userId={assignedMember.user_id} name={teamMemberLabel(assignedMember)} size={24} />
+                    <span className="text-sm font-medium truncate">{teamMemberLabel(assignedMember)}</span>
                   </>
                 ) : (
                   <div className="flex items-center gap-2 text-muted-foreground">
@@ -1561,15 +1603,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 }
 
 // Utility functions
-function getInitials(email: string): string {
-  const name = email.split("@")[0];
-  const parts = name.split(/[._-]/);
-  if (parts.length >= 2) {
-    return (parts[0][0] + parts[1][0]).toUpperCase();
-  }
-  return name.substring(0, 2).toUpperCase();
-}
-
 function formatRelativeTime(dateString: string): string {
   const date = new Date(dateString);
   const now = new Date();
