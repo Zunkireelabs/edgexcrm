@@ -204,6 +204,9 @@ export default async function LeadsPage({
   const positionSlugMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.position_slug])
   );
+  const memberRoleMap = Object.fromEntries(
+    teamMembers.map((m) => [m.user_id, m.role])
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -341,6 +344,7 @@ export default async function LeadsPage({
         hasListPipeline={hasListPipeline}
         isTeamScoped={tenantData.permissions.leadScope === "team"}
         roleMap={roleMap}
+        memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
         allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
         currentUserPositionSlug={tenantData.positionSlug}

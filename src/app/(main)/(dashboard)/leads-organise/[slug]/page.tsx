@@ -143,6 +143,9 @@ export default async function LeadsOrganiseCockpitPage({
   const positionSlugMap = Object.fromEntries(
     teamMembersWithPositions.map((m) => [m.user_id, m.position_slug])
   );
+  const memberRoleMap = Object.fromEntries(
+    teamMembers.map((m) => [m.user_id, m.role])
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -180,6 +183,7 @@ export default async function LeadsOrganiseCockpitPage({
         userBranchId={tenantData.branchId}
         leadLists={pipelineLists}
         roleMap={roleMap}
+        memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView

@@ -110,6 +110,7 @@ interface LeadsTableProps {
   userBranchId?: string | null;
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
+  memberRoleMap?: Record<string, string>;
   positionSlugMap?: Record<string, string | null>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
@@ -250,6 +251,7 @@ export function LeadsTable({
   userBranchId = null,
   leadLists = [],
   roleMap,
+  memberRoleMap = {},
   positionSlugMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
@@ -497,47 +499,14 @@ export function LeadsTable({
     return Array.from(c.entries());
   }, [memberMap]);
 
-  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
-  const collaboratorCounts = useMemo(() => {
+  // Global collaboration count per user across the whole tenant (within the 10k
+  // collaborators-map cap) — stable across all stages. Powers the Collaborators
+  // filter options + count label.
+  const collaboratorGlobalCounts = useMemo(() => {
     const m = new Map<string, number>();
-    const now = Date.now();
-    const dayMs = 24 * 60 * 60 * 1000;
-    localLeads.forEach((l) => {
-      const matchesSource =
-        sourceFilter.length === 0 ||
-        (isStagingView
-          ? (l.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
-          : (l.intake_source ? sourceFilter.includes(l.intake_source) : false));
-      const matchesCounselor =
-        counselorFilter.length === 0 ||
-        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
-        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
-      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
-      const matchesStatus = statusFilter === "all" || l.status === statusFilter;
-      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
-      let matchesTime = true;
-      if (createdFilter !== "all") {
-        const createdAt = new Date(l.created_at).getTime();
-        switch (createdFilter) {
-          case "today": matchesTime = now - createdAt < dayMs; break;
-          case "week": matchesTime = now - createdAt < 7 * dayMs; break;
-          case "month": matchesTime = now - createdAt < 30 * dayMs; break;
-        }
-      }
-      if (!matchesSource || !matchesCounselor || !matchesTag || !matchesStatus || !matchesForm || !matchesTime) return;
-      (leadCollaborators[l.id] ?? []).forEach((userId) => {
-        m.set(userId, (m.get(userId) ?? 0) + 1);
-      });
-    });
+    Object.values(leadCollaborators).forEach((ids) =>
+      ids.forEach((id) => m.set(id, (m.get(id) ?? 0) + 1)));
     return m;
-  }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
-
-  // Users who collaborate on ANY lead in the tenant (stage-independent).
-  // Collaborators filter lists these in every stage, not just the current one.
-  const collaboratorUserIds = useMemo(() => {
-    const s = new Set<string>();
-    Object.values(leadCollaborators).forEach((ids) => ids.forEach((id) => s.add(id)));
-    return s;
   }, [leadCollaborators]);
 
   const filtered = useMemo(() => {
@@ -1414,10 +1383,13 @@ export function LeadsTable({
               setCurrentPage(1);
             },
             options: counselors
-              .filter(([userId]) => collaboratorUserIds.has(userId))
+              .filter(([userId]) =>
+                (collaboratorGlobalCounts.get(userId) ?? 0) > 0 &&
+                memberRoleMap[userId] !== "owner" &&
+                memberRoleMap[userId] !== "admin")
               .map(([userId, email]) => ({
                 value: userId,
-                label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
+                label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorGlobalCounts.get(userId) ?? 0).toLocaleString()})`,
                 description: eduStageGated ? (memberMeta(userId) || email) : email,
               })),
           } satisfies FilterDef,
