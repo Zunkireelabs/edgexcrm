@@ -532,6 +532,14 @@ export function LeadsTable({
     return m;
   }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
 
+  // Users who collaborate on ANY lead in the tenant (stage-independent).
+  // Collaborators filter lists these in every stage, not just the current one.
+  const collaboratorUserIds = useMemo(() => {
+    const s = new Set<string>();
+    Object.values(leadCollaborators).forEach((ids) => ids.forEach((id) => s.add(id)));
+    return s;
+  }, [leadCollaborators]);
+
   const filtered = useMemo(() => {
     const now = Date.now();
 
@@ -1406,7 +1414,7 @@ export function LeadsTable({
               setCurrentPage(1);
             },
             options: counselors
-              .filter(([userId]) => !eduStageGated || (collaboratorCounts.get(userId) ?? 0) > 0)
+              .filter(([userId]) => collaboratorUserIds.has(userId))
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
