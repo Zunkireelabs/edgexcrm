@@ -83,6 +83,35 @@ export async function getLeadCollaboratorsMap(
   return map;
 }
 
+/**
+ * Collaborators for a specific set of leads, keyed by lead_id. Chunks the id
+ * list (PostgREST URL limit ~440 ids) and runs chunks in parallel. Use to build
+ * a map that exactly covers the leads shown on a page, so per-view counts are
+ * accurate with no dependency on the global COLLABORATORS_MAP_CAP.
+ */
+export async function getLeadCollaboratorsMapForLeads(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: SupabaseClient<any>,
+  tenantId: string,
+  leadIds: string[],
+): Promise<Record<string, string[]>> {
+  const map: Record<string, string[]> = {};
+  if (leadIds.length === 0) return map;
+  const CHUNK = 300;
+  const chunks: string[][] = [];
+  for (let i = 0; i < leadIds.length; i += CHUNK) chunks.push(leadIds.slice(i, i + CHUNK));
+  const results = await Promise.all(
+    chunks.map((slice) =>
+      db.from("lead_collaborators").select("lead_id, user_id").eq("tenant_id", tenantId).in("lead_id", slice)),
+  );
+  results.forEach(({ data }) => {
+    (data ?? []).forEach((r: { lead_id: string; user_id: string }) => {
+      (map[r.lead_id] ??= []).push(r.user_id);
+    });
+  });
+  return map;
+}
+
 /** Targeted single-lead check — is this user a collaborator on this lead? */
 export async function isLeadCollaborator(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
