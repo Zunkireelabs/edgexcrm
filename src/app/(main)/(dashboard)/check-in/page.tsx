@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { getCurrentUserTenant, getPipelines, getTeamMembers } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getPipelines, getTeamMembers, getBranches } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { CheckInPage } from "@/industries/_shared/features/check-in/ui";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -26,7 +26,7 @@ export default async function CheckInRoute() {
 
   const serviceClient = await createServiceClient();
 
-  const [pipelines, stagesResult, teamMembers] = await Promise.all([
+  const [pipelines, stagesResult, teamMembers, branches] = await Promise.all([
     getPipelines(tenantData.tenant.id),
     serviceClient
       .from("pipeline_stages")
@@ -34,7 +34,12 @@ export default async function CheckInRoute() {
       .eq("tenant_id", tenantData.tenant.id)
       .order("position", { ascending: true }),
     getTeamMembers(tenantData.tenant.id),
+    getBranches(tenantData.tenant.id),
   ]);
+
+  const branchNames: Record<string, string> = Object.fromEntries(
+    branches.map((b) => [b.id, b.name]),
+  );
 
   const stages = (stagesResult.data || []) as PipelineStage[];
 
@@ -75,6 +80,7 @@ export default async function CheckInRoute() {
         stages={stages}
         teamMembers={assignableMembers}
         allBranchMembers={branchMembers}
+        branchNames={branchNames}
         industryId={tenantData.tenant.industry_id ?? ""}
         canAssignAny={canAssignAny}
         canAssignOwnCheckIns={canAssignOwnCheckIns}
