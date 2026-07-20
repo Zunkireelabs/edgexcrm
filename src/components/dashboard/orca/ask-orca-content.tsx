@@ -34,7 +34,7 @@ interface AskOrcaThreadProps {
 }
 
 function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskOrcaThreadProps) {
-  const { messages, status, error, disabled, retry, send, approveTool, denyTool } = useAssistantChat({
+  const { messages, status, error, disabled, hasPendingApproval, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     userFirstName,
     onConversationId,
@@ -101,7 +101,8 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
       <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">
         <ChatInput
           onSend={send}
-          disabled={status === "submitted" || status === "streaming"}
+          disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
+          disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
           placeholder="Ask anything or start a task..."
         />
       </div>

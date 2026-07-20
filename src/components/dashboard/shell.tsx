@@ -263,7 +263,10 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isOrcaRoute = pathname === "/orca" || pathname.startsWith("/orca/");
+  // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
+  // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
+  // consistent with the (hidden) mode-switcher tab above.
+  const isOrcaRoute = aiAssistantEnabled && (pathname === "/orca" || pathname.startsWith("/orca/"));
   const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -395,21 +398,23 @@ export function DashboardShell({
         </span>
       </div>
 
-      {/* Mode switcher */}
-      <div className="px-3 pb-2">
-        <Tabs value={navMode} onValueChange={handleNavModeChange}>
-          <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
-            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <LayoutGrid className="w-3.5 h-3.5" />
-              Ops
-            </TabsTrigger>
-            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <Bot className="w-3.5 h-3.5" />
-              Orca
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled) */}
+      {aiAssistantEnabled && (
+        <div className="px-3 pb-2">
+          <Tabs value={navMode} onValueChange={handleNavModeChange}>
+            <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
+              <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Ops
+              </TabsTrigger>
+              <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <Bot className="w-3.5 h-3.5" />
+                Orca
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* Global Search row — top of nav, opens command palette */}
       <div className="px-3 pb-1">
