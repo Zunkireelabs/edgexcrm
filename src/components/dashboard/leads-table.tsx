@@ -1369,11 +1369,7 @@ export function LeadsTable({
                       ]
                     : []),
                   ...counselors
-                    .filter(
-                      ([userId]) =>
-                        (counselorCounts.get(userId) ?? 0) > 0 &&
-                        allowedAssigneePositions.has(positionSlugMap?.[userId] ?? "")
-                    )
+                    .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
                     .map(([userId, email]) => ({
                       value: userId,
                       label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
