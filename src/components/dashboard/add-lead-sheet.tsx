@@ -80,6 +80,10 @@ interface AddLeadSheetProps {
   /** Id of the current stage view (when it's a visible, non-staging/archive list) —
    *  pre-selects the Stage dropdown so the new lead lands where the creator is looking. */
   defaultListId?: string;
+  /** When set, the Stage is locked to this list (the page the user opened Add Lead from):
+   *  a read-only label instead of the dropdown, and the new lead can only land here.
+   *  Works for staging/archive lists the dropdown normally hides. */
+  lockedList?: { id: string; name: string; is_archive: boolean };
 }
 
 interface FormData {
@@ -171,6 +175,7 @@ export function AddLeadSheet({
   userBranchId = null,
   currentUserPositionSlug = null,
   defaultListId,
+  lockedList,
 }: AddLeadSheetProps) {
   const router = useRouter();
   // Owner/admin + branch managers skip the Prospects academic-qualification dialog.
@@ -209,7 +214,7 @@ export function AddLeadSheet({
       setFormData({
         ...initialFormData,
         stageId: defaultStage?.id || "",
-        listId: validDefaultListId,
+        listId: lockedList ? lockedList.id : validDefaultListId,
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
         // Always seed from creator's own branch first; fall back to active branch switcher
@@ -501,24 +506,33 @@ export function AddLeadSheet({
           <Label htmlFor="stage" className="text-xs text-gray-600">
             Stage
           </Label>
-          <Select
-            value={formData.listId}
-            onValueChange={updateListId}
-            disabled={isSubmitting}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select stage" />
-            </SelectTrigger>
-            <SelectContent>
-              {leadLists
-                .filter((l) => !l.is_staging && !l.is_archive)
-                .map((list) => (
-                  <SelectItem key={list.id} value={list.id}>
-                    {list.name}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
+          {lockedList ? (
+            <div
+              className="flex h-9 w-full items-center rounded-md border border-input bg-gray-50 px-3 text-sm text-gray-700"
+              aria-readonly="true"
+            >
+              {lockedList.name}
+            </div>
+          ) : (
+            <Select
+              value={formData.listId}
+              onValueChange={updateListId}
+              disabled={isSubmitting}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select stage" />
+              </SelectTrigger>
+              <SelectContent>
+                {leadLists
+                  .filter((l) => !l.is_staging && !l.is_archive)
+                  .map((list) => (
+                    <SelectItem key={list.id} value={list.id}>
+                      {list.name}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          )}
         </div>
 
         <div className="space-y-1.5">

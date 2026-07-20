@@ -125,6 +125,8 @@ interface LeadsTableProps {
   /** Id of the currently active list, when it's a visible stage (not staging/archive) —
    *  pre-selects Add-Lead's Stage dropdown so the new lead lands where the creator is looking. */
   defaultListId?: string;
+  /** When set, Add Lead locks the Stage to this list (the active page). */
+  lockedList?: { id: string; name: string; is_archive: boolean };
   /** it_agency funnel key when viewing a whole funnel (no single list active). */
   activeFunnelKey?: string | null;
   /** When true the active list (or funnel) has a pipeline/stages and can show kanban. */
@@ -191,6 +193,7 @@ export function LeadsTable({
   memberBranchMap = {},
   activeListSlug = null,
   defaultListId,
+  lockedList,
   activeFunnelKey = null,
   hasListPipeline = false,
   isTeamScoped = false,
@@ -2132,6 +2135,7 @@ export function LeadsTable({
           userBranchId={userBranchId}
           currentUserPositionSlug={currentUserPositionSlug}
           defaultListId={defaultListId}
+          lockedList={lockedList}
         />
       )}
 
