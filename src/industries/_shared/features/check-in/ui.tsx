@@ -102,6 +102,7 @@ interface CheckInPageProps {
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   allBranchMembers: TeamMember[];
+  branchNames?: Record<string, string>;
   industryId: string;
   canAssignAny: boolean;
   canAssignOwnCheckIns: boolean;
@@ -197,7 +198,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, branchNames = {}, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
@@ -208,6 +209,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;
+  const isLeadExecutive = (m: TeamMember) => m.position_slug === "lead-executive";
+  const leadExecMembers = allBranchMembers.filter(isLeadExecutive);
   // education_consultancy shows Assigned To + Meet With as two independent columns;
   // every other industry keeps the single flip-column (new-walk-in vs meet-with).
   const eduCols = industryId === "education_consultancy";
@@ -1540,24 +1543,41 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     </Select>
                   </div>
                 )}
-                {(selectedLead.list_slug === "qualified" || moveToStage) && (
-                  <div>
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assign to</p>
-                    <Select value={assignToId || "__none__"} onValueChange={(v) => setAssignToId(v === "__none__" ? "" : v)}>
-                      <SelectTrigger className="h-9">
-                        <SelectValue placeholder="Assign counselor (optional)" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">No one selected</SelectItem>
-                        {counselorMembers.map((m) => (
-                          <SelectItem key={m.user_id} value={m.user_id}>
-                            {m.name || m.email.split("@")[0]} ({m.position_name ?? m.role})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
+                {(selectedLead.list_slug === "qualified" || moveToStage) && (() => {
+                  const targetStage = moveToStage || selectedLead.list_slug;
+                  const assignPool = targetStage === "qualified" ? leadExecMembers
+                    : targetStage === "prospects" ? counselorMembers
+                    : [];
+                  const placeholder = targetStage === "qualified"
+                    ? "Assign lead executive (optional)"
+                    : "Assign counselor (optional)";
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assign to</p>
+                      <Select value={assignToId || "__none__"} onValueChange={(v) => setAssignToId(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder={placeholder} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No one selected</SelectItem>
+                          {assignPool.map((m) => {
+                            const branch = branchNames[m.branch_id ?? ""];
+                            return (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{m.name || m.email.split("@")[0]}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {(m.position_name ?? m.role)}{branch ? ` · ${branch}` : ""}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
