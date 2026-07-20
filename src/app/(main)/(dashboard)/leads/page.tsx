@@ -331,6 +331,11 @@ export default async function LeadsPage({
         assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
         defaultListId={activeList && !activeList.is_staging && !activeList.is_archive ? activeList.id : undefined}
+        lockedList={
+          activeList && activeList.slug !== "delete"
+            ? { id: activeList.id, name: activeList.name, is_archive: activeList.is_archive }
+            : undefined
+        }
         activeListSlug={activeList?.slug ?? null}
         activeFunnelKey={activeFunnelLists.length > 0 ? funnelParam ?? null : null}
         hasListPipeline={hasListPipeline}

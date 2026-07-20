@@ -64,6 +64,8 @@ interface LeadResult {
   stage_color: string | null;
   pipeline_name: string | null;
   list_name: string | null;
+  list_slug: string | null;
+  assigned_to: string | null;
   assigned_to_name: string | null;
   created_at: string;
 }
@@ -100,6 +102,7 @@ interface CheckInPageProps {
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   allBranchMembers: TeamMember[];
+  branchNames?: Record<string, string>;
   industryId: string;
   canAssignAny: boolean;
   canAssignOwnCheckIns: boolean;
@@ -195,7 +198,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, branchNames = {}, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
@@ -206,12 +209,16 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;
+  const isLeadExecutive = (m: TeamMember) => m.position_slug === "lead-executive";
+  const leadExecMembers = allBranchMembers.filter(isLeadExecutive);
   // education_consultancy shows Assigned To + Meet With as two independent columns;
   // every other industry keeps the single flip-column (new-walk-in vs meet-with).
   const eduCols = industryId === "education_consultancy";
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [meetWithId, setMeetWithId] = useState<string>("");
+  const [assignToId, setAssignToId] = useState<string>("");
+  const [moveToStage, setMoveToStage] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LeadResult[]>([]);
@@ -377,6 +384,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const handleCloseDetails = () => {
     setSelectedLead(null);
     setLeadDetails(null);
+    setAssignToId("");
+    setMoveToStage("");
   };
 
   const handleCheckIn = async (leadId: string) => {
@@ -388,7 +397,11 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       const res = await fetch(`/api/v1/leads/${leadId}/check-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meet_with_id: meetWithId || null }),
+        body: JSON.stringify({
+          meet_with_id: meetWithId || null,
+          assign_to_id: assignToId || null,
+          move_to_stage: moveToStage || null,
+        }),
       });
       if (!res.ok) {
         toast.error("Failed to check in");
@@ -401,6 +414,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       setResults([]);
       setSearched(false);
       setMeetWithId("");
+      setAssignToId("");
+      setMoveToStage("");
       setCheckingIn(null);
     } catch {
       toast.error("Failed to check in");
@@ -1506,6 +1521,64 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
             {leadDetails && !loadingDetails && (
               <LeadExtraDetails details={leadDetails} />
+            )}
+
+            {/* Education triage: assign an owning counselor, and move un-triaged leads
+                into Qualified/Prospect. Hidden for leads already in Prospects (they
+                already have a counselor). Meet With below is separate and untouched. */}
+            {industryId === "education_consultancy" && selectedLead.list_slug !== "prospects" && (
+              <div className="mb-4 space-y-3">
+                {selectedLead.list_slug !== "qualified" && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Move to stage</p>
+                    <Select value={moveToStage || "__none__"} onValueChange={(v) => setMoveToStage(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Keep current stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Keep current stage</SelectItem>
+                        <SelectItem value="qualified">Qualified</SelectItem>
+                        <SelectItem value="prospects">Prospect</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(selectedLead.list_slug === "qualified" || moveToStage) && (() => {
+                  const targetStage = moveToStage || selectedLead.list_slug;
+                  const assignPool = targetStage === "qualified" ? leadExecMembers
+                    : targetStage === "prospects" ? counselorMembers
+                    : [];
+                  const placeholder = targetStage === "qualified"
+                    ? "Assign lead executive (optional)"
+                    : "Assign counselor (optional)";
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assign to</p>
+                      <Select value={assignToId || "__none__"} onValueChange={(v) => setAssignToId(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder={placeholder} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No one selected</SelectItem>
+                          {assignPool.map((m) => {
+                            const branch = branchNames[m.branch_id ?? ""];
+                            return (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{m.name || m.email.split("@")[0]}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {(m.position_name ?? m.role)}{branch ? ` · ${branch}` : ""}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
 
             {/* Meet with — who the visitor is meeting today */}

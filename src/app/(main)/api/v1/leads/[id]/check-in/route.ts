@@ -44,12 +44,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   let reason = "";
   let meetWithId: string | null = null;
+  let assignToId: string | null = null;
+  let moveToStage: "qualified" | "prospects" | null = null;
   try {
     const body = await request.json();
     reason = (body.reason as string) || "";
     // Per-visit "meet with" person, stored on THIS check-in note — distinct from
     // lead.assigned_to (the counselor). Optional.
     meetWithId = (body.meet_with_id as string) || null;
+    // Explicit front-desk triage (education only): owning counselor + optional stage move.
+    assignToId = (body.assign_to_id as string) || null;
+    const mv = body.move_to_stage as string | undefined;
+    moveToStage = mv === "qualified" || mv === "prospects" ? mv : null;
   } catch {
     // No body is fine
   }
@@ -81,6 +87,93 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return apiServiceUnavailable("Failed to log check-in");
   }
 
+  const isEducation = auth.industryId === "education_consultancy";
+
+  // Current stage slug (source of truth for triage decisions).
+  let currentSlug: string | null = null;
+  if (lead.list_id) {
+    const { data: cur } = await supabase
+      .from("lead_lists")
+      .select("slug")
+      .eq("id", lead.list_id)
+      .maybeSingle();
+    currentSlug = cur?.slug ?? null;
+  }
+
+  // An explicit triage decision is present when the front desk asked to move the lead,
+  // OR the lead is already in Qualified (where a blank picker means "assign the checker").
+  const explicitTriage =
+    isEducation && (moveToStage !== null || currentSlug === "qualified");
+
+  if (explicitTriage) {
+    try {
+      const targetSlug = moveToStage; // null = stay in current (qualified in-place)
+
+      // Assignment rule:
+      //   qualified target/in-place → picked, else keep existing, else the checker.
+      //   prospects target          → picked, else keep existing (no checker fallback).
+      const effectiveTargetIsQualified =
+        targetSlug === "qualified" || (targetSlug === null && currentSlug === "qualified");
+      let newAssigned: string | null;
+      if (assignToId) {
+        newAssigned = assignToId;
+      } else if (lead.assigned_to) {
+        newAssigned = lead.assigned_to; // never overwrite an existing owner with blank
+      } else {
+        newAssigned = effectiveTargetIsQualified ? auth.userId : null;
+      }
+
+      const updatePayload: Record<string, unknown> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (newAssigned !== lead.assigned_to) updatePayload.assigned_to = newAssigned;
+
+      if (targetSlug) {
+        const { data: target } = await supabase
+          .from("lead_lists")
+          .select("id, pipeline_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("slug", targetSlug)
+          .maybeSingle();
+        if (target) {
+          updatePayload.list_id = target.id;
+          if (targetSlug === "prospects") updatePayload.lead_type = "prospect";
+          if (target.pipeline_id) {
+            const landing = await getPipelineLandingStage(supabase, target.pipeline_id);
+            if (landing) {
+              updatePayload.pipeline_id = target.pipeline_id;
+              updatePayload.stage_id = landing.id;
+              updatePayload.status = landing.slug;
+            }
+          }
+          // Un-archive (mirror the auto-promotion path).
+          if (lead.archived_at) {
+            updatePayload.archived_at = null;
+            updatePayload.archived_by = null;
+            updatePayload.archived_from_list_id = null;
+            updatePayload.archived_from_status = null;
+          }
+        }
+      }
+
+      // Only write if something actually changed beyond updated_at.
+      if (Object.keys(updatePayload).length > 1) {
+        const { error: triageError } = await supabase
+          .from("leads")
+          .update(updatePayload)
+          .eq("id", id)
+          .eq("tenant_id", auth.tenantId);
+        if (triageError) {
+          logger.error({ err: triageError, leadId: id }, "Failed to apply check-in triage");
+        }
+      }
+    } catch (triageErr) {
+      logger.error({ err: triageErr, leadId: id }, "Unexpected error applying check-in triage");
+    }
+
+    return apiSuccess({ checked_in: true, lead_id: id });
+  }
+
   // Auto-promotion (education_consultancy, student check-ins only) — forward-only:
   //   1) Counselor assigned  → Prospects (any performer), subject to the academic gate.
   //   2) No counselor + an elevated performer (lead-exec/admin/owner) → Qualified,
@@ -94,7 +187,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
     assignedIsCounselor = assignedPositionSlug === "counselor";
   }
 
-  const isEducation = auth.industryId === "education_consultancy";
   const isStudent = ((lead.tags as string[] | null) ?? []).includes("student");
   const performerElevated =
     auth.positionSlug === "lead-executive" ||
