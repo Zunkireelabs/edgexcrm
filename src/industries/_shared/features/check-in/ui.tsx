@@ -64,6 +64,8 @@ interface LeadResult {
   stage_color: string | null;
   pipeline_name: string | null;
   list_name: string | null;
+  list_slug: string | null;
+  assigned_to: string | null;
   assigned_to_name: string | null;
   created_at: string;
 }
