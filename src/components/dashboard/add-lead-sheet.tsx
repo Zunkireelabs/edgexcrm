@@ -113,6 +113,7 @@ interface FormData {
   destinations: string[];
   fieldOfStudy: string;
   degreeLevel: string;
+  archiveReason: string;
 }
 
 interface FormErrors {
@@ -120,6 +121,7 @@ interface FormErrors {
   email?: string;
   phone?: string;
   general?: string;
+  archiveReason?: string;
 }
 
 const CONTACT_METHODS = [
@@ -155,6 +157,7 @@ const initialFormData: FormData = {
   destinations: [],
   fieldOfStudy: "",
   degreeLevel: "",
+  archiveReason: "",
 };
 
 export function AddLeadSheet({
@@ -273,6 +276,11 @@ export function AddLeadSheet({
     }
     setAcademicsError(false);
 
+    if (lockedList?.is_archive && !formData.archiveReason.trim()) {
+      setErrors({ archiveReason: "Archive reason is required." });
+      return;
+    }
+
     setIsSubmitting(true);
     setErrors({});
 
@@ -290,6 +298,7 @@ export function AddLeadSheet({
         city: formData.city || null,
         country: derivedCountry,
         list_id: formData.listId || undefined,
+        archive_reason: lockedList?.is_archive ? formData.archiveReason.trim() : undefined,
         stage_id: formData.stageId || undefined,
         assigned_to: formData.assignedTo || null,
         entity_id: formData.entityId || null,
@@ -507,12 +516,33 @@ export function AddLeadSheet({
             Stage
           </Label>
           {lockedList ? (
-            <div
-              className="flex h-9 w-full items-center rounded-md border border-input bg-gray-50 px-3 text-sm text-gray-700"
-              aria-readonly="true"
-            >
-              {lockedList.name}
-            </div>
+            <>
+              <div
+                className="flex h-9 w-full items-center rounded-md border border-input bg-gray-50 px-3 text-sm text-gray-700"
+                aria-readonly="true"
+              >
+                {lockedList.name}
+              </div>
+              {lockedList.is_archive && (
+                <div className="space-y-1.5 pt-2">
+                  <Label htmlFor="archiveReason" className="text-xs text-gray-600">
+                    Archive reason <span className="text-red-500">*</span>
+                  </Label>
+                  <Input
+                    id="archiveReason"
+                    value={formData.archiveReason}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, archiveReason: e.target.value }))
+                    }
+                    placeholder="Why is this lead being archived?"
+                    disabled={isSubmitting}
+                  />
+                  {errors.archiveReason && (
+                    <p className="text-xs text-red-500">{errors.archiveReason}</p>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <Select
               value={formData.listId}
