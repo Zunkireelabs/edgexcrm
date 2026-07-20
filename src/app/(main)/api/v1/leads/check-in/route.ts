@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       list_id, assigned_to,
       pipeline_stages(name, color),
       pipelines(name),
-      lead_lists!leads_list_id_fkey(name)
+      lead_lists!leads_list_id_fkey(name, slug)
     `)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest) {
   const results = leads.map((lead) => {
     const stage = lead.pipeline_stages as unknown as { name: string; color: string } | null;
     const pipeline = lead.pipelines as unknown as { name: string } | null;
-    const list = lead.lead_lists as unknown as { name: string } | null;
+    const list = lead.lead_lists as unknown as { name: string; slug: string | null } | null;
     return {
       id: lead.id,
       first_name: lead.first_name,
@@ -71,6 +71,8 @@ export async function GET(request: NextRequest) {
       stage_color: stage?.color || null,
       pipeline_name: pipeline?.name || null,
       list_name: list?.name || null,
+      list_slug: list?.slug || null,
+      assigned_to: lead.assigned_to || null,
       assigned_to_name: lead.assigned_to ? nameById.get(lead.assigned_to) ?? null : null,
       created_at: lead.created_at,
     };
