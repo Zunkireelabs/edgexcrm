@@ -29,6 +29,21 @@ export async function getProfileEmail(
 }
 
 /**
+ * Fetch the connected account's email address from Google's OpenID userinfo
+ * endpoint using the access token. Used by the OAuth callback under send-only
+ * (Path A), where gmail.getProfile is unavailable (it needs a read scope).
+ */
+export async function getUserInfoEmail(accessToken: string): Promise<string | undefined> {
+  const res = await fetch("https://www.googleapis.com/oauth2/v2/userinfo", {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return undefined;
+  const data = (await res.json()) as { email?: string };
+  return data.email;
+}
+
+/**
  * Revoke a Gmail OAuth grant on Google's side (undoes "prompt=consent").
  * Call this on Disconnect — without it, deleting the local row only forgets
  * the credential here; the grant stays live under the user's Google Account
