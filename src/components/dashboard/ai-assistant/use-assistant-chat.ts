@@ -2,7 +2,12 @@
 
 import { useCallback, useMemo } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses, type UIMessage } from "ai";
+import {
+  DefaultChatTransport,
+  isToolUIPart,
+  lastAssistantMessageIsCompleteWithApprovalResponses,
+  type UIMessage,
+} from "ai";
 
 export interface AssistantMessageMetadata {
   conversationId?: string;
@@ -72,6 +77,14 @@ export function useAssistantChat({ id, initialMessages, userFirstName, onConvers
 
   const disabled = isAssistantDisabledError(chat.error);
 
+  // A completed stream can still leave a write tool awaiting a decision — `status`
+  // goes back to "ready" while the approval sits unresolved. Sending in that state
+  // submits a tool call with no result, which the AI SDK rejects. Callers must
+  // disable input on this in addition to the status check.
+  const hasPendingApproval = chat.messages.some((message) =>
+    message.parts.some((part) => isToolUIPart(part) && part.state === "approval-requested")
+  );
+
   const retry = useCallback(() => {
     chat.clearError();
     void chat.regenerate();
@@ -98,5 +111,5 @@ export function useAssistantChat({ id, initialMessages, userFirstName, onConvers
     [chat]
   );
 
-  return { ...chat, disabled, retry, send, approveTool, denyTool };
+  return { ...chat, disabled, hasPendingApproval, retry, send, approveTool, denyTool };
 }

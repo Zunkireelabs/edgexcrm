@@ -102,7 +102,7 @@ export default async function DashboardLayout({
     stagingLists,
     allowedNavKeys,
     industryId: tenantData.tenant.industry_id ?? null,
-    isOrcaAvailable: true,
+    isOrcaAvailable: aiAssistantEnabled,
   });
 
   return (
