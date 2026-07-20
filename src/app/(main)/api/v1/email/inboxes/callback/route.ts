@@ -5,7 +5,7 @@ import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
 import { createHmac } from "crypto";
-import { getProfileEmail, createOAuth2Client } from "@/industries/_shared/features/email/lib/gmail-client";
+import { getUserInfoEmail } from "@/industries/_shared/features/email/lib/gmail-client";
 import { encryptAccountToken } from "@/industries/_shared/features/email/lib/token-crypto";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -93,13 +93,9 @@ export async function GET(request: NextRequest) {
       return NextResponse.redirect(getSettingsUrl("error=token_exchange"));
     }
 
-    const oauthClient = createOAuth2Client(tokenData.refresh_token);
-    oauthClient.setCredentials({
-      access_token: tokenData.access_token,
-      refresh_token: tokenData.refresh_token,
-    });
-
-    const email = await getProfileEmail(oauthClient);
+    // Send-only (Path A): read the account email from the userinfo endpoint —
+    // gmail.getProfile needs a read scope we no longer request.
+    const email = await getUserInfoEmail(tokenData.access_token);
     if (!email) {
       return NextResponse.redirect(getSettingsUrl("error=no_email"));
     }

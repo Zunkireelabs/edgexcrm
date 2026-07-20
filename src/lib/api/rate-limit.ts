@@ -34,6 +34,11 @@ export const AI_CHAT_LIMIT: RateLimitConfig = {
   windowMs: 300_000, // 5 minutes — keyed by userId, not IP (see ai/chat route.ts)
 };
 
+export const EMAIL_SEND_LIMIT: RateLimitConfig = {
+  maxRequests: 50,
+  windowMs: 300_000, // 5 minutes — keyed by userId (manual compose/send abuse guard)
+};
+
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig

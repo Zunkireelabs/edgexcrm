@@ -28,6 +28,8 @@ import { ChecklistCard } from "../management-panel";
 import { TaskList } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -126,7 +128,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
   const [appNotes, setAppNotes] = useState<{ id: string; notes: string; created_at: string; updated_at: string | null; institution_name: string | null }[]>([]);
 
-  const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
+  const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();

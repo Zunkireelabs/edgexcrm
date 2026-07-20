@@ -16,6 +16,8 @@ import { ProfessionalDetailsCard } from "./professional-details-card";
 import { ActivitiesPanel, type ActivitiesPanelRef } from "./activities/activities-panel";
 import { MergeDialog } from "./merge-dialog";
 import { useEmailThreads } from "@/industries/_shared/features/email/hooks/use-email-threads";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import { getLeadFullName } from "./lead-name";
 import { ItineraryBuilder } from "@/industries/travel-agency/features/itinerary/builder";
 import type { Itinerary } from "@/industries/travel-agency/features/itinerary/types";
@@ -62,7 +64,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
       },
     }));
 
-    const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
+    const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
     const { threads, setThreads, loading: threadsLoading } = useEmailThreads(hasEmail ? lead.id : "");
     const unreadEmailCount = useMemo(
       () => threads.reduce((n, t) => n + t.emails.filter((e) => e.direction === "inbound" && !e.read_at).length, 0),

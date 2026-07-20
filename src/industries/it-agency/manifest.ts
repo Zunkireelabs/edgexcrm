@@ -10,6 +10,7 @@ import { proposalsMeta } from "./features/proposals/meta";
 import { resourcingMeta } from "./features/resourcing/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { insightsMeta } from "../_shared/features/insights/meta";
+import { emailMeta } from "../_shared/features/email/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -25,6 +26,7 @@ export const manifest: IndustryManifest = {
     { meta: resourcingMeta },
     { meta: leadListsMeta },
     { meta: insightsMeta },
+    { meta: emailMeta },
   ],
   sidebar: [
     {
