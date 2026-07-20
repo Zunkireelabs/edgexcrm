@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AiWrittenBadge } from "@/components/dashboard/ai-written-badge";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -637,7 +638,10 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
-                              <p className="text-sm text-foreground">Note added</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm text-foreground">Note added</p>
+                                {item.note.created_via === "ai_assistant" && <AiWrittenBadge />}
+                              </div>
                               {plain && (
                                 <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                   {plain}
@@ -693,7 +697,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               <p className="text-sm text-foreground">
                                 Application note{item.institution ? ` · ${item.institution}` : ""}
                               </p>
-                              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2 break-words">
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                 {item.content}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
@@ -1089,6 +1093,8 @@ function getSystemActivityDescription(
     }
     if (labels.length > 0) return `Updated ${labels.join(", ")}`;
   }
+
+  if (activity.action === "application.reordered") return "Reordered Application";
 
   // Humanized fallback — never render a raw dotted action string
   const actionParts = activity.action.split(".");

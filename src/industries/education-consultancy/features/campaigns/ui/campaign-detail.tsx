@@ -20,6 +20,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
+import {
   Table,
   TableBody,
   TableCell,
@@ -45,7 +54,7 @@ interface EspnResult {
   source?: "espn" | "manual";
   locked?: boolean;
   match_date: string | null;
-  winner?: { email: string; name: string; source: "auto" | "manual" } | null;
+  winner?: { email: string; name: string } | null;
 }
 
 interface Campaign {
@@ -431,18 +440,23 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
   const [gearOpen, setGearOpen] = useState(false);
   const [overrideTarget, setOverrideTarget] = useState<EspnResult | null>(null);
+  const [openWinnerFor, setOpenWinnerFor] = useState<string | null>(null);
+  const [winnerSearch, setWinnerSearch] = useState("");
 
   const sortedResults = useMemo(() => {
     if (!data) return [];
+    // Serial tournament order — earliest kickoff first. Matches missing a
+    // kickoff date (ESPN refresh gap) always sort after dated ones instead
+    // of interleaving, tie-broken by ESPN's own event id ascending.
     return [...data.results].sort((a, b) => {
       if (a.match_date && b.match_date) {
-        return new Date(b.match_date).getTime() - new Date(a.match_date).getTime();
+        return new Date(a.match_date).getTime() - new Date(b.match_date).getTime();
       }
       if (a.match_date && !b.match_date) return -1;
       if (!a.match_date && b.match_date) return 1;
       const aId = parseInt(a.match_id.replace("espn-", ""), 10);
       const bId = parseInt(b.match_id.replace("espn-", ""), 10);
-      return bId - aId;
+      return aId - bId;
     });
   }, [data]);
 
@@ -484,6 +498,22 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
       });
     });
     return map;
+  }, [data]);
+
+  // Full leaderboard applicant list — winner picker isn't limited to a match's
+  // own predictors; owners can assign any applicant as the winner of any match.
+  const allApplicants = useMemo(() => {
+    if (!data) return [];
+    const list = data.standings.map((entry) => ({
+      name: entry.name,
+      email: entry.email,
+      studyAbroad: entry.profile?.["study_abroad_interest"] === "yes",
+    }));
+    list.sort((a, b) => {
+      if (a.studyAbroad !== b.studyAbroad) return a.studyAbroad ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    return list;
   }, [data]);
 
   const loadLeaderboard = useCallback(() => {
@@ -623,6 +653,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">#</TableHead>
                 <TableHead>Match</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead>Outcome</TableHead>
@@ -634,12 +665,12 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             <TableBody>
               {sortedResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground text-sm py-6">
+                  <TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-6">
                     No results yet. Click &ldquo;Refresh results&rdquo; to fetch from ESPN.
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedResults.map((r) => {
+                sortedResults.map((r, index) => {
                   const isMatchExpanded = expandedMatch === r.match_id;
                   return (
                     <>
@@ -648,6 +679,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                         className="cursor-pointer"
                         onClick={() => setExpandedMatch(isMatchExpanded ? null : r.match_id)}
                       >
+                        <TableCell className="text-sm text-muted-foreground">{index + 1}</TableCell>
                         <TableCell className="font-medium text-sm">
                           <span className="flex items-center gap-1.5">
                             {isMatchExpanded
@@ -684,7 +716,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                       </TableRow>
                       {isMatchExpanded && (
                         <TableRow key={`${r.match_id}-predictors`}>
-                          <TableCell colSpan={6} className="pb-3 pt-0">
+                          <TableCell colSpan={7} className="pb-3 pt-0">
                             <div className="rounded-md border bg-muted/30 text-xs">
                               <table className="w-full">
                                 <thead>
@@ -706,30 +738,62 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                                             <Trophy className="h-3.5 w-3.5 text-yellow-500 shrink-0" />
                                             Winner:
                                             {r.winner ? (
-                                              <>
-                                                <span>{r.winner.name}</span>
-                                                <Badge variant="outline" className="text-xs capitalize">{r.winner.source}</Badge>
-                                              </>
+                                              <span>{r.winner.name}</span>
                                             ) : (
-                                              <span className="font-normal text-muted-foreground">No eligible winner yet</span>
+                                              <span className="font-normal text-muted-foreground">No winner selected</span>
                                             )}
                                           </span>
-                                          <select
-                                            value={r.winner?.email ?? "__auto__"}
-                                            onClick={(e) => e.stopPropagation()}
-                                            onChange={(e) =>
-                                              handleSetWinner(r.match_id, e.target.value === "__auto__" ? null : e.target.value)
-                                            }
-                                            className="h-7 rounded-md border bg-background px-2 text-xs"
+                                          <Popover
+                                            open={openWinnerFor === r.match_id}
+                                            onOpenChange={(v) => { setOpenWinnerFor(v ? r.match_id : null); setWinnerSearch(""); }}
                                           >
-                                            <option value="__auto__">Use auto pick</option>
-                                            {(matchPredictors.get(r.match_id) ?? []).map((p) => (
-                                              <option key={p.email} value={p.email}>
-                                                {p.name}
-                                              </option>
-                                            ))}
-                                          </select>
-                                          <span className="text-muted-foreground">Internal only — does not change the match result or the public leaderboard.</span>
+                                            <PopoverTrigger asChild>
+                                              <Button
+                                                size="sm"
+                                                variant="outline"
+                                                className="h-7 text-xs"
+                                                onClick={(e) => e.stopPropagation()}
+                                              >
+                                                {r.winner ? "Change winner" : "Set winner"}
+                                              </Button>
+                                            </PopoverTrigger>
+                                            <PopoverContent
+                                              className="w-64 p-0"
+                                              align="start"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <Command shouldFilter={false}>
+                                                <CommandInput
+                                                  placeholder="Search applicants…"
+                                                  value={winnerSearch}
+                                                  onValueChange={setWinnerSearch}
+                                                />
+                                                <CommandList className="max-h-64">
+                                                  <CommandEmpty>No matches</CommandEmpty>
+                                                  <CommandItem
+                                                    value="__none__"
+                                                    onSelect={() => { handleSetWinner(r.match_id, null); setOpenWinnerFor(null); }}
+                                                  >
+                                                    <Check className={cn("mr-2 h-4 w-4", !r.winner ? "opacity-100" : "opacity-0")} />
+                                                    <span className="text-muted-foreground">— No winner selected —</span>
+                                                  </CommandItem>
+                                                  {allApplicants
+                                                    .filter((p) => p.name.toLowerCase().includes(winnerSearch.trim().toLowerCase()))
+                                                    .map((p) => (
+                                                      <CommandItem
+                                                        key={p.email}
+                                                        value={p.email}
+                                                        onSelect={() => { handleSetWinner(r.match_id, p.email); setOpenWinnerFor(null); }}
+                                                      >
+                                                        <Check className={cn("mr-2 h-4 w-4", r.winner?.email === p.email ? "opacity-100" : "opacity-0")} />
+                                                        {p.name}
+                                                      </CommandItem>
+                                                    ))}
+                                                </CommandList>
+                                              </Command>
+                                            </PopoverContent>
+                                          </Popover>
+                                          <span className="text-muted-foreground">Does not change the match result — the masked winner name is shown on the public leaderboard.</span>
                                         </div>
                                       </td>
                                     </tr>

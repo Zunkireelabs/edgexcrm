@@ -3,8 +3,10 @@ import { getCurrentUserTenant, getApplicationActivity } from "@/lib/supabase/que
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
-import { shouldRestrictToSelf, canEditApplication, canDeleteApplication } from "@/lib/api/permissions";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { canManageApplicationForLead } from "@/lib/api/applications";
 import { getLeadMembership, branchMemberIds } from "@/lib/leads/branch-membership";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { ApplicationDetailPage } from "@/industries/education-consultancy/features/application-tracking/pages/application-detail";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 
@@ -45,8 +47,15 @@ export default async function ApplicationDetailRoute({ params }: Props) {
   const parentLead = parentLeadData as { id: string; assigned_to: string | null; branch_id: string | null };
   const membership = await getLeadMembership(supabase, tenantData.tenant.id, parentLead.id);
 
+  // Collaborator VIEW bypass: a lead collaborator (ever-assigned, incl. reassigned
+  // away) may READ the application even when own-scope and not currently assigned —
+  // mirrors getApplicationWithAccess so the panel and this page agree. Edit/delete
+  // stay gated below by canManageApplicationForLead (a collaborator gets neither).
+  const isCollab = await isLeadCollaborator(supabase, tenantData.tenant.id, parentLead.id, tenantData.userId);
+
   // shouldRestrictToSelf guard
   if (
+    !isCollab &&
     shouldRestrictToSelf(tenantData.permissions) &&
     !(
       parentLead.assigned_to === tenantData.userId ||
@@ -58,7 +67,7 @@ export default async function ApplicationDetailRoute({ params }: Props) {
 
   // requireLeadBranchAccess guard (replicated inline — reads only leadScope, branchId, userId)
   const leadScope = tenantData.permissions.leadScope;
-  if (leadScope === "team") {
+  if (leadScope === "team" && !isCollab) {
     const branchId = tenantData.branchId ?? null;
     if (!branchId) {
       if (
@@ -68,12 +77,15 @@ export default async function ApplicationDetailRoute({ params }: Props) {
         notFound();
       }
     } else {
-      // Mirror requireLeadBranchAccess (auth.ts) + the applications LIST scope:
-      // a team-scoped manager may view a lead assigned to a member of their branch.
+      // Mirror requireLeadBranchAccess (auth.ts) + the applications LIST scope: a
+      // team-scoped manager may view any lead in their branch — via the
+      // lead_branches roster, a direct branch_id, or a branch-member assignee.
       const branchMembers = await branchMemberIds(supabase, tenantData.tenant.id, branchId);
-      if (!(parentLead.assigned_to !== null && branchMembers.includes(parentLead.assigned_to))) {
-        notFound();
-      }
+      const inBranch =
+        membership.some((m) => m.branch_id === branchId) ||
+        parentLead.branch_id === branchId ||
+        (parentLead.assigned_to !== null && branchMembers.includes(parentLead.assigned_to));
+      if (!inBranch) notFound();
     }
   }
 
@@ -104,8 +116,9 @@ export default async function ApplicationDetailRoute({ params }: Props) {
       stages={stages}
       fullLead={fullLead}
       activityTimeline={activityTimeline}
-      canEdit={canEditApplication(tenantData.permissions, tenantData.positionSlug)}
-      canDelete={canDeleteApplication(tenantData.permissions)}
+      canEdit={canManageApplicationForLead(tenantData, parentLead)}
+      canDelete={canManageApplicationForLead(tenantData, parentLead)}
+      currentUserId={tenantData.userId}
     />
   );
 }

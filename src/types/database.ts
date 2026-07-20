@@ -56,6 +56,8 @@ export interface Tenant {
   entitlement_overrides: Record<string, unknown>;
   timezone: string;
   weekend_days: number[];
+  default_currency: string;
+  ai_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -108,6 +110,7 @@ export interface TenantUser {
   user_id: string;
   role: UserRole;
   default_hourly_rate: number | null;
+  cost_rate: number | null;
   branch_id: string | null;
   created_at: string;
 }
@@ -195,6 +198,24 @@ export interface Lead {
   pre_app_fee_status: "paid" | "unpaid" | "waiver" | null;
   pre_app_fee_amount: number | null;
   pre_app_fee_notes: string | null;
+  // Academic qualification + test scores (education_consultancy — migration 159)
+  see_gpa: string | null;
+  see_institution: string | null;
+  see_passed_year: number | null;
+  plus_two_gpa: string | null;
+  plus_two_institution: string | null;
+  plus_two_passed_year: number | null;
+  bachelor_gpa: string | null;
+  bachelor_institution: string | null;
+  bachelor_passed_year: number | null;
+  masters_gpa: string | null;
+  masters_institution: string | null;
+  masters_passed_year: number | null;
+  ielts_score: string | null;
+  pte_score: string | null;
+  toefl_score: string | null;
+  sat_score: string | null;
+  gre_gmat_score: string | null;
   archive_reason: string | null;
   archived_by: string | null;
   archived_at: string | null;
@@ -218,6 +239,8 @@ export interface LeadList {
   color: string | null;
   access: { mode: "all" } | { mode: "allow"; positionIds: string[] };
   pipeline_id: string | null;
+  /** Groups this list under a sidebar funnel (it_agency only). Null = ungrouped. */
+  funnel_key: string | null;
   created_at: string;
   updated_at: string;
   count?: number;
@@ -309,6 +332,8 @@ export interface LeadNote {
   content: string;
   created_at: string;
   edited_at: string | null;
+  /** Phase 4C provenance — 'ai_assistant' when written by the AI assistant via create_lead_note, not a human. Optional/defaulted on the client: treat as human unless exactly 'ai_assistant'. */
+  created_via?: "human" | "ai_assistant";
 }
 
 export interface FormAttribution {
@@ -639,6 +664,10 @@ export interface Service {
 
 export type ProjectStatus = "planning" | "active" | "in_review" | "delivered" | "on_hold" | "cancelled";
 
+export type EngagementModel = "fixed_bid" | "time_materials" | "retainer" | "staff_aug";
+
+export type ProjectHealth = "green" | "amber" | "red";
+
 export interface Project {
   id: string;
   tenant_id: string;
@@ -650,6 +679,217 @@ export interface Project {
   notes: string | null;
   owner_id: string | null;
   deal_id: string | null;
+  created_at: string;
+  updated_at: string;
+  // Delivery Workflow Phase 1 — Brief/Qualify/Control (mig 128)
+  brief: string | null;
+  engagement_model: EngagementModel | null;
+  definition_of_done: string | null;
+  baseline_estimate_minutes: number | null;
+  current_estimate_minutes: number | null;
+  budget_amount: number | null;
+  start_date: string | null;
+  target_end_date: string | null;
+  health_override: ProjectHealth | null;
+  health_note: string | null;
+  qualified_at: string | null;
+  qualified_by: string | null;
+  // Deal/Proposal -> Project handoff (mig 134)
+  currency: string | null;
+  // Derived, only present on GET responses that compute them
+  pct_complete?: number;
+  health?: ProjectHealth;
+  actual_minutes?: number;
+}
+
+export type ProjectEventType =
+  | "brief_captured"
+  | "baseline_seeded_from_proposal"
+  | "scope_baseline_set"
+  | "plan_committed"
+  | "change_request_proposed"
+  | "change_request_approved"
+  | "change_request_rejected"
+  | "task_reconciled"
+  | "milestone_accepted"
+  | "milestone_rejected"
+  | "milestone_submitted"
+  | "milestone_started"
+  | "issue_raised"
+  | "issue_resolved"
+  | "status_published"
+  | "retro_lesson"
+  | "invoice_generated"
+  | "invoice_sent"
+  | "invoice_paid"
+  | "invoice_voided"
+  | "risk_raised"
+  | "risk_closed"
+  | "risk_occurred"
+  | string;
+
+export interface ProjectEvent {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  event_type: ProjectEventType;
+  actor_id: string | null;
+  summary: string | null;
+  payload: Record<string, unknown>;
+  subject_type: string | null;
+  subject_id: string | null;
+  occurred_at: string;
+  created_at: string;
+}
+
+export type MilestoneStatus = "pending" | "in_progress" | "submitted" | "accepted" | "rejected";
+
+export interface ProjectMilestone {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  due_date: string | null;
+  sort_order: number;
+  amount: number | null;
+  status: MilestoneStatus;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  rejection_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  // Invoicing spine (mig 133) — stamped when a generated invoice captures this milestone.
+  invoiced_at: string | null;
+}
+
+export type InvoiceStatus = "draft" | "sent" | "paid" | "void";
+
+export interface Invoice {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  account_id: string;
+  invoice_number: string;
+  status: InvoiceStatus;
+  currency: string;
+  subtotal: number;
+  tax_amount: number;
+  total: number;
+  issue_date: string | null;
+  due_date: string | null;
+  notes: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
+  voided_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  // joined (from API)
+  line_items?: InvoiceLineItem[];
+  projects?: { id: string; name: string } | null;
+}
+
+export interface InvoiceLineItem {
+  id: string;
+  tenant_id: string;
+  invoice_id: string;
+  milestone_id: string | null;
+  description: string;
+  quantity: number;
+  unit_price: number;
+  line_total: number;
+  sort_order: number;
+  created_at: string;
+}
+
+export type IssueKind = "query" | "issue" | "blocker";
+export type IssueSeverity = "low" | "medium" | "high";
+export type IssueStatus = "open" | "in_progress" | "resolved" | "closed";
+export type IssueSource = "internal" | "client";
+
+export interface ProjectIssue {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  kind: IssueKind;
+  severity: IssueSeverity;
+  status: IssueStatus;
+  source: IssueSource;
+  raised_by_label: string | null;
+  raised_by_contact_id: string | null;
+  assigned_to: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type RiskLevel = "low" | "medium" | "high";
+export type RiskStatus = "open" | "mitigating" | "closed" | "occurred";
+
+export interface ProjectRisk {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  probability: RiskLevel;
+  impact: RiskLevel;
+  mitigation: string | null;
+  owner_id: string | null;
+  status: RiskStatus;
+  review_date: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type ChangeRequestClassification = "in_scope" | "new_scope";
+export type ChangeRequestStatus = "proposed" | "approved" | "rejected";
+
+export interface ProjectChangeRequest {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  title: string;
+  description: string | null;
+  classification: ChangeRequestClassification;
+  estimate_delta_minutes: number;
+  budget_delta_amount: number | null;
+  status: ChangeRequestStatus;
+  client_approved: boolean;
+  origin_issue_id: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectStatusReport {
+  id: string;
+  tenant_id: string;
+  project_id: string;
+  report_date: string;
+  period_start: string | null;
+  period_end: string | null;
+  health_snapshot: ProjectHealth | null;
+  summary: string | null;
+  accomplishments: string | null;
+  in_progress: string | null;
+  risks: string | null;
+  asks: string | null;
+  client_message: string | null;
+  pct_complete_snapshot: number | null;
+  hours_actual_snapshot: number | null;
+  hours_estimate_snapshot: number | null;
+  is_client_visible: boolean;
+  public_token: string | null;
+  published_at: string | null;
+  published_by: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -692,12 +932,24 @@ export interface TimeEntry {
   notes: string | null;
   is_billable: boolean;
   rate_snapshot: number | null;
+  cost_rate_snapshot: number | null;
   approval_status: ApprovalStatus;
   approved_by: string | null;
   approved_at: string | null;
   rejection_reason: string | null;
+  source: "manual" | "timer";
   created_at: string;
   updated_at: string;
+}
+
+export interface ActiveTimer {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  task_id: string;
+  project_id: string;
+  started_at: string;
+  created_at: string;
 }
 
 // ============================================================
@@ -838,10 +1090,12 @@ export interface Application {
   tenant_id: string;
   lead_id: string;
   assigned_to: string | null;
+  created_by: string | null;
   university_name: string;
   program_name: string;
   intake_term: string | null;
   country: string | null;
+  countries: string[] | null;
   stage_id: string;
   status: string;
   offer_type: "conditional" | "unconditional" | null;
@@ -854,6 +1108,8 @@ export interface Application {
   agent_id: string | null;
   applied_date: string | null;
   intake_start_date: string | null;
+  degree_level: string | null;
+  field_of_study: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
@@ -959,6 +1215,8 @@ export interface Proposal {
   deleted_at: string | null;
   public_token: string | null;
   public_enabled: boolean;
+  // Deal/Proposal -> Project handoff (mig 134) — set once this proposal seeds a project.
+  project_id: string | null;
   // joined (from API)
   deals?: { id: string; name: string; currency: string } | null;
   line_items?: ProposalLineItem[];

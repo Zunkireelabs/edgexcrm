@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Clock, Loader2 } from "lucide-react";
+import { Clock, Loader2, ChevronRight } from "lucide-react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 
@@ -10,15 +10,20 @@ interface CheckInRecord {
   content: string;
   created_at: string;
   user_email: string;
+  user_id: string | null;
+  meet_with_id: string | null;
 }
 
 interface CheckInHistoryCardProps {
   leadId: string;
+  teamMemberNames: Record<string, string>;
+  teamMemberEmails: Record<string, string>;
 }
 
-export function CheckInHistoryCard({ leadId }: CheckInHistoryCardProps) {
+export function CheckInHistoryCard({ leadId, teamMemberNames, teamMemberEmails }: CheckInHistoryCardProps) {
   const [records, setRecords] = useState<CheckInRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const fetchHistory = useCallback(async () => {
     try {
@@ -35,6 +40,15 @@ export function CheckInHistoryCard({ leadId }: CheckInHistoryCardProps) {
     setLoading(true);
     fetchHistory().finally(() => setLoading(false));
   }, [fetchHistory]);
+
+  function toggleExpanded(id: string) {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   return (
     <Card className="shadow-none rounded-lg py-0">
@@ -63,15 +77,49 @@ export function CheckInHistoryCard({ leadId }: CheckInHistoryCardProps) {
           <div className="space-y-2">
             {records.map((record) => {
               const { date, time } = formatDateTime(record.created_at);
-              const reasonMatch = record.content.match(/— (.+)$/);
-              const reason = reasonMatch ? reasonMatch[1] : "Walk-in visit";
+              const reasonMatch = record.content.match(/— ([\s\S]+)$/);
+              const reason = reasonMatch ? reasonMatch[1] : null;
+              const isExpanded = expanded.has(record.id);
+              const checkedInBy =
+                (record.user_id && (teamMemberNames[record.user_id] ?? teamMemberEmails[record.user_id])) ??
+                record.user_email;
+              const metWith = record.meet_with_id
+                ? (teamMemberNames[record.meet_with_id] ?? teamMemberEmails[record.meet_with_id] ?? null)
+                : null;
+
+              const header = (
+                <p className="text-sm font-medium">
+                  {date} <span className="text-muted-foreground font-normal">at {time}</span>
+                </p>
+              );
+
               return (
                 <div key={record.id} className="border rounded-md p-3">
-                  <p className="text-sm font-medium">
-                    {date} <span className="text-muted-foreground font-normal">at {time}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{reason}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Checked in by {record.user_email}</p>
+                  {reason ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(record.id)}
+                      className="flex w-full items-center justify-between gap-2 cursor-pointer text-left"
+                    >
+                      {header}
+                      <ChevronRight
+                        className={`h-3.5 w-3.5 text-muted-foreground shrink-0 transition-transform ${isExpanded ? "rotate-90" : ""}`}
+                      />
+                    </button>
+                  ) : (
+                    header
+                  )}
+                  {reason ? (
+                    isExpanded && (
+                      <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">{reason}</p>
+                    )
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-0.5">Walk-in visit</p>
+                  )}
+                  {metWith && (
+                    <p className="text-xs text-muted-foreground mt-0.5">Met with {metWith}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-0.5">Checked in by {checkedInBy}</p>
                 </div>
               );
             })}

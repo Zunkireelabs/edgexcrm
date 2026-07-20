@@ -22,6 +22,31 @@ jobs:
           git fetch origin "${{ github.base_ref }}" --quiet
           BASE_REF="origin/${{ github.base_ref }}" bash scripts/check-migrations.sh
 
+  destructive-script-guard:
+    name: Destructive Script Guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No workflow may invoke a destructive data script
+        run: |
+          # scrub-stage-pii.sh rewrites customer names/phones/emails in place and
+          # is irreversible. It already refuses to target prod (no prod option +
+          # URL marker abort), but "cannot be run automatically at all" is a
+          # stronger guarantee than "refuses when asked". It is a human-run,
+          # supervised tool — never a pipeline step.
+          #
+          # Deliberately greps the workflow directory only: the script is allowed
+          # to exist, be reviewed and be documented; it just may never be wired
+          # into automation.
+          # --exclude=ci.yml so this guard doesn't match its own comments and
+          # error message. ci.yml runs only on pull_request and holds no
+          # database credentials, so it isn't a route to prod data anyway.
+          if grep -rn "scrub-stage-pii" .github/workflows/ --exclude=ci.yml; then
+            echo "::error::A workflow references the stage scrub script. It rewrites customer data irreversibly and must only ever be run by a human against local or stage. Remove the reference."
+            exit 1
+          fi
+          echo "OK — no workflow invokes a destructive data script."
+
   promotion-guard:
     name: Promotion Source Guard
     runs-on: ubuntu-latest
@@ -73,6 +98,8 @@ jobs:
       - run: npm ci
 
       - run: npx tsc --noEmit
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
 
   test:
     name: Test
@@ -115,3 +142,4 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          NODE_OPTIONS: --max-old-space-size=6144

@@ -4,16 +4,27 @@ import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getF
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
 import { canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
+import { CapitalRaiseDashboard } from "@/industries/real-estate/features/capital-raise/capital-raise-dashboard";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  // Education tenants have their own Insights → Dashboards surface — but only send
-  // users who can actually see it. Redirecting a user without insights nav access
-  // creates an infinite loop: /insights/dashboards bounces them straight back here.
+  // real_estate (CRE capital-raise) lands here on /dashboard and gets its own
+  // Capital-Raise Dashboard instead of the generic lead StatsCards/charts. This
+  // is an additive early return ABOVE all existing logic — every education /
+  // it_agency / generic path below is untouched and unreachable for real_estate.
+  if (tenantData.tenant.industry_id === "real_estate") {
+    return <CapitalRaiseDashboard />;
+  }
+
+  // Education and IT-agency tenants have their own Insights → Dashboards surface —
+  // but only send users who can actually see it. Redirecting a user without insights
+  // nav access creates an infinite loop: /insights/dashboards bounces them straight
+  // back here.
   if (
-    tenantData.tenant.industry_id === "education_consultancy" &&
+    (tenantData.tenant.industry_id === "education_consultancy" ||
+      tenantData.tenant.industry_id === "it_agency") &&
     canSeeNav(tenantData.permissions, "/insights/dashboards")
   ) {
     redirect("/insights/dashboards");

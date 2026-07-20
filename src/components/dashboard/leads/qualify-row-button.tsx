@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,12 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { LeadList } from "@/types/database";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 
 interface QualifyRowButtonProps {
   leadId: string;
@@ -41,13 +40,12 @@ export function QualifyRowButton({
   qualifiedList,
   onQualified,
 }: QualifyRowButtonProps) {
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [open, setOpen] = useState(false);
   const [dests, setDests] = useState<string[]>(currentDestinations);
   const [fieldOfStudy, setFieldOfStudy] = useState(currentFieldOfStudy ?? "");
   const [degreeLevel, setDegreeLevel] = useState(currentDegreeLevel ?? "");
   const [note, setNote] = useState("");
-  const [destOpen, setDestOpen] = useState(false);
   const [qualifying, setQualifying] = useState(false);
 
   function openDialog(e: React.MouseEvent) {
@@ -56,14 +54,7 @@ export function QualifyRowButton({
     setFieldOfStudy(currentFieldOfStudy ?? "");
     setDegreeLevel(currentDegreeLevel ?? "");
     setNote("");
-    setDestOpen(false);
     setOpen(true);
-  }
-
-  function toggleDest(dest: string) {
-    setDests((prev) =>
-      prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
-    );
   }
 
   async function handleSubmit() {
@@ -121,33 +112,13 @@ export function QualifyRowButton({
           </DialogHeader>
 
           <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Interested Destinations</p>
-              <button
-                type="button"
-                onClick={() => setDestOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background"
-              >
-                <span className={dests.length === 0 ? "text-muted-foreground" : ""}>
-                  {dests.length === 0 ? "Select destinations" : dests.join(", ")}
-                </span>
-                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${destOpen ? "rotate-180" : ""}`} />
-              </button>
-              {destOpen && (
-                <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background">
-                  {destOptions.map((dest) => (
-                    <div key={dest} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`qr-${dest}-${leadId}`}
-                        checked={dests.includes(dest)}
-                        onCheckedChange={() => toggleDest(dest)}
-                      />
-                      <label htmlFor={`qr-${dest}-${leadId}`} className="text-sm cursor-pointer">{dest}</label>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <DestinationsMultiSelect
+              selected={dests}
+              onChange={setDests}
+              options={destOptions}
+              label="Interested Destinations"
+              optional={false}
+            />
 
             <div className="space-y-1.5">
               <p className="text-sm font-medium">Field of Study</p>
@@ -176,8 +147,8 @@ export function QualifyRowButton({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

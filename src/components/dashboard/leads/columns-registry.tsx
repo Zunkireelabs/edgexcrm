@@ -38,6 +38,8 @@ export interface LeadColumnCtx {
   onStageChange?: (leadId: string, stageId: string) => Promise<void>;
   viewMode?: "trash" | "archived" | "normal";
   onRestore?: (leadId: string) => Promise<void>;
+  /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open (todo/in_progress) task. */
+  openTaskLeadIds?: Set<string>;
 }
 
 export interface LeadColumn {
@@ -88,9 +90,15 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
   );
 }
 
+const TAG_CLASSES_BY_VALUE: Record<string, string> = {
+  other: "bg-amber-100 text-amber-700 hover:bg-amber-200",
+  student: "bg-blue-100 text-blue-700 hover:bg-blue-200",
+};
+const TAG_LABELS_BY_VALUE: Record<string, string> = { other: "Other", student: "Student" };
+
 function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string[]) => void }) {
-  const currentTag = lead.tags?.includes("parent") ? "parent" : "student";
-  const nextTag = currentTag === "student" ? "parent" : "student";
+  const currentTag = lead.tags?.includes("other") ? "other" : "student";
+  const nextTag = currentTag === "student" ? "other" : "student";
 
   async function toggle() {
     const newTags = [nextTag];
@@ -110,14 +118,10 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
-        currentTag === "parent"
-          ? "bg-green-100 text-green-700 hover:bg-green-200"
-          : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-      }`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${TAG_CLASSES_BY_VALUE[currentTag]}`}
       title={`Click to change to ${nextTag}`}
     >
-      {currentTag === "parent" ? "Parent" : "Student"}
+      {TAG_LABELS_BY_VALUE[currentTag]}
     </button>
   );
 }
@@ -326,11 +330,18 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Location
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-        {lead.city || <span className="text-gray-400">—</span>}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the real column; fall back to the legacy custom_fields value
+      // for leads whose city answer was never promoted (form-submitted leads
+      // that posted it nested under custom_fields instead of top-level).
+      const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+      const city = lead.city || (typeof cf.city === "string" ? cf.city : null);
+      return (
+        <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
+          {city || <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
   },
 
   // ── assigned
@@ -474,17 +485,24 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Form Source
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-        {lead.form_source ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-            {lead.form_source}
-          </span>
-        ) : (
-          <span className="text-gray-400">—</span>
-        )}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the dedicated form_source column; fall back to intake_account
+      // (the page/slug the lead's form posted from) — the public Form
+      // Builder submit API never writes form_source, so this column would
+      // otherwise show blank for every one of those leads.
+      const display = lead.form_source || lead.intake_account;
+      return (
+        <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+          {display ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+              {display}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      );
+    },
   },
 
   // ── medium (intake_medium)
@@ -776,6 +794,74 @@ const STATIC_COLUMNS: LeadColumn[] = [
     },
   },
 
+  // ── data_completeness (Lead Processing funnel signal — structure only, no automation)
+  {
+    key: "data_completeness",
+    label: "Data Completeness",
+    group: "industry",
+    industries: ["it_agency"],
+    defaultVisible: true,
+    renderTh: () => (
+      <th key="data_completeness" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[120px]">
+        Completeness
+      </th>
+    ),
+    renderTd: (lead) => {
+      const fields = [lead.company_name, lead.prospect_industry, lead.designation, lead.company_email];
+      const filled = fields.filter((f) => !!f && String(f).trim() !== "").length;
+      const total = fields.length;
+      const pct = Math.round((filled / total) * 100);
+      return (
+        <td key="data_completeness" className="px-3 py-1.5 hidden md:table-cell">
+          <div className="flex items-center gap-1.5">
+            <div className="w-12 h-1.5 rounded-full bg-gray-200 overflow-hidden shrink-0">
+              <div
+                className={`h-full rounded-full ${pct === 100 ? "bg-emerald-500" : pct >= 50 ? "bg-amber-500" : "bg-gray-400"}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground tabular-nums">{filled}/{total}</span>
+          </div>
+        </td>
+      );
+    },
+  },
+
+  // ── next_task (Sales Leads "no next task" signal — structure only, no automated alerting)
+  {
+    key: "next_task",
+    label: "Next Task",
+    group: "industry",
+    industries: ["it_agency"],
+    defaultVisible: true,
+    renderTh: () => (
+      <th key="next_task" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[100px]">
+        Next Task
+      </th>
+    ),
+    renderTd: (lead, ctx) => {
+      if (!ctx.openTaskLeadIds) {
+        return <td key="next_task" className="px-3 py-1.5 hidden md:table-cell" />;
+      }
+      const hasOpenTask = ctx.openTaskLeadIds.has(lead.id);
+      return (
+        <td key="next_task" className="px-3 py-1.5 hidden md:table-cell">
+          {hasOpenTask ? (
+            <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+              On track
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs text-red-600 font-medium">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0" />
+              No next task
+            </span>
+          )}
+        </td>
+      );
+    },
+  },
+
   // ── assigned_role (universal; default-visible only in staging cockpit via extraDefaultVisibleKeys)
   {
     key: "assigned_role",
@@ -930,22 +1016,35 @@ export function getLeadColumns(
     return industryId != null && col.industries.includes(industryId);
   });
 
-  const customCols: LeadColumn[] = customFieldKeys.map((key) => ({
-    key: `cf:${key}`,
-    label: humanizeKey(key),
-    group: "custom" as const,
-    defaultVisible: false,
-    renderTh: () => (
-      <th key={`cf:${key}`} className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[120px]">
-        {humanizeKey(key)}
-      </th>
-    ),
-    renderTd: (lead) => (
-      <td key={`cf:${key}`} className="px-3 py-1.5 text-sm font-normal text-[#787871]">
-        {String(lead.custom_fields?.[key] ?? "") || <span className="text-gray-400">—</span>}
-      </td>
-    ),
-  }));
+  // "field_of_study" and "countries" were promoted to real leads columns
+  // (field_of_study, destinations — migration 059/087), but older leads may
+  // still only have the value in custom_fields. Prefer the real column so
+  // current write paths (check-in, add-lead) show up; fall back to the
+  // legacy custom_fields value so old data isn't hidden.
+  const PROMOTED_CF_VALUE: Record<string, (lead: Lead) => string> = {
+    field_of_study: (lead) => lead.field_of_study ?? "",
+    countries: (lead) => (lead.destinations ?? []).join(", "),
+  };
+
+  const customCols: LeadColumn[] = customFieldKeys.map((key) => {
+    const promoted = PROMOTED_CF_VALUE[key];
+    return {
+      key: `cf:${key}`,
+      label: humanizeKey(key),
+      group: "custom" as const,
+      defaultVisible: false,
+      renderTh: () => (
+        <th key={`cf:${key}`} className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[120px]">
+          {humanizeKey(key)}
+        </th>
+      ),
+      renderTd: (lead) => (
+        <td key={`cf:${key}`} className="px-3 py-1.5 text-sm font-normal text-[#787871]">
+          {(promoted?.(lead) || String(lead.custom_fields?.[key] ?? "")) || <span className="text-gray-400">—</span>}
+        </td>
+      ),
+    };
+  });
 
   return [...staticCols, ...customCols];
 }

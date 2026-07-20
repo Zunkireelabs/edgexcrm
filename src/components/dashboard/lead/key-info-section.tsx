@@ -6,13 +6,20 @@ import { prospectIndustryLabel, PROSPECT_INDUSTRIES } from "@/industries/it-agen
 import { TRIP_TYPES, tripTypeLabel } from "@/industries/travel-agency/leads/trip-types";
 import { formatMoney } from "@/lib/travel/currency";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import {
+  ACCREDITATION_BADGE,
+  ACCREDITATION_LABELS,
+  INVESTOR_TYPE_LABELS,
+  labelFor,
+  type AccreditationStatus,
+} from "@/industries/real-estate/lib/investor-fields";
+import { isOtherLead } from "@/lib/leads/lead-type";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -20,11 +27,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
+import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
+import { StageMoveSelector } from "@/components/dashboard/leads/stage-move-selector";
+import { ACADEMIC_LEVELS, TEST_TYPES } from "@/lib/leads/prospect-qualification";
 
 const CONTACT_METHODS = [
   { value: "phone", label: "Phone" },
@@ -61,6 +79,7 @@ interface LeadDraftSubset {
 
 interface KeyInfoSectionProps {
   lead: Lead;
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   currentStage?: PipelineStage;
   stageId: string | null;
@@ -68,8 +87,13 @@ interface KeyInfoSectionProps {
   teamMembers: TeamMember[];
   /** Pre-filtered assignable subset for the dropdown; falls back to teamMembers.filter(canEditLeads) if absent. */
   assignableMembers?: TeamMember[];
+  /** Admin/branch-manager (education): Assigned-To options scoped to the lead's CURRENT stage team.
+   *  Non-null overrides assignableMembers for the standalone Assigned-To dropdown. */
+  stageScopedAssignees?: { user_id: string; email: string; name?: string | null }[] | null;
   userId?: string;
   isAdmin: boolean;
+  /** admin OR the lead's assignee OR a lead collaborator — gates academic/test field edits. */
+  isEditor?: boolean;
   canEdit?: boolean;            // member with canEditLeads: can change stage even when not admin
   canAssign?: boolean;          // member with canAssignLeads: can set the assignee even when not admin
   onStageChange: (stageId: string) => void;
@@ -84,6 +108,13 @@ interface KeyInfoSectionProps {
   onLeadTypeChange?: (newType: string) => void;
   onListChange?: (listId: string, archiveReason?: string, assignToUserId?: string | null) => Promise<void>;
   nextPositionMembers?: { user_id: string; email: string; name?: string | null }[];
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
+  revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
   onSaveTripFields?: (fields: Record<string, unknown>) => Promise<void>;
@@ -97,14 +128,17 @@ interface KeyInfoSectionProps {
 
 export function KeyInfoSection({
   lead,
+  submissionHistory,
   stages,
   currentStage,
   stageId,
   assignedTo,
   teamMembers,
   assignableMembers,
+  stageScopedAssignees = null,
   userId,
   isAdmin,
+  isEditor,
   canEdit = false,
   canAssign = false,
   onStageChange,
@@ -127,9 +161,15 @@ export function KeyInfoSection({
   userBranchId,
   leadScope,
   nextPositionMembers,
+  revertTargetUserId,
+  revertTargetName,
+  revertTargetMembers,
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
 }: KeyInfoSectionProps) {
   const [isOpen, setIsOpen] = useState(true);
   const [leadType, setLeadType] = useState(lead.lead_type || "lead");
+  const [pendingStageId, setPendingStageId] = useState<string | null>(null);
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setLeadType(lead.lead_type || "lead"), [lead.lead_type]);
@@ -139,7 +179,12 @@ export function KeyInfoSection({
   // Ensure the currently-assigned member always appears in the dropdown,
   // even if they fall outside the caller's normal assignable chain scope
   // (e.g. a counselor assigned via check-in, viewed by a lead-executive).
-  const baseAssignable = assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false);
+  // stageScopedAssignees (admin/branch-manager, education) takes precedence over the
+  // chain-filtered assignableMembers — scopes Assigned-To to the lead's current stage team.
+  const stageScopedAsTeamMembers: TeamMember[] | null = stageScopedAssignees
+    ? stageScopedAssignees.map((m) => ({ id: m.user_id, user_id: m.user_id, role: "member", email: m.email, name: m.name }))
+    : null;
+  const baseAssignable = stageScopedAsTeamMembers ?? assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false);
   const resolvedAssignable =
     !assignedTo || baseAssignable.some((m) => m.user_id === assignedTo)
       ? baseAssignable
@@ -151,18 +196,28 @@ export function KeyInfoSection({
   );
   const isInIntakeList = currentLeadList?.is_intake ?? false;
 
-  // Stages scoped to this lead's pipeline, sorted by position.
-  const pipelineStages = stages
+  // Stages scoped to this lead's pipeline, sorted by position. When the lead's
+  // pipeline_id doesn't match any provided stage (data drift — e.g. a lead whose
+  // pipeline_id was never synced to its list's pipeline), fall back to the full
+  // stages prop (the lead's list-pipeline stages) so the Status control is never
+  // dead. Picking a stage then re-syncs pipeline_id via onStageChange.
+  const scopedStages = stages
     .filter((s) => s.pipeline_id === lead.pipeline_id)
     .sort((a, b) => a.position - b.position);
+  const pipelineStages =
+    scopedStages.length > 0 ? scopedStages : [...stages].sort((a, b) => a.position - b.position);
   const defaultPipelineStage =
     pipelineStages.find((s) => s.is_default) ?? pipelineStages[0];
   // When lead has no stage_id yet, show the pipeline's default/first stage.
   const effectiveStageId = stageId || defaultPipelineStage?.id || "";
 
+  // Other-tagged walk-ins (Contacts) never enter the pipeline/funnel — Status and
+  // Stage are meaningless for them (see excludeOtherType across Stages/Pipeline).
+  const isOtherContact = isOtherLead(lead.tags, industryId);
+
   // Custom fields
   const customFields = Object.entries(lead.custom_fields || {}).filter(
-    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key)
+    ([key, v]) => v != null && v !== "" && !isReservedCustomField(key, industryId)
   );
 
   return (
@@ -186,12 +241,44 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list */}
-          {!isInIntakeList && (
+          {/* ── INVESTOR badges — real_estate only (reads custom_fields, no fetch) ── */}
+          {industryId === "real_estate" && (() => {
+            const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+            const accred = cf.accreditation_status ? String(cf.accreditation_status) : null;
+            const invType = cf.investor_type ? String(cf.investor_type) : null;
+            return (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {accred && (
+                  <span
+                    className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                      ACCREDITATION_BADGE[accred as AccreditationStatus] ?? "bg-gray-100 text-gray-600"
+                    }`}
+                  >
+                    {labelFor(accred, ACCREDITATION_LABELS)}
+                  </span>
+                )}
+                {invType && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-700 font-medium">
+                    {labelFor(invType, INVESTOR_TYPE_LABELS)}
+                  </span>
+                )}
+                {!accred && !invType && (
+                  <span className="text-xs text-muted-foreground">No investor profile yet</span>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Status (pipeline stage) — hidden for leads in the intake/New Leads list,
+              and for Other-tagged Contacts (never in the pipeline). */}
+          {!isInIntakeList && !isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Status</p>
             {(isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
-              <Select value={effectiveStageId} onValueChange={onStageChange}>
+              <Select
+                value={effectiveStageId}
+                onValueChange={industryId === "education_consultancy" ? setPendingStageId : onStageChange}
+              >
                 <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Select stage" />
                 </SelectTrigger>
@@ -224,22 +311,38 @@ export function KeyInfoSection({
           </div>
           )}
 
-          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →] */}
-          {((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
+          {/* Stage (lead list) — arrow stepper: [← Revert] [Current] [Send to next →].
+              Skipped for Other-tagged Contacts — they don't have a real list/stage. */}
+          {!isOtherContact && ((leadLists && leadLists.length > 0) || industryId === "education_consultancy") && (
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">
                 {leadLists && leadLists.length > 0 ? "Stage" : "Lead Type"}
               </p>
-              {leadLists && leadLists.length > 0 && onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)) ? (
+              {leadLists && leadLists.length > 0 ? (
+                canMoveWithoutChain && onListChange ? (
+                  <StageMoveSelector
+                    currentListId={lead.list_id ?? null}
+                    activeLists={activeLeadLists ?? leadLists}
+                    accessibleLists={leadLists}
+                    stageAssigneeMap={stageAssigneeMap}
+                    onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
+                  />
+                ) : (
                 <ListStepper
+                  readOnly={!(onListChange && (isAdmin || leadScope === "team" || (canEdit && !!userId && userId === assignedTo)))}
                   currentListId={lead.list_id ?? null}
                   activeLists={activeLeadLists ?? leadLists}
                   accessibleLists={leadLists}
                   industryId={industryId}
-                  onMove={(listId, assignToUserId) => onListChange(listId, undefined, assignToUserId)}
+                  onMove={onListChange ? (listId, assignToUserId) => onListChange(listId, undefined, assignToUserId) : async () => {}}
                   onQualify={onQualify}
                   nextPositionMembers={nextPositionMembers}
+                  revertTargetUserId={revertTargetUserId}
+                  revertTargetName={revertTargetName}
+                  revertTargetMembers={revertTargetMembers}
+                  canRevertOverride={isAdmin || leadScope === "team"}
                 />
+                )
               ) : (
                 <div className="flex gap-1.5">
                   {["lead", "prospect"].map((t) => (
@@ -262,10 +365,16 @@ export function KeyInfoSection({
             </div>
           )}
 
-          {/* Assigned To */}
+          {/* Assigned To — skipped for Other-tagged walk-ins (not real pipeline leads,
+              so there's no counselor to assign). */}
+          {!isOtherContact && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Assigned To</p>
-            {isAdmin || canAssign ? (
+            {isAdmin ||
+            leadScope === "team" ||
+            (industryId === "education_consultancy"
+              ? canAssign && (!assignedTo || userId === assignedTo)
+              : canAssign) ? (
               <Select
                 value={assignedTo || "unassigned"}
                 onValueChange={onAssignmentChange}
@@ -311,9 +420,13 @@ export function KeyInfoSection({
               </div>
             )}
           </div>
+          )}
 
-          {/* Lead Collaborators — visible to all, editable by admin/owner only */}
-          <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+          {/* Lead Collaborators — visible to all, editable by admin/owner only.
+              Skipped for Other-tagged walk-ins (no collaboration flow for Contacts). */}
+          {!isOtherContact && (
+            <CollaboratorsBlock leadId={lead.id} teamMembers={teamMembers} canManage={isAdmin} />
+          )}
 
           {/* Branches */}
           {maxBranches && maxBranches > 1 && (
@@ -325,16 +438,19 @@ export function KeyInfoSection({
             />
           )}
 
-          {/* ── STUDY INTEREST — education_consultancy only ─────────── */}
-          {industryId === "education_consultancy" && (
+          {/* ── STUDY INTEREST — education_consultancy only, skipped for Other-tagged
+              walk-ins (Contacts) since they aren't applying to study anywhere. */}
+          {industryId === "education_consultancy" && !lead.tags?.includes("other") && (
             <StudyInterestPanel
               lead={lead}
               isAdmin={isAdmin}
+              isEditor={isEditor ?? isAdmin}
               onSave={onSaveStudyFields}
+              submissionHistory={submissionHistory}
             />
           )}
 
-          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} />
+          <LeadSourcePanel lead={lead} isAdmin={isAdmin} onSave={onSaveSourceFields} submissionHistory={submissionHistory} />
 
           {/* ── COMPANY — it_agency only ──────────────────────────── */}
           {industryId === "it_agency" && isEditing && draft ? (
@@ -560,6 +676,37 @@ export function KeyInfoSection({
           )}
         </div>
       )}
+
+      {/* Status-change confirmation */}
+      <Dialog
+        open={!!pendingStageId}
+        onOpenChange={(v) => { if (!v) setPendingStageId(null); }}
+      >
+        <DialogContent className="max-w-md sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Change status to{" "}
+              {pipelineStages.find((s) => s.id === pendingStageId)?.name ?? ""}?
+            </DialogTitle>
+            <DialogDescription>
+              This updates the lead&apos;s pipeline stage.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPendingStageId(null)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingStageId) onStageChange(pendingStageId);
+                setPendingStageId(null);
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -569,37 +716,64 @@ export function KeyInfoSection({
 interface StudyInterestPanelProps {
   lead: Lead;
   isAdmin: boolean;
+  isEditor?: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) {
+function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory }: StudyInterestPanelProps) {
+  const canEditPanel = isEditor ?? isAdmin;
   const leadWithEdu = lead as {
     destinations?: string[] | null;
     field_of_study?: string | null;
     degree_level?: string | null;
   };
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
 
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
+  const distinctFieldOfStudy = getDistinctFormValues(cf, submissionHistory, "field_of_study");
+  const distinctDegreeLevel = getDistinctFormValues(cf, submissionHistory, "education_level");
+  const effectiveDestinations: string[] =
+    (leadWithEdu.destinations?.length ?? 0) > 0
+      ? (leadWithEdu.destinations ?? [])
+      : getDistinctFormValues(cf, submissionHistory, "countries");
+  const effectiveFieldOfStudy = leadWithEdu.field_of_study || distinctFieldOfStudy.join(", ") || null;
+  const effectiveDegreeLevel = leadWithEdu.degree_level || distinctDegreeLevel.join(", ") || null;
+
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [destOpen, setDestOpen] = useState(false);
   const [draftDests, setDraftDests] = useState<string[]>(leadWithEdu.destinations ?? []);
   const [draftField, setDraftField] = useState(leadWithEdu.field_of_study ?? "");
   const [draftDegree, setDraftDegree] = useState(leadWithEdu.degree_level ?? "");
+  const [draftAcademics, setDraftAcademics] = useState<Record<string, string>>({});
+  const [draftTestScores, setDraftTestScores] = useState<Record<string, string>>({});
+  const leadRecord = lead as unknown as Record<string, unknown>;
 
+  // Seed the draft from the values actually shown on screen (effective*),
+  // not the raw columns — those are often empty on form-submitted leads,
+  // whose real answers only exist via the submission-history fallback above.
+  // Seeding from the empty raw columns meant Save silently erased them.
   function openEdit() {
-    setDraftDests(leadWithEdu.destinations ?? []);
-    setDraftField(leadWithEdu.field_of_study ?? "");
-    setDraftDegree(leadWithEdu.degree_level ?? "");
-    setDestOpen(false);
+    setDraftDests(effectiveDestinations);
+    setDraftField(leadWithEdu.field_of_study || distinctFieldOfStudy[0] || "");
+    setDraftDegree(leadWithEdu.degree_level || distinctDegreeLevel[0] || "");
+    const academics: Record<string, string> = {};
+    for (const level of ACADEMIC_LEVELS) {
+      academics[`${level.key}_gpa`] = String(leadRecord[`${level.key}_gpa`] ?? "");
+      academics[`${level.key}_institution`] = String(leadRecord[`${level.key}_institution`] ?? "");
+      academics[`${level.key}_passed_year`] = String(leadRecord[`${level.key}_passed_year`] ?? "");
+    }
+    setDraftAcademics(academics);
+    const testScores: Record<string, string> = {};
+    for (const t of TEST_TYPES) {
+      testScores[`${t.key}_score`] = String(leadRecord[`${t.key}_score`] ?? "");
+    }
+    setDraftTestScores(testScores);
     setEditing(true);
   }
 
-  function toggleDest(d: string) {
-    setDraftDests((prev) =>
-      prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d]
-    );
-  }
 
   async function handleSave() {
     if (!onSave) return;
@@ -609,6 +783,8 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         destinations: draftDests,
         field_of_study: draftField || null,
         degree_level: draftDegree || null,
+        ...draftAcademics,
+        ...draftTestScores,
       });
       setEditing(false);
     } finally {
@@ -617,9 +793,21 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
   }
 
   const hasAny =
-    (leadWithEdu.destinations?.length ?? 0) > 0 ||
-    leadWithEdu.field_of_study ||
-    leadWithEdu.degree_level;
+    effectiveDestinations.length > 0 ||
+    effectiveFieldOfStudy ||
+    effectiveDegreeLevel;
+
+  const academicLevelRows = ACADEMIC_LEVELS.map((level) => ({
+    level,
+    gpa: String(leadRecord[`${level.key}_gpa`] ?? "").trim(),
+    institution: String(leadRecord[`${level.key}_institution`] ?? "").trim(),
+    passedYear: String(leadRecord[`${level.key}_passed_year`] ?? "").trim(),
+  })).filter((r) => r.gpa || r.institution || r.passedYear);
+  const testScoreRows = TEST_TYPES.map((t) => ({
+    test: t,
+    score: String(leadRecord[`${t.key}_score`] ?? "").trim(),
+  })).filter((r) => r.score);
+  const hasAcademicData = academicLevelRows.length > 0 || testScoreRows.length > 0;
 
   return (
     <>
@@ -628,7 +816,7 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
           Study Interest
         </p>
-        {isAdmin && !editing && (
+        {canEditPanel && !editing && (
           <button
             type="button"
             onClick={openEdit}
@@ -642,33 +830,13 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
       {editing ? (
         <div className="space-y-2">
           {/* Destinations multi-select */}
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Interested Destinations</p>
-            <button
-              type="button"
-              onClick={() => setDestOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-2 py-1.5 border border-input rounded text-xs bg-background"
-            >
-              <span className={draftDests.length === 0 ? "text-muted-foreground" : ""}>
-                {draftDests.length === 0 ? "Select destinations" : draftDests.join(", ")}
-              </span>
-              <ChevronDown className={`h-3 w-3 text-muted-foreground transition-transform ${destOpen ? "rotate-180" : ""}`} />
-            </button>
-            {destOpen && (
-              <div className="mt-1 border border-input rounded p-2 grid grid-cols-2 gap-1 bg-background">
-                {destOptions.map((dest) => (
-                  <div key={dest} className="flex items-center gap-1.5">
-                    <Checkbox
-                      id={`kd-${dest}`}
-                      checked={draftDests.includes(dest)}
-                      onCheckedChange={() => toggleDest(dest)}
-                    />
-                    <label htmlFor={`kd-${dest}`} className="text-xs cursor-pointer">{dest}</label>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+          <DestinationsMultiSelect
+            selected={draftDests}
+            onChange={setDraftDests}
+            options={destOptions}
+            label="Interested Destinations"
+            optional={false}
+          />
           {/* Field of Study */}
           <div>
             <p className="text-xs text-muted-foreground mb-1">Field of Study</p>
@@ -683,6 +851,12 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select field</span>
                 </SelectItem>
+                {/* Free-text answer from a form submission that isn't one of
+                    the canonical options — show it as-is so the trigger
+                    doesn't look blank for a lead that actually has data. */}
+                {draftField && !fieldsOfStudy.includes(draftField) && (
+                  <SelectItem value={draftField}>{draftField}</SelectItem>
+                )}
                 {fieldsOfStudy.map((f) => (
                   <SelectItem key={f} value={f}>{f}</SelectItem>
                 ))}
@@ -703,11 +877,74 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
                 <SelectItem value="__none__">
                   <span className="text-muted-foreground">Select level</span>
                 </SelectItem>
-                {DEGREE_LEVELS.map((d) => (
-                  <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                {/* Same free-text fallback as Field of Study above. */}
+                {draftDegree && !studyLevels.includes(draftDegree) && (
+                  <SelectItem value={draftDegree}>{draftDegree}</SelectItem>
+                )}
+                {studyLevels.map((lvl) => (
+                  <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
+          </div>
+          {/* Academic Qualification */}
+          <div className="pt-1 space-y-2">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              Academic Qualification
+            </p>
+            {ACADEMIC_LEVELS.map((level) => (
+              <div key={level.key} className="space-y-1">
+                <p className="text-xs text-muted-foreground">{level.label}</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="%/GPA"
+                    value={draftAcademics[`${level.key}_gpa`] || ""}
+                    onChange={(e) =>
+                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_gpa`]: e.target.value }))
+                    }
+                  />
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="School / College"
+                    value={draftAcademics[`${level.key}_institution`] || ""}
+                    onChange={(e) =>
+                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_institution`]: e.target.value }))
+                    }
+                  />
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Passed year"
+                    inputMode="numeric"
+                    value={draftAcademics[`${level.key}_passed_year`] || ""}
+                    onChange={(e) =>
+                      setDraftAcademics((prev) => ({ ...prev, [`${level.key}_passed_year`]: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          {/* Test Report & Score */}
+          <div className="pt-1 space-y-2">
+            <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+              Test Report &amp; Score
+            </p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {TEST_TYPES.map((t) => (
+                <div key={t.key} className="space-y-1">
+                  <p className="text-xs text-muted-foreground">{t.label}</p>
+                  <Input
+                    className="h-7 text-xs"
+                    placeholder="Score"
+                    value={draftTestScores[`${t.key}_score`] || ""}
+                    onChange={(e) =>
+                      setDraftTestScores((prev) => ({ ...prev, [`${t.key}_score`]: e.target.value }))
+                    }
+                  />
+                </div>
+              ))}
+            </div>
           </div>
           <div className="flex gap-2 pt-1">
             <Button size="sm" className="h-7 text-xs flex-1" onClick={handleSave} disabled={saving}>
@@ -726,11 +963,11 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
         </div>
       ) : hasAny ? (
         <div className="space-y-2">
-          {(leadWithEdu.destinations?.length ?? 0) > 0 && (
+          {effectiveDestinations.length > 0 && (
             <div>
               <p className="text-xs text-muted-foreground">Destinations</p>
               <div className="flex flex-wrap gap-1 mt-0.5">
-                {(leadWithEdu.destinations ?? []).map((d) => (
+                {effectiveDestinations.map((d) => (
                   <span key={d} className="px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">
                     {d}
                   </span>
@@ -738,17 +975,46 @@ function StudyInterestPanel({ lead, isAdmin, onSave }: StudyInterestPanelProps) 
               </div>
             </div>
           )}
-          {leadWithEdu.field_of_study && (
-            <InfoRow label="Field of Study" value={leadWithEdu.field_of_study} />
+          {effectiveFieldOfStudy && (
+            <InfoRow label="Field of Study" value={effectiveFieldOfStudy} />
           )}
-          {leadWithEdu.degree_level && (
-            <InfoRow label="Degree Level" value={leadWithEdu.degree_level} />
+          {effectiveDegreeLevel && (
+            <InfoRow label="Degree Level" value={effectiveDegreeLevel} />
           )}
         </div>
       ) : (
         <p className="text-xs text-muted-foreground italic">
-          No study details yet.{isAdmin ? " Click Edit to add." : ""}
+          No study details yet.{canEditPanel ? " Click Edit to add." : ""}
         </p>
+      )}
+
+      {!editing && hasAcademicData && (
+        <div className="space-y-2 pt-1">
+          {academicLevelRows.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Academic Qualification
+              </p>
+              {academicLevelRows.map(({ level, gpa, institution, passedYear }) => (
+                <InfoRow
+                  key={level.key}
+                  label={level.label}
+                  value={[gpa, institution, passedYear].filter(Boolean).join(" · ") || "—"}
+                />
+              ))}
+            </div>
+          )}
+          {testScoreRows.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">
+                Test Report &amp; Score
+              </p>
+              {testScoreRows.map(({ test, score }) => (
+                <InfoRow key={test.key} label={test.label} value={score} />
+              ))}
+            </div>
+          )}
+        </div>
       )}
     </>
   );
@@ -760,9 +1026,10 @@ interface LeadSourcePanelProps {
   lead: Lead;
   isAdmin: boolean;
   onSave?: (fields: Record<string, unknown>) => Promise<void>;
+  submissionHistory?: LeadSubmissionSnapshot[];
 }
 
-function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
+function LeadSourcePanel({ lead, isAdmin, onSave, submissionHistory }: LeadSourcePanelProps) {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [draftSource, setDraftSource] = useState(lead.intake_source ?? "");
@@ -771,20 +1038,33 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
   const [draftCampaign, setDraftCampaign] = useState(lead.intake_campaign ?? "");
   const [affiliateName, setAffiliateName] = useState<string | null>(null);
 
+  // Fall back to every distinct answer this lead has given across repeat form
+  // submissions when the dedicated column is empty (form-submitted leads).
+  const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+  const distinctSourceChannel = getDistinctFormValues(cf, submissionHistory, "source");
+  const distinctRefCode = getDistinctFormValues(cf, submissionHistory, "ref_code");
+  const sourceChannel = lead.intake_medium || distinctSourceChannel.join(", ") || "—";
+  const refCode = lead.ref_code || distinctRefCode.join(", ") || null;
+  // Affiliate lookup needs one concrete code to match against — the raw
+  // column, or the single distinct value from submission history. A lead
+  // with multiple *different* ref codes across submissions has no single
+  // affiliate to resolve, so it's skipped rather than guessed at.
+  const singleRefCode = lead.ref_code || (distinctRefCode.length === 1 ? distinctRefCode[0] : null);
+
   useEffect(() => {
-    if (!lead.ref_code) return;
+    if (!singleRefCode) return;
     fetch("/api/v1/affiliates")
       .then((r) => r.json())
       .then((json) => {
-        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === lead.ref_code);
+        const match = (json.data ?? []).find((a: { ref_code: string; name: string }) => a.ref_code === singleRefCode);
         if (match) setAffiliateName(match.name);
       })
       .catch(() => null);
-  }, [lead.ref_code]);
+  }, [singleRefCode]);
 
   function openEdit() {
     setDraftSource(lead.intake_source ?? "");
-    setDraftMedium(lead.intake_medium ?? "");
+    setDraftMedium(lead.intake_medium || distinctSourceChannel[0] || "");
     setDraftAccount(lead.intake_account ?? "");
     setDraftCampaign(lead.intake_campaign ?? "");
     setEditing(true);
@@ -880,14 +1160,14 @@ function LeadSourcePanel({ lead, isAdmin, onSave }: LeadSourcePanelProps) {
       ) : (
         <div className="space-y-2">
           <InfoRow label="Source Category" value={lead.intake_source || "—"} />
-          <InfoRow label="Source Channel" value={lead.intake_medium || "—"} />
+          <InfoRow label="Source Channel" value={sourceChannel} />
           <InfoRow label="Source Page / Account" value={lead.intake_account || "—"} />
           <InfoRow label="Campaign" value={lead.intake_campaign || "—"} />
           {lead.form_source && <InfoRow label="Form Source" value={lead.form_source} />}
-          {lead.ref_code && (
+          {refCode && (
             <InfoRow
               label="Ref Code"
-              value={affiliateName ? `${lead.ref_code} · ${affiliateName}` : lead.ref_code}
+              value={affiliateName ? `${refCode} · ${affiliateName}` : refCode}
             />
           )}
         </div>

@@ -43,18 +43,26 @@ import {
 import { ContactCard } from "@/components/dashboard/lead/contact-card";
 import { ConsentCard } from "../components/consent-card";
 import { StatusBadge } from "../components/status-badge";
-import { StageStepper } from "../components/stage-stepper";
-import { ApplicationActivityTimeline } from "../components/application-activity-timeline";
+import { StageStepperHorizontal } from "../components/stage-stepper-horizontal";
+import { ApplicationTabs } from "../components/application-tabs";
+import { AutocompleteInput } from "../components/autocomplete-input";
+import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
+import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 
-const COUNTRIES = [
-  "Australia", "Canada", "China", "France", "Germany", "India", "Japan",
-  "Nepal", "New Zealand", "Singapore", "UAE", "United Kingdom", "United States", "Other",
-];
-
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
+
+// Settings-managed lookup values (intake month/year names) are admin-editable
+// free text, not developer-controlled constants — they must be escaped
+// before being interpolated into a RegExp pattern, or a name containing a
+// metacharacter (e.g. "*Fall*") throws SyntaxError at match time.
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "—";
@@ -84,6 +92,7 @@ interface ApplicationDetailPageProps {
   activityTimeline: LeadActivity[];
   canEdit: boolean;
   canDelete: boolean;
+  currentUserId: string;
 }
 
 export function ApplicationDetailPage({
@@ -93,6 +102,7 @@ export function ApplicationDetailPage({
   activityTimeline,
   canEdit,
   canDelete,
+  currentUserId,
 }: ApplicationDetailPageProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -115,8 +125,29 @@ export function ApplicationDetailPage({
   // Editable detail fields (lifted from application-detail-sheet.tsx)
   const [universityName, setUniversityName] = useState("");
   const [programName, setProgramName] = useState("");
-  const [intakeTerm, setIntakeTerm] = useState("");
-  const [country, setCountry] = useState("");
+  const [intakeMonth, setIntakeMonth] = useState("");
+  const [intakeYear, setIntakeYear] = useState("");
+  // True only once the admin actually changes one of the Month/Year dropdowns
+  // during this edit session. Guards against saveEdit() silently overwriting
+  // a legacy free-text intake_term (e.g. "Sep 2026", an Excel date serial)
+  // that the dropdown pre-fill couldn't cleanly parse back — see startEdit().
+  const [intakeTouched, setIntakeTouched] = useState(false);
+  // True when the original intake_term had real content but startEdit()
+  // couldn't confidently parse BOTH Month and Year out of it (e.g. "Sep 2026"
+  // — abbreviated month, only the year matches). In this case touching just
+  // one dropdown must not be allowed to synthesize a value that silently
+  // drops the half that never made it into the UI — see saveEdit().
+  const [intakeLegacyAmbiguous, setIntakeLegacyAmbiguous] = useState(false);
+  // Set when the legacy intake_term's year parses cleanly but predates the
+  // Settings-managed intake_years rolling window (e.g. a migrated "September
+  // 2019" record). We still know the exact value — there's no need to guess
+  // or block forever — so it's injected as an extra selectable Year option
+  // for this edit session instead of being unrepresentable, which would
+  // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
+  const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
+  const [countries, setCountries] = useState<string[]>([]);
+  const [degreeLevel, setDegreeLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [deadline, setDeadline] = useState("");
   const [offerType, setOfferType] = useState<"" | "conditional" | "unconditional">("");
   const [offerLetterUrl, setOfferLetterUrl] = useState("");
@@ -127,9 +158,27 @@ export function ApplicationDetailPage({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
-  const [agents, setAgents] = useState<{ id: string; name: string; agent_type: string }[]>([]);
-  const [assignedTo, setAssignedTo] = useState("");
-  const [teamMembers, setTeamMembers] = useState<{ user_id: string; name: string; email: string }[]>([]);
+  const {
+    agents, partnerColleges, countries: countryOptions, intakeMonths, intakeYears,
+    createPartnerCollege, createProgram, fetchDistinctProgramNames,
+  } = useApplicationReferenceData();
+  const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
+  const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
+  const [pendingUniversityName, setPendingUniversityName] = useState("");
+
+  // Colleges tagged to any of the selected countries (+ untagged) rank first;
+  // every college stays selectable so the autocomplete's dedupe check never
+  // misses one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, countries);
+
+  // Settings' normal rolling window, plus the current application's own
+  // out-of-window legacy year if it has one — so it's an actual selectable
+  // option (see intakeYearLegacyOutOfRange above) instead of silently unable
+  // to satisfy the save guard.
+  const yearOptions =
+    intakeYearLegacyOutOfRange && !intakeYears.includes(intakeYearLegacyOutOfRange)
+      ? [intakeYearLegacyOutOfRange, ...intakeYears]
+      : intakeYears;
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
   const progress = computeProgress(stages, application.stage_id);
@@ -137,13 +186,10 @@ export function ApplicationDetailPage({
   const leadId =
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
 
-  // Fetch agents for the detail edit dropdown
-  useEffect(() => {
-    fetch("/api/v1/agents")
-      .then((r) => r.ok ? r.json() : null)
-      .then((j) => { if (j?.data) setAgents(j.data); })
-      .catch(() => {});
-  }, []);
+  async function handleCreateCollege(name: string) {
+    setPendingUniversityName(name);
+    setAddUniversityDialogOpen(true);
+  }
 
   // Fetch team member emails for timeline display
   useEffect(() => {
@@ -152,15 +198,12 @@ export function ApplicationDetailPage({
       .then((j) => {
         const emails: Record<string, string> = {};
         const names: Record<string, string> = {};
-        const members: { user_id: string; name: string; email: string }[] = [];
         for (const m of j.data ?? []) {
           if (m.user_id && m.email) emails[m.user_id] = m.email;
           if (m.user_id && m.name) names[m.user_id] = m.name;
-          if (m.user_id) members.push({ user_id: m.user_id, name: m.name ?? m.email ?? m.user_id, email: m.email ?? "" });
         }
         setTeamMemberEmails(emails);
         setTeamMemberNames(names);
-        setTeamMembers(members);
       })
       .catch(() => {});
   }, []);
@@ -168,8 +211,42 @@ export function ApplicationDetailPage({
   function startEdit() {
     setUniversityName(application.university_name ?? "");
     setProgramName(application.program_name ?? "");
-    setIntakeTerm(application.intake_term ?? "");
-    setCountry(application.country ?? "");
+    // Best-effort: existing intake_term values are inconsistent free text
+    // ("Sep 2026", "September", "SEP-2026", a stray Excel date serial, etc.)
+    // from before this became a dropdown. Only pre-fill Month/Year when the
+    // old value clearly matches a known month (full name OR standard
+    // 3-letter abbreviation — real prod data is full of the latter) and a
+    // 4-digit year; otherwise leave both blank for the admin to pick fresh
+    // rather than guess wrong.
+    const raw = application.intake_term ?? "";
+    const matchedMonth = intakeMonths.find((m) => {
+      // Word-boundary-based, not a plain substring test — a bare full name
+      // OR its 3-letter abbreviation can otherwise false-positive inside an
+      // unrelated word ("Marching Band Fee" contains "march" as a literal
+      // substring), which would wrongly mark a genuinely-unmatched legacy
+      // value as a trustworthy, unambiguous parse. `intakeMonths` entries are
+      // admin-editable free text (only required+maxLength validated), so
+      // they're escaped before being interpolated into the pattern — an
+      // unescaped regex metacharacter in a custom month name would otherwise
+      // throw here and break the Edit button for every application.
+      const escaped = escapeRegExp(m);
+      if (new RegExp(`\\b${escaped}\\b`, "i").test(raw)) return true;
+      return new RegExp(`\\b${escapeRegExp(m.slice(0, 3))}\\b`, "i").test(raw);
+    });
+    const rawYear = raw.match(/\b(20\d{2})\b/)?.[1];
+    // A cleanly-parsed year outside Settings' rolling window (e.g. a
+    // migrated record's "2019") is still a known, exact value — pre-fill it
+    // and inject it as an extra Year option (see yearOptions above) rather
+    // than leaving it blank and unrepresentable, which would otherwise make
+    // the ambiguity guard below permanently unsatisfiable for this record.
+    setIntakeMonth(matchedMonth ?? "");
+    setIntakeYear(rawYear ?? "");
+    setIntakeYearLegacyOutOfRange(rawYear && !intakeYears.includes(rawYear) ? rawYear : null);
+    setIntakeTouched(false);
+    setIntakeLegacyAmbiguous(raw.trim() !== "" && (matchedMonth == null || rawYear == null));
+    setCountries(application.countries ?? []);
+    setDegreeLevel(application.degree_level ?? "");
+    setFieldOfStudy(application.field_of_study ?? "");
     setDeadline(application.application_deadline ?? "");
     setOfferType((application.offer_type as "" | "conditional" | "unconditional") ?? "");
     setOfferLetterUrl(application.offer_letter_url ?? "");
@@ -180,20 +257,39 @@ export function ApplicationDetailPage({
     setAgentId(application.agent_id ?? "");
     setAppliedDate(application.applied_date ?? "");
     setIntakeStartDate(application.intake_start_date ?? "");
-    setAssignedTo(application.assigned_to ?? "");
     setEditing(true);
   }
 
   async function saveEdit() {
     if (!universityName.trim()) { toast.error("University name is required"); return; }
     if (!programName.trim()) { toast.error("Program name is required"); return; }
+    // The original intake_term had content that couldn't be fully split into
+    // Month + Year (e.g. "Sep 2026" — abbreviated month). Touching only one
+    // of the two dropdowns is not enough information to safely replace it:
+    // saving now would silently drop whichever half never got parsed. Block
+    // until both are set, instead of quietly truncating real application data.
+    if (intakeTouched && intakeLegacyAmbiguous && !(intakeMonth && intakeYear)) {
+      toast.error("Original Intake Term (\"" + (application.intake_term ?? "") + "\") couldn't be fully read into Month + Year — please set both before saving.");
+      return;
+    }
     setSaving(true);
     try {
+      // Only overwrite intake_term if the admin actually changed Month/Year
+      // this session — otherwise preserve the original value untouched, even
+      // if it's legacy free text startEdit() couldn't cleanly parse back into
+      // the dropdowns. Prevents an unrelated field edit (e.g. Deadline) from
+      // silently truncating or nulling a real intake date.
+      const intakeTermPatch = intakeTouched
+        ? [intakeMonth, intakeYear].filter(Boolean).join(" ") || null
+        : application.intake_term;
+
       const patch: Record<string, unknown> = {
         university_name: universityName.trim(),
         program_name: programName.trim(),
-        intake_term: intakeTerm.trim() || null,
-        country: country.trim() || null,
+        intake_term: intakeTermPatch,
+        countries,
+        degree_level: degreeLevel && degreeLevel !== "__none__" ? degreeLevel : null,
+        field_of_study: fieldOfStudy && fieldOfStudy !== "__none__" ? fieldOfStudy : null,
         application_deadline: deadline || null,
         offer_type: offerType || null,
         offer_letter_url: offerLetterUrl.trim() || null,
@@ -204,7 +300,6 @@ export function ApplicationDetailPage({
         agent_id: agentId && agentId !== "__none__" ? agentId : null,
         applied_date: appliedDate || null,
         intake_start_date: intakeStartDate || null,
-        assigned_to: assignedTo && assignedTo !== "__none__" ? assignedTo : null,
       };
 
       const res = await fetch(`/api/v1/applications/${application.id}`, {
@@ -278,6 +373,22 @@ export function ApplicationDetailPage({
         </Link>
       </Button>
 
+      {/* Application Stage — horizontal stepper */}
+      <Card className="border shadow-none rounded-lg">
+        <CardContent className="p-5">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            Application Stage
+          </p>
+          <StageStepperHorizontal
+            stages={stages}
+            currentStageId={application.stage_id}
+            applicationId={application.id}
+            canManage={canEdit}
+            onStageChange={handleStageChange}
+          />
+        </CardContent>
+      </Card>
+
       {/* 3-column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(220px,260px)_minmax(0,1fr)_minmax(320px,380px)] gap-6 items-start">
 
@@ -312,10 +423,10 @@ export function ApplicationDetailPage({
                     <span className="text-xs">{fullLead.intake_source}</span>
                   </div>
                 )}
-                {/* Counselor */}
+                {/* Assigned To */}
                 <div className="flex items-center gap-2 text-sm">
                   <Users className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <span className="text-muted-foreground text-xs">Counselor:</span>
+                  <span className="text-muted-foreground text-xs">Assigned To:</span>
                   <span className="text-xs truncate">
                     {fullLead.assigned_to
                       ? (teamMemberNames[fullLead.assigned_to] ?? teamMemberEmails[fullLead.assigned_to] ?? "Unassigned")
@@ -403,10 +514,10 @@ export function ApplicationDetailPage({
                     {application.intake_term && (
                       <span className="text-xs text-muted-foreground">{application.intake_term}</span>
                     )}
-                    {application.country && (
+                    {application.countries && application.countries.length > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        {application.country}
+                        {application.countries.join(", ")}
                       </span>
                     )}
                     {application.application_deadline && (
@@ -447,31 +558,15 @@ export function ApplicationDetailPage({
             </CardContent>
           </Card>
 
-          {/* Stage stepper */}
+          {/* Activity / Notes / Emails / Calls / Tasks / Meetings */}
           <Card className="border shadow-none rounded-lg">
             <CardContent className="p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                Application Stage
-              </p>
-              <StageStepper
-                stages={stages}
-                currentStageId={application.stage_id}
+              <ApplicationTabs
                 applicationId={application.id}
-                canManage={canEdit}
-                onStageChange={handleStageChange}
-              />
-            </CardContent>
-          </Card>
-
-          {/* Activity timeline */}
-          <Card className="border shadow-none rounded-lg">
-            <CardContent className="p-5">
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-4">
-                Activity
-              </p>
-              <ApplicationActivityTimeline
                 timeline={activityTimeline}
                 teamMemberEmails={teamMemberEmails}
+                teamMemberNames={teamMemberNames}
+                currentUserId={currentUserId}
               />
             </CardContent>
           </Card>
@@ -521,32 +616,35 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Application Executive */}
+              {/* Created by */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Application Executive</Label>
-                {editing && canEdit ? (
-                  <Select
-                    value={assignedTo || "__none__"}
-                    onValueChange={(v) => setAssignedTo(v === "__none__" ? "" : v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Unassigned" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">Unassigned</SelectItem>
-                      {teamMembers.map((m) => (
-                        <SelectItem key={m.user_id} value={m.user_id}>
-                          {m.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <Label className="text-xs text-muted-foreground">Created by</Label>
+                <p className="text-sm font-medium">
+                  {application.created_by
+                    ? (teamMemberNames[application.created_by] ?? teamMemberEmails[application.created_by] ?? "—")
+                    : "—"}
+                </p>
+              </div>
+
+              {/* Country */}
+              <div className="space-y-1">
+                {editing ? (
+                  <DestinationsMultiSelect
+                    selected={countries}
+                    onChange={setCountries}
+                    options={countryOptions}
+                    label="Destination"
+                    optional={false}
+                  />
                 ) : (
-                  <p className="text-sm font-medium">
-                    {application.assigned_to
-                      ? (teamMemberNames[application.assigned_to] ?? teamMemberEmails[application.assigned_to] ?? "—")
-                      : "Unassigned"}
-                  </p>
+                  <>
+                    <Label className="text-xs text-muted-foreground">Destination</Label>
+                    <p className="text-sm">
+                      {application.countries && application.countries.length > 0
+                        ? application.countries.join(", ")
+                        : "—"}
+                    </p>
+                  </>
                 )}
               </div>
 
@@ -554,9 +652,57 @@ export function ApplicationDetailPage({
               <div className="space-y-1">
                 <Label className="text-xs text-muted-foreground">University</Label>
                 {editing ? (
-                  <Input value={universityName} onChange={(e) => setUniversityName(e.target.value)} />
+                  <AutocompleteInput
+                    value={universityName}
+                    onChange={setUniversityName}
+                    suggestions={collegeSuggestions}
+                    placeholder="e.g. University of Melbourne"
+                    onCreateNew={handleCreateCollege}
+                    createLabel="university"
+                    skipConfirm
+                  />
                 ) : (
                   <p className="text-sm">{application.university_name}</p>
+                )}
+              </div>
+
+              {/* Interested Degree Level */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Interested Degree Level</Label>
+                {editing ? (
+                  <Select value={degreeLevel || "__none__"} onValueChange={setDegreeLevel}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select level</SelectItem>
+                      {studyLevels.map((lvl) => (
+                        <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.degree_level ?? "—"}</p>
+                )}
+              </div>
+
+              {/* Field of Study */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Field of Study</Label>
+                {editing ? (
+                  <Select value={fieldOfStudy || "__none__"} onValueChange={setFieldOfStudy}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select field" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__none__">Select field</SelectItem>
+                      {fieldsOfStudy.map((f) => (
+                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm">{application.field_of_study ?? "—"}</p>
                 )}
               </div>
 
@@ -570,33 +716,43 @@ export function ApplicationDetailPage({
                 )}
               </div>
 
-              {/* Intake + Country */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Intake</Label>
-                  {editing ? (
-                    <Input value={intakeTerm} onChange={(e) => setIntakeTerm(e.target.value)} placeholder="e.g. Fall 2026" />
-                  ) : (
-                    <p className="text-sm">{application.intake_term ?? "—"}</p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Country</Label>
-                  {editing ? (
-                    <Select value={country} onValueChange={setCountry}>
+              {/* Intake */}
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Intake</Label>
+                {editing ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Select
+                      value={intakeMonth || "__none__"}
+                      onValueChange={(v) => { setIntakeMonth(v === "__none__" ? "" : v); setIntakeTouched(true); }}
+                    >
                       <SelectTrigger>
-                        <SelectValue placeholder="Select country" />
+                        <SelectValue placeholder="Month" />
                       </SelectTrigger>
                       <SelectContent>
-                        {COUNTRIES.map((c) => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {intakeMonths.map((m) => (
+                          <SelectItem key={m} value={m}>{m}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <p className="text-sm">{application.country ?? "—"}</p>
-                  )}
-                </div>
+                    <Select
+                      value={intakeYear || "__none__"}
+                      onValueChange={(v) => { setIntakeYear(v === "__none__" ? "" : v); setIntakeTouched(true); }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Year" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {yearOptions.map((y) => (
+                          <SelectItem key={y} value={y}>{y}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
+                  <p className="text-sm">{application.intake_term ?? "—"}</p>
+                )}
               </div>
 
               {/* Deadline */}
@@ -803,6 +959,20 @@ export function ApplicationDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddUniversityWithProgramsDialog
+        open={addUniversityDialogOpen}
+        onOpenChange={setAddUniversityDialogOpen}
+        initialName={pendingUniversityName}
+        countries={countryOptions}
+        createPartnerCollege={createPartnerCollege}
+        createProgram={createProgram}
+        fetchDistinctProgramNames={fetchDistinctProgramNames}
+        onCreated={({ university, programs }) => {
+          setUniversityName(university.name);
+          if (programs.length === 1) setProgramName(programs[0].name);
+        }}
+      />
     </div>
   );
 }

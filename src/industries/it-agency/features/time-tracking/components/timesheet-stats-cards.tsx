@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Clock, Users, AlertCircle, DollarSign } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { formatMinutes } from "../hooks/use-time-entries";
-import { calculateBillableAmount } from "../lib/totals";
+import { calculateBillableAmount, calculateMinutesBySource } from "../lib/totals";
 import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
 interface TimesheetStatsCardsProps {
@@ -16,6 +16,7 @@ interface TimesheetStatsCardsProps {
 interface Tile {
   label: string;
   value: string;
+  subline?: string;
   icon: React.ComponentType<{ className?: string }>;
   color: string;
   href?: string;
@@ -26,9 +27,14 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
   const pendingCount = entries.filter((e) => e.approval_status === "pending").length;
   const memberCount = new Set(entries.map((e) => e.user_id)).size;
   const billableAmount = calculateBillableAmount(entries);
+  const bySource = calculateMinutesBySource(entries);
+  const totalHoursSubline =
+    bySource.timer > 0 || bySource.manual > 0
+      ? `${formatMinutes(bySource.timer)} system-logged · ${formatMinutes(bySource.manual)} manual`
+      : undefined;
 
   const adminTiles: Tile[] = [
-    { label: "Total Hours", value: formatMinutes(totalMinutes), icon: Clock, color: "text-blue-600" },
+    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: Clock, color: "text-blue-600" },
     { label: "Members", value: String(memberCount), icon: Users, color: "text-violet-600" },
     {
       label: "Billable",
@@ -46,7 +52,7 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
   ];
 
   const memberTiles: Tile[] = [
-    { label: "Total Hours", value: formatMinutes(totalMinutes), icon: Clock, color: "text-blue-600" },
+    { label: "Total Hours", value: formatMinutes(totalMinutes), subline: totalHoursSubline, icon: Clock, color: "text-blue-600" },
     {
       label: "Billable",
       value: `$${billableAmount.toFixed(2)}`,
@@ -72,6 +78,9 @@ export function TimesheetStatsCards({ entries, isAdmin }: TimesheetStatsCardsPro
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold tabular-nums">{tile.value}</div>
+              {tile.subline && (
+                <div className="text-xs text-muted-foreground mt-1 tabular-nums">{tile.subline}</div>
+              )}
             </CardContent>
           </Card>
         );

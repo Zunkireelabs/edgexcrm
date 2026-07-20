@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2, ChevronDown } from "lucide-react";
+import { ArrowLeft, Trash2, UserCheck, Pencil, X, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -20,24 +20,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { createClient } from "@/lib/supabase/client";
 import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { ConvertLeadDialog } from "@/industries/it-agency/features/crm-contacts/components/convert-lead-dialog";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { resolveEntitlements } from "@/lib/api/entitlements";
-import { DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 
 import { ContactCard } from "./contact-card";
 import { KeyInfoSection } from "./key-info-section";
 import { LeadTabs } from "./lead-tabs";
 import { ManagementPanel } from "./management-panel";
 import { getLeadFullName } from "./lead-name";
+import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { ApplicationsCard } from "@/industries/education-consultancy/features/application-tracking/components/applications-card";
 import { ClassesCard } from "@/industries/education-consultancy/features/classes/components/classes-card";
 import { ConsentCard } from "@/industries/education-consultancy/features/application-tracking/components/consent-card";
+import { InvestorProfileCard } from "@/industries/real-estate/features/investors/components/investor-profile-card";
+import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
+import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
 
 interface TeamMember {
@@ -55,6 +60,7 @@ interface LeadDetailV2Props {
   notes: LeadNote[];
   checklists: LeadChecklist[];
   activities: LeadActivity[];
+  submissionHistory?: LeadSubmissionSnapshot[];
   stages: PipelineStage[];
   tenant: Tenant;
   role: string;
@@ -63,13 +69,29 @@ interface LeadDetailV2Props {
   industry?: Industry | null;
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
+  /** Owner/admin + branch managers skip the Prospects academic-qualification dialog. */
+  bypassQualification?: boolean;
   canAssign?: boolean;
   canEditLeads?: boolean;
   /** Pre-filtered assignable members for the Assigned-To dropdown (full roster kept for display). */
   assignableMembers?: TeamMember[];
+  /** Admin/branch-manager (education): Assigned-To options scoped to the lead's CURRENT stage team.
+   *  Non-null overrides assignableMembers; null falls back to assignableMembers unchanged. */
+  stageScopedAssignees?: { user_id: string; email: string; name?: string | null }[] | null;
   /** Next-position members shown in the "Send to next" assignment picker. Empty = picker hidden. */
   nextPositionMembers?: TeamMember[];
+  /** Who "Revert" would hand the lead back to (null = current holder is the lead's origin). */
+  revertTargetUserId?: string | null;
+  revertTargetName?: string | null;
+  /** Revert assignee options: the previous holder's same-position peers in their branch. */
+  revertTargetMembers?: { user_id: string; email: string; name?: string | null }[];
+  /** Admin/branch-manager (education): renders StageMoveSelector instead of the linear ListStepper. */
+  canMoveWithoutChain?: boolean;
+  /** Per-stage assignee candidates for StageMoveSelector, keyed by list id. */
+  stageAssigneeMap?: Record<string, { user_id: string; email: string; name?: string | null }[]>;
   canManageApplications?: boolean;
+  /** Add/reorder access for the applications PANEL (branch/assignee-aware). Falls back to canManageApplications. */
+  canManageApplicationPanel?: boolean;
   canEnroll?: boolean;
   leadLists?: LeadList[];
   activeLeadLists?: LeadList[];
@@ -127,6 +149,7 @@ export function LeadDetailV2({
   notes: initialNotes,
   checklists: initialChecklists,
   activities,
+  submissionHistory,
   stages,
   tenant,
   role,
@@ -135,11 +158,19 @@ export function LeadDetailV2({
   industry,
   userBranchId,
   leadScope,
+  bypassQualification = false,
   canAssign = false,
   canEditLeads = false,
   assignableMembers,
+  stageScopedAssignees = null,
   nextPositionMembers,
+  revertTargetUserId = null,
+  revertTargetName = null,
+  revertTargetMembers = [],
+  canMoveWithoutChain = false,
+  stageAssigneeMap = {},
   canManageApplications,
+  canManageApplicationPanel,
   canEnroll,
   leadLists,
   activeLeadLists,
@@ -153,7 +184,7 @@ export function LeadDetailV2({
   const searchParams = useSearchParams();
   const notesTabRef = useRef<{ focusComposer: () => void }>(null);
   const checklistRef = useRef<{ focusInput: () => void }>(null);
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
 
   const [notes, setNotes] = useState(initialNotes);
   const [checklists, setChecklists] = useState(initialChecklists);
@@ -176,7 +207,6 @@ export function LeadDetailV2({
   const [qualifyField, setQualifyField] = useState("");
   const [qualifyDegree, setQualifyDegree] = useState("");
   const [qualifyNote, setQualifyNote] = useState("");
-  const [qualifyDestOpen, setQualifyDestOpen] = useState(false);
   const [qualifying, setQualifying] = useState(false);
 
   // Edit mode state
@@ -185,8 +215,13 @@ export function LeadDetailV2({
   const [isSaving, setIsSaving] = useState(false);
   const [draft, setDraft] = useState<LeadDraft>(() => makeDraft(lead));
   const [editErrors, setEditErrors] = useState<EditErrors>({});
+  const [leaving, setLeaving] = useState(false);
 
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate: the lead IS an investor (rides the leads spine). Adds investor
+  // profile + commitments blocks in the right sidebar. Additive — other industries
+  // unaffected.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   const isAdmin = role === "owner" || role === "admin";
   // Position-derived edit capability: admins always, plus members whose position grants
@@ -238,6 +273,116 @@ export function LeadDetailV2({
       fetchTeamMembers();
     }
   }, [isAdmin, canAssign, fetchTeamMembers]);
+
+  // Academic/test field edit gate (§ Prospect-qualification brief): admin OR the lead's
+  // assignee OR a lead collaborator may edit. Assignee is known synchronously; collaborator
+  // status needs a fetch.
+  const [isCollaboratorUser, setIsCollaboratorUser] = useState(false);
+  const fetchCollaboratorStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/v1/leads/${currentLead.id}/collaborators`);
+      if (res.ok) {
+        const json = await res.json();
+        const collabs = (json.data?.collaborators ?? []) as { user_id: string }[];
+        setIsCollaboratorUser(collabs.some((c) => c.user_id === userId));
+      }
+    } catch {
+      // silently fail — falls back to isAdmin/isAssignee
+    }
+  }, [currentLead.id, userId]);
+
+  useEffect(() => {
+    fetchCollaboratorStatus();
+  }, [fetchCollaboratorStatus]);
+
+  const isAssignee = userId === currentLead.assigned_to;
+  const isEditor = isAdmin || isAssignee || isCollaboratorUser;
+
+  // Move-into-Prospects gate: when the target list requires a qualifying %/GPA the lead
+  // doesn't have yet, the move is deferred until this fill-in dialog is confirmed.
+  const [pendingProspectMove, setPendingProspectMove] = useState<{
+    listId: string;
+    archiveReason?: string;
+    assignToUserId?: string | null;
+  } | null>(null);
+
+  // Assign-a-counselor gate (§6b hard-block): the server now rejects assigning a
+  // counselor when that assignment would auto-promote an unqualified lead into
+  // Prospects. Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{ userId: string } | null>(null);
+
+  async function performListMove(
+    listId: string,
+    archiveReason?: string,
+    assignToUserId?: string | null,
+    academicPatch?: Record<string, string>
+  ) {
+    const prevLead = currentLead;
+    const prevStageId = stageId;
+    const willHandOff =
+      assignToUserId !== undefined && assignToUserId !== null && assignToUserId !== userId;
+    if (willHandOff) setLeaving(true);
+    const targetList = leadLists?.find((l) => l.id === listId);
+    const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
+    setCurrentLead((prev) => ({
+      ...prev,
+      list_id: listId,
+      lead_type: newLeadType,
+      archive_reason: archiveReason ?? null,
+      ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
+      ...(academicPatch ?? {}),
+    } as Lead));
+    if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
+    try {
+      const body: Record<string, unknown> = {
+        list_id: listId,
+        archive_reason: archiveReason ?? null,
+        ...(academicPatch ?? {}),
+      };
+      if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
+      const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to move lead");
+      }
+      const json = await res.json();
+      const updated = json.data as Lead;
+      // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
+      if (updated.stage_id !== stageId) {
+        setStageId(updated.stage_id);
+        setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
+      }
+      // Server may derive a reassignment on revert (stage-transition governance)
+      // even when the client didn't pass assigned_to — sync it back.
+      if (updated.assigned_to !== prevLead.assigned_to) {
+        setAssignedTo(updated.assigned_to ?? "");
+        setCurrentLead((prev) => ({ ...prev, assigned_to: updated.assigned_to } as Lead));
+        router.refresh();
+      }
+      toast.success(`Moved to ${targetList?.name ?? "list"}`);
+      // Handed off to someone else (send-to-next / revert to another holder):
+      // the lead leaves this user's control and is now read-only for them, so
+      // close the detail and return to the list it moved out of.
+      if (updated.assigned_to && updated.assigned_to !== userId) {
+        router.back();
+        router.refresh();
+        return;
+      }
+      // Predicted a handoff (spinner shown) but the server kept the lead
+      // with us — restore the detail instead of hanging on the spinner.
+      if (willHandOff) setLeaving(false);
+    } catch (err) {
+      setCurrentLead(prevLead);
+      setStageId(prevStageId);
+      if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
+      setLeaving(false);
+      toast.error(err instanceof Error ? err.message : "Failed to move lead");
+    }
+  }
 
   useEffect(() => {
     if (!lead.converted_contact_id || !isItAgency) return;
@@ -375,11 +520,19 @@ export function LeadDetailV2({
     setStageId(newStageId);
     setStatus(newStage.slug);
 
+    // When the chosen stage belongs to a different pipeline than the lead's current
+    // pipeline_id (data-drift fallback in KeyInfoSection), send pipeline_id too so the
+    // PATCH validates against — and re-syncs to — the correct pipeline.
+    const body: Record<string, unknown> =
+      newStage.pipeline_id && newStage.pipeline_id !== lead.pipeline_id
+        ? { stage_id: newStageId, pipeline_id: newStage.pipeline_id }
+        : { stage_id: newStageId };
+
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stage_id: newStageId }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) throw new Error("Failed to update stage");
       toast.success("Stage updated");
@@ -400,13 +553,50 @@ export function LeadDetailV2({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assigned_to: value }),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && value) {
+          setAssignedTo(lead.assigned_to || "");
+          toast.error(academicMsg);
+          setPendingAssignGate({ userId: value });
+          return;
+        }
+        throw new Error(errJson?.error?.message);
+      }
       toast.success("Assignment updated");
+      // revertTargetUserId/Name are computed server-side from the lead's
+      // assignment history — refresh so the Revert confirm dialog reflects
+      // the new assignee, not whoever it was when the page first loaded.
+      router.refresh();
     } catch {
       toast.error("Failed to update assignment");
       setAssignedTo(lead.assigned_to || "");
     }
   };
+
+  async function confirmAssignQualification(patch: Record<string, string>) {
+    if (!pendingAssignGate) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: pendingAssignGate.userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to update assignment");
+      }
+      const json = await res.json();
+      setCurrentLead(json.data as Lead);
+      setAssignedTo(pendingAssignGate.userId);
+      toast.success("Assignment updated");
+      setPendingAssignGate(null);
+      router.refresh();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update assignment");
+    }
+  }
 
   const handleDeleteLead = async () => {
     if (!confirm("Are you sure you want to delete this lead? This cannot be undone.")) return;
@@ -434,7 +624,6 @@ export function LeadDetailV2({
     setQualifyField(leadWithEdu.field_of_study ?? "");
     setQualifyDegree(leadWithEdu.degree_level ?? "");
     setQualifyNote("");
-    setQualifyDestOpen(false);
     setQualifyOpen(true);
   };
 
@@ -495,6 +684,14 @@ export function LeadDetailV2({
     setCustomFields(newFields);
   };
 
+  if (leaving) {
+    return (
+      <div className="flex items-center justify-center py-32">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -511,6 +708,11 @@ export function LeadDetailV2({
               {tenant.industry_id === "education_consultancy" && currentLead.display_id && (
                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-100 text-gray-600 font-medium">
                   {currentLead.display_id}
+                </span>
+              )}
+              {isRealEstate && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs bg-violet-100 text-violet-800 font-medium">
+                  Investor
                 </span>
               )}
             </div>
@@ -604,6 +806,7 @@ export function LeadDetailV2({
             editErrors={editErrors}
             onDraftChange={updateDraft}
             industryId={tenant.industry_id}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
           />
 
           {/* Key Information (includes Stage, Assigned To, and all lead details) */}
@@ -615,8 +818,10 @@ export function LeadDetailV2({
             assignedTo={assignedTo}
             teamMembers={teamMembers}
             assignableMembers={assignableMembers}
+            stageScopedAssignees={stageScopedAssignees}
             userId={userId}
             isAdmin={isAdmin}
+            isEditor={isEditor}
             canEdit={canEdit}
             canAssign={canAssign}
             onStageChange={handleStageChange}
@@ -624,6 +829,7 @@ export function LeadDetailV2({
             entity={entity}
             industry={industry}
             industryId={tenant.industry_id}
+            submissionHistory={submissionHistory}
             isEditing={isEditing}
             draft={draft}
             editErrors={editErrors}
@@ -646,42 +852,23 @@ export function LeadDetailV2({
             leadLists={leadLists}
             activeLeadLists={activeLeadLists}
             nextPositionMembers={nextPositionMembers}
+            revertTargetUserId={revertTargetUserId}
+            revertTargetName={revertTargetName}
+            revertTargetMembers={revertTargetMembers}
+            canMoveWithoutChain={canMoveWithoutChain}
+            stageAssigneeMap={stageAssigneeMap}
             onListChange={async (listId, archiveReason, assignToUserId) => {
-              const prevLead = currentLead;
-              const prevStageId = stageId;
               const targetList = leadLists?.find((l) => l.id === listId);
-              const newLeadType = targetList?.slug === "prospects" ? "prospect" : "lead";
-              setCurrentLead((prev) => ({
-                ...prev,
-                list_id: listId,
-                lead_type: newLeadType,
-                archive_reason: archiveReason ?? null,
-                ...(assignToUserId !== undefined ? { assigned_to: assignToUserId } : {}),
-              } as Lead));
-              if (assignToUserId !== undefined) setAssignedTo(assignToUserId ?? "");
-              try {
-                const body: Record<string, unknown> = { list_id: listId, archive_reason: archiveReason ?? null };
-                if (assignToUserId !== undefined) body.assigned_to = assignToUserId;
-                const res = await fetch(`/api/v1/leads/${currentLead.id}`, {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify(body),
-                });
-                if (!res.ok) throw new Error("Failed to move lead");
-                const json = await res.json();
-                const updated = json.data as Lead;
-                // Sync stage_id — server resets it to default for new list's pipeline (or null if no pipeline)
-                if (updated.stage_id !== stageId) {
-                  setStageId(updated.stage_id);
-                  setCurrentLead((prev) => ({ ...prev, stage_id: updated.stage_id, status: updated.status } as Lead));
-                }
-                toast.success(`Moved to ${targetList?.name ?? "list"}`);
-              } catch {
-                setCurrentLead(prevLead);
-                setStageId(prevStageId);
-                if (assignToUserId !== undefined) setAssignedTo(prevLead.assigned_to ?? "");
-                toast.error("Failed to move lead");
+              if (
+                tenant.industry_id === "education_consultancy" &&
+                !bypassQualification &&
+                targetList?.slug === "prospects" &&
+                !hasProspectQualification(currentLead as unknown as Record<string, unknown>)
+              ) {
+                setPendingProspectMove({ listId, archiveReason, assignToUserId });
+                return;
               }
+              await performListMove(listId, archiveReason, assignToUserId);
             }}
             onSaveTripFields={async (fields) => {
               // Merge against live state (not the stale `lead` prop) so a trip
@@ -745,6 +932,7 @@ export function LeadDetailV2({
             industryId={tenant.industry_id}
             tenantName={tenant.name}
             tenantLogoUrl={tenant.logo_url}
+            onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the
               // itinerary doesn't clobber trip fields saved earlier this session.
@@ -781,7 +969,7 @@ export function LeadDetailV2({
                   )}
                   <ApplicationsCard
                     leadId={currentLead.id}
-                    canManage={canManageApplications ?? isAdmin}
+                    canManage={canManageApplicationPanel ?? canManageApplications ?? isAdmin}
                     disabled={consentEnabled && !consentSignedState}
                   />
                 </>
@@ -801,7 +989,50 @@ export function LeadDetailV2({
                   canManage={canEnroll ?? isAdmin}
                 />
               )}
-              {checkInActive && <CheckInHistoryCard leadId={currentLead.id} />}
+              {checkInActive && (
+                <CheckInHistoryCard
+                  leadId={currentLead.id}
+                  teamMemberNames={teamMemberNames}
+                  teamMemberEmails={teamMemberEmails}
+                />
+              )}
+            </div>
+          ) : isRealEstate ? (
+            <div className="space-y-4">
+              <InvestorProfileCard
+                leadId={currentLead.id}
+                customFields={customFields}
+                canEdit={canEdit}
+              />
+              <CommitmentsPanel leadId={currentLead.id} canManage={isAdmin} />
+              <InvestorCommsCard leadId={currentLead.id} canManage={isAdmin} />
+              {/* Subscription Agreement — reuses the consent e-sign spine with
+                  real_estate labels + no education processing-fee section. */}
+              <ConsentCard
+                leadId={currentLead.id}
+                tenantId={tenant.id}
+                consentEnabled={true}
+                consentSigned={false}
+                canManage={isAdmin}
+                showProcessingFee={false}
+                labels={{
+                  sectionTitle: "Subscription Agreement",
+                  docLabel: "Subscription Agreement",
+                  requiredTitle: "Subscription Agreement required",
+                  requiredHelp:
+                    "This investor must sign the Subscription Agreement before their commitment can be marked Subscribed.",
+                  awaitingHelp: "Subscription Agreement sent · awaiting investor signature",
+                  signedTitle: "Subscription Agreement signed",
+                }}
+              />
+              <ManagementPanel
+                ref={checklistRef}
+                lead={currentLead}
+                checklists={checklists}
+                isAdmin={isAdmin}
+                canEdit={canEdit}
+                onChecklistsChange={handleChecklistsChange}
+              />
             </div>
           ) : (
             <ManagementPanel
@@ -838,37 +1069,13 @@ export function LeadDetailV2({
 
           <div className="space-y-4 py-2">
             {/* Destinations multi-select */}
-            <div className="space-y-1.5">
-              <p className="text-sm font-medium">Interested Destinations</p>
-              <button
-                type="button"
-                onClick={() => setQualifyDestOpen((v) => !v)}
-                className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background"
-              >
-                <span className={qualifyDests.length === 0 ? "text-muted-foreground" : ""}>
-                  {qualifyDests.length === 0 ? "Select destinations" : qualifyDests.join(", ")}
-                </span>
-                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${qualifyDestOpen ? "rotate-180" : ""}`} />
-              </button>
-              {qualifyDestOpen && (
-                <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background">
-                  {destOptions.map((dest) => (
-                    <div key={dest} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`qd-${dest}`}
-                        checked={qualifyDests.includes(dest)}
-                        onCheckedChange={() =>
-                          setQualifyDests((prev) =>
-                            prev.includes(dest) ? prev.filter((d) => d !== dest) : [...prev, dest]
-                          )
-                        }
-                      />
-                      <label htmlFor={`qd-${dest}`} className="text-sm cursor-pointer">{dest}</label>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+            <DestinationsMultiSelect
+              selected={qualifyDests}
+              onChange={setQualifyDests}
+              options={destOptions}
+              label="Interested Destinations"
+              optional={false}
+            />
 
             {/* Field of Study */}
             <div className="space-y-1.5">
@@ -899,8 +1106,8 @@ export function LeadDetailV2({
                   <SelectItem value="__none__">
                     <span className="text-muted-foreground">Not specified</span>
                   </SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -936,6 +1143,29 @@ export function LeadDetailV2({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ProspectQualificationDialog
+        lead={currentLead as unknown as Record<string, unknown>}
+        open={!!pendingProspectMove}
+        onConfirm={async (patch) => {
+          if (!pendingProspectMove) return;
+          await performListMove(
+            pendingProspectMove.listId,
+            pendingProspectMove.archiveReason,
+            pendingProspectMove.assignToUserId,
+            patch
+          );
+          setPendingProspectMove(null);
+        }}
+        onCancel={() => setPendingProspectMove(null)}
+      />
+
+      <ProspectQualificationDialog
+        lead={currentLead as unknown as Record<string, unknown>}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
+      />
     </div>
   );
 }

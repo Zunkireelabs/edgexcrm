@@ -52,7 +52,7 @@ const FIELD_LABELS: Record<string, string> = {
   assigned_to: "assignee",
 };
 
-function formatTime(dateString: string): string {
+export function formatTime(dateString: string): string {
   const date = new Date(dateString);
   const isCurrentYear = date.getFullYear() === new Date().getFullYear();
   return date.toLocaleString("en-US", {

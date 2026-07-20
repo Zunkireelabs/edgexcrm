@@ -5,6 +5,7 @@ import {
   getLeadNotes,
   getLeadChecklists,
   getLeadActivity,
+  getLeadSubmissionHistory,
   getPipelineStages,
   getLeadListsByTenant,
   getListPipeline,
@@ -13,9 +14,12 @@ import {
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
 import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { nextPositionSlug, ASSIGN_CHAIN_POSITIONS } from "@/industries/education-consultancy/lead-assignment-chain";
+import { stageAssigneeCandidates } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { TenantEntity, Industry, LeadList } from "@/types/database";
@@ -40,10 +44,11 @@ export default async function LeadDetailPage({
   const checkInActive = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN);
 
   const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
-  const [notes, checklists, activities, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
+  const [notes, checklists, activities, submissionHistory, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
     getLeadNotes(lead.id),
     getLeadChecklists(lead.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
+    getLeadSubmissionHistory(lead.id, tenantData.tenant.id),
     // Load this lead's list-pipeline stages (preferred); fallback to all tenant stages
     leadListId ? getListPipeline(leadListId, tenantData.tenant.id) : Promise.resolve(null),
     getPipelineStages(tenantData.tenant.id),
@@ -185,6 +190,80 @@ export default async function LeadDetailPage({
       )
     : [];
 
+  // Admins, owners, and branch-managers have no chain position, so the block above leaves
+  // them with an empty roster and ListStepper hides the assignee picker entirely — the lead
+  // moves with the assignee unchanged. They get a different control entirely (StageMoveSelector):
+  // a dropdown of every active stage (any direction), each coupled to that stage's own assignee
+  // picker — branch line-team, admin/owner also sees the branch-manager, with a
+  // branch-manager → tenant-wide-line-team fallback so the picker is never empty.
+  // Sourced from the same list activeLeadLists ?? accessibleLists ListStepper itself uses
+  // (key-info-section.tsx's `activeLists`) so the destinations can't diverge from what the
+  // control actually moves the lead to (e.g. in a funnel-scoped view).
+  const isBranchManagerViewer = tenantData.permissions.leadScope === "team";
+  const canMoveWithoutChain =
+    tenantData.tenant.industry_id === "education_consultancy" &&
+    !isChainMember &&
+    (tenantData.permissions.baseTier === "admin" ||
+      tenantData.permissions.baseTier === "owner" ||
+      isBranchManagerViewer);
+  const leadBranchId = (lead as unknown as { branch_id?: string | null }).branch_id ?? null;
+  const stageAssigneeMap: Record<string, { user_id: string; email: string; name?: string | null }[]> = {};
+  if (canMoveWithoutChain) {
+    const stepperLists = activeLeadLists ?? accessibleLists;
+    for (const list of stepperLists) {
+      const slug = (list as unknown as { slug: string }).slug;
+      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId, isBranchManagerViewer);
+    }
+  }
+  // Standalone "Assigned To" dropdown (KEY INFORMATION panel, not the stage-move picker):
+  // for admin/branch-manager viewers, scope it to the lead's CURRENT stage's team instead of
+  // the full chain-filtered roster — same stageAssigneeCandidates fallback (branch line-team →
+  // branch-manager(s) → tenant-wide) so it's never empty. null ⇒ key-info-section falls back
+  // to assignableMembers unchanged (chain members, non-education).
+  const currentStageSlug = currentList ? (currentList as unknown as { slug: string }).slug : null;
+  const rawStageScopedAssignees =
+    canMoveWithoutChain && currentStageSlug
+      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId, isBranchManagerViewer)
+      : null;
+  // A staging/off-funnel stage (e.g. migration-qc, new-leads, archived — not in STAGE_TEAM_MAP)
+  // has no mapped team, so the candidates call above would return []. Treat that the same as
+  // "no stage-scoping" and fall back to the chain-filtered assignableMembers rather than
+  // rendering a dead-empty Assigned-To dropdown.
+  const stageScopedAssignees =
+    rawStageScopedAssignees && rawStageScopedAssignees.length > 0 ? rawStageScopedAssignees : null;
+
+  // Revert target: who the ListStepper's "Revert" would hand the lead back to.
+  // Absence of a prior handoff row means the current holder is the lead's origin
+  // (education_consultancy only — stage-transition governance is education-scoped).
+  let revertTargetUserId: string | null = null;
+  if (tenantData.tenant.industry_id === "education_consultancy" && lead.assigned_to) {
+    const { data: lh } = await serviceClient
+      .from("lead_assignment_history")
+      .select("from_user_id")
+      .eq("lead_id", lead.id)
+      .eq("to_user_id", lead.assigned_to)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    revertTargetUserId = (lh as { from_user_id?: string } | null)?.from_user_id ?? null;
+  }
+  const revertTargetName = revertTargetUserId ? (memberNames[revertTargetUserId] ?? null) : null;
+  // Revert assignee options: the previous holder's same-position peers in their
+  // branch (default-selected = the previous holder). Lets the reverter hand the
+  // lead to anyone on that person's team instead of only the exact prior holder.
+  const revertTargetMember = revertTargetUserId
+    ? roster.find((m) => m.user_id === revertTargetUserId)
+    : null;
+  const revertTargetMembers = revertTargetMember
+    ? roster
+        .filter(
+          (m) =>
+            m.position_slug === revertTargetMember.position_slug &&
+            (revertTargetMember.branch_id == null || m.branch_id === revertTargetMember.branch_id),
+        )
+        .map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
+    : [];
+
   return (
     <LeadDetailV2
       lead={lead}
@@ -192,6 +271,7 @@ export default async function LeadDetailPage({
       notes={notes}
       checklists={checklists}
       activities={activities}
+      submissionHistory={submissionHistory}
       stages={stages}
       tenant={tenantData.tenant}
       role={tenantData.role}
@@ -200,11 +280,21 @@ export default async function LeadDetailPage({
       industry={industry}
       userBranchId={tenantData.branchId}
       leadScope={tenantData.permissions.leadScope}
+      bypassQualification={canBypassProspectQualification(
+        tenantData.permissions.baseTier, tenantData.positionSlug
+      )}
       canAssign={tenantData.permissions.canAssignLeads}
       canEditLeads={tenantData.permissions.canEditLeads}
       assignableMembers={assignableMembers}
+      stageScopedAssignees={stageScopedAssignees}
       nextPositionMembers={nextPositionMembers}
+      revertTargetUserId={revertTargetUserId}
+      revertTargetName={revertTargetName}
+      revertTargetMembers={revertTargetMembers}
+      canMoveWithoutChain={canMoveWithoutChain}
+      stageAssigneeMap={stageAssigneeMap}
       canManageApplications={tenantData.permissions.canManageApplications}
+      canManageApplicationPanel={canCreateOrReorderApplications(tenantData, lead)}
       canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
       leadLists={accessibleLists}
       activeLeadLists={activeLeadLists}

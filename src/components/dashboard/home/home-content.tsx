@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { GreetingHeader } from "./greeting-header";
 import { AttentionSummary } from "./attention-summary";
@@ -12,6 +13,15 @@ import { RecentActivityCard } from "./recent-activity-card";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem, LeaveHomeSummary } from "@/lib/supabase/queries";
 import type { Lead, TaskStatus } from "@/types/database";
 
+// Same _shared -> it_agency coupling trade-off as dashboard-renderer.tsx: dynamic
+// import keeps non-it_agency Home bundles from growing.
+const MyUtilizationWidget = dynamic(
+  () => import("@/industries/it-agency/features/delivery-dashboard/widgets/my-utilization")
+);
+const MyTimeWidget = dynamic(
+  () => import("@/industries/it-agency/features/delivery-dashboard/widgets/my-time")
+);
+
 interface HomeContentProps {
   userId: string;
   userName: string;
@@ -21,6 +31,8 @@ interface HomeContentProps {
   recentActivity: RecentActivityItem[];
   inboxSnapshot: InboxSnapshot;
   isEducation: boolean;
+  isItAgency: boolean;
+  currentTenantUserId: string | null;
   leaveSummary: LeaveHomeSummary;
 }
 
@@ -32,6 +44,8 @@ export function HomeContent({
   myLeads,
   recentActivity,
   inboxSnapshot,
+  isItAgency,
+  currentTenantUserId,
   leaveSummary,
 }: HomeContentProps) {
   const router = useRouter();
@@ -84,6 +98,15 @@ export function HomeContent({
       />
 
       <div className="space-y-4">
+        {isItAgency && (
+          <div>
+            <h2 className="text-sm font-semibold text-muted-foreground mb-2">My Work</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <MyUtilizationWidget currentUserId={userId} currentTenantUserId={currentTenantUserId} />
+              <MyTimeWidget currentUserId={userId} currentTenantUserId={currentTenantUserId} />
+            </div>
+          </div>
+        )}
         <ScheduleCard schedule={schedule} />
         <TasksCard
           initialOpen={openTasks}

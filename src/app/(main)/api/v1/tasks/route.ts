@@ -11,7 +11,8 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { dueFilterToDateRange } from "@/industries/it-agency/features/project-board/lib/due-keywords";
+import { dueFilterToDateRange, type DueDateRange } from "@/industries/it-agency/features/project-board/lib/due-keywords";
+import { todayInTz } from "@/lib/hr/dates";
 
 const VALID_STATUSES = ["todo", "in_progress", "done"];
 const VALID_PRIORITIES = ["low", "normal", "high", "urgent"];
@@ -87,7 +88,12 @@ export async function GET(request: NextRequest) {
     if (sanitized) query = query.ilike("title", `%${sanitized}%`);
   }
 
-  const due = dueFilterToDateRange(dueKeyword);
+  let due: DueDateRange | null = null;
+  if (dueKeyword && dueKeyword !== "__all__") {
+    const { data: tenantRow } = await db.raw().from("tenants").select("timezone").eq("id", auth.tenantId).single();
+    const timezone = (tenantRow as { timezone: string } | null)?.timezone ?? "Asia/Kathmandu";
+    due = dueFilterToDateRange(dueKeyword, todayInTz(timezone));
+  }
   if (due) {
     if (due.isNull) {
       query = query.is("due_date", null);

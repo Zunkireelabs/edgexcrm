@@ -71,7 +71,7 @@ export const admissionInquiryTemplate: TemplateDefinition = {
         },
         {
           name: "study_level",
-          label: "Study Level",
+          label: "Interested Degree Level",
           type: "select",
           required: true,
           width: "half",

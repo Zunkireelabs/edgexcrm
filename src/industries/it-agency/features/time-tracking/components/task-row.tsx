@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Pencil, Trash2, Loader2, Clock } from "lucide-react";
+import { Pencil, Trash2, Loader2, Clock, Play, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,10 +21,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TaskStatusBadge } from "./status-badge";
 import { AssigneePicker } from "../../project-board/components/assignee-picker";
+import { useActiveTimersContext, formatElapsed } from "../hooks/use-active-timers";
 import type { TeamMember } from "../../project-board/hooks/use-projects";
 import type { Task, TaskStatus } from "@/types/database";
+
+/** Minutes → hours string for the estimate input, rounded to 2 decimals to avoid float artifacts (e.g. 100min -> "1.67"). */
+function minutesToHoursInput(minutes: number | null): string {
+  if (minutes == null) return "";
+  return String(Math.round((minutes / 60) * 100) / 100);
+}
 
 const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
   { value: "todo",        label: "To Do" },
@@ -41,21 +49,24 @@ interface TaskRowProps {
 }
 
 export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRowProps) {
+  const { isTaskRunning, isPending, startTimer, stopTimer, now } = useActiveTimersContext();
+  const running = isTaskRunning(task.id);
+  const timerPending = isPending(task.id);
+  const noProject = task.project_id == null;
+
   const [editOpen, setEditOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [status, setStatus] = useState<TaskStatus>(task.status);
-  const [estimatedMinutes, setEstimatedMinutes] = useState(
-    task.estimated_minutes != null ? String(task.estimated_minutes) : ""
-  );
+  const [estimatedHours, setEstimatedHours] = useState(minutesToHoursInput(task.estimated_minutes));
 
   function handleEditOpen() {
     setTitle(task.title);
     setDescription(task.description ?? "");
     setStatus(task.status);
-    setEstimatedMinutes(task.estimated_minutes != null ? String(task.estimated_minutes) : "");
+    setEstimatedHours(minutesToHoursInput(task.estimated_minutes));
     setEditOpen(true);
   }
 
@@ -71,7 +82,7 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
           title: title.trim(),
           description: description.trim() || null,
           status,
-          estimated_minutes: estimatedMinutes ? parseInt(estimatedMinutes, 10) : null,
+          estimated_minutes: estimatedHours.trim() ? Math.round(parseFloat(estimatedHours) * 60) : null,
         }),
       });
       if (!res.ok) {
@@ -151,6 +162,37 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
           onChange={handleAssigneeChange}
           disabled={!isAdmin}
         />
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className={`h-7 px-2 gap-1.5 ${running ? "text-red-600 hover:text-red-600" : ""}`}
+                  disabled={noProject || timerPending}
+                  onClick={() => (running ? stopTimer(running.id) : startTimer(task.id))}
+                  title={running ? "Stop timer" : "Start timer"}
+                  aria-label={running ? "Stop timer" : "Start timer"}
+                >
+                  {timerPending ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : running ? (
+                    <Square className="h-3.5 w-3.5" />
+                  ) : (
+                    <Play className="h-3.5 w-3.5" />
+                  )}
+                  {running && (
+                    <span className="text-xs tabular-nums">
+                      {formatElapsed(now - Date.parse(running.started_at))}
+                    </span>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {noProject && <TooltipContent>Task must be attached to a project to track time</TooltipContent>}
+          </Tooltip>
+        </TooltipProvider>
         {isAdmin && (
           <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <Button
@@ -224,14 +266,15 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
                 </Select>
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="task-est">Est. minutes</Label>
+                <Label htmlFor="task-est">Est. hours</Label>
                 <Input
                   id="task-est"
                   type="number"
-                  min="1"
-                  value={estimatedMinutes}
-                  onChange={(e) => setEstimatedMinutes(e.target.value)}
-                  placeholder="e.g. 90"
+                  min="0"
+                  step="0.25"
+                  value={estimatedHours}
+                  onChange={(e) => setEstimatedHours(e.target.value)}
+                  placeholder="e.g. 1.5"
                 />
               </div>
             </div>

@@ -45,10 +45,11 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     patch.name = trimmed;
   }
   if (body.description !== undefined) patch.description = body.description ? String(body.description).trim() : null;
+  if (body.country !== undefined) patch.country = body.country ? String(body.country).trim() : null;
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
 
   if (Object.keys(patch).length === 0) {
-    const { data: unchanged } = await db.from("partner_colleges").select("id, name, description, is_active, created_at").eq("id", id).maybeSingle();
+    const { data: unchanged } = await db.from("partner_colleges").select("id, name, description, country, is_active, created_at").eq("id", id).maybeSingle();
     return apiSuccess(unchanged);
   }
 
@@ -56,7 +57,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     .from("partner_colleges")
     .update(patch)
     .eq("id", id)
-    .select("id, name, description, is_active, created_at")
+    .select("id, name, description, country, is_active, created_at")
     .single();
 
   if (error) {

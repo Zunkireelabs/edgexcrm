@@ -4,6 +4,7 @@ import { authenticateRequest, requireAdmin, getClientIp } from "@/lib/api/auth";
 import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborators } from "@/lib/leads/collaborators";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { canAccessList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -19,6 +20,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { ASSIGN_CHAIN_POSITIONS, assignableTargetSlugs } from "@/industries/education-consultancy/lead-assignment-chain";
 import { sendBulkAssignedEmail } from "@/lib/email/send-lead-assigned";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -53,6 +55,8 @@ export async function PATCH(request: NextRequest) {
     branch_id?: string | null;
     list_id?: string | null;
     archive_reason?: string;
+    /** it_agency: Fit-Qualified → Sales Leads graduation. Labels the audit/event distinctly. */
+    graduate?: boolean;
   };
   try {
     body = await request.json();
@@ -220,9 +224,35 @@ export async function PATCH(request: NextRequest) {
     return apiValidationError({ ids: ["No valid leads found to update"] });
   }
 
+  // Prospect-qualification gate (bulk backstop): reject the move if any target lead's
+  // academics don't qualify. Returns failing_ids so the caller (funnel-kanban drags one
+  // card at a time) can react — e.g. open the fill-in modal for that lead.
+  if (
+    targetList?.slug === "prospects" &&
+    auth.industryId === "education_consultancy" &&
+    !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
+  ) {
+    const { data: academicRows } = await supabase
+      .from("leads")
+      .select("id, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
+      .eq("tenant_id", auth.tenantId)
+      .in("id", idsToUpdate);
+    const failingIds = (academicRows ?? [])
+      .filter((row) => !hasProspectQualification(row as Record<string, unknown>))
+      .map((row) => (row as { id: string }).id);
+    if (failingIds.length > 0) {
+      return apiValidationError({
+        academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+        academic_failed_ids: failingIds,
+      });
+    }
+  }
+
   // Build bulk update payload
+  const now = new Date().toISOString();
   const bulkUpdatePayload: Record<string, unknown> = {
-    updated_at: new Date().toISOString(),
+    updated_at: now,
+    last_activity_at: now,
   };
   if (body.assigned_to !== undefined) bulkUpdatePayload.assigned_to = body.assigned_to ?? null;
   if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
@@ -242,18 +272,16 @@ export async function PATCH(request: NextRequest) {
         bulkUpdatePayload.archived_from_list_id = null;
         bulkUpdatePayload.archived_from_status = null;
       }
-      // Sync pipeline + default stage so stage updates work after the move
+      // Sync pipeline + landing stage so stage updates work after the move.
+      // Use the shared helper: default-flagged stage if present, else first by
+      // position — a pipeline with no is_default stage (e.g. Prospects) must
+      // still land on a real stage, or the lead's Status renders blank.
       if (targetList.pipeline_id) {
-        const { data: defaultStage } = await supabase
-          .from("pipeline_stages")
-          .select("id, slug")
-          .eq("pipeline_id", targetList.pipeline_id)
-          .eq("is_default", true)
-          .maybeSingle();
-        if (defaultStage) {
+        const landing = await getPipelineLandingStage(supabase, targetList.pipeline_id);
+        if (landing) {
           bulkUpdatePayload.pipeline_id = targetList.pipeline_id;
-          bulkUpdatePayload.stage_id = defaultStage.id;
-          bulkUpdatePayload.status = defaultStage.slug;
+          bulkUpdatePayload.stage_id = landing.id;
+          bulkUpdatePayload.status = landing.slug;
         }
       }
     }
@@ -318,6 +346,32 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  // Previous assignees also retain lifecycle visibility after a bulk handoff.
+  // Each lead's prior assignee differs, so group by prev-user and add per group.
+  // Mirrors single-lead PATCH behavior (leads/[id]/route.ts).
+  if (body.assigned_to !== undefined) {
+    const prevByUser = new Map<string, string[]>();
+    for (const id of idsToUpdate) {
+      const prev = existingMap.get(id)?.assigned_to as string | null | undefined;
+      if (prev && prev !== body.assigned_to) {
+        const arr = prevByUser.get(prev) ?? [];
+        arr.push(id);
+        prevByUser.set(prev, arr);
+      }
+    }
+    if (prevByUser.size > 0) {
+      try {
+        await Promise.all(
+          [...prevByUser.entries()].map(([userId, leadIds]) =>
+            addLeadCollaborators(supabase, auth.tenantId, leadIds, userId),
+          ),
+        );
+      } catch (err) {
+        log.error({ err }, "addLeadCollaborators (prev assignees) on bulk handoff failed");
+      }
+    }
+  }
+
   // Keep lead_branches origin rows in sync for each updated lead
   if (body.branch_id !== undefined || body.assigned_to !== undefined) {
     await Promise.all(
@@ -328,6 +382,16 @@ export async function PATCH(request: NextRequest) {
         return syncOriginMembership(supabase, auth.tenantId, lid, newBranchId, newAssignedTo);
       })
     );
+  }
+
+  // Mirror the new assignee onto every non-origin pool row so the cross-branch pool
+  // (unassignedCrossBranchLeadIds) never treats an assigned lead as unclaimed.
+  if (body.assigned_to !== undefined) {
+    await supabase.from("lead_branches")
+      .update({ assigned_to: body.assigned_to ?? null })
+      .eq("tenant_id", auth.tenantId)
+      .in("lead_id", idsToUpdate)
+      .eq("is_origin", false);
   }
 
   // Resolve old list names for human-readable audit entries
@@ -373,7 +437,7 @@ export async function PATCH(request: NextRequest) {
           }
           ops.push(emitEvent({
             tenantId: auth.tenantId,
-            type: "lead.list_changed",
+            type: body.graduate ? "lead.graduated" : "lead.list_changed",
             entityType: "lead",
             entityId: id,
             payload: {
@@ -390,7 +454,7 @@ export async function PATCH(request: NextRequest) {
         ops.push(createAuditLog({
           tenantId: auth.tenantId,
           userId: auth.userId,
-          action: "lead.updated",
+          action: body.graduate ? "lead.graduated" : "lead.updated",
           entityType: "lead",
           entityId: id,
           changes,

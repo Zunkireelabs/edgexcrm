@@ -4,6 +4,7 @@ import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissi
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
 import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
+import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -70,6 +71,36 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
   return (data as LeadList[]) || [];
 }
 
+/**
+ * Live lead count per list, for sidebar stage rows. Same chunked-range caveat as
+ * getLeads: PostgREST caps a response at 1000 rows, so we page until short.
+ * Fine at today's it_agency volumes; revisit alongside the broader pagination TODO
+ * if a tenant's stage-lists grow past a few thousand leads each.
+ */
+export async function getLeadListCounts(tenantId: string, listIds: string[]): Promise<Record<string, number>> {
+  if (listIds.length === 0) return {};
+  const supabase = await createServiceClient();
+  const counts: Record<string, number> = {};
+  const CHUNK = 1000;
+  for (let from = 0; ; from += CHUNK) {
+    const { data, error } = await supabase
+      .from("leads")
+      .select("list_id")
+      .eq("tenant_id", tenantId)
+      .in("list_id", listIds)
+      .is("deleted_at", null)
+      .is("converted_at", null)
+      .range(from, from + CHUNK - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const lid = (row as { list_id: string | null }).list_id;
+      if (lid) counts[lid] = (counts[lid] ?? 0) + 1;
+    }
+    if (!data || data.length < CHUNK) break;
+  }
+  return counts;
+}
+
 export async function getLeads(
   tenantId: string,
   scope?: {
@@ -81,6 +112,8 @@ export async function getLeads(
     userBranchId?: string | null;
     crossBranchPoolListSlug?: string | null;
     listId?: string | null;
+    /** Funnel-wide view: leads whose list_id is any of the funnel's stage-lists. */
+    listIds?: string[] | null;
     excludeListIds?: string[];
     onlyDeleted?: boolean;
     excludeOtherType?: boolean;
@@ -169,6 +202,8 @@ export async function getLeads(
     if (!scope?.onlyDeleted) {
       if (scope?.listId) {
         q = q.eq("list_id", scope.listId);
+      } else if (scope?.listIds && scope.listIds.length > 0) {
+        q = q.in("list_id", scope.listIds);
       } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
         // Master view for education: show leads not in any archive list (NULL list_id is included)
         q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
@@ -218,6 +253,32 @@ export async function getLeads(
   return result ?? [];
 }
 
+/**
+ * it_agency Sales Leads "no next task" signal — which of the given leads have at
+ * least one open (todo/in_progress) task. Structure only: no automated alerting yet.
+ */
+export async function getOpenTaskLeadIds(tenantId: string, leadIds: string[]): Promise<Set<string>> {
+  if (leadIds.length === 0) return new Set();
+  const supabase = await createServiceClient();
+  const openIds = new Set<string>();
+  const CHUNK = 200; // keep the .in() filter well under undici's 16KB URL cap
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    const chunk = leadIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("lead_id")
+      .eq("tenant_id", tenantId)
+      .in("lead_id", chunk)
+      .in("status", ["todo", "in_progress"]);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const lid = (row as { lead_id: string | null }).lead_id;
+      if (lid) openIds.add(lid);
+    }
+  }
+  return openIds;
+}
+
 export async function getLead(
   leadId: string,
   tenantId: string,
@@ -247,11 +308,14 @@ export async function getLead(
       // Service client: tenant_users RLS hides other users' rows from the RLS client.
       const svc = await createServiceClient();
       const memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
-      // Unassigned lead (e.g. a walk-in just created via Check-In): fall back to a
-      // branch match, same as requireLeadBranchAccess in src/lib/api/auth.ts.
-      const branchOk = data.assigned_to
-        ? memberIds.includes(data.assigned_to)
-        : data.branch_id === scope.branchId;
+      // In-branch via the lead_branches roster, a direct branch_id, or a
+      // branch-member assignee. Mirrors requireLeadBranchAccess / requireLeadAccess
+      // and the getLeads list scope so the detail page matches the list — a lead a
+      // branch manager sees in their list must open, not 404.
+      const branchOk =
+        membership.some((m) => m.branch_id === scope.branchId) ||
+        data.branch_id === scope.branchId ||
+        (data.assigned_to !== null && memberIds.includes(data.assigned_to));
       if (!branchOk) return null;
     }
   }
@@ -441,7 +505,14 @@ export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | n
 
 export async function getLeadsForPipeline(
   tenantId: string,
-  options?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; pipelineId?: string; branchId?: string | null }
+  options?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    pipelineId?: string;
+    branchId?: string | null;
+    excludeOtherType?: boolean;
+  }
 ): Promise<PipelineLead[]> {
   const supabase = await createClient();
 
@@ -454,6 +525,9 @@ export async function getLeadsForPipeline(
     .is("converted_at", null)
     .not("stage_id", "is", null)
     .limit(500);
+
+  // Exclude "other" type contacts from the board — they're walk-in visitors only.
+  if (options?.excludeOtherType) query = query.not("tags", "cs", '{"other"}');
 
   if (options?.pipelineId) {
     // If this specific pipeline isn't in the allowed set, return empty immediately.
@@ -658,6 +732,25 @@ export async function getLeadActivity(leadId: string, tenantId: string): Promise
 
   if (error) throw error;
   return (data as LeadActivity[]) || [];
+}
+
+// Every raw form submission this lead has ever made, oldest first — the source
+// of truth for "what distinct answers has this person given across repeat
+// submissions" (see src/lib/leads/submission-history.ts).
+export async function getLeadSubmissionHistory(
+  leadId: string,
+  tenantId: string
+): Promise<LeadSubmissionSnapshot[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("lead_submissions")
+    .select("custom_fields")
+    .eq("lead_id", leadId)
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+
+  if (error) throw error;
+  return (data as LeadSubmissionSnapshot[]) || [];
 }
 
 export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {

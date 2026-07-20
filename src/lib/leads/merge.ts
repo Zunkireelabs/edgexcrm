@@ -255,7 +255,7 @@ export async function mergeLeads(
     repointedCounts.lead_duplicate_suggestions_deleted = rowIds(data).length;
   }
 
-  // ── 5. Merge fields into canonical (fill-empty; JSONB merge; tags union) ─
+  // ── 5. Merge fields into canonical (fill-empty; JSONB merge; tags fill-empty) ─
   const fieldPatchFlat = applyCanonicalUpdate(canonical, {
     first_name: absorbed.first_name,
     last_name: absorbed.last_name,
@@ -270,8 +270,8 @@ export async function mergeLeads(
   });
 
   // Store {old, new} per key so undo can restore old values rather than nulling them out.
-  // Critical for JSONB/array fields where applyCanonicalUpdate produces a merged superset:
-  // without old values, undo would null canonical's custom_fields/file_urls/tags.
+  // Critical for JSONB fields where applyCanonicalUpdate produces a merged superset (custom_fields,
+  // file_urls): without old values, undo would null canonical's data instead of restoring it.
   const fieldPatchDetailed: Record<string, { old: unknown; new: unknown }> = {};
   const canonicalMap = canonical as unknown as Record<string, unknown>;
   for (const key of Object.keys(fieldPatchFlat)) {

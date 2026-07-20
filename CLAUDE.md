@@ -23,7 +23,7 @@ The product is an **AI-native operating system per industry tenant**. Each tenan
 | Where it lives | What goes there |
 |---|---|
 | `src/app/(main)/(dashboard)/<feature>/` + `src/components/dashboard/<feature>.tsx` | **Universal features** — used by every tenant regardless of industry. Examples: leads, pipeline, team, settings. |
-| `src/industries/<industry-id>/features/<feature>/` | **Industry-scoped features** — used by one industry only. Example: `industries/education-consultancy/features/check-in/`. |
+| `src/industries/<industry-id>/features/<feature>/` | **Industry-scoped features** — used by one industry only. Example: `industries/education-consultancy/features/classes/`. |
 | `src/industries/_shared/features/<feature>/` | **Cross-industry shared features** — used by multiple industries (but not all). Each consuming industry's `manifest.ts` opts in. |
 
 ### Three feature categories
@@ -51,8 +51,8 @@ Each industry exports a `manifest.ts` declaring its features, sidebar items, and
 ```ts
 // src/industries/education-consultancy/manifest.ts
 import { FEATURES, INDUSTRIES } from "../_registry";
-import { checkInMeta } from "./features/check-in/meta";
-import { formBuilderMeta } from "./features/form-builder/meta";
+import { checkInMeta } from "../_shared/features/check-in/meta";
+import { formBuilderMeta } from "../_shared/features/form-builder/meta";
 
 export const manifest: IndustryManifest = {
   id: INDUSTRIES.EDUCATION_CONSULTANCY,
@@ -100,10 +100,10 @@ When a second industry wants a feature that already exists in one industry's fol
 | Industry entities manager | Industry-aware | all with industry set |
 | Email auto-forward + Gmail OAuth | Global | all |
 | Multi-pipeline | Global | all |
-| AI chat (`/api/v1/ai/chat`) | Global | all (placeholder; per-industry config later) |
+| AI assistant (`/api/v1/ai/*` — streaming chat, tool packs, knowledge retrieval) | Industry-aware | all (per-industry tool packs + prompt addenda via each manifest's `ai` config; flag-gated `AI_ASSISTANT_ENABLED`) |
 | Notifications | Global | all |
-| **Student check-in** | **Industry-scoped** | **education_consultancy** |
-| **Form builder** | **Industry-scoped** | **education_consultancy** |
+| **Student check-in** | **Shared** (`src/industries/_shared/features/check-in/`) | **education_consultancy, travel_agency** |
+| **Form builder** | **Shared** (`src/industries/_shared/features/form-builder/`) | **education_consultancy, construction, travel_agency** |
 
 For a fuller, machine-friendly view see `docs/FEATURE-CATALOG.md`.
 
@@ -234,6 +234,8 @@ When the user gives ANY development request (build, create, implement, fix, upda
 |-------|--------|
 | `/project-pm` | Orchestrator for all dev tasks |
 | `/coo-it-agency` | Operating-strategy brain for `it_agency` tenants — whole-company product direction, end-to-end workflow design/critique, AI-native touchpoint hunting; sits above crm/hr experts and orchestrates them; advises & routes. One COO skill per industry. |
+| `/pm-it-agency` | Delivery-execution brain for `it_agency` tenants — how projects actually get run (methodology, sprint/milestone/task/status/approval mechanics, resourcing, delivery-health metrics, RAID); optimizes the Delivery surface (Projects/Time Tracking/Approvals/Resourcing/Utilization) and proposes delivery features. Functional expert under coo-it-agency; advises & routes. One PM skill per industry. |
+| `/coo-real-estate` | Operating-strategy brain for `real_estate` (CRE sponsor / capital-raise) tenants — whole-firm product direction, end-to-end investor-raise + IR workflow design/critique (source→structure→raise→subscribe→close→distribute→report→re-up), AI-native touchpoint hunting; knows the CRE-capital domain, competitors (SponsorCloud/Juniper Square/InvestNext/Covercy), and reuse spines. Sits above crm/hr experts and orchestrates them; advises & routes. One COO skill per industry. |
 | `/crm-expert` | Lead workflows, pipeline design, CRM patterns |
 | `/hr-expert` | HR/HRMS domain — org/positions, onboarding, leave/attendance, payroll, performance, ESS/MSS; plans people features, reuses existing team/positions spine, routes to dev skills |
 | `/db-engineer` | Schema, migrations, SQL, RLS, tenant isolation |
@@ -291,7 +293,7 @@ feature/* ──► stage (staging) ──► main (production)
 ### The rules that keep prod from breaking (learned from real incidents)
 
 1. **Branch from — and rebase onto — the LATEST `origin/stage`** right before you merge. A stale base is the #1 cause of a merge silently reverting someone else's work on a shared file (`shell.tsx`, `leads/queries.ts`, `leads/route.ts`, …). Resolve conflicts on those files **hunk-by-hunk**, never "keep my whole file."
-2. **`main` auto-deploys on every push, with NO migration step.** So a coupled DB change must be **applied to the PROD database BEFORE the code merges to `main`** — else prod runs new code on an old schema → 500s (split-brain). Order is always: *apply migration to prod → verify → merge stage→main.*
+2. **Migrations ride the deploy pipelines, migration-before-code order is enforced by CI.** `deploy-staging.yml` auto-applies pending migrations to the stage DB via `scripts/migrate-apply.sh` (ledger `schema_migrations`, advisory-locked) before deploying; `deploy.yml` (prod) has the same `migrate` job behind the **`production-db` environment approval gate** — a migration-bearing stage→main promotion pauses at "Apply Pending Migrations" for a reviewer, applies to prod, *then* swaps the container. Out-of-band/emergency SQL can still be hand-applied (per-action approval, see below), but the old "hand-apply to prod before merging" step is no longer the normal flow. Split-brain (new code on old schema) is still the failure mode if the migrate job is skipped/red — never merge past a failed migrate.
 3. **One migration number = one file, globally unique.** `ls supabase/migrations/ | sort` → take the next number; never reuse (we already have a duplicate `110_*` — don't add more). Transactional, additive, with a rollback line + before/after counts.
 4. **Two separate Supabase DBs** (stage `dymeudcddasqpomfpjvt`, prod `pirhnklvtjjpuvbvibxf`). A migration on one is NOT on the other. "Applied" is meaningless without saying which DB. A migration is not on prod until you have personally run it on prod.
 5. **Rollback (`rollback.yml`) is a fire alarm:** it reverts CODE only (not the DB), un-deploys everything after the target SHA, and detaches HEAD on the box. Announce before running; prefer a roll-*forward* revert PR.
@@ -299,8 +301,8 @@ feature/* ──► stage (staging) ──► main (production)
 | Trigger | Result |
 |---------|--------|
 | PR to `main` or `stage` | CI checks (lint, typecheck, build) |
-| Push to `stage` | Auto-deploy to `dev-lead-crm.zunkireelabs.com` |
-| Push to `main` | Auto-deploy to `lead-crm.zunkireelabs.com` (⚠️ no migration step) |
+| Push to `stage` | Auto-apply pending migrations to stage DB → auto-deploy to `dev-lead-crm.zunkireelabs.com` |
+| Push to `main` | Approval-gated migrate job (`production-db` env) if migrations present → auto-deploy to `lead-crm.zunkireelabs.com` |
 | Manual dispatch | Rollback (code only — see rule 5) |
 
 ```bash
@@ -314,7 +316,7 @@ git fetch origin && git rebase origin/stage   # again right before merge
 # main + stage are BRANCH-PROTECTED — no direct pushes. Everything is a PR.
 # (If GitHub says the PR is out-of-date, click "Update branch" — required to merge.)
 
-# Deploy staging: open + squash-merge a PR to stage (CI must be green, 0 approvals)
+# Deploy staging: open + squash-merge a PR to stage (CI must be green + 1 approval — stage is branch-protected)
 gh pr create --base stage --title "..." --body "..."
 gh pr merge <num> --squash --delete-branch
 
@@ -450,12 +452,14 @@ Migrations are in `supabase/migrations/` numbered sequentially (001-019). Applie
 | Env | Project ref | URL | Used by |
 |---|---|---|---|
 | **Production** | `pirhnklvtjjpuvbvibxf` (ap-south-1) | `https://pirhnklvtjjpuvbvibxf.supabase.co` | prod deploy (`lead-crm`/`edgex.zunkireelabs.com`), `docker-compose.prod.yml`, prod VPS `.env.local` |
-| **Dev/Staging** | `dymeudcddasqpomfpjvt` | `https://dymeudcddasqpomfpjvt.supabase.co` | `dev-lead-crm.zunkireelabs.com`, `docker-compose.yml`, dev VPS `.env.local`, **local `npm run dev`** |
+| **Dev/Staging** | `dymeudcddasqpomfpjvt` | `https://dymeudcddasqpomfpjvt.supabase.co` | `dev-lead-crm.zunkireelabs.com`, `docker-compose.yml`, stage VPS `.env.local` |
+| **Local dev** | local Docker Supabase stack (containers `*_edgexcrm`) | `http://127.0.0.1:54321` (DB on `54322`) | **local `npm run dev` / `npm start`** on the dev box — NOT the shared staging project; seeded tenants `test-agency`/`cre-capital`/`admizz-local` |
 
 - **Prod DB connection**: `postgresql://postgres.pirhnklvtjjpuvbvibxf:H2a0r0d0ik%23@aws-1-ap-south-1.pooler.supabase.com:5432/postgres`
 - **Stage DB connection (direct)**: `postgresql://postgres:Zunkiree%40123%25%5E%26@db.dymeudcddasqpomfpjvt.supabase.co:5432/postgres` (password `Zunkiree@123%^&`)
 - **Keys**: in each environment's `.env.local`. The DB pointer lives in **two places per environment** — `docker-compose*.yml` build args (`NEXT_PUBLIC_*`, baked at build) **and** the VPS `.env.local` (`SUPABASE_SERVICE_ROLE_KEY` + the `NEXT_PUBLIC_*` runtime copies). Change both in lockstep or you get a prod/stage split-brain (client one DB, server the other).
-- **Stage = sanitized clone of prod** (point-in-time 2026-06-21): identical schema + all rows, but end-customer PII scrubbed and **every auth password reset to `edgexdev123`**. Log into dev/local as any prod email (e.g. `admin@zunkireelabs.com`, `hello@admizz.org`) with password `edgexdev123`.
+- **Stage = clone of prod** (point-in-time 2026-06-21): identical schema + all rows, with **every auth password reset to `edgexdev123`**. Log into dev/local as any prod email (e.g. `admin@zunkireelabs.com`, `hello@admizz.org`) with password `edgexdev123`.
+- ⚠️ **Stage customer data is NOT anonymized.** This doc previously claimed "end-customer PII scrubbed" — that is false and was corrected 2026-07-19 after it misled a privacy assessment. Verified on the stage DB: of Admizz's 16,684 leads, **16,436 carry a real phone number** and only 38 are obvious test rows. Names and phone numbers came across intact; only passwords were reset. Treat stage lead data as **real customer PII**, especially before pointing any third-party service (AI providers, analytics, external APIs) at it. Anonymizing stage's customer columns is tracked as open work.
 
 ### Migration workflow (dev-first)
 
@@ -476,8 +480,8 @@ This overrides the "prod only at promotion" default: prod changes are allowed mi
 always gated behind an explicit, per-action approval — not run unsupervised.
 
 ### Server
-- **The ONLY Zunkiree Labs VPS is `root@94.136.189.213`.** There is no other zunkireelabs server.
-- **Always connect with `ssh vps`** (alias in `~/.ssh/config`), never the raw IP. The raw IP `ssh root@94.136.189.213` does NOT match the `vps` Host block, so it skips the `~/.ssh/vps_zunkireelabs` identity file and falls back to password auth — which fails non-interactively (e.g. via Claude's `!` prefix).
+- **Two boxes — don't confuse them.** (1) The **dev box** is where Claude Code sessions run (`/home/sadin/edgeXcrm`, host `vmi3118921`, `173.249.9.91`) — Sadin's Mac alias `vps` points HERE. (2) The **Zunkiree Labs VPS** (`root@94.136.189.213`) hosts the deployed stage + prod apps and is **NOT reachable from the dev box** (no key) — changes reach it via the GitHub Actions deploy pipelines, and only Sadin can shell into it.
+- The rest of this section describes the **Zunkiree VPS** (the deploy target):
 - IP: `94.136.189.213`
 - Domain: `lead-crm.zunkireelabs.com`
 - Container: `leads-crm` (Docker + Traefik + Let's Encrypt)
@@ -485,17 +489,17 @@ always gated behind an explicit, per-action approval — not run unsupervised.
 
 ---
 
-## Form Builder Feature (`src/industries/education-consultancy/features/form-builder/`)
+## Form Builder Feature (`src/industries/_shared/features/form-builder/`)
 
-Visual form builder, industry-scoped to `education_consultancy`. Admin manages fields and branding; developers control step structure via API/templates.
+Visual form builder, shared across `education_consultancy`, `construction`, and `travel_agency` (each opts in via its manifest). Admin manages fields and branding; developers control step structure via API/templates.
 
 - **Wizard**: 3-step creation at `/forms/new` (Pick Template → Customize → Publish)
 - **Builder**: Split layout with editor (left) + live preview (right) at `/forms/[id]`
-- **Templates**: 4 education templates + blank (`src/industries/education-consultancy/features/form-builder/templates/`)
+- **Templates**: 4 education templates + blank (`src/industries/_shared/features/form-builder/templates/`)
 - **Public submit API**: `POST /api/public/submit/[tenantSlug]/[formSlug]` — requires API key (Bearer token), CORS enabled
 - **API keys split**: Form keys shown on `/forms`, integration keys on `/settings` — differentiated by `permissions_detail.category`
 - **Public forms**: `force-dynamic` — fetches config in real-time from `form_configs` JSONB
-- **Industry gate**: all 3 page routes and 3 API routes call `getFeatureAccess(industry, FEATURES.FORM_BUILDER)`; non-education tenants get 404/403.
+- **Industry gate**: all 3 page routes and 3 API routes call `getFeatureAccess(industry, FEATURES.FORM_BUILDER)`; tenants outside the opted-in industries get 404/403.
 
 ### Builder UI decisions
 - Field editor: Label/Type/Required visible by default, advanced settings behind toggle

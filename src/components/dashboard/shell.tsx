@@ -36,6 +36,7 @@ import {
   Stamp,
   Network,
   ListChecks,
+  ListTodo,
   GitCompare,
   Plane,
   MapPin,
@@ -44,12 +45,14 @@ import {
   Megaphone,
   GraduationCap,
   BookOpen,
-  Repeat2,
   Package,
   FileSignature,
   Gauge,
   CalendarClock,
   CalendarCheck,
+  Filter,
+  Target,
+  FolderOpen,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -66,6 +69,7 @@ import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
 import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
+import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 
@@ -115,6 +119,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LayoutGrid,
   Kanban,
+  ListTodo,
   MessageSquare,
   Stamp,
   Users,
@@ -128,10 +133,10 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Megaphone,
   GraduationCap,
   BookOpen,
-  Repeat2,
   Package,
   FileSignature,
   Gauge,
+  FolderOpen,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -174,7 +179,7 @@ function SidebarGroupRender({
         className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -196,7 +201,7 @@ function SidebarGroupRender({
                 className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
-                    : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+                    : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
                 }`}
               >
                 <ChildIcon className="w-4 h-4" />
@@ -229,9 +234,11 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
-  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
+  leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
+  /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
+  aiAssistantEnabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -251,11 +258,15 @@ export function DashboardShell({
   leadLists = [],
   stagingLists = [],
   archiveLists = [],
+  aiAssistantEnabled = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isOrcaRoute = pathname === "/orca" || pathname.startsWith("/orca/");
+  // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
+  // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
+  // consistent with the (hidden) mode-switcher tab above.
+  const isOrcaRoute = aiAssistantEnabled && (pathname === "/orca" || pathname.startsWith("/orca/"));
   const navMode = isOrcaRoute ? "orca" : "ops";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -276,6 +287,10 @@ export function DashboardShell({
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
+  // real_estate (CRE capital-raise): renders the generic sidebar branch, but the
+  // universal "All Leads" nav item is relabeled "Investors" (investors ride the
+  // leads spine). Additive — no other industry's label changes.
+  const isRealEstate = tenant.industry_id === "real_estate";
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -283,6 +298,7 @@ export function DashboardShell({
       education_consultancy: "edu",
       travel_agency: "travel",
       it_agency: "agency",
+      real_estate: "capital",
     } as Record<string, string>)[tenant.industry_id ?? ""] ?? "";
 
   // Fix hydration mismatch: wait until client-side before rendering Radix UI components
@@ -329,7 +345,7 @@ export function DashboardShell({
         className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <item.icon className="w-[18px] h-[18px]" />
@@ -382,28 +398,30 @@ export function DashboardShell({
         </span>
       </div>
 
-      {/* Mode switcher */}
-      <div className="px-3 pb-2">
-        <Tabs value={navMode} onValueChange={handleNavModeChange}>
-          <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
-            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <LayoutGrid className="w-3.5 h-3.5" />
-              Ops
-            </TabsTrigger>
-            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <Bot className="w-3.5 h-3.5" />
-              Orca
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled) */}
+      {aiAssistantEnabled && (
+        <div className="px-3 pb-2">
+          <Tabs value={navMode} onValueChange={handleNavModeChange}>
+            <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
+              <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Ops
+              </TabsTrigger>
+              <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <Bot className="w-3.5 h-3.5" />
+                Orca
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* Global Search row — top of nav, opens command palette */}
       <div className="px-3 pb-1">
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-gray-500 hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>
@@ -436,7 +454,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Leads" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -448,7 +466,7 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 <Suspense key="lead-lists-nav" fallback={
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                     <Users className="w-[18px] h-[18px] shrink-0" />
                     All Leads
                   </div>
@@ -459,7 +477,6 @@ export function DashboardShell({
                     isAdmin={role === "owner" || role === "admin"}
                   />
                 </Suspense>
-                {eduItem("/follow-ups") && renderIndustryEntry(eduItem("/follow-ups")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
                 {archiveLists.length > 0 && (
@@ -491,9 +508,6 @@ export function DashboardShell({
               industrySidebarItems.find(
                 (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
               );
-            const pmGroup = industrySidebarItems.find(
-              (e): e is SidebarGroup => "children" in e && e.id === "project-management"
-            );
             return (
               <>
                 {/* Home — standalone, no section header */}
@@ -508,7 +522,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Sales" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -519,24 +533,93 @@ export function DashboardShell({
                     />
                   </Suspense>
                 )}
-                {navAllowed("/leads") && (
-                  leadLists.length > 0 ? (
-                    <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
-                        <Users className="w-[18px] h-[18px] shrink-0" />
-                        All Leads
-                      </div>
-                    }>
-                      <LeadListsNavGroup
-                        lists={leadLists}
-                        onNavigate={() => setMobileOpen(false)}
-                        isAdmin={role === "owner" || role === "admin"}
-                      />
-                    </Suspense>
-                  ) : (
-                    renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
-                  )
-                )}
+                {navAllowed("/leads") && (() => {
+                  // Funnel grouping is it_agency-only — non-it_agency tenants always fall
+                  // through to the ungrouped/All Leads path below, even if a list somehow
+                  // carries a funnel_key (belt-and-suspenders; the write path is gated too).
+                  const processingLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "lead_processing")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const salesLists = isItAgency
+                    ? leadLists
+                        .filter((l) => l.funnel_key === "sales_leads")
+                        .sort((a, b) => a.sort_order - b.sort_order)
+                    : [];
+                  const ungroupedLists = isItAgency
+                    ? leadLists.filter((l) => l.funnel_key == null)
+                    : leadLists;
+                  const isAdminUser = role === "owner" || role === "admin";
+
+                  if (processingLists.length === 0 && salesLists.length === 0) {
+                    return ungroupedLists.length > 0 ? (
+                      <Suspense key="lead-lists-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Users className="w-[18px] h-[18px] shrink-0" />
+                          All Leads
+                        </div>
+                      }>
+                        <LeadListsNavGroup
+                          lists={ungroupedLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                    ) : (
+                      renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                    );
+                  }
+
+                  return (
+                    <>
+                      <Suspense key="lead-processing-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Filter className="w-[18px] h-[18px] shrink-0" />
+                          Lead Processing
+                        </div>
+                      }>
+                        <LeadFunnelNavGroup
+                          funnelKey="lead_processing"
+                          label="Lead Processing"
+                          icon={Filter}
+                          lists={processingLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                      <Suspense key="sales-leads-nav" fallback={
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <Target className="w-[18px] h-[18px] shrink-0" />
+                          Sales Leads
+                        </div>
+                      }>
+                        <LeadFunnelNavGroup
+                          funnelKey="sales_leads"
+                          label="Sales Leads"
+                          icon={Target}
+                          lists={salesLists}
+                          onNavigate={() => setMobileOpen(false)}
+                          isAdmin={isAdminUser}
+                        />
+                      </Suspense>
+                      {ungroupedLists.length > 0 && (
+                        <Suspense key="lead-lists-nav" fallback={
+                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                            <Users className="w-[18px] h-[18px] shrink-0" />
+                            All Leads
+                          </div>
+                        }>
+                          <LeadListsNavGroup
+                            lists={ungroupedLists}
+                            onNavigate={() => setMobileOpen(false)}
+                            isAdmin={isAdminUser}
+                          />
+                        </Suspense>
+                      )}
+                    </>
+                  );
+                })()}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}
@@ -555,7 +638,10 @@ export function DashboardShell({
 
                 {/* Delivery */}
                 <NavSectionHeader label="Delivery" />
-                {pmGroup && renderIndustryEntry(pmGroup)}
+                {itItem("/projects") && renderIndustryEntry(itItem("/projects")!)}
+                {itItem("/tasks") && renderIndustryEntry(itItem("/tasks")!)}
+                {itItem("/time-tracking") && renderIndustryEntry(itItem("/time-tracking")!)}
+                {itItem("/approvals") && renderIndustryEntry(itItem("/approvals")!)}
 
                 {/* Communication */}
                 <NavSectionHeader label="Communication" />
@@ -571,11 +657,50 @@ export function DashboardShell({
                 {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
               </>
             );
+          })() : isRealEstate ? (() => {
+            // real_estate (CRE capital-raise): departmental sidebar mirroring the
+            // it_agency branch. Investors ride the universal /leads spine (relabeled);
+            // Offerings + Data Room come from the industry manifest via reItem().
+            const reItem = (href: string) =>
+              industrySidebarItems.find(
+                (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
+              );
+            return (
+              <>
+                {/* Home — standalone, no section header */}
+                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
+
+                {/* Intelligence */}
+                <NavSectionHeader label="Intelligence" />
+                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
+                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+
+                {/* Capital Raise */}
+                <NavSectionHeader label="Capital Raise" />
+                {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
+                {reItem("/offerings") && renderIndustryEntry(reItem("/offerings")!)}
+                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+                {reItem("/data-room") && renderIndustryEntry(reItem("/data-room")!)}
+
+                {/* Investor Relations — header omitted until Distributions/Statements
+                    land (avoids an empty-section header). Add it here when they do. */}
+
+                {/* People */}
+                <NavSectionHeader label="People" />
+                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
+                {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
+                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
+
+                {/* Comms */}
+                <NavSectionHeader label="Comms" />
+                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
+              </>
+            );
           })() : (
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
-                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                   <span className="w-[18px] h-[18px] shrink-0" />
                   Leads Organise
                 </div>
@@ -593,7 +718,7 @@ export function DashboardShell({
                 if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-gray-500">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>
@@ -608,7 +733,7 @@ export function DashboardShell({
                 }
                 const node = renderNavItem(
                   item.href === "/leads"
-                    ? { ...item, badge: counts.unread_leads || undefined }
+                    ? { ...item, label: isRealEstate ? "Investors" : item.label, badge: counts.unread_leads || undefined }
                     : item
                 );
                 if (item.href === "/home") {
@@ -668,8 +793,8 @@ export function DashboardShell({
                 </span>
               </div>
 
-              {/* Settings (ops mode only) */}
-              {navMode === "ops" && navAllowed("/settings") && (
+              {/* Settings (ops mode only) — owner/admin only; route + bootstrap API also hard-gate to these roles */}
+              {navMode === "ops" && (role === "owner" || role === "admin") && (
                 <div className="py-1">
                   <button
                     type="button"
@@ -735,18 +860,20 @@ export function DashboardShell({
 
           {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
           <div className="flex items-center gap-3">
-            {/* AI Assistant Button */}
-            <button
-              onClick={toggleAssistant}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                isAssistantOpen
-                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
-                  : "hover:bg-gray-100 text-gray-700"
-              }`}
-            >
-              <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
-              <span className="text-sm font-medium hidden sm:inline">Assistant</span>
-            </button>
+            {/* AI Assistant Button — hidden entirely (not just its requests 404) when disabled */}
+            {aiAssistantEnabled && (
+              <button
+                onClick={toggleAssistant}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
+                  isAssistantOpen
+                    ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
+                    : "hover:bg-gray-100 text-gray-700"
+                }`}
+              >
+                <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
+                <span className="text-sm font-medium hidden sm:inline">Assistant</span>
+              </button>
+            )}
 
             {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
             <BranchSwitcher
@@ -777,10 +904,13 @@ export function DashboardShell({
             {children}
           </main>
 
-          {/* AI Assistant Panel */}
-          <div className="print:hidden">
-            <AIAssistantPanel />
-          </div>
+          {/* AI Assistant Panel — not mounted at all when disabled, so a disabled
+              tenant has no path to open it (button hidden above; this is belt-and-braces). */}
+          {aiAssistantEnabled && (
+            <div className="print:hidden">
+              <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
+            </div>
+          )}
         </div>
       </div>
     </div>

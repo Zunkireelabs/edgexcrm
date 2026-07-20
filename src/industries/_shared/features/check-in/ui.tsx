@@ -9,6 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -31,15 +36,23 @@ import {
   MapPin,
   Globe,
   FileText,
+  User,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
 import type { TeamMember } from "@/lib/supabase/queries";
 import {
-  DEGREE_LEVELS,
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
+import {
+  ACADEMIC_LEVELS,
+  TEST_TYPES,
+  hasProspectQualification,
+  canBypassProspectQualification,
+} from "@/lib/leads/prospect-qualification";
+import { ProspectQualificationDialog } from "@/components/dashboard/leads/prospect-qualification-dialog";
 
 interface LeadResult {
   id: string;
@@ -50,6 +63,8 @@ interface LeadResult {
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
+  list_name: string | null;
+  assigned_to_name: string | null;
   created_at: string;
 }
 
@@ -62,7 +77,13 @@ interface CheckInRecord {
   phone: string | null;
   assigned_to: string | null;
   assigned_to_name: string | null;
+  // Per-visit "meet with" person for THIS check-in, separate from the lead's
+  // assigned counselor (assigned_to).
+  meet_with_id: string | null;
+  meet_with_name: string | null;
   tags: string[];
+  lead_created_at: string | null;
+  is_new: boolean;
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
@@ -84,9 +105,11 @@ interface CheckInPageProps {
   canAssignOwnCheckIns: boolean;
   currentUserId: string;
   isAdmin: boolean;
+  /** Owner/admin + branch managers skip the Prospects academic-qualification dialog. */
+  bypassQualification?: boolean;
 }
 
-type DateFilter = "today" | "week" | "month" | "custom";
+type DateFilter = "today" | "yesterday" | "last7" | "last30" | "custom";
 
 function getDateRange(filter: DateFilter, customFrom?: string, customTo?: string) {
   const now = new Date();
@@ -100,16 +123,26 @@ function getDateRange(filter: DateFilter, customFrom?: string, customTo?: string
       from = start.toISOString();
       break;
     }
-    case "week": {
+    case "yesterday": {
+      const start = new Date(now);
+      start.setDate(start.getDate() - 1);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+      from = start.toISOString();
+      to = end.toISOString();
+      break;
+    }
+    case "last7": {
       const start = new Date(now);
       start.setDate(start.getDate() - 7);
       start.setHours(0, 0, 0, 0);
       from = start.toISOString();
       break;
     }
-    case "month": {
+    case "last30": {
       const start = new Date(now);
-      start.setMonth(start.getMonth() - 1);
+      start.setDate(start.getDate() - 30);
       start.setHours(0, 0, 0, 0);
       from = start.toISOString();
       break;
@@ -162,9 +195,9 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
   const router = useRouter();
-  const { destinations: destOptions } = useEduTaxonomy();
+  const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
     allBranchMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
   );
@@ -173,6 +206,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;
+  // education_consultancy shows Assigned To + Meet With as two independent columns;
+  // every other industry keeps the single flip-column (new-walk-in vs meet-with).
+  const eduCols = industryId === "education_consultancy";
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [meetWithId, setMeetWithId] = useState<string>("");
@@ -197,16 +233,36 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [assignedTo, setAssignedTo] = useState("");
   const [notes, setNotes] = useState("");
   const [leadTag, setLeadTag] = useState<string>("student");
+  const [leadTypeOptions, setLeadTypeOptions] = useState<{ slug: string; label: string; is_default: boolean }[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   // Student-only education fields (revealed when the Student tag is active)
-  const [destination, setDestination] = useState("");
+  const [destinations, setDestinations] = useState<string[]>([]);
   const [studyLevel, setStudyLevel] = useState("");
+  const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [referralSource, setReferralSource] = useState("");
   const [referredBy, setReferredBy] = useState("");
+  const [academics, setAcademics] = useState<Record<string, string>>({});
+  const [testScores, setTestScores] = useState<Record<string, string>>({});
+  const [academicsOpen, setAcademicsOpen] = useState(false);
+  const [academicsError, setAcademicsError] = useState(false);
+  const updateAcademic = (col: string, value: string) =>
+    setAcademics((prev) => ({ ...prev, [col]: value }));
+  const updateTestScore = (col: string, value: string) =>
+    setTestScores((prev) => ({ ...prev, [col]: value }));
 
-  // Check-in history state
+  // Assign-a-counselor gate (§6b hard-block): assigning a new walk-in's counselor from
+  // the check-in history table can hit the server's 422 (would auto-promote an
+  // unqualified lead into Prospects). Deferred until this fill-in dialog is confirmed.
+  const [pendingAssignGate, setPendingAssignGate] = useState<{
+    record: CheckInRecord;
+    userId: string;
+  } | null>(null);
+
+  // Check-in history state — every checked-in visitor shows here regardless of tag
+  // (Other-tagged ones also surface separately on the Contacts page).
   const [checkIns, setCheckIns] = useState<CheckInRecord[]>([]);
+  const visibleCheckIns = checkIns;
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [dateFilter, setDateFilter] = useState<DateFilter>("today");
   const [customFrom, setCustomFrom] = useState("");
@@ -216,6 +272,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Lead types (Student, Other, and any admin-added types) — mirrors the picker
+  // on the lead detail page (contact-card.tsx) instead of a hardcoded pair.
+  // Only education_consultancy has lead_types rows; the API 403s for other
+  // industries, and this block is hidden for travel_agency anyway (see below).
+  useEffect(() => {
+    if (industryId !== "education_consultancy") return;
+    fetch("/api/v1/lead-types")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((json) => { if (json?.data) setLeadTypeOptions(json.data); })
+      .catch(() => {});
+  }, [industryId]);
 
   // Set default pipeline
   useEffect(() => {
@@ -314,20 +382,14 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const handleCheckIn = async (leadId: string) => {
     setCheckingIn(leadId);
     try {
-      // Assign first so the check-in promotion logic sees the counselor assignee.
-      if (meetWithId) {
-        const assignRes = await fetch(`/api/v1/leads/${leadId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ assigned_to: meetWithId }),
-        });
-        if (!assignRes.ok) {
-          toast.error("Failed to assign lead");
-          setCheckingIn(null);
-          return;
-        }
-      }
-      const res = await fetch(`/api/v1/leads/${leadId}/check-in`, { method: "POST" });
+      // "Meet with" is a per-visit record stored on the check-in note — it does
+      // NOT reassign the lead's counselor (lead.assigned_to). Front-desk picks
+      // never clobber the lead's assignment.
+      const res = await fetch(`/api/v1/leads/${leadId}/check-in`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meet_with_id: meetWithId || null }),
+      });
       if (!res.ok) {
         toast.error("Failed to check in");
         setCheckingIn(null);
@@ -347,19 +409,86 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   };
 
   const handleAssign = async (record: CheckInRecord, userId: string | null) => {
-    if (!record.lead_id || assigningId) return;
+    if (assigningId) return;
     setAssigningId(record.id);
     try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      if (record.is_new) {
+        // New walk-in student → "Assigned To" is the lead's counselor.
+        // Assigning it updates the lead (and fires auto-promotion server-side).
+        if (!record.lead_id) return;
+        const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ assigned_to: userId }),
+        });
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => null);
+          const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+          if (academicMsg && userId) {
+            toast.error(academicMsg);
+            setPendingAssignGate({ record, userId });
+            return;
+          }
+          toast.error("Failed to assign lead");
+          return;
+        }
+        setCheckIns((prev) =>
+          prev.map((c) =>
+            c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+          ),
+        );
+        toast.success(userId ? "Lead assigned" : "Lead unassigned");
+      } else {
+        // Everyone else → "Meet with" is a per-visit record on the check-in
+        // note; editing it never touches the lead's counselor assignment.
+        const res = await fetch(`/api/v1/check-ins/${record.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ meet_with_id: userId }),
+        });
+        if (!res.ok) {
+          toast.error("Failed to update meet-with");
+          return;
+        }
+        setCheckIns((prev) =>
+          prev.map((c) =>
+            c.id === record.id ? { ...c, meet_with_id: userId, meet_with_name: name } : c,
+          ),
+        );
+        toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
+      }
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Assigned To always writes the lead's counselor (assigned_to),
+  // independent of Meet With — mirrors handleAssign's is_new branch for every row.
+  const handleAssignCounselor = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    if (!record.lead_id) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
       const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ assigned_to: userId }),
       });
       if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && userId) {
+          toast.error(academicMsg);
+          setPendingAssignGate({ record, userId });
+          return;
+        }
         toast.error("Failed to assign lead");
         return;
       }
-      const name = userId ? memberNameById.get(userId) ?? null : null;
       setCheckIns((prev) =>
         prev.map((c) =>
           c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
@@ -367,9 +496,65 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       );
       toast.success(userId ? "Lead assigned" : "Lead unassigned");
     } catch {
-      toast.error("Failed to assign lead");
+      toast.error("Failed to update");
     } finally {
       setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Meet With always writes the per-visit note field
+  // (meet_with_id), independent of the lead's counselor assignment.
+  const handleAssignMeetWith = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      const res = await fetch(`/api/v1/check-ins/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meet_with_id: userId }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to update meet-with");
+        return;
+      }
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, meet_with_id: userId, meet_with_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  const confirmAssignQualification = async (patch: Record<string, string>) => {
+    if (!pendingAssignGate) return;
+    const { record, userId } = pendingAssignGate;
+    if (!record.lead_id) return;
+    try {
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId, ...patch }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.error?.message || "Failed to assign lead");
+      }
+      const name = memberNameById.get(userId) ?? null;
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success("Lead assigned");
+      setPendingAssignGate(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to assign lead");
     }
   };
 
@@ -398,6 +583,22 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       return;
     }
 
+    if (
+      industryId === "education_consultancy" &&
+      !bypassQualification &&
+      leadTag === "student" &&
+      assignedTo &&
+      !hasProspectQualification(academics)
+    ) {
+      setAcademicsOpen(true);
+      setAcademicsError(true);
+      toast.error(
+        "Enter the student's highest qualification (%/GPA) before assigning a counselor."
+      );
+      return;
+    }
+    setAcademicsError(false);
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/v1/leads", {
@@ -411,7 +612,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           phone: phone || null,
           pipeline_id: pipelineId,
           stage_id: stageId,
-          assigned_to: (leadTag === "other" ? meetWithId : assignedTo) || null,
+          assigned_to: (leadTag !== "student" ? meetWithId : assignedTo) || null,
           intake_source: referralSource || "walk_in",
           intake_campaign:
             (referralSource === "referral" || referralSource === "other") &&
@@ -424,9 +625,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           // Student-only structured education fields
           ...(industryId !== "travel_agency" && leadTag === "student"
             ? {
-                destinations: destination ? [destination] : [],
+                destinations,
                 degree_level: studyLevel || null,
+                field_of_study: fieldOfStudy || null,
               }
+            : {}),
+          ...(industryId === "education_consultancy" && leadTag === "student"
+            ? { ...academics, ...testScores }
             : {}),
           is_final: true,
           step: 1,
@@ -445,7 +650,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         const checkInRes = await fetch(`/api/v1/leads/${newLeadId}/check-in`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ reason: notes.trim() || undefined }),
+          body: JSON.stringify({ meet_with_id: meetWithId || null, reason: notes.trim() || undefined }),
         });
         if (checkInRes.ok) {
           toast.success("Lead added and checked in");
@@ -465,10 +670,14 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setNotes("");
         setAssignedTo("");
         setMeetWithId("");
-        setDestination("");
+        setDestinations([]);
         setStudyLevel("");
+        setFieldOfStudy("");
         setReferralSource("");
         setReferredBy("");
+        setAcademics({});
+        setTestScores({});
+        setAcademicsOpen(false);
         setSubmitting(false);
       }
     } catch {
@@ -492,13 +701,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   }, [showAddForm, query]);
 
   const handleExportCSV = () => {
-    if (checkIns.length === 0) {
+    if (visibleCheckIns.length === 0) {
       toast.error("No check-ins to export");
       return;
     }
 
     const headers = ["Name", "Email", "Phone", "Pipeline", "Stage", "Checked In At", "Checked In By"];
-    const rows = checkIns.map((r) => [
+    const rows = visibleCheckIns.map((r) => [
       [r.first_name, r.last_name].filter(Boolean).join(" ") || "Unknown",
       r.email || "",
       r.phone || "",
@@ -517,7 +726,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `check-ins-${dateFilter === "custom" ? `${customFrom}-to-${customTo}` : dateFilter}-${new Date().toISOString().split("T")[0]}.csv`;
+    const filterLabel = dateFilter === "custom" ? `${customFrom}-to-${customTo}` : dateFilter === "yesterday" ? "yesterday" : dateFilter === "last7" ? "last-7-days" : dateFilter === "last30" ? "last-30-days" : dateFilter;
+    link.download = `check-ins-${filterLabel}-${new Date().toISOString().split("T")[0]}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -678,21 +888,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       <div className="space-y-3">
                         <div className="space-y-1">
                           <Label className="text-xs">Tag</Label>
-                          <div className="flex gap-2">
-                            {[
-                              { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                              { value: "parent", activeClass: "bg-green-100 text-green-700 ring-2 ring-green-300" },
-                              { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
-                            ].map(({ value, activeClass }) => (
+                          <div className="flex gap-2 flex-wrap">
+                            {(leadTypeOptions.length > 0
+                              ? leadTypeOptions
+                              : [{ slug: "student", label: "Student", is_default: true }, { slug: "other", label: "Other", is_default: false }]
+                            ).map(({ slug, label, is_default }) => (
                               <button
-                                key={value}
+                                key={slug}
                                 type="button"
                                 className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                                  leadTag === value ? activeClass : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                                  leadTag === slug
+                                    ? is_default
+                                      ? "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
+                                      : "bg-amber-100 text-amber-700 ring-2 ring-amber-300"
+                                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                                 }`}
-                                onClick={() => setLeadTag(value)}
+                                onClick={() => setLeadTag(slug)}
                               >
-                                {value.charAt(0).toUpperCase() + value.slice(1)}
+                                {label}
                               </button>
                             ))}
                           </div>
@@ -701,32 +914,38 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {/* Student-only structured fields */}
                         {leadTag === "student" && (
                           <div className="rounded-md border bg-muted/30 p-3 space-y-3">
-                            <div className="space-y-1">
-                              <Label className="text-xs">Destination</Label>
-                              <Select value={destination} onValueChange={setDestination}>
-                                <SelectTrigger className="h-9">
-                                  <SelectValue placeholder="Select destination (optional)" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {destOptions.map((d) => (
-                                    <SelectItem key={d} value={d}>
-                                      {d}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            </div>
                             <div className="grid grid-cols-2 gap-3">
+                              <DestinationsMultiSelect
+                                selected={destinations}
+                                onChange={setDestinations}
+                                options={destOptions}
+                                label="Destination"
+                              />
                               <div className="space-y-1">
-                                <Label className="text-xs">Interested Study Level</Label>
+                                <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
                                   <SelectTrigger className="h-9">
                                     <SelectValue placeholder="Select level (optional)" />
                                   </SelectTrigger>
                                   <SelectContent>
-                                    {DEGREE_LEVELS.map((d) => (
-                                      <SelectItem key={d.value} value={d.value}>
-                                        {d.label}
+                                    {studyLevelOptions.map((lvl) => (
+                                      <SelectItem key={lvl} value={lvl}>
+                                        {lvl}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="space-y-1">
+                                <Label className="text-xs">Field of Study</Label>
+                                <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
+                                  <SelectTrigger className="h-9">
+                                    <SelectValue placeholder="Select field (optional)" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {fieldOfStudyOptions.map((f) => (
+                                      <SelectItem key={f} value={f}>
+                                        {f}
                                       </SelectItem>
                                     ))}
                                   </SelectContent>
@@ -778,8 +997,78 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                     )}
 
+                    {/* Academic Qualification & Test Report — education Student tag only */}
+                    {industryId === "education_consultancy" && leadTag === "student" && (
+                      <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
+                        <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-xs font-medium text-gray-700 hover:text-gray-900">
+                          <ChevronRight
+                            className={`h-4 w-4 transition-transform ${
+                              academicsOpen ? "rotate-90" : ""
+                            }`}
+                          />
+                          Academic &amp; test details
+                          <span className="text-[10px] text-gray-400 font-normal">(optional)</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 pt-1">
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Academic Qualification
+                            </p>
+                            {ACADEMIC_LEVELS.map((level) => (
+                              <div key={level.key} className="space-y-1">
+                                <Label className="text-xs">{level.label}</Label>
+                                <div className="grid grid-cols-3 gap-2">
+                                  <Input
+                                    placeholder="%/GPA"
+                                    value={academics[`${level.key}_gpa`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_gpa`, e.target.value)}
+                                    className={`h-8 text-xs ${
+                                      academicsError && level.gateEligible
+                                        ? "ring-2 ring-destructive"
+                                        : ""
+                                    }`}
+                                  />
+                                  <Input
+                                    placeholder="School / College"
+                                    value={academics[`${level.key}_institution`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_institution`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                  <Input
+                                    placeholder="Passed year"
+                                    inputMode="numeric"
+                                    value={academics[`${level.key}_passed_year`] || ""}
+                                    onChange={(e) => updateAcademic(`${level.key}_passed_year`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                              Test Report &amp; Score
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                              {TEST_TYPES.map((t) => (
+                                <div key={t.key} className="space-y-1">
+                                  <Label className="text-xs">{t.label}</Label>
+                                  <Input
+                                    placeholder="Score"
+                                    value={testScores[`${t.key}_score`] || ""}
+                                    onChange={(e) => updateTestScore(`${t.key}_score`, e.target.value)}
+                                    className="h-8 text-xs"
+                                  />
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )}
+
                     {/* Assign Counselor / Meet with */}
-                    {leadTag === "other" ? (
+                    {leadTag !== "student" ? (
                       <div className="space-y-1">
                         <Label className="text-xs">Meet with</Label>
                         <Select value={meetWithId || "__none__"} onValueChange={(v) => setMeetWithId(v === "__none__" ? "" : v)}>
@@ -845,10 +1134,15 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setPhone("");
                           setNotes("");
                           setAssignedTo("");
-                          setDestination("");
+                          setDestinations([]);
                           setStudyLevel("");
+                          setFieldOfStudy("");
                           setReferralSource("");
                           setReferredBy("");
+                          setAcademics({});
+                          setTestScores({});
+                          setAcademicsOpen(false);
+                          setAcademicsError(false);
                         }}
                       >
                         Cancel
@@ -883,13 +1177,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             <Clock className="h-4 w-4" />
             Check-In History
             <Badge variant="secondary" className="text-xs ml-1">
-              {checkIns.length}
+              {visibleCheckIns.length}
             </Badge>
           </h2>
 
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex gap-1">
-              {(["today", "week", "month", "custom"] as DateFilter[]).map((f) => (
+              {(["today", "yesterday", "last7", "last30", "custom"] as DateFilter[]).map((f) => (
                 <Button
                   key={f}
                   variant={dateFilter === f ? "default" : "outline"}
@@ -897,7 +1191,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   className="text-xs h-7 px-2.5"
                   onClick={() => setDateFilter(f)}
                 >
-                  {f === "today" ? "Today" : f === "week" ? "This Week" : f === "month" ? "This Month" : "Custom"}
+                  {f === "today" ? "Today" : f === "yesterday" ? "Yesterday" : f === "last7" ? "Last 7 Days" : f === "last30" ? "Last 30 Days" : "Custom"}
                 </Button>
               ))}
             </div>
@@ -937,7 +1231,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   size="sm"
                   className="text-xs h-7 px-2.5"
                   onClick={handleExportCSV}
-                  disabled={checkIns.length === 0}
+                  disabled={visibleCheckIns.length === 0}
                 >
                   <Download className="h-3.5 w-3.5 mr-1" />
                   Export CSV
@@ -949,13 +1243,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
               <div className="flex items-center justify-center py-8">
                 <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
               </div>
-            ) : checkIns.length === 0 ? (
+            ) : visibleCheckIns.length === 0 ? (
               <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
                 No check-ins found for this period
               </div>
             ) : (
               <div className="flex-1 overflow-y-auto p-3 pt-2 space-y-1">
-                {checkIns.map((record) => {
+                {visibleCheckIns.map((record) => {
                   const checkedInByName = memberNameById.get(record.checked_in_by_id ?? "") || record.checked_in_by;
                   const noteContent = (() => {
                     const raw = record.note || "";
@@ -963,9 +1257,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                     return dashIdx !== -1 ? raw.slice(dashIdx + 3).trim() : "";
                   })();
                   const canAssignThis = canAssignAny || record.checked_in_by_id === currentUserId;
-                  // Don't show checked-in-by person as "Meet with" — treat as unset
-                  const meetWithId = record.assigned_to && record.assigned_to !== record.checked_in_by_id ? record.assigned_to : null;
-                  const meetWithName = meetWithId ? (record.assigned_to_name || memberNameById.get(meetWithId) || null) : null;
+                  // New walk-in student → the column is the lead's assigned
+                  // counselor (assigned_to). Everyone else → the per-visit "meet with"
+                  // person recorded on this note (meet_with_id), independent of the
+                  // lead's assignment — so an unselected visit shows no one.
+                  const meetWithId = record.is_new
+                    ? (record.assigned_to && record.assigned_to !== record.checked_in_by_id ? record.assigned_to : null)
+                    : record.meet_with_id;
+                  const meetWithName = meetWithId
+                    ? (record.is_new
+                        ? (record.assigned_to_name || memberNameById.get(meetWithId) || null)
+                        : (record.meet_with_name || memberNameById.get(meetWithId) || null))
+                    : null;
                   return (
                     <div
                       key={record.id}
@@ -991,18 +1294,16 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-xs font-medium truncate">{checkedInByName}</div>
                       </div>
 
-                      {/* Assigned To / Meet with — depends on lead tag */}
-                      {(() => {
-                        const isStudentOrParent = (record.tags ?? []).some((t) => t === "student" || t === "parent");
-                        const colLabel = isStudentOrParent ? "Assigned To" : "Meet with";
-                        const colMembers = isStudentOrParent ? counselorMembers : allBranchMembers;
-                        return (
-                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
-                            <div className="text-[10px] text-muted-foreground">{colLabel}</div>
-                            {canAssignThis ? (
+                      {/* Assigned To / Meet with — education_consultancy gets both as independent
+                          columns; every other industry keeps the flip-column (new-walk-in vs meet-with). */}
+                      {eduCols ? (
+                        <>
+                          <div className="w-32 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Assigned To</div>
+                            {record.assigned_to == null && canAssignThis ? (
                               <Select
-                                value={meetWithId ?? "__unassigned__"}
-                                onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                value="__unassigned__"
+                                onValueChange={(v) => handleAssignCounselor(record, v === "__unassigned__" ? null : v)}
                                 disabled={assigningId === record.id}
                               >
                                 <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
@@ -1010,7 +1311,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__unassigned__">Not selected</SelectItem>
-                                  {colMembers.map((m) => (
+                                  {counselorMembers.map((m) => (
                                     <SelectItem key={m.user_id} value={m.user_id}>
                                       {m.name || m.email.split("@")[0]}
                                     </SelectItem>
@@ -1018,11 +1319,69 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              <div className="text-xs font-medium truncate">{record.assigned_to_name || <span className="text-muted-foreground italic">—</span>}</div>
                             )}
                           </div>
-                        );
-                      })()}
+
+                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Meet With</div>
+                            {record.meet_with_id == null && canAssignThis ? (
+                              <Select
+                                value="__unassigned__"
+                                onValueChange={(v) => handleAssignMeetWith(record, v === "__unassigned__" ? null : v)}
+                                disabled={assigningId === record.id}
+                              >
+                                <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                  {allBranchMembers.map((m) => (
+                                    <SelectItem key={m.user_id} value={m.user_id}>
+                                      {m.name || m.email.split("@")[0]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-xs font-medium truncate">{record.meet_with_name || <span className="text-muted-foreground italic">—</span>}</div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        (() => {
+                          const isStudent = (record.tags ?? []).includes("student");
+                          const isNew = isStudent && record.is_new;
+                          const colLabel = isNew ? "Assigned To" : "Meet with";
+                          const colMembers = isNew ? counselorMembers : allBranchMembers;
+                          return (
+                            <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-[10px] text-muted-foreground">{colLabel}</div>
+                              {meetWithId == null && canAssignThis ? (
+                                <Select
+                                  value="__unassigned__"
+                                  onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                  disabled={assigningId === record.id}
+                                >
+                                  <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                    <SelectValue placeholder="Select..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                    {colMembers.map((m) => (
+                                      <SelectItem key={m.user_id} value={m.user_id}>
+                                        {m.name || m.email.split("@")[0]}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
 
                       {/* Notes */}
                       <div className="flex-1 min-w-0">
@@ -1109,11 +1468,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   <span>{selectedLead.phone}</span>
                 </div>
               )}
-              {selectedLead.pipeline_name && (
-                <div className="flex items-center gap-3 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span>{selectedLead.pipeline_name}</span>
-                </div>
+              {industryId === "education_consultancy" ? (
+                <>
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Stage: {selectedLead.list_name || "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Assigned To: {selectedLead.assigned_to_name || "Unassigned"}</span>
+                  </div>
+                </>
+              ) : (
+                selectedLead.pipeline_name && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>{selectedLead.pipeline_name}</span>
+                  </div>
+                )
               )}
               <div className="flex items-center gap-3 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1134,47 +1506,6 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
             {leadDetails && !loadingDetails && (
               <LeadExtraDetails details={leadDetails} />
-            )}
-
-            {/* Tag selector — education only */}
-            {leadDetails && industryId !== "travel_agency" && (
-              <div className="mb-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Tag</p>
-                <div className="flex gap-2">
-                  {[
-                    { value: "student", activeClass: "bg-blue-100 text-blue-700 ring-2 ring-blue-300" },
-                    { value: "parent", activeClass: "bg-green-100 text-green-700 ring-2 ring-green-300" },
-                    { value: "other", activeClass: "bg-amber-100 text-amber-700 ring-2 ring-amber-300" },
-                  ].map(({ value, activeClass }) => {
-                    const currentTags = (leadDetails as Record<string, unknown>).tags as string[] || [];
-                    const isActive = currentTags.includes(value);
-                    return (
-                      <button
-                        key={value}
-                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                          isActive ? activeClass : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                        }`}
-                        onClick={async () => {
-                          const newTags = [value];
-                          try {
-                            await fetch(`/api/v1/leads/${selectedLead.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ tags: newTags }),
-                            });
-                            setLeadDetails((prev) => prev ? { ...prev, tags: newTags } : prev);
-                            toast.success(`Tagged as ${value}`);
-                          } catch {
-                            toast.error("Failed to update tag");
-                          }
-                        }}
-                      >
-                        {value.charAt(0).toUpperCase() + value.slice(1)}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
             )}
 
             {/* Meet with — who the visitor is meeting today */}
@@ -1220,6 +1551,13 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           </div>
         </div>
       )}
+
+      <ProspectQualificationDialog
+        lead={{}}
+        open={!!pendingAssignGate}
+        onConfirm={confirmAssignQualification}
+        onCancel={() => setPendingAssignGate(null)}
+      />
     </div>
   );
 }

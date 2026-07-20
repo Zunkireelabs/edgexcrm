@@ -123,13 +123,10 @@ export function positionPermissionsFromEmbed(embed: unknown): PositionPermission
 export function canManageApplications(p: ResolvedPermissions): boolean {
   return p.canManageApplications;
 }
-const APP_EDIT_POSITIONS = new Set(["branch-manager", "application-executive"]);
-export function canEditApplication(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
-  return p.baseTier === "owner" || p.baseTier === "admin" || APP_EDIT_POSITIONS.has(positionSlug ?? "");
-}
-export function canDeleteApplication(p: ResolvedPermissions): boolean {
-  return p.baseTier === "owner" || p.baseTier === "admin";
-}
+// Application edit/delete/create access now lives in canManageApplicationForLead /
+// canCreateOrReorderApplications (src/lib/api/applications.ts) — branch- and
+// assignee-aware. The old blanket position-based canEditApplication /
+// canDeleteApplication were removed in favor of that model.
 export function canManageClasses(p: ResolvedPermissions): boolean {
   return p.canManageClasses;
 }
@@ -176,6 +173,7 @@ export interface LeadQueryScope {
   userBranchId?: string | null; // own-scope user's branch (for cross-branch pool lookup)
   crossBranchPoolListSlug?: string | null; // list slug for unassigned cross-branch pool
   listId?: string | null;          // filter to one list (lead-lists feature)
+  listIds?: string[] | null;        // filter to any of these lists (it_agency funnel-wide view)
   excludeListIds?: string[];        // exclude these list IDs (master view: hide archived)
   onlyDeleted?: boolean;            // recycle bin: show soft-deleted leads (deleted_at NOT NULL)
 }

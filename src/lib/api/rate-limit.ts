@@ -29,6 +29,11 @@ export const PUBLIC_READ_LIMIT: RateLimitConfig = {
   windowMs: 60_000, // 1 minute
 };
 
+export const AI_CHAT_LIMIT: RateLimitConfig = {
+  maxRequests: 30,
+  windowMs: 300_000, // 5 minutes — keyed by userId, not IP (see ai/chat route.ts)
+};
+
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig

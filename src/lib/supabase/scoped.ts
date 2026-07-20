@@ -30,8 +30,19 @@
  *   const { data: users } = await db.fromGlobal("auth.users").select("*");
  *   //                              ^ for tables WITHOUT tenant_id
  *
+ *   const { data } = await db.rpc("knowledge_hybrid_search", { p_query_embedding, p_query, p_limit });
+ *   //   ^ p_tenant_id is force-set to auth.tenantId, overwriting anything the
+ *   //     caller passes — only for functions that trust a p_tenant_id param
+ *   //     (see the rpc() docstring below)
+ *
  *   await db.raw().auth.admin.listUsers();
  *   //  ^ escape hatch for service-level operations (auth.admin etc.)
+ *
+ *   await db
+ *     .from("intake_years")
+ *     .upsert({ name: "2036" }, { onConflict: "tenant_id,name", ignoreDuplicates: true });
+ *   //   ^ tenant_id auto-injected/stripped same as insert(); ON CONFLICT-aware
+ *   //     for idempotent "make sure this row exists" writes
  *
  * ## Discipline constraints (not enforced by the wrapper)
  *
@@ -41,9 +52,18 @@
  *   targets every row in the tenant. The wrapper cannot prevent this
  *   at compile time; PR review is the only guard.
  *
- * - `tenant_id` is stripped from `update()` and `insert()` payloads
- *   before forwarding. A caller cannot move a row to a different
+ * - `tenant_id` is stripped from `update()`, `insert()`, and `upsert()`
+ *   payloads before forwarding. A caller cannot move a row to a different
  *   tenant via the wrapper.
+ *
+ * - `.upsert()`'s caller-supplied `onConflict` MUST include `tenant_id`
+ *   as one of the conflict columns (e.g. `"tenant_id,name"`, never just
+ *   `"name"`). `tenant_id` is stripped from the payload and re-injected
+ *   as the CURRENT caller's tenant — so if the conflict target omits it,
+ *   `ON CONFLICT DO UPDATE`-style upserts could match and silently
+ *   reassign another tenant's existing row to the caller's tenant. The
+ *   wrapper cannot enforce this at compile time; PR review is the only
+ *   guard, same as the `.update()`/`.delete()` filter requirement above.
  *
  * - For cross-tenant operations (admin backfills, support tooling),
  *   use `db.raw()` — the naming makes the escape hatch obvious in
@@ -69,7 +89,15 @@ function stripTenantId<T extends Record<string, unknown>>(row: T): Omit<T, "tena
   return safe;
 }
 
-export async function scopedClient(auth: AuthContext) {
+/**
+ * Same wrapper as `scopedClient(auth)`, but for callers that have a
+ * `tenantId` without a request-scoped `AuthContext` — today, only the
+ * Phase 2B ingestion pipeline (Inngest functions run outside a request;
+ * `tenantId` there comes from the triggering event, which is only ever
+ * sent by authenticated routes or the backfill script, never model input).
+ * `scopedClient(auth)` delegates here so there is exactly one implementation.
+ */
+export async function scopedClientForTenant(tenantId: string) {
   const raw = await createServiceClient();
 
   function from(table: string) {
@@ -83,22 +111,35 @@ export async function scopedClient(auth: AuthContext) {
       select(columns: string = "*", options?: SelectOptions) {
         const base = raw.from(table);
         const q = options ? base.select(columns, options) : base.select(columns);
-        return q.eq("tenant_id", auth.tenantId);
+        return q.eq("tenant_id", tenantId);
       },
       update(values: Record<string, unknown>) {
         // Strip caller-supplied tenant_id so a malicious or buggy
         // caller cannot SET tenant_id to another tenant.
         const safe = stripTenantId(values);
-        return raw.from(table).update(safe).eq("tenant_id", auth.tenantId);
+        return raw.from(table).update(safe).eq("tenant_id", tenantId);
       },
       delete() {
-        return raw.from(table).delete().eq("tenant_id", auth.tenantId);
+        return raw.from(table).delete().eq("tenant_id", tenantId);
       },
       insert(rows: Record<string, unknown> | Record<string, unknown>[]) {
         const withTenant = Array.isArray(rows)
-          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: auth.tenantId }))
-          : { ...stripTenantId(rows), tenant_id: auth.tenantId };
+          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: tenantId }))
+          : { ...stripTenantId(rows), tenant_id: tenantId };
         return raw.from(table).insert(withTenant);
+      },
+      // Same tenant_id injection/stripping as insert(), but ON CONFLICT-aware —
+      // for idempotent "make sure these rows exist" writes (e.g. a lookup
+      // table topping itself up) where a plain insert() would abort the whole
+      // batch the moment any one row collides with an existing unique key.
+      upsert(
+        rows: Record<string, unknown> | Record<string, unknown>[],
+        options: { onConflict: string; ignoreDuplicates?: boolean }
+      ) {
+        const withTenant = Array.isArray(rows)
+          ? rows.map((r) => ({ ...stripTenantId(r), tenant_id: tenantId }))
+          : { ...stripTenantId(rows), tenant_id: tenantId };
+        return raw.from(table).upsert(withTenant, options);
       },
     };
   }
@@ -116,9 +157,29 @@ export async function scopedClient(auth: AuthContext) {
   return {
     from,
     fromGlobal,
+    /**
+     * Calls a Postgres function that declares a `p_tenant_id` parameter and
+     * enforces it internally (e.g. `knowledge_hybrid_search`, migration 170).
+     * `p_tenant_id` in `args` is force-overwritten with the CURRENT caller's
+     * tenant — same spirit as insert()'s tenant injection — so a caller can
+     * never pass a foreign tenant id through. Only for functions built to
+     * this trust model (REVOKEd from `authenticated`/`anon`, service-role-only,
+     * tenant-filtered by parameter, not by session/RLS). Do not use for
+     * functions that expect the caller's tenant to come from RLS instead —
+     * those go through `raw().rpc(...)`, as `sales_leads_by_owner` etc. do today.
+     */
+    rpc(fn: string, args: Record<string, unknown> = {}) {
+      return raw.rpc(fn, { ...args, p_tenant_id: tenantId });
+    },
     /** Escape hatch — returns the unwrapped service client for cross-tenant operations (admin backfills, support tooling, auth.admin). */
     raw(): RawClient {
       return raw;
     },
   };
 }
+
+export async function scopedClient(auth: AuthContext) {
+  return scopedClientForTenant(auth.tenantId);
+}
+
+export type ScopedClient = Awaited<ReturnType<typeof scopedClient>>;

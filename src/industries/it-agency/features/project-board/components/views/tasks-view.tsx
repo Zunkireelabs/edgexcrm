@@ -2,9 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { toast } from "sonner";
-import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown, Timer, ListTodo, Play, Square, Loader2 } from "lucide-react";
 import {
-  Table,
   TableBody,
   TableCell,
   TableHead,
@@ -18,7 +17,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { LogTimeDialog } from "@/industries/it-agency/features/time-tracking/components/log-time-dialog";
+import { useActiveTimersContext, formatElapsed } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 import { AssigneePicker } from "../assignee-picker";
 import { PriorityPill } from "../priority-pill";
 import { TagMultiPicker } from "../tag-multi-picker";
@@ -211,6 +212,15 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
     }
   }
 
+  async function handleEstimateChange(taskId: string, estimated_minutes: number | null) {
+    try {
+      const updated = await patchTask(taskId, { estimated_minutes });
+      setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...updated } : t)));
+    } catch {
+      toast.error("Failed to update estimate");
+    }
+  }
+
   async function handleTagsChange(taskId: string, newTags: string[]) {
     const prevTags = tasks.find((t) => t.id === taskId)?.tags ?? [];
     setTasks((curr) => curr.map((t) => (t.id === taskId ? { ...t, tags: newTags } : t)));
@@ -258,72 +268,78 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
 
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow className="bg-gray-50 border-b border-gray-200">
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("title")}
-              aria-sort={sortKey === "title" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Title <SortIcon col="title" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("project")}
-              aria-sort={sortKey === "project" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Project <SortIcon col="project" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("status")}
-              aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("assignee")}
-              aria-sort={sortKey === "assignee" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Assignee <SortIcon col="assignee" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("priority")}
-              aria-sort={sortKey === "priority" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead
-              className={headCls}
-              onClick={() => handleSort("due_date")}
-              aria-sort={sortKey === "due_date" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
-            >
-              <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
-            </TableHead>
-            <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
-            <TableHead className="w-10" />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sorted.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              team={team}
-              poolTags={poolTags}
-              onStatusChange={handleStatusChange}
-              onAssigneeChange={handleAssigneeChange}
-              onPriorityChange={handlePriorityChange}
-              onDueDateChange={handleDueDateChange}
-              onTagsChange={handleTagsChange}
-              onLogTime={openLogTime}
-            />
-          ))}
-        </TableBody>
-      </Table>
+      <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-auto">
+          <table className="w-full text-sm border-collapse">
+            <TableHeader className="sticky top-0 z-10">
+              <TableRow className="bg-gray-50 border-b border-gray-200">
+                <TableHead className="w-0 border-r border-gray-100" />
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("title")}
+                  aria-sort={sortKey === "title" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Title <SortIcon col="title" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("project")}
+                  aria-sort={sortKey === "project" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Project <SortIcon col="project" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("status")}
+                  aria-sort={sortKey === "status" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Status <SortIcon col="status" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("assignee")}
+                  aria-sort={sortKey === "assignee" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Assignee <SortIcon col="assignee" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("priority")}
+                  aria-sort={sortKey === "priority" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Priority <SortIcon col="priority" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead
+                  className={`${headCls} border-r border-gray-100`}
+                  onClick={() => handleSort("due_date")}
+                  aria-sort={sortKey === "due_date" ? (sortDir === "asc" ? "ascending" : "descending") : "none"}
+                >
+                  <span className="flex items-center gap-1">Due <SortIcon col="due_date" sortKey={sortKey} dir={sortDir} /></span>
+                </TableHead>
+                <TableHead className="text-xs font-medium text-gray-600 border-r border-gray-100">Est.</TableHead>
+                <TableHead className="text-xs font-medium text-gray-600">Tags</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sorted.map((task) => (
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  team={team}
+                  poolTags={poolTags}
+                  onStatusChange={handleStatusChange}
+                  onAssigneeChange={handleAssigneeChange}
+                  onPriorityChange={handlePriorityChange}
+                  onDueDateChange={handleDueDateChange}
+                  onEstimateChange={handleEstimateChange}
+                  onTagsChange={handleTagsChange}
+                  onLogTime={openLogTime}
+                />
+              ))}
+            </TableBody>
+          </table>
+        </div>
+      </div>
 
       <LogTimeDialog
         open={logTimeOpen}
@@ -346,6 +362,7 @@ interface TaskRowProps {
   onAssigneeChange: (id: string, uid: string | null) => void;
   onPriorityChange: (id: string, p: TaskPriority) => void;
   onDueDateChange: (id: string, d: string | null) => void;
+  onEstimateChange: (id: string, estimated_minutes: number | null) => void;
   onTagsChange: (id: string, tags: string[]) => void;
   onLogTime: (task: TaskWithProject) => void;
 }
@@ -358,6 +375,7 @@ function TaskRow({
   onAssigneeChange,
   onPriorityChange,
   onDueDateChange,
+  onEstimateChange,
   onTagsChange,
   onLogTime,
 }: TaskRowProps) {
@@ -366,10 +384,75 @@ function TaskRow({
     task.status !== "done" &&
     task.due_date < new Date().toISOString().split("T")[0];
 
+  const { isTaskRunning, isPending, startTimer, stopTimer, now } = useActiveTimersContext();
+  const running = isTaskRunning(task.id);
+  const timerPending = isPending(task.id);
+
+  const [estimateInput, setEstimateInput] = useState(
+    task.estimated_minutes != null ? String(Math.round((task.estimated_minutes / 60) * 100) / 100) : ""
+  );
+
+  function commitEstimate() {
+    const trimmed = estimateInput.trim();
+    const minutes = trimmed ? Math.round(parseFloat(trimmed) * 60) : null;
+    if (minutes != null && Number.isNaN(minutes)) return;
+    if (minutes === (task.estimated_minutes ?? null)) return;
+    onEstimateChange(task.id, minutes);
+  }
+
   return (
     <TableRow className="group hover:bg-gray-50">
+      {/* Timer + log time actions */}
+      <TableCell className="border-r border-gray-100">
+        <div className="flex items-center gap-1">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <button
+                    type="button"
+                    onClick={() => (running ? stopTimer(running.id) : startTimer(task.id))}
+                    disabled={!task.projects || timerPending}
+                    title={running ? "Stop timer" : "Start timer"}
+                    aria-label={running ? "Stop timer" : "Start timer"}
+                    className="flex items-center gap-1 p-1 rounded hover:bg-gray-100"
+                  >
+                    {timerPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                    ) : running ? (
+                      <Square className="h-3.5 w-3.5 text-red-600" />
+                    ) : (
+                      <Play className="h-3.5 w-3.5 text-muted-foreground" />
+                    )}
+                    {running && (
+                      <span className="text-[11px] tabular-nums text-red-600">
+                        {formatElapsed(now - Date.parse(running.started_at))}
+                      </span>
+                    )}
+                  </button>
+                </span>
+              </TooltipTrigger>
+              {!task.projects && (
+                <TooltipContent>Task must be attached to a project to track time</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          {task.projects && (
+            <button
+              type="button"
+              onClick={() => onLogTime(task)}
+              title="Log time for this task"
+              aria-label="Log time for this task"
+              className="p-1 rounded hover:bg-gray-100"
+            >
+              <Timer className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+      </TableCell>
+
       {/* Title */}
-      <TableCell className="max-w-[220px]">
+      <TableCell className="max-w-[220px] border-r border-gray-100">
         <span className="text-sm font-medium text-[#0f0f10] truncate block" title={task.title}>
           {task.title}
         </span>
@@ -381,10 +464,10 @@ function TaskRow({
       </TableCell>
 
       {/* Project */}
-      <TableCell className="max-w-[160px]">
+      <TableCell className="max-w-[160px] border-r border-gray-100">
         {task.projects ? (
           <a
-            href={`/time-tracking/projects/${task.projects.id}`}
+            href={`/projects/${task.projects.id}`}
             className="text-xs text-[#0f0f10] hover:underline truncate block"
           >
             {task.projects.name}
@@ -395,7 +478,7 @@ function TaskRow({
       </TableCell>
 
       {/* Status */}
-      <TableCell>
+      <TableCell className="border-r border-gray-100">
         <Select
           value={task.status}
           onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
@@ -412,7 +495,7 @@ function TaskRow({
       </TableCell>
 
       {/* Assignee */}
-      <TableCell>
+      <TableCell className="border-r border-gray-100">
         <AssigneePicker
           assigneeId={task.assignee_id}
           team={team}
@@ -421,7 +504,7 @@ function TaskRow({
       </TableCell>
 
       {/* Priority */}
-      <TableCell>
+      <TableCell className="border-r border-gray-100">
         <PriorityPill
           priority={task.priority}
           onChange={(p) => onPriorityChange(task.id, p)}
@@ -429,7 +512,7 @@ function TaskRow({
       </TableCell>
 
       {/* Due date */}
-      <TableCell>
+      <TableCell className="border-r border-gray-100">
         <input
           type="date"
           value={task.due_date ?? ""}
@@ -442,6 +525,21 @@ function TaskRow({
         />
       </TableCell>
 
+      {/* Estimate (hours) */}
+      <TableCell className="border-r border-gray-100">
+        <input
+          type="number"
+          min="0"
+          step="0.25"
+          value={estimateInput}
+          onChange={(e) => setEstimateInput(e.target.value)}
+          onBlur={commitEstimate}
+          placeholder="—"
+          aria-label="Estimated hours"
+          className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
+        />
+      </TableCell>
+
       {/* Tags */}
       <TableCell className="max-w-[200px]">
         <TagMultiPicker
@@ -451,21 +549,6 @@ function TaskRow({
           allTags={poolTags}
           placeholder="+ tag"
         />
-      </TableCell>
-
-      {/* Log time action */}
-      <TableCell>
-        {task.projects && (
-          <button
-            type="button"
-            onClick={() => onLogTime(task)}
-            title="Log time for this task"
-            aria-label="Log time for this task"
-            className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-gray-100"
-          >
-            <Timer className="h-3.5 w-3.5 text-muted-foreground" />
-          </button>
-        )}
       </TableCell>
     </TableRow>
   );

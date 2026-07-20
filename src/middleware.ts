@@ -17,6 +17,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for public status report share links — no session needed
+  if (request.nextUrl.pathname.startsWith("/reports/share")) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 

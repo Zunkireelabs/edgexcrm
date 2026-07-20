@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
+import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { authenticateRequest, resolvePositionSlug } from "@/lib/api/auth";
 import { logger } from "@/lib/logger";
 import {
@@ -8,9 +9,11 @@ import {
   apiForbidden,
   apiNotFound,
   apiServiceUnavailable,
+  apiValidationError,
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   // user with check-in access can log a visit for any lead in the tenant.
   const { data: lead } = await supabase
     .from("leads")
-    .select("id, list_id, assigned_to")
+    .select("id, list_id, assigned_to, tags, archived_at, deleted_at, see_gpa, see_institution, see_passed_year, plus_two_gpa, plus_two_institution, plus_two_passed_year, bachelor_gpa, bachelor_institution, bachelor_passed_year, masters_gpa, masters_institution, masters_passed_year, ielts_score, pte_score, toefl_score, sat_score, gre_gmat_score")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
@@ -40,9 +43,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (!lead) return apiNotFound("Lead");
 
   let reason = "";
+  let meetWithId: string | null = null;
   try {
     const body = await request.json();
     reason = (body.reason as string) || "";
+    // Per-visit "meet with" person, stored on THIS check-in note — distinct from
+    // lead.assigned_to (the counselor). Optional.
+    meetWithId = (body.meet_with_id as string) || null;
   } catch {
     // No body is fine
   }
@@ -67,80 +74,122 @@ export async function POST(request: NextRequest, context: RouteContext) {
     user_id: auth.userId,
     user_email: auth.email || "unknown",
     content,
+    meet_with_id: meetWithId,
   });
 
   if (error) {
     return apiServiceUnavailable("Failed to log check-in");
   }
 
-  // Auto-promote into the "Prospects" list on first check-in — forward-only,
-  // never regress a lead that's already at Prospects or further along
-  // (Applications/Archived). Best-effort: a failure here must not fail the
-  // check-in itself, since the note is already logged.
-  // Promotion is gated on the lead being assigned to a counselor-position user.
-  // A lead-exec self-assignment also sets assigned_to but must stay in Qualified.
+  // Auto-promotion (education_consultancy, student check-ins only) — forward-only:
+  //   1) Counselor assigned  → Prospects (any performer), subject to the academic gate.
+  //   2) No counselor + an elevated performer (lead-exec/admin/owner) → Qualified,
+  //      self-assigning the lead-exec as interim counselor if still unassigned.
+  // A lead already at/past its target stage (slug-based, not sort_order) is left alone.
+  // Non-student / non-education / no-counselor-with-non-elevated-performer → no move.
+  // Best-effort: a failure here must not fail the check-in itself (note already logged).
   let assignedIsCounselor = false;
   if (lead.assigned_to) {
     const assignedPositionSlug = await resolvePositionSlug(supabase, auth.tenantId, lead.assigned_to);
     assignedIsCounselor = assignedPositionSlug === "counselor";
   }
 
-  try {
-    const { data: prospectsList } = await supabase
-      .from("lead_lists")
-      .select("id, sort_order, pipeline_id")
-      .eq("tenant_id", auth.tenantId)
-      .eq("slug", "prospects")
-      .maybeSingle();
+  const isEducation = auth.industryId === "education_consultancy";
+  const isStudent = ((lead.tags as string[] | null) ?? []).includes("student");
+  const performerElevated =
+    auth.positionSlug === "lead-executive" ||
+    auth.permissions.baseTier === "admin" ||
+    auth.permissions.baseTier === "owner";
 
-    if (prospectsList && assignedIsCounselor) {
-      let currentSortOrder: number | null = null;
-      let currentIsStaging = false;
+  try {
+    if (isEducation && isStudent && !lead.deleted_at) {
+      const ADVANCED = new Set(["qualified", "prospects", "applications"]);
+
+      let currentList: { slug: string | null; is_archive: boolean | null } | null = null;
       if (lead.list_id) {
-        const { data: currentList } = await supabase
+        const { data } = await supabase
           .from("lead_lists")
-          .select("sort_order, is_staging")
+          .select("slug, is_archive")
           .eq("id", lead.list_id)
           .maybeSingle();
-        currentSortOrder = currentList?.sort_order ?? null;
-        currentIsStaging = currentList?.is_staging ?? false;
+        currentList = data;
       }
+      const currentSlug = currentList?.slug ?? null;
 
-      // Staging/intake lists (e.g. "New Leads") sit outside the normal
-      // sort_order funnel — always treat them as behind Prospects.
-      if (currentSortOrder === null || currentIsStaging || currentSortOrder < prospectsList.sort_order) {
-        const promotePayload: Record<string, unknown> = {
-          list_id: prospectsList.id,
-          lead_type: "prospect",
-          updated_at: new Date().toISOString(),
-        };
+      let targetSlug: string | null = null;
+      const extraPayload: Record<string, unknown> = {};
 
-        if (prospectsList.pipeline_id) {
-          const { data: defaultStage } = await supabase
-            .from("pipeline_stages")
-            .select("id, slug")
-            .eq("pipeline_id", prospectsList.pipeline_id)
-            .eq("is_default", true)
-            .maybeSingle();
-          if (defaultStage) {
-            promotePayload.pipeline_id = prospectsList.pipeline_id;
-            promotePayload.stage_id = defaultStage.id;
-            promotePayload.status = defaultStage.slug;
+      // 1) COUNSELOR ASSIGNED → Prospects (any performer)
+      if (assignedIsCounselor) {
+        // Academic hard-block: UNCHANGED wording/condition.
+        if (
+          !hasProspectQualification(lead as Record<string, unknown>) &&
+          !canBypassProspectQualification(auth.permissions.baseTier, auth.positionSlug)
+        ) {
+          return apiValidationError({
+            academic: ["Add the student's highest qualification (%/GPA) before moving to Prospects."],
+          });
+        }
+        if (!["prospects", "applications"].includes(currentSlug ?? "")) {
+          targetSlug = "prospects";
+          extraPayload.lead_type = "prospect";
+        }
+      }
+      // 2) NO COUNSELOR + elevated performer → Qualified
+      else if (performerElevated) {
+        if (!ADVANCED.has(currentSlug ?? "")) {
+          targetSlug = "qualified";
+          if (lead.assigned_to == null && auth.positionSlug === "lead-executive") {
+            extraPayload.assigned_to = auth.userId;
           }
         }
+      }
 
-        const { error: promoteError } = await supabase
-          .from("leads")
-          .update(promotePayload)
-          .eq("id", id)
-          .eq("tenant_id", auth.tenantId);
-        if (promoteError) {
-          logger.error({ err: promoteError, leadId: id }, "Failed to auto-promote lead to Prospects on check-in");
+      if (targetSlug) {
+        const { data: target } = await supabase
+          .from("lead_lists")
+          .select("id, pipeline_id")
+          .eq("tenant_id", auth.tenantId)
+          .eq("slug", targetSlug)
+          .maybeSingle();
+
+        if (target) {
+          const promotePayload: Record<string, unknown> = {
+            list_id: target.id,
+            updated_at: new Date().toISOString(),
+            ...extraPayload,
+          };
+
+          if (target.pipeline_id) {
+            const landing = await getPipelineLandingStage(supabase, target.pipeline_id);
+            if (landing) {
+              promotePayload.pipeline_id = target.pipeline_id;
+              promotePayload.stage_id = landing.id;
+              promotePayload.status = landing.slug;
+            }
+          }
+
+          // Un-archive: mirror leads/[id]/route.ts ~L658-663.
+          if (lead.archived_at) {
+            promotePayload.archived_at = null;
+            promotePayload.archived_by = null;
+            promotePayload.archived_from_list_id = null;
+            promotePayload.archived_from_status = null;
+          }
+
+          const { error: promoteError } = await supabase
+            .from("leads")
+            .update(promotePayload)
+            .eq("id", id)
+            .eq("tenant_id", auth.tenantId);
+          if (promoteError) {
+            logger.error({ err: promoteError, leadId: id }, "Failed to auto-promote lead on check-in");
+          }
         }
       }
     }
   } catch (promoteErr) {
-    logger.error({ err: promoteErr, leadId: id }, "Unexpected error auto-promoting lead to Prospects on check-in");
+    logger.error({ err: promoteErr, leadId: id }, "Unexpected error auto-promoting lead on check-in");
   }
 
   return apiSuccess({ checked_in: true, lead_id: id });

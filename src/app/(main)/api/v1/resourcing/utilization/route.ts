@@ -65,24 +65,9 @@ export async function GET() {
   const memberIds = members.map((m) => m.id);
   const userIdByTenantUserId = new Map(members.map((m) => [m.id, m.user_id]));
 
-  // Numerator: approved + billable minutes from time_entries, same rule as
-  // /api/v1/time-entries/summary?dimension=member. Joined via user_id (both
-  // tenant_users.user_id and time_entries.user_id reference auth.users.id).
-  const userIds = members.map((m) => m.user_id);
-  const { data: entriesRaw, error: entriesError } = await db
-    .from("time_entries")
-    .select("user_id, minutes, is_billable, approval_status")
-    .in("user_id", userIds);
-  if (entriesError) return apiError("DB_ERROR", "Failed to fetch time entries", 500);
-
-  const billableMinutesByUserId = new Map<string, number>();
-  for (const e of (entriesRaw ?? []) as unknown as Pick<TimeEntry, "user_id" | "minutes" | "is_billable" | "approval_status">[]) {
-    if (!e.is_billable || e.approval_status !== "approved") continue;
-    billableMinutesByUserId.set(e.user_id, (billableMinutesByUserId.get(e.user_id) ?? 0) + e.minutes);
-  }
-
-  // Subtract approved leave overlapping the current reporting week from each
-  // member's weekly capacity before computing utilization%.
+  // Reporting week (Mon–Sun) — used both to scope the numerator (time entries)
+  // and to subtract approved leave from the denominator (weekly capacity), so
+  // utilization% compares like-for-like periods.
   const { data: tenantLocale } = await db
     .raw()
     .from("tenants")
@@ -92,6 +77,25 @@ export async function GET() {
   const locale = tenantLocale as unknown as { timezone: string; weekend_days: number[] } | null;
   const weekendDays = locale?.weekend_days ?? [6];
   const { weekStart, weekEnd } = currentWeekRange(todayInTz(locale?.timezone ?? "Asia/Kathmandu"));
+
+  // Numerator: approved + billable minutes from time_entries THIS WEEK, same
+  // rule as /api/v1/time-entries/summary?dimension=member plus a week scope.
+  // Joined via user_id (both tenant_users.user_id and time_entries.user_id
+  // reference auth.users.id).
+  const userIds = members.map((m) => m.user_id);
+  const { data: entriesRaw, error: entriesError } = await db
+    .from("time_entries")
+    .select("user_id, minutes, is_billable, approval_status")
+    .in("user_id", userIds)
+    .gte("entry_date", weekStart)
+    .lte("entry_date", weekEnd);
+  if (entriesError) return apiError("DB_ERROR", "Failed to fetch time entries", 500);
+
+  const billableMinutesByUserId = new Map<string, number>();
+  for (const e of (entriesRaw ?? []) as unknown as Pick<TimeEntry, "user_id" | "minutes" | "is_billable" | "approval_status">[]) {
+    if (!e.is_billable || e.approval_status !== "approved") continue;
+    billableMinutesByUserId.set(e.user_id, (billableMinutesByUserId.get(e.user_id) ?? 0) + e.minutes);
+  }
 
   const { data: leaveRaw, error: leaveError } = await db
     .from("leave_requests")

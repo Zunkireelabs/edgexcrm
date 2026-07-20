@@ -26,8 +26,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronRight, ChevronDown, Loader2, Plus, AlertCircle } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronRight, Loader2, Plus, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import type { Branch, LeadList, PipelineStage, TenantEntity, UserRole } from "@/types/database";
 import {
@@ -35,13 +34,20 @@ import {
 } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import {
-  DEGREE_LEVELS,
   INTAKE_SOURCES,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
+import { positionsForStage } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { validateLeadIdentity } from "@/lib/leads/lead-validation";
 import { COUNTRY_CODES } from "@/lib/country-codes";
 import { parseStoredPhone } from "@/lib/phone-utils";
+import {
+  ACADEMIC_LEVELS,
+  TEST_TYPES,
+  hasProspectQualification,
+  canBypassProspectQualification,
+} from "@/lib/leads/prospect-qualification";
 
 interface TeamMember {
   user_id: string;
@@ -49,6 +55,8 @@ interface TeamMember {
   role: string;
   name: string;
   canEditLeads?: boolean;
+  position_slug?: string | null;
+  branch_id?: string | null;
 }
 
 interface AddLeadSheetProps {
@@ -67,6 +75,11 @@ interface AddLeadSheetProps {
   branches?: Branch[];
   selectedBranchId?: string | null;
   userBranchId?: string | null;
+  /** Current user's position slug — gates the education stage→team assignment cascade. */
+  currentUserPositionSlug?: string | null;
+  /** Id of the current stage view (when it's a visible, non-staging/archive list) —
+   *  pre-selects the Stage dropdown so the new lead lands where the creator is looking. */
+  defaultListId?: string;
 }
 
 interface FormData {
@@ -86,7 +99,6 @@ interface FormData {
   intakeCampaign: string;
   preferredContact: string;
   initialNotes: string;
-  tag: string;
   companyName: string;
   designation: string;
   prospectIndustry: string;
@@ -130,7 +142,6 @@ const initialFormData: FormData = {
   intakeCampaign: "",
   preferredContact: "",
   initialNotes: "",
-  tag: "student",
   companyName: "",
   designation: "",
   prospectIndustry: "",
@@ -141,58 +152,6 @@ const initialFormData: FormData = {
   fieldOfStudy: "",
   degreeLevel: "",
 };
-
-function DestinationsField({
-  selected,
-  onToggle,
-  disabled,
-  options,
-}: {
-  selected: string[];
-  onToggle: (dest: string) => void;
-  disabled: boolean;
-  options: string[];
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="space-y-1.5">
-      <Label className="text-xs text-gray-600">
-        Interested Destination
-        <span className="ml-1 text-gray-400">(optional)</span>
-      </Label>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 border border-input rounded-md text-sm bg-background hover:bg-accent transition-colors"
-      >
-        <span className={selected.length === 0 ? "text-muted-foreground" : ""}>
-          {selected.length === 0
-            ? "Select destinations"
-            : selected.join(", ")}
-        </span>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      {open && (
-        <div className="border border-input rounded-md p-2 grid grid-cols-2 gap-1.5 bg-background shadow-sm">
-          {options.map((dest) => (
-            <div key={dest} className="flex items-center gap-2">
-              <Checkbox
-                id={`dest-${dest}`}
-                checked={selected.includes(dest)}
-                disabled={disabled}
-                onCheckedChange={() => onToggle(dest)}
-              />
-              <label htmlFor={`dest-${dest}`} className="text-xs cursor-pointer select-none">
-                {dest}
-              </label>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 export function AddLeadSheet({
   open,
@@ -210,24 +169,47 @@ export function AddLeadSheet({
   branches = [],
   selectedBranchId = null,
   userBranchId = null,
+  currentUserPositionSlug = null,
+  defaultListId,
 }: AddLeadSheetProps) {
   const router = useRouter();
-  const { destinations: destOptions, fieldsOfStudy } = useEduTaxonomy();
+  // Owner/admin + branch managers skip the Prospects academic-qualification dialog.
+  const bypassQualification = canBypassProspectQualification(
+    role === "owner" ? "owner" : role === "admin" ? "admin" : "member",
+    currentUserPositionSlug,
+  );
+  const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [formData, setFormData] = useState<FormData>(initialFormData);
   const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
   const [sourceOpen, setSourceOpen] = useState(false);
   const [notesOpen, setNotesOpen] = useState(false);
+  const [academicsOpen, setAcademicsOpen] = useState(false);
+  const [academicsError, setAcademicsError] = useState(false);
+  const [academics, setAcademics] = useState<Record<string, string>>({});
+  const [testScores, setTestScores] = useState<Record<string, string>>({});
+  const updateAcademic = (col: string, value: string) =>
+    setAcademics((prev) => ({ ...prev, [col]: value }));
+  const updateTestScore = (col: string, value: string) =>
+    setTestScores((prev) => ({ ...prev, [col]: value }));
 
   const isAdmin = role === "owner" || role === "admin";
   const defaultStage = stages.find((s) => s.is_default) || stages[0];
 
   useEffect(() => {
     if (open) {
+      // Only pre-select a Stage the dropdown will actually offer (mirrors its own
+      // !is_staging && !is_archive filter) — an id from a hidden/archive list, or one
+      // that's since disappeared from leadLists, must fall back to blank, not a dead value.
+      const validDefaultListId =
+        defaultListId && leadLists.some((l) => l.id === defaultListId && !l.is_staging && !l.is_archive)
+          ? defaultListId
+          : "";
       setFormData({
         ...initialFormData,
         stageId: defaultStage?.id || "",
+        listId: validDefaultListId,
         assignedTo: role === "counselor" ? currentUserId : "",
         ownerId: currentUserId,
         // Always seed from creator's own branch first; fall back to active branch switcher
@@ -237,8 +219,12 @@ export function AddLeadSheet({
       setIsDirty(false);
       setSourceOpen(false);
       setNotesOpen(false);
+      setAcademicsOpen(false);
+      setAcademicsError(false);
+      setAcademics({});
+      setTestScores({});
     }
-  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId]);
+  }, [open, defaultStage?.id, role, currentUserId, isAdmin, userBranchId, selectedBranchId, defaultListId, leadLists]);
 
   const updateField = (field: keyof FormData, value: string) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -248,14 +234,8 @@ export function AddLeadSheet({
     }
   };
 
-  const toggleDestination = (dest: string) => {
-    setFormData((prev) => {
-      const current = prev.destinations;
-      const next = current.includes(dest)
-        ? current.filter((d) => d !== dest)
-        : [...current, dest];
-      return { ...prev, destinations: next };
-    });
+  const setDestinations = (next: string[]) => {
+    setFormData((prev) => ({ ...prev, destinations: next }));
     setIsDirty(true);
   };
 
@@ -272,6 +252,21 @@ export function AddLeadSheet({
 
   const handleSubmit = async () => {
     if (!validate()) return;
+
+    if (
+      industryId === "education_consultancy" &&
+      !bypassQualification &&
+      selectedStageSlug === "prospects" &&
+      !hasProspectQualification(academics)
+    ) {
+      setAcademicsOpen(true);
+      setAcademicsError(true);
+      toast.error(
+        "Enter the student's highest qualification (%/GPA) before moving to Prospects."
+      );
+      return;
+    }
+    setAcademicsError(false);
 
     setIsSubmitting(true);
     setErrors({});
@@ -296,7 +291,7 @@ export function AddLeadSheet({
         branch_id: formData.branchId || null,
         intake_source: formData.intakeSource || "manual_entry",
         intake_medium: "dashboard",
-        tags: industryId === "education_consultancy" ? [formData.tag || "student"] : [],
+        tags: industryId === "education_consultancy" ? ["student"] : [],
         intake_campaign: formData.intakeCampaign || null,
         preferred_contact_method: formData.preferredContact || null,
         custom_fields: formData.initialNotes
@@ -311,6 +306,7 @@ export function AddLeadSheet({
         destinations: industryId === "education_consultancy" ? formData.destinations : undefined,
         field_of_study: industryId === "education_consultancy" ? (formData.fieldOfStudy || null) : undefined,
         degree_level: industryId === "education_consultancy" ? (formData.degreeLevel || null) : undefined,
+        ...(industryId === "education_consultancy" ? { ...academics, ...testScores } : {}),
         is_final: true,
         step: 1,
       };
@@ -358,6 +354,64 @@ export function AddLeadSheet({
 
   // Caller passes a pre-chain-filtered set; keep canEditLeads guard as a safety net.
   const assignableMembers = teamMembers.filter((m) => m.canEditLeads !== false);
+
+  // ── Education: stage-cascaded, branch-scoped assignment ──────────────────
+  // For education tenants the "Assigned To" options are driven by the chosen Stage
+  // (which positions handle that stage) intersected with the selected Branch, plus that
+  // branch's manager. Admin picks Branch first; a branch-manager creates within their own
+  // branch (no Branch field). All of this is gated to education — it_agency is untouched.
+  const isEducation = industryId === "education_consultancy";
+  const isBranchManager = currentUserPositionSlug === "branch-manager";
+  const canPickAssignee = isAdmin || (isEducation && isBranchManager);
+  // Whose branch scopes the assignee list: admin uses the picked branch, others their own.
+  const effectiveBranchId = isAdmin ? (formData.branchId || null) : (userBranchId || null);
+  const selectedStageSlug = formData.listId
+    ? (leadLists.find((l) => l.id === formData.listId)?.slug ?? null)
+    : null;
+  const eduAllowedPositions = positionsForStage(selectedStageSlug);
+  const selectedBranch = effectiveBranchId
+    ? branches.find((b) => b.id === effectiveBranchId) ?? null
+    : null;
+
+  const eduAssignableMembers = !isEducation
+    ? assignableMembers
+    : !selectedStageSlug
+      ? [] // no Stage chosen yet → nothing to assign to
+      : assignableMembers.filter((m) => {
+          const inBranch = !effectiveBranchId || m.branch_id === effectiveBranchId;
+          const positionAllowed =
+            !!m.position_slug && eduAllowedPositions.includes(m.position_slug);
+          const isSelectedBranchMgr =
+            !!selectedBranch && m.user_id === selectedBranch.manager_user_id;
+          // Branch manager of the selected branch is always assignable; everyone else must
+          // both hold an allowed position AND belong to the selected branch.
+          return isSelectedBranchMgr || (positionAllowed && inBranch);
+        });
+
+  const assigneeOptions = isEducation ? eduAssignableMembers : assignableMembers;
+  const assigneeDisabled =
+    isSubmitting || !canPickAssignee || (isEducation && !formData.listId);
+
+  // Clearing a stale assignee when Stage/Branch changes (education cascade only).
+  const updateListId = (value: string) => {
+    if (isEducation) {
+      setFormData((prev) => ({ ...prev, listId: value, assignedTo: "" }));
+      setIsDirty(true);
+    } else {
+      updateField("listId", value);
+    }
+  };
+  const updateBranchId = (value: string) => {
+    if (isEducation) {
+      setFormData((prev) => ({ ...prev, branchId: value, assignedTo: "" }));
+      setIsDirty(true);
+    } else {
+      updateField("branchId", value);
+    }
+  };
+
+  // Education admin always sees a Branch field (Admizz is multi-branch); it comes first.
+  const showEduBranchField = isEducation && isAdmin && branches.length >= 1;
 
   // ── Shared render helpers ────────────────────────────────────────────────
 
@@ -416,6 +470,32 @@ export function AddLeadSheet({
     <div className="space-y-4">
       <h3 className="text-sm font-medium text-gray-900">Assignment &amp; Status</h3>
 
+      {/* Education admin: Branch is chosen first and scopes the assignee list */}
+      {showEduBranchField && (
+        <div className="space-y-1.5">
+          <Label htmlFor="branchId" className="text-xs text-gray-600">
+            Branch
+          </Label>
+          <Select
+            value={formData.branchId || "__none__"}
+            onValueChange={(v) => updateBranchId(v === "__none__" ? "" : v)}
+            disabled={isSubmitting}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select branch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">No branch</SelectItem>
+              {branches.map((b) => (
+                <SelectItem key={b.id} value={b.id}>
+                  {b.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
           <Label htmlFor="stage" className="text-xs text-gray-600">
@@ -423,7 +503,7 @@ export function AddLeadSheet({
           </Label>
           <Select
             value={formData.listId}
-            onValueChange={(v) => updateField("listId", v)}
+            onValueChange={updateListId}
             disabled={isSubmitting}
           >
             <SelectTrigger className="w-full">
@@ -444,21 +524,25 @@ export function AddLeadSheet({
         <div className="space-y-1.5">
           <Label htmlFor="assignedTo" className="text-xs text-gray-600">
             Assigned To
-            {!isAdmin && (
+            {!canPickAssignee && (
               <span className="ml-1 text-gray-400">(auto)</span>
             )}
           </Label>
           <Select
             value={formData.assignedTo || "__none__"}
             onValueChange={(v) => updateField("assignedTo", v === "__none__" ? "" : v)}
-            disabled={isSubmitting || !isAdmin}
+            disabled={assigneeDisabled}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select team member" />
+              <SelectValue
+                placeholder={
+                  isEducation && !formData.listId ? "Select a stage first" : "Select team member"
+                }
+              />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="__none__">Unassigned</SelectItem>
-              {assignableMembers.map((member) => (
+              {assigneeOptions.map((member) => (
                 <SelectItem key={member.user_id} value={member.user_id}>
                   {member.name}
                   {member.user_id === currentUserId && " (You)"}
@@ -469,8 +553,8 @@ export function AddLeadSheet({
         </div>
       </div>
 
-      {/* Branch picker — only for tenants with >1 branch */}
-      {branches.length > 1 && (
+      {/* Branch picker — non-education tenants with >1 branch (original behavior) */}
+      {!isEducation && branches.length > 1 && (
         <div className="space-y-1.5">
           <Label htmlFor="branchId" className="text-xs text-gray-600">
             Branch
@@ -620,6 +704,77 @@ export function AddLeadSheet({
           />
         </CollapsibleContent>
       </Collapsible>
+
+      {industryId === "education_consultancy" && (
+        <Collapsible open={academicsOpen} onOpenChange={setAcademicsOpen}>
+          <CollapsibleTrigger className="flex items-center gap-2 w-full py-2 text-sm font-medium text-gray-700 hover:text-gray-900">
+            <ChevronRight
+              className={`h-4 w-4 transition-transform ${
+                academicsOpen ? "rotate-90" : ""
+              }`}
+            />
+            Academic &amp; test details
+            <span className="text-xs text-gray-400 font-normal">(optional)</span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-3 pt-2">
+            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Academic Qualification
+              </p>
+              {ACADEMIC_LEVELS.map((level) => (
+                <div key={level.key} className="space-y-1">
+                  <Label className="text-xs text-gray-600">{level.label}</Label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <Input
+                      placeholder="%/GPA"
+                      value={academics[`${level.key}_gpa`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_gpa`, e.target.value)}
+                      disabled={isSubmitting}
+                      className={`h-9 text-sm ${
+                        academicsError && level.gateEligible ? "border-red-500 ring-2 ring-red-200" : ""
+                      }`}
+                    />
+                    <Input
+                      placeholder="School / College"
+                      value={academics[`${level.key}_institution`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_institution`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                    <Input
+                      placeholder="Passed year"
+                      inputMode="numeric"
+                      value={academics[`${level.key}_passed_year`] || ""}
+                      onChange={(e) => updateAcademic(`${level.key}_passed_year`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-md border bg-muted/30 p-3 space-y-3">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Test Report &amp; Score
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                {TEST_TYPES.map((t) => (
+                  <div key={t.key} className="space-y-1">
+                    <Label className="text-xs text-gray-600">{t.label}</Label>
+                    <Input
+                      placeholder="Score"
+                      value={testScores[`${t.key}_score`] || ""}
+                      onChange={(e) => updateTestScore(`${t.key}_score`, e.target.value)}
+                      disabled={isSubmitting}
+                      className="h-9 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </>
   );
 
@@ -873,37 +1028,11 @@ export function AddLeadSheet({
           </div>
         </div>
 
-        {/* Tag Selector — education_consultancy only */}
-        {industryId === "education_consultancy" && (
-          <div className="space-y-1.5">
-            <Label className="text-xs text-gray-600">Tag</Label>
-            <div className="flex gap-2">
-              {["student", "parent"].map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  disabled={isSubmitting}
-                  className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
-                    formData.tag === tag
-                      ? tag === "parent"
-                        ? "bg-green-100 text-green-700 ring-2 ring-green-300"
-                        : "bg-blue-100 text-blue-700 ring-2 ring-blue-300"
-                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  }`}
-                  onClick={() => updateField("tag", tag)}
-                >
-                  {tag.charAt(0).toUpperCase() + tag.slice(1)}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Study Interest — education_consultancy only */}
         {industryId === "education_consultancy" && (
-          <DestinationsField
+          <DestinationsMultiSelect
             selected={formData.destinations}
-            onToggle={toggleDestination}
+            onChange={setDestinations}
             disabled={isSubmitting}
             options={destOptions}
           />
@@ -929,7 +1058,7 @@ export function AddLeadSheet({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Degree Level</Label>
+              <Label className="text-xs text-gray-600">Interested Degree Level</Label>
               <Select
                 value={formData.degreeLevel || "__none__"}
                 onValueChange={(v) => updateField("degreeLevel", v === "__none__" ? "" : v)}
@@ -940,8 +1069,8 @@ export function AddLeadSheet({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">Select level</SelectItem>
-                  {DEGREE_LEVELS.map((d) => (
-                    <SelectItem key={d.value} value={d.value}>{d.label}</SelectItem>
+                  {studyLevels.map((lvl) => (
+                    <SelectItem key={lvl} value={lvl}>{lvl}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

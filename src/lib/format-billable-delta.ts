@@ -19,12 +19,3 @@ export function formatBillableDelta(
   if (pct > 0) return { text: `▲ +${pct}%`, direction: "up" };
   return { text: `▼ ${pct}%`, direction: "down" };
 }
-
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}

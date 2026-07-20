@@ -176,3 +176,27 @@ button:disabled,
 .disabled {
   cursor: not-allowed;
 }
+
+/* Refined icon stroke weight across the whole app (lucide ships at 2) */
+.lucide {
+  stroke-width: 1.3px;
+}
+
+/* Scrollbars: transparent track, subtle thumb — app-wide */
+* {
+  scrollbar-color: rgba(0, 0, 0, 0.25) transparent; /* Firefox: thumb, track */
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.25);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 0, 0, 0.4);
+}

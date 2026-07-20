@@ -20,6 +20,8 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { KB_MAX_FILE_BYTES, KB_ACCEPTED_TYPES } from "@/lib/knowledge-base/constants";
+import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
+import { inngest } from "@/lib/ai/ingestion/inngest";
 
 const isHttpUrl = (): ((v: unknown) => string | null) => (v) => {
   if (!v || typeof v !== "string") return null;
@@ -80,6 +82,7 @@ export async function POST(
   const { data: kb } = await db.from("knowledge_bases").select("id").eq("id", id).single();
   if (!kb) return apiNotFound("Knowledge base");
 
+  const ingestionEnabled = await isIngestionEnabledForTenant(auth.tenantId);
   const type = body.type;
   let insertRow: Record<string, unknown>;
 
@@ -94,7 +97,7 @@ export async function POST(
       knowledge_base_id: id,
       title: String(body.title).trim(),
       url: String(body.url).trim(),
-      status: "ready",
+      status: ingestionEnabled ? "pending" : "ready",
       created_by: auth.userId,
     };
   } else if (type === "note") {
@@ -108,7 +111,7 @@ export async function POST(
       knowledge_base_id: id,
       title: String(body.title).trim(),
       content: String(body.content),
-      status: "ready",
+      status: ingestionEnabled ? "pending" : "ready",
       created_by: auth.userId,
     };
   } else if (type === "file") {
@@ -152,7 +155,7 @@ export async function POST(
       mime_type: String(body.mime_type),
       size_bytes: sizeBytes,
       storage_path: String(body.storage_path),
-      status: "ready",
+      status: ingestionEnabled ? "pending" : "ready",
       created_by: auth.userId,
     };
   } else {
@@ -168,6 +171,12 @@ export async function POST(
   if (error) {
     log.error({ error }, "Failed to create knowledge base item");
     return apiError("DB_ERROR", "Failed to create item", 500);
+  }
+
+  if (ingestionEnabled) {
+    inngest
+      .send({ name: "kb/item.ingest.requested", data: { tenantId: auth.tenantId, itemId: created.id } })
+      .catch((err) => log.error({ err, itemId: created.id }, "Failed to send kb-ingest event (recoverable via backfill)"));
   }
 
   Promise.all([

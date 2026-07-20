@@ -14,6 +14,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { computePctComplete } from "@/lib/projects/health";
 
 const PROJECT_STATUSES = ["planning", "active", "in_review", "delivered", "on_hold", "cancelled"];
 
@@ -33,7 +34,43 @@ export async function GET(request: NextRequest) {
   const { data: projects, error } = await query.order("created_at", { ascending: false });
 
   if (error) return apiError("DB_ERROR", "Failed to fetch projects", 500);
-  return apiSuccess(projects ?? []);
+
+  const projectRows = (projects ?? []) as unknown as Array<Record<string, unknown> & { id: string }>;
+  const projectIds = projectRows.map((p) => p.id);
+
+  const actualMinutesByProject = new Map<string, number>();
+  const tasksByProject = new Map<string, Array<{ status: string; estimated_minutes: number | null }>>();
+
+  if (projectIds.length > 0) {
+    const [{ data: timeEntries, error: timeEntriesError }, { data: tasks, error: tasksError }] = await Promise.all([
+      db.from("time_entries").select("project_id, minutes").in("project_id", projectIds),
+      db.from("tasks").select("project_id, status, estimated_minutes").in("project_id", projectIds),
+    ]);
+    if (timeEntriesError || tasksError) return apiError("DB_ERROR", "Failed to fetch project health inputs", 500);
+
+    for (const e of (timeEntries ?? []) as unknown as Array<{ project_id: string; minutes: number }>) {
+      actualMinutesByProject.set(e.project_id, (actualMinutesByProject.get(e.project_id) ?? 0) + e.minutes);
+    }
+    for (const t of (tasks ?? []) as unknown as Array<{
+      project_id: string;
+      status: string;
+      estimated_minutes: number | null;
+    }>) {
+      const list = tasksByProject.get(t.project_id) ?? [];
+      list.push({ status: t.status, estimated_minutes: t.estimated_minutes });
+      tasksByProject.set(t.project_id, list);
+    }
+  }
+
+  const enriched = projectRows.map((p) => ({
+    ...p,
+    actual_minutes: actualMinutesByProject.get(p.id) ?? 0,
+    pct_complete: computePctComplete(
+      (tasksByProject.get(p.id) ?? []).map((t) => ({ status: t.status, estimatedMinutes: t.estimated_minutes }))
+    ),
+  }));
+
+  return apiSuccess(enriched);
 }
 
 export async function POST(request: NextRequest) {

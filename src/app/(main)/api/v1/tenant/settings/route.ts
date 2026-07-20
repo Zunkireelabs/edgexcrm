@@ -12,6 +12,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import type { Tenant } from "@/types/database";
 
 const WEEKDAY_NUMS = [0, 1, 2, 3, 4, 5, 6];
+const VALID_CURRENCIES = ["NPR", "USD", "INR", "EUR"];
 
 export async function PATCH(request: NextRequest) {
   const requestId = crypto.randomUUID();
@@ -54,6 +55,15 @@ export async function PATCH(request: NextRequest) {
       return apiValidationError({ weekend_days: ["Must leave at least one working day"] });
     }
     patch.weekend_days = dedupedWeekendDays;
+  }
+
+  if (body.default_currency !== undefined) {
+    if (typeof body.default_currency !== "string" || !VALID_CURRENCIES.includes(body.default_currency)) {
+      return apiValidationError({
+        default_currency: [`Must be one of: ${VALID_CURRENCIES.join(", ")}`],
+      });
+    }
+    patch.default_currency = body.default_currency;
   }
 
   if (Object.keys(patch).length === 0) {

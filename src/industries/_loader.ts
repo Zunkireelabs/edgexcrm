@@ -8,7 +8,7 @@
  */
 
 import { INDUSTRIES, type FeatureId, type IndustryId } from "./_registry";
-import type { IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
+import type { AiConfig, IndustryManifest, SidebarEntry, SidebarItem } from "./_types";
 import { canSeeNav, type ResolvedPermissions } from "@/lib/api/permissions";
 
 import { manifest as educationConsultancyManifest } from "./education-consultancy/manifest";
@@ -86,8 +86,15 @@ export function getIndustrySidebarItems(
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
 
+  // Always-viewable nav items: visible to every user in the industry regardless of
+  // the position's allowedNavKeys / minRoles restrictions. Editing is still gated
+  // downstream (e.g. classes manage/enroll buttons require canManageClasses), but
+  // the page itself is view-only-accessible to everyone.
+  const ALWAYS_VIEWABLE_HREFS = new Set(["/classes"]);
+
   function isItemAllowed(item: SidebarItem): boolean {
     if (!registeredFeatureIds.has(item.featureId)) return false;
+    if (ALWAYS_VIEWABLE_HREFS.has(item.href)) return true;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
     if (permissions && !canSeeNav(permissions, item.href)) return false;
     return true;
@@ -101,6 +108,16 @@ export function getIndustrySidebarItems(
     }
     return isItemAllowed(entry) ? [entry] : [];
   });
+}
+
+/**
+ * Returns the tenant's industry AI configuration (prompt addendum + tool
+ * ids), if any. Mirrors getManifest's fallback semantics — a null/unknown
+ * industryId resolves to the general manifest's `ai` config rather than
+ * undefined.
+ */
+export function getIndustryAiConfig(industryId: string | null | undefined): AiConfig | undefined {
+  return getManifest(industryId).ai;
 }
 
 /**

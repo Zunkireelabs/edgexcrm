@@ -42,17 +42,29 @@ const WEEKDAYS = [
   { value: 6, label: "Sat" },
 ];
 
+const CURRENCY_OPTIONS = [
+  { value: "NPR", label: "NPR — Nepalese Rupee (Rs.)" },
+  { value: "USD", label: "USD — US Dollar ($)" },
+  { value: "INR", label: "INR — Indian Rupee (₹)" },
+  { value: "EUR", label: "EUR — Euro (€)" },
+];
+
 interface TenantLocaleManagerProps {
   timezone: string;
   weekendDays: number[];
+  defaultCurrency: string;
 }
 
-export function TenantLocaleManager({ timezone, weekendDays }: TenantLocaleManagerProps) {
+export function TenantLocaleManager({ timezone, weekendDays, defaultCurrency }: TenantLocaleManagerProps) {
   const [tz, setTz] = useState(timezone);
   const [weekend, setWeekend] = useState<number[]>(weekendDays);
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [saving, setSaving] = useState(false);
 
-  const dirty = tz !== timezone || JSON.stringify([...weekend].sort()) !== JSON.stringify([...weekendDays].sort());
+  const dirty =
+    tz !== timezone ||
+    currency !== defaultCurrency ||
+    JSON.stringify([...weekend].sort()) !== JSON.stringify([...weekendDays].sort());
 
   function toggleWeekendDay(day: number, checked: boolean) {
     setWeekend((prev) => (checked ? [...prev, day] : prev.filter((d) => d !== day)));
@@ -64,7 +76,7 @@ export function TenantLocaleManager({ timezone, weekendDays }: TenantLocaleManag
       const res = await fetch("/api/v1/tenant/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timezone: tz, weekend_days: weekend }),
+        body: JSON.stringify({ timezone: tz, weekend_days: weekend, default_currency: currency }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error?.message ?? "Failed to save locale settings");
@@ -84,7 +96,7 @@ export function TenantLocaleManager({ timezone, weekendDays }: TenantLocaleManag
           Locale
         </CardTitle>
         <CardDescription>
-          Timezone and weekend days used for leave day-counting and scheduling.
+          Timezone, weekend days, and billing currency used across scheduling and billing displays.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -96,6 +108,22 @@ export function TenantLocaleManager({ timezone, weekendDays }: TenantLocaleManag
             </SelectTrigger>
             <SelectContent>
               {TIMEZONE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium">Default currency</label>
+          <Select value={currency} onValueChange={setCurrency}>
+            <SelectTrigger className="w-full sm:w-64">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {CURRENCY_OPTIONS.map((opt) => (
                 <SelectItem key={opt.value} value={opt.value}>
                   {opt.label}
                 </SelectItem>

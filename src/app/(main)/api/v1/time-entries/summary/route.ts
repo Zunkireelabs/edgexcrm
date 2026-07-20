@@ -16,7 +16,7 @@ import { calculateBillableMinutes, calculateBillableAmount } from "@/industries/
 import type { TimeEntry } from "@/types/database";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const VALID_DIMENSIONS = ["member", "project", "account"] as const;
+const VALID_DIMENSIONS = ["member", "project", "account", "department"] as const;
 type Dimension = (typeof VALID_DIMENSIONS)[number];
 
 interface SummaryRow {
@@ -25,6 +25,7 @@ interface SummaryRow {
   minutes: number;
   billable_minutes: number;
   billable_amount: number;
+  currency: string;
 }
 
 interface EntryWithJoins extends TimeEntry {
@@ -68,6 +69,9 @@ export async function GET(request: NextRequest) {
   const db = await scopedClient(auth);
   const isAdmin = requireAdmin(auth);
 
+  const { data: tenantRow } = await db.raw().from("tenants").select("default_currency").eq("id", auth.tenantId).single();
+  const currency = (tenantRow as { default_currency: string } | null)?.default_currency ?? "NPR";
+
   let query = db
     .from("time_entries")
     .select("*, projects!time_entries_project_id_fkey(id, name, account_id, accounts(id, name))");
@@ -87,6 +91,40 @@ export async function GET(request: NextRequest) {
 
   const entries = (data ?? []) as unknown as EntryWithJoins[];
 
+  // dimension=department needs a user_id -> department lookup: time_entries.user_id
+  // (auth.users.id) -> tenant_users.user_id -> tenant_users.id -> employee_profiles.department_id
+  // -> departments.name. Members without a profile/department land in "Unassigned".
+  let departmentByUserId: Map<string, { key: string; label: string }> | null = null;
+  if (dimension === "department") {
+    const [{ data: tenantUsersRaw, error: tuError }, { data: departmentsRaw, error: deptError }] = await Promise.all([
+      db
+        .from("tenant_users")
+        .select("user_id, employee_profiles!employee_profiles_tenant_user_id_fkey(department_id)"),
+      db.from("departments").select("id, name"),
+    ]);
+    if (tuError || deptError) {
+      log.error({ tuError, deptError }, "Failed to fetch department lookups for summary");
+      return apiError("DB_ERROR", "Failed to fetch department data", 500);
+    }
+
+    const departmentNameById = new Map(
+      ((departmentsRaw ?? []) as unknown as Array<{ id: string; name: string }>).map((d) => [d.id, d.name])
+    );
+
+    departmentByUserId = new Map();
+    for (const tu of (tenantUsersRaw ?? []) as unknown as Array<{
+      user_id: string;
+      employee_profiles: { department_id: string | null } | { department_id: string | null }[] | null;
+    }>) {
+      const profile = Array.isArray(tu.employee_profiles) ? tu.employee_profiles[0] ?? null : tu.employee_profiles;
+      const departmentId = profile?.department_id ?? null;
+      departmentByUserId.set(tu.user_id, {
+        key: departmentId ?? "unassigned",
+        label: departmentId ? departmentNameById.get(departmentId) ?? "Unknown" : "Unassigned",
+      });
+    }
+  }
+
   // Group entries by dimension key
   const groups = new Map<string, EntryWithJoins[]>();
 
@@ -96,6 +134,8 @@ export async function GET(request: NextRequest) {
       key = entry.user_id;
     } else if (dimension === "project") {
       key = entry.project_id ?? "unknown";
+    } else if (dimension === "department") {
+      key = departmentByUserId?.get(entry.user_id)?.key ?? "unassigned";
     } else {
       // account
       key = entry.projects?.account_id ?? "unassigned";
@@ -118,6 +158,8 @@ export async function GET(request: NextRequest) {
       label = key;
     } else if (dimension === "project") {
       label = grp[0]?.projects?.name ?? key;
+    } else if (dimension === "department") {
+      label = departmentByUserId?.get(grp[0]?.user_id)?.label ?? (key === "unassigned" ? "Unassigned" : key);
     } else {
       label = grp[0]?.projects?.accounts?.name ?? (key === "unassigned" ? "Unassigned" : key);
     }
@@ -128,6 +170,7 @@ export async function GET(request: NextRequest) {
       minutes: grp.reduce((sum, e) => sum + e.minutes, 0),
       billable_minutes: calculateBillableMinutes(grp as TimeEntry[]),
       billable_amount: calculateBillableAmount(grp as TimeEntry[]),
+      currency,
     });
   }
 

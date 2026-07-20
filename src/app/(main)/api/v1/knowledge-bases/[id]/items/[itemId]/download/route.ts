@@ -7,6 +7,7 @@ import {
   apiError,
 } from "@/lib/api/response";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { getStorageProvider } from "@/lib/storage/provider";
 
 export async function GET(
   _request: NextRequest,
@@ -30,14 +31,12 @@ export async function GET(
     return apiNotFound("Knowledge base item");
   }
 
-  const { data: signed, error: storageError } = await db
-    .raw()
-    .storage.from("knowledge-base-files")
-    .createSignedUrl(row.storage_path, 60);
-
-  if (storageError || !signed) {
+  let url: string;
+  try {
+    url = await getStorageProvider().getSignedDownloadUrl("knowledge-base-files", row.storage_path, 60);
+  } catch {
     return apiError("STORAGE_ERROR", "Failed to create download URL", 500);
   }
 
-  return apiSuccess({ url: signed.signedUrl });
+  return apiSuccess({ url });
 }
