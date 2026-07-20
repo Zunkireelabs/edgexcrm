@@ -366,6 +366,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   const handleViewDetails = async (lead: LeadResult) => {
     setSelectedLead(lead);
+    setAssignToId(lead.assigned_to ?? "");
+    setMoveToStage("");
     setLoadingDetails(true);
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`);
@@ -1524,9 +1526,10 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             )}
 
             {/* Education triage: assign an owning counselor, and move un-triaged leads
-                into Qualified/Prospect. Hidden for leads already in Prospects (they
-                already have a counselor). Meet With below is separate and untouched. */}
-            {industryId === "education_consultancy" && selectedLead.list_slug !== "prospects" && (
+                into Qualified/Prospect. Hidden for leads already in Prospects or
+                Applications (advanced stages — only Meet With applies). Meet With
+                below is separate and untouched. */}
+            {industryId === "education_consultancy" && selectedLead.list_slug !== "prospects" && selectedLead.list_slug !== "applications" && (
               <div className="mb-4 space-y-3">
                 {selectedLead.list_slug !== "qualified" && (
                   <div>
