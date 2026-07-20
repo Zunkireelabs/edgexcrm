@@ -246,7 +246,7 @@ export default async function LeadsPage({
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <ListKanbanView
           listSlug={activeList.slug}
           pipeline={pipeline}
@@ -271,7 +271,7 @@ export default async function LeadsPage({
   if (canShowFunnelKanban) {
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <FunnelKanbanBoard
           lists={activeFunnelLists}
           leads={leads}
@@ -299,8 +299,9 @@ export default async function LeadsPage({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
       <LeadsTable
+        pageHeading={pageHeading}
+        pageHeadingClassName="shrink-0 text-lg font-bold pl-4 pt-4 mb-4 pr-6"
         leads={leads}
         openTaskLeadIds={openTaskLeadIds}
         leadCollaborators={leadCollaboratorsMap}

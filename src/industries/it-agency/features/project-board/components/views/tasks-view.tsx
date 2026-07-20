@@ -500,6 +500,7 @@ function TaskRow({
           assigneeId={task.assignee_id}
           team={team}
           onChange={(uid) => onAssigneeChange(task.id, uid)}
+          showName
         />
       </TableCell>
 

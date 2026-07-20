@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { User, Trash2, ChevronDown, ChevronUp, X, UserPlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Position } from "@/types/database";
 import type { OrgMember } from "./types";
 
@@ -20,17 +21,6 @@ const roleColors: Record<string, string> = {
   counselor: "bg-purple-100 text-purple-800",
   viewer: "bg-gray-100 text-gray-600",
 };
-
-const avatarBgs = [
-  "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-rose-500",
-  "bg-amber-500", "bg-cyan-500", "bg-fuchsia-500", "bg-teal-500",
-];
-
-function avatarColor(email: string): string {
-  let h = 0;
-  for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) & 0xffff;
-  return avatarBgs[h % avatarBgs.length];
-}
 
 interface PositionCardProps {
   position: Position & { member_count: number; members: OrgMember[] };
@@ -94,15 +84,8 @@ export function PositionCard({
             <>
               <div className="flex -space-x-1.5">
                 {visible.map((m) => (
-                  <div
-                    key={m.user_id}
-                    title={m.name || m.email}
-                    className={cn(
-                      "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white ring-1 ring-white",
-                      avatarColor(m.email)
-                    )}
-                  >
-                    {(m.name || m.email).charAt(0).toUpperCase()}
+                  <div key={m.user_id} title={m.name || m.email} className="ring-1 ring-white rounded-full">
+                    <MemberAvatar userId={m.user_id} name={m.name || m.email} size={20} />
                   </div>
                 ))}
                 {overflow > 0 && (
@@ -141,15 +124,9 @@ export function PositionCard({
 
           {members.map((m) => (
             <div key={m.user_id} className="flex items-center gap-1.5 w-full">
-              <div
-                title={m.name || m.email}
-                className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
-                  avatarColor(m.email)
-                )}
-              >
-                {(m.name || m.email).charAt(0).toUpperCase()}
-              </div>
+              <span title={m.name || m.email} className="shrink-0 inline-flex">
+                <MemberAvatar userId={m.user_id} name={m.name || m.email} size={24} />
+              </span>
               <span className="text-xs text-gray-700 flex-1 truncate min-w-0">{m.name || m.email}</span>
               <span className={cn(
                 "text-[9px] font-medium px-1.5 py-0.5 rounded-full shrink-0",

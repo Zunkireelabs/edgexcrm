@@ -1,18 +1,7 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { OrgMember } from "./types";
-
-const avatarBgs = [
-  "bg-blue-500", "bg-emerald-500", "bg-violet-500", "bg-rose-500",
-  "bg-amber-500", "bg-cyan-500", "bg-fuchsia-500", "bg-teal-500",
-];
-
-function avatarColor(email: string): string {
-  let h = 0;
-  for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) & 0xffff;
-  return avatarBgs[h % avatarBgs.length];
-}
 
 interface UnassignedMembersTrayProps {
   members: OrgMember[];
@@ -43,15 +32,9 @@ export function UnassignedMembersTray({
               key={m.user_id}
               className="flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-200 bg-gray-50"
             >
-              <div
-                title={m.name || m.email}
-                className={cn(
-                  "w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold text-white shrink-0",
-                  avatarColor(m.email)
-                )}
-              >
-                {(m.name || m.email).charAt(0).toUpperCase()}
-              </div>
+              <span title={m.name || m.email} className="shrink-0 inline-flex">
+                <MemberAvatar userId={m.user_id} name={m.name || m.email} size={24} />
+              </span>
               <span className="text-xs text-gray-700">{m.name || m.email}</span>
               {isAdmin && assignablePositions.length > 0 && (
                 <select

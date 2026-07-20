@@ -158,9 +158,9 @@ export default async function LeadsOrganiseCockpitPage({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
-      <ReconciliationPanel rows={reconciliationRows} />
       <LeadsTable
+        pageHeading={stagingList.name}
+        beforeTable={<ReconciliationPanel rows={reconciliationRows} />}
         leads={leads}
         leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}

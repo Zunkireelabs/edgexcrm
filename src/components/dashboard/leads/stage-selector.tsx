@@ -52,7 +52,7 @@ export function StageSelector({
       <PopoverTrigger asChild>
         <button
           disabled={disabled || saving}
-          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[8px] text-xs font-medium whitespace-nowrap transition-opacity hover:opacity-80 disabled:opacity-50 disabled:cursor-not-allowed"
           style={
             current
               ? { backgroundColor: `${current.color}20`, color: current.color }

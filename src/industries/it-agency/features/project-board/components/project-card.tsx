@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import { HealthDot } from "./health-dot";
 import type { Project } from "@/types/database";
 import type { TeamMember } from "../hooks/use-projects";
@@ -31,15 +32,6 @@ function relativeTime(iso: string): string {
   if (diffDays < 30) return `${diffDays}d ago`;
   const diffMo = Math.floor(diffDays / 30);
   return `${diffMo}mo ago`;
-}
-
-function ownerInitials(email: string): string {
-  return email
-    .split("@")[0]
-    .split(/[._-]/)
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
 }
 
 function getDaysSinceUpdate(updatedAt: string): number {
@@ -169,12 +161,9 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
           <HealthDot project={project} />
         </div>
         {owner ? (
-          <div
-            title={owner.email}
-            className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary"
-          >
-            {ownerInitials(owner.email)}
-          </div>
+          <span title={owner.email} className="inline-flex">
+            <MemberAvatar userId={owner.user_id} name={owner.name || owner.email.split("@")[0]} size={24} />
+          </span>
         ) : (
           <div
             title="Unassigned"

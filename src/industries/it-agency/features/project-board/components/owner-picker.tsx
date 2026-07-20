@@ -2,14 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Check, UserCircle2, X } from "lucide-react";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 
-function initials(email: string): string {
-  const parts = email.split("@")[0].split(/[._-]/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
+function memberLabel(m: TeamMember): string {
+  return m.name || m.email.split("@")[0];
 }
 
 interface OwnerPickerProps {
@@ -41,11 +38,8 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
 
   if (disabled) {
     return owner ? (
-      <span
-        title={owner.email}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-blue-100 text-blue-700 text-xs font-semibold"
-      >
-        {initials(owner.email)}
+      <span title={owner.email} className="inline-flex">
+        <MemberAvatar userId={owner.user_id} name={memberLabel(owner)} size={28} />
       </span>
     ) : (
       <UserCircle2 className="h-5 w-5 text-muted-foreground/40" />
@@ -57,12 +51,11 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold transition-colors hover:ring-2 hover:ring-blue-300"
+        className="inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors hover:ring-2 hover:ring-blue-300"
         title={owner?.email ?? "Set owner"}
-        style={owner ? { backgroundColor: "#dbeafe", color: "#1d4ed8" } : undefined}
       >
         {owner ? (
-          initials(owner.email)
+          <MemberAvatar userId={owner.user_id} name={memberLabel(owner)} size={28} />
         ) : (
           <UserCircle2 className="h-4 w-4 text-muted-foreground/50" />
         )}
@@ -78,10 +71,8 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
                 onClick={() => handleSelect(m.user_id)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-semibold shrink-0">
-                  {initials(m.email)}
-                </span>
-                <span className="truncate text-gray-700">{m.name || m.email.split("@")[0]}</span>
+                <MemberAvatar userId={m.user_id} name={memberLabel(m)} />
+                <span className="truncate text-gray-700">{memberLabel(m)}</span>
                 {m.user_id === ownerId && <Check className="h-3 w-3 text-blue-600 ml-auto shrink-0" />}
               </button>
             ))}
