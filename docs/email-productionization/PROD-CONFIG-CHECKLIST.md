@@ -29,17 +29,15 @@ the compose build args (baked `NEXT_PUBLIC_*`). Keep them in lockstep.
 
 ## Poll cron (reply-sync infrastructure — dormant under Path A)
 
-- ✅ `email-poll-prod.yml` exists, enabled, and returns **HTTP 200** on schedule
-  (verified 2026-07-20; recent runs all `success`). Hits
-  `https://edgex.zunkireelabs.com/api/internal/email/poll`.
-- ⚠️ **Cadence caveat:** the workflow is written `*/5 * * * *`, but GitHub Actions scheduled
-  workflows are heavily throttled — observed real cadence was **1–3 hours between runs**, not
-  5 minutes. Fine while reply-sync is dormant (Path A). **Before Path B** (when reply freshness
-  matters, especially for AI-monitor), move polling to a more reliable trigger (dedicated cron
-  on the VPS, Cloud Scheduler, or Inngest) — GH Actions cron is not dependable for
-  minute-level freshness.
-- Under Path A, once `EMAIL_REPLY_SYNC_ENABLED` is off, the endpoint returns immediately and
-  the cron is a harmless no-op (still 200). You may leave it running or disable the workflow.
+- ✅ **RESOLVED.** The `*/5 * * * *` GH-Actions cadence caveat below described in the original
+  version of this checklist (`email-poll-prod.yml` throttled to a real 1–3 hour cadence) is fixed
+  by the Inngest cron migration — `email-poll-prod.yml` (and its dev/reminders/inbox-process
+  siblings) were retired in Phase 3. Polling now runs as the `ops-email-poll` Inngest scheduled
+  function (`*/30 * * * *`, dormant under Path A same as before). See
+  [`docs/reference/03-INNGEST-BACKGROUND-JOBS.md`](../reference/03-INNGEST-BACKGROUND-JOBS.md)
+  for the current architecture, environments, and function inventory.
+- Under Path A, once `EMAIL_REPLY_SYNC_ENABLED` is off, the function returns immediately
+  (`{disabled: true}`) — a harmless no-op regardless of cadence.
 
 ## Sanity smoke (after OAuth verification completes)
 
