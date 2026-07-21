@@ -78,7 +78,25 @@ export function SequencesManager({ isAdmin }: SequencesManagerProps) {
       ) : (
         <div className="divide-y rounded-lg border">
           {sequences.map((sequence) => (
-            <div key={sequence.id} className="flex items-center justify-between gap-4 px-4 py-3">
+            <div
+              key={sequence.id}
+              role={isAdmin ? "button" : undefined}
+              tabIndex={isAdmin ? 0 : undefined}
+              onClick={isAdmin ? () => openEdit(sequence) : undefined}
+              onKeyDown={
+                isAdmin
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        openEdit(sequence);
+                      }
+                    }
+                  : undefined
+              }
+              className={`flex items-center justify-between gap-4 px-4 py-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset ${
+                isAdmin ? "cursor-pointer hover:bg-muted/40" : ""
+              }`}
+            >
               <div className="min-w-0">
                 <p className="font-medium text-sm truncate">{sequence.name}</p>
                 {sequence.description && (
@@ -91,7 +109,15 @@ export function SequencesManager({ isAdmin }: SequencesManagerProps) {
               </div>
               {isAdmin && (
                 <div className="shrink-0 flex items-center gap-1">
-                  <Button type="button" variant="ghost" size="sm" onClick={() => openEdit(sequence)}>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openEdit(sequence);
+                    }}
+                  >
                     <Pencil className="h-3.5 w-3.5 mr-1.5" /> Edit
                   </Button>
                   <Button
@@ -99,7 +125,10 @@ export function SequencesManager({ isAdmin }: SequencesManagerProps) {
                     variant="ghost"
                     size="sm"
                     className="text-destructive hover:text-destructive"
-                    onClick={() => setArchiveTarget(sequence)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setArchiveTarget(sequence);
+                    }}
                   >
                     <Archive className="h-3.5 w-3.5 mr-1.5" /> Archive
                   </Button>

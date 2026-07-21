@@ -74,6 +74,71 @@ export async function POST(request: Request) {
     }
   }
 
-  logger.info({ processed: processedIds.length, notified }, "reminders run complete");
-  return apiSuccess({ processed: processedIds.length, notified, errors: 0 });
+  // ── Outreach drafts that just came due ──────────────────────────────────
+  // Notify the draft's owner (assigned_to) once, when a pending draft on an
+  // ACTIVE enrollment passes its due_at. notified_at is the fire-once stamp.
+  //
+  // No feature-gate here: this cron is cross-tenant service-role, and
+  // sequence_step_drafts only exist for tenants that used the OUTREACH feature
+  // (gated at enrollment creation). Presence of rows IS the scope.
+  const { data: dueDrafts, error: draftErr } = await supabase
+    .from("sequence_step_drafts")
+    .select("id, lead_id, tenant_id, assigned_to, subject, sequence_enrollments!inner(status), leads!inner(deleted_at)")
+    .lte("due_at", nowIso)
+    .is("notified_at", null)
+    .eq("status", "pending")
+    .eq("sequence_enrollments.status", "active")
+    .is("leads.deleted_at", null)
+    .limit(500);
+
+  if (draftErr) {
+    logger.error({ err: draftErr }, "reminders run: failed to fetch due outreach drafts");
+    return apiInternalError();
+  }
+
+  let outreachNotified = 0;
+  const draftProcessedIds: string[] = [];
+
+  for (const row of dueDrafts ?? []) {
+    const r = row as unknown as { id: string; lead_id: string; tenant_id: string; assigned_to: string | null; subject: string | null };
+    if (!r.assigned_to) {
+      draftProcessedIds.push(r.id); // no owner — stamp to avoid perpetual re-scan
+      continue;
+    }
+    try {
+      await createNotification({
+        tenantId: r.tenant_id,
+        userId: r.assigned_to,
+        type: NotificationTypes.OUTREACH_DRAFT_DUE,
+        title: "Outreach email due",
+        message: r.subject && r.subject.trim() ? r.subject : "A follow-up email is ready to send",
+        link: `/leads/${r.lead_id}`,
+      });
+      outreachNotified++;
+      draftProcessedIds.push(r.id);
+    } catch (err) {
+      logger.error({ err, draftId: r.id }, "reminders run: failed to notify outreach draft");
+      // not stamped — retried next run
+    }
+  }
+
+  if (draftProcessedIds.length > 0) {
+    const { error: stampErr } = await supabase
+      .from("sequence_step_drafts")
+      .update({ notified_at: nowIso })
+      .in("id", draftProcessedIds);
+    if (stampErr) logger.error({ err: stampErr }, "reminders run: failed to stamp draft notified_at");
+  }
+
+  logger.info(
+    { processed: processedIds.length, notified, outreachProcessed: draftProcessedIds.length, outreachNotified },
+    "reminders run complete"
+  );
+  return apiSuccess({
+    processed: processedIds.length,
+    notified,
+    errors: 0,
+    outreach_processed: draftProcessedIds.length,
+    outreach_notified: outreachNotified,
+  });
 }
