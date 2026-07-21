@@ -53,6 +53,7 @@ import {
   Filter,
   Target,
   FolderOpen,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -137,6 +138,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   FileSignature,
   Gauge,
   FolderOpen,
+  Send,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -621,6 +623,7 @@ export function DashboardShell({
                     </>
                   );
                 })()}
+                {itItem("/outreach") && renderIndustryEntry(itItem("/outreach")!)}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}

@@ -30,6 +30,7 @@ import { type EmailThread, type Email } from "@/industries/_shared/features/emai
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -129,6 +130,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const [appNotes, setAppNotes] = useState<{ id: string; notes: string; created_at: string; updated_at: string | null; institution_name: string | null }[]>([]);
 
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
+  const hasOutreach = getFeatureAccess(industryId, FEATURES.OUTREACH);
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -443,6 +445,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
       {activeTab === "emails" && (
         <>
+          {hasOutreach && (
+            <div className="mb-3">
+              <LeadCadenceStrip leadId={leadId} isAdmin={isAdmin} currentUserId={currentUserId} />
+            </div>
+          )}
           {isEmailsTabLoading ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
