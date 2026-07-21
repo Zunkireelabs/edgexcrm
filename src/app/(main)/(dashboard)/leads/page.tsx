@@ -268,6 +268,8 @@ export default async function LeadsPage({
           isAdmin={isAdmin}
           canEditLeads={tenantData.permissions.canEditLeads}
           restrictToSelf={tenantData.permissions.leadScope === "own"}
+          leadCollaborators={leadCollaboratorsMap}
+          formMap={formMap}
         />
       </div>
     );

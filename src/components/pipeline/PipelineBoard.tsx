@@ -34,6 +34,8 @@ import {
   Calendar,
   Plus,
   Briefcase,
+  Tag,
+  UserPlus,
 } from "lucide-react";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import {
@@ -65,12 +67,8 @@ interface PipelineBoardProps {
   /** Position-derived permissions (source of truth). Fall back to legacy `role` if omitted. */
   canEditLeads?: boolean;
   restrictToSelf?: boolean;
-}
-
-interface TeamMember {
-  user_id: string;
-  email: string;
-  name?: string | null;
+  leadCollaborators?: Record<string, string[]>;
+  formMap?: Record<string, string>;
 }
 
 type ColumnsState = Record<string, PipelineLead[]>;
@@ -145,6 +143,8 @@ export function PipelineBoard({
   industryId,
   canEditLeads,
   restrictToSelf,
+  leadCollaborators = {},
+  formMap = {},
 }: PipelineBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() =>
@@ -155,13 +155,16 @@ export function PipelineBoard({
 
   // Filter States
   const [searchQuery, setSearchQuery] = useState("");
-  const [counselorFilter, setCounselorFilter] = useState<string>("all");
-  const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
+  const [sourceFilter, setSourceFilter] = useState<string[]>([]);
+  const [collaboratorFilter, setCollaboratorFilter] = useState<string[]>([]);
+  const [tagFilter, setTagFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [formFilter, setFormFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
   const [industryFilter, setIndustryFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<SortField>("updated");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [addLeadOpen, setAddLeadOpen] = useState(false);
 
   const isAdmin = role === "admin" || role === "owner";
@@ -265,16 +268,6 @@ export function PipelineBoard({
     };
   }, [tenantId]);
 
-  // Fetch team members for filtering (admin only)
-  useEffect(() => {
-    if (isAdmin) {
-      fetch("/api/v1/team")
-        .then(res => res.json())
-        .then(json => setTeamMembers(json.data || []))
-        .catch(() => {});
-    }
-  }, [isAdmin]);
-
   // Derived unique sources for filter
   const sources = useMemo(() => {
     const s = new Set<string>();
@@ -283,6 +276,90 @@ export function PipelineBoard({
     });
     return Array.from(s).sort();
   }, [leads]);
+
+  // Counselors from team members, for the Assigned To filter
+  const counselors = useMemo(
+    () => teamMembersData.map((m) => [m.user_id, m.email] as const),
+    [teamMembersData]
+  );
+  const memberNames = useMemo(
+    () => Object.fromEntries(teamMembersData.map((m) => [m.user_id, m.name])),
+    [teamMembersData]
+  );
+  const memberRoleMap = useMemo(
+    () => Object.fromEntries(teamMembersData.map((m) => [m.user_id, m.role])),
+    [teamMembersData]
+  );
+
+  const hasMultipleForms = Object.keys(formMap).length > 1;
+  const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
+
+  const statusFilterOptions = useMemo(
+    () => [
+      { value: "all", label: "All Status", description: "Show all leads" },
+      ...stages.map((s) => ({ value: s.slug, label: s.name })),
+    ],
+    [stages]
+  );
+
+  // Per-source counts — cross-filtered: reflects all active filters except source itself
+  const sourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    leads.forEach((l) => {
+      if (!l.intake_source) return;
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesCollaborator =
+        collaboratorFilter.length === 0 ||
+        (leadCollaborators[l.id]?.some((u) => collaboratorFilter.includes(u)) ?? false);
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatusVal = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      if (!matchesCounselor || !matchesCollaborator || !matchesTag || !matchesStatusVal || !matchesForm) return;
+      m.set(l.intake_source, (m.get(l.intake_source) ?? 0) + 1);
+    });
+    return m;
+  }, [leads, counselorFilter, collaboratorFilter, tagFilter, statusFilter, formFilter, leadCollaborators]);
+
+  // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
+  const counselorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    leads.forEach((l) => {
+      const matchesSource = sourceFilter.length === 0 || (!!l.intake_source && sourceFilter.includes(l.intake_source));
+      const matchesCollaborator =
+        collaboratorFilter.length === 0 ||
+        (leadCollaborators[l.id]?.some((u) => collaboratorFilter.includes(u)) ?? false);
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatusVal = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      if (!matchesSource || !matchesCollaborator || !matchesTag || !matchesStatusVal || !matchesForm) return;
+      const key = l.assigned_to ?? "unassigned";
+      m.set(key, (m.get(key) ?? 0) + 1);
+    });
+    return m;
+  }, [leads, sourceFilter, collaboratorFilter, tagFilter, statusFilter, formFilter, leadCollaborators]);
+
+  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
+  const collaboratorCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    leads.forEach((l) => {
+      const matchesSource = sourceFilter.length === 0 || (!!l.intake_source && sourceFilter.includes(l.intake_source));
+      const matchesCounselor =
+        counselorFilter.length === 0 ||
+        (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+        (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+      const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+      const matchesStatusVal = statusFilter === "all" || l.status === statusFilter;
+      const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
+      if (!matchesSource || !matchesCounselor || !matchesTag || !matchesStatusVal || !matchesForm) return;
+      (leadCollaborators[l.id] ?? []).forEach((u) => {
+        m.set(u, (m.get(u) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [leads, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, leadCollaborators]);
 
   // Apply filters to columns
   const filteredColumns = useMemo(() => {
@@ -298,9 +375,16 @@ export function PipelineBoard({
           l.email?.toLowerCase().includes(query) ||
           l.phone?.toLowerCase().includes(query);
 
-        const matchesCounselor = counselorFilter === "all" ||
-          (counselorFilter === "unassigned" ? !l.assigned_to : l.assigned_to === counselorFilter);
-        const matchesSource = sourceFilter === "all" || l.intake_source === sourceFilter;
+        const matchesCounselor = counselorFilter.length === 0 ||
+          (counselorFilter.includes("unassigned") && !l.assigned_to) ||
+          (!!l.assigned_to && counselorFilter.includes(l.assigned_to));
+        const matchesSource = sourceFilter.length === 0 ||
+          (!!l.intake_source && sourceFilter.includes(l.intake_source));
+        const matchesCollaborator = collaboratorFilter.length === 0 ||
+          (leadCollaborators[l.id]?.some((u) => collaboratorFilter.includes(u)) ?? false);
+        const matchesTag = tagFilter === "all" || (!!l.tags && l.tags.includes(tagFilter));
+        const matchesStatus = statusFilter === "all" || l.status === statusFilter;
+        const matchesForm = formFilter === "all" || l.form_config_id === formFilter;
 
         const matchesIndustry = industryFilter === "all" ||
           (industryFilter === "__none__" ? !l.prospect_industry : l.prospect_industry === industryFilter);
@@ -323,27 +407,40 @@ export function PipelineBoard({
           }
         }
 
-        return matchesSearch && matchesCounselor && matchesSource && matchesIndustry && matchesCreated;
+        return matchesSearch && matchesCounselor && matchesSource && matchesCollaborator &&
+          matchesTag && matchesStatus && matchesForm && matchesIndustry && matchesCreated;
       });
 
       // Apply sorting
       filtered[stageId] = sortLeads(filteredLeads, sortField, sortDirection);
     });
     return filtered;
-  }, [columns, searchQuery, counselorFilter, sourceFilter, createdFilter, industryFilter, sortField, sortDirection]);
+  }, [
+    columns, searchQuery, counselorFilter, sourceFilter, collaboratorFilter, tagFilter,
+    statusFilter, formFilter, createdFilter, industryFilter, sortField, sortDirection,
+    leadCollaborators,
+  ]);
 
   const clearFilters = () => {
     setSearchQuery("");
-    setCounselorFilter("all");
-    setSourceFilter("all");
+    setCounselorFilter([]);
+    setSourceFilter([]);
+    setCollaboratorFilter([]);
+    setTagFilter("all");
+    setStatusFilter("all");
+    setFormFilter("all");
     setCreatedFilter("all");
     setIndustryFilter("all");
   };
 
   const activeFiltersCount = [
     searchQuery !== "",
-    counselorFilter !== "all",
-    sourceFilter !== "all",
+    counselorFilter.length > 0,
+    sourceFilter.length > 0,
+    collaboratorFilter.length > 0,
+    tagFilter !== "all",
+    statusFilter !== "all",
+    formFilter !== "all",
     createdFilter !== "all",
     industryFilter !== "all",
   ].filter(Boolean).length;
@@ -563,45 +660,86 @@ export function PipelineBoard({
   }
 
   const filterDefs: FilterDef[] = [
-    ...(isAdmin
-      ? [
-          {
-            id: "counselor",
-            label: "All Counselors",
-            icon: <Users2 className="h-3.5 w-3.5" />,
-            multiple: false,
-            defaultValue: "all",
-            value: counselorFilter,
-            onChange: setCounselorFilter,
-            options: [
-              { value: "all", label: "All Counselors", description: "Show leads from everyone" },
-              { value: "unassigned", label: "Unassigned", description: "Leads not assigned yet" },
-              ...teamMembers.map((m) => ({
-                value: m.user_id,
-                label: m.name || m.email.split("@")[0],
-                description: m.email,
-              })),
-            ],
-          } satisfies FilterDef,
-        ]
-      : []),
     ...(sources.length > 0
       ? [
           {
             id: "source",
-            label: "All Sources",
+            label: "Source",
             icon: <Globe className="h-3.5 w-3.5" />,
-            multiple: false,
-            defaultValue: "all",
+            multiple: true,
             value: sourceFilter,
             onChange: setSourceFilter,
+            options: sources.map((s) => ({
+              value: s,
+              label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})`,
+              description: `Leads from ${s}`,
+            })),
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(isAdmin
+      ? [
+          {
+            id: "counselor",
+            label: "Assigned To",
+            icon: <Users2 className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: counselorFilter,
+            onChange: setCounselorFilter,
             options: [
-              { value: "all", label: "All Sources", description: "Show leads from all sources" },
-              ...sources.map((s) => ({
-                value: s,
-                label: s,
-                description: `Leads from ${s}`,
+              ...((counselorCounts.get("unassigned") ?? 0) > 0
+                ? [
+                    {
+                      value: "unassigned",
+                      label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})`,
+                      description: "Leads not assigned yet",
+                    },
+                  ]
+                : []),
+              ...counselors
+                .filter(([uid]) => (counselorCounts.get(uid) ?? 0) > 0)
+                .map(([uid, email]) => ({
+                  value: uid,
+                  label: `${memberNames[uid] || email.split("@")[0]} (${(counselorCounts.get(uid) ?? 0).toLocaleString()})`,
+                  description: email,
+                })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(isAdmin && Object.keys(leadCollaborators).length > 0
+      ? [
+          {
+            id: "collaborator",
+            label: "Collaborators",
+            icon: <UserPlus className="h-3.5 w-3.5" />,
+            multiple: true,
+            value: collaboratorFilter,
+            onChange: setCollaboratorFilter,
+            options: counselors
+              .filter(([uid]) =>
+                (collaboratorCounts.get(uid) ?? 0) > 0 &&
+                memberRoleMap[uid] !== "owner" &&
+                memberRoleMap[uid] !== "admin")
+              .map(([uid, email]) => ({
+                value: uid,
+                label: `${memberNames[uid] || email.split("@")[0]} (${(collaboratorCounts.get(uid) ?? 0).toLocaleString()})`,
+                description: email,
               })),
+          } satisfies FilterDef,
+        ]
+      : []),
+    ...(industryId === "education_consultancy"
+      ? [
+          {
+            id: "tag",
+            label: "Tag",
+            icon: <Tag className="h-3.5 w-3.5" />,
+            value: tagFilter,
+            onChange: setTagFilter,
+            options: [
+              { value: "all", label: "All Tags", description: "Show all leads" },
+              { value: "student", label: "Student", description: "Student leads only" },
             ],
           } satisfies FilterDef,
         ]
@@ -630,11 +768,9 @@ export function PipelineBoard({
       : []),
     {
       id: "created",
-      label: "Any time",
+      label: "Date created",
       icon: <Calendar className="h-3.5 w-3.5" />,
-      multiple: false,
       searchable: false,
-      defaultValue: "all",
       value: createdFilter,
       onChange: setCreatedFilter,
       options: [
@@ -644,6 +780,32 @@ export function PipelineBoard({
         { value: "month", label: "Last 30 days", description: "Past month" },
       ],
     } satisfies FilterDef,
+    {
+      id: "status",
+      label: "Status",
+      searchable: false,
+      value: statusFilter,
+      onChange: setStatusFilter,
+      options: statusFilterOptions,
+    } satisfies FilterDef,
+    ...(hasMultipleForms
+      ? [
+          {
+            id: "form",
+            label: "Form",
+            value: formFilter,
+            onChange: setFormFilter,
+            options: [
+              { value: "all", label: "All Forms", description: "Show leads from all forms" },
+              ...formEntries.map(([id, name]) => ({
+                value: id,
+                label: name,
+                description: `Form: ${name}`,
+              })),
+            ],
+          } satisfies FilterDef,
+        ]
+      : []),
   ];
 
   return (
