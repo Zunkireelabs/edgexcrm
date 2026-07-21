@@ -82,8 +82,8 @@ Tenant-scoped but missing the assigned-to/own-scope check — a counselor can re
 - `use-badge-counts.ts:45` (`setInterval 30s`, mounted in both `shell.tsx` and `leads-table.tsx`) + `notifications-dropdown.tsx:84` (30s) → ~4 req/min/user, uncached; badge-counts runs a `LIKE '/leads/%'` scan on unread notifications per poll.
 - Supabase Realtime `postgres_changes` subscriptions (PipelineBoard, deal-board, InboxUI) — Supabase's least-scalable realtime mode; cost grows with tenants × open boards × write rate. Swap for broadcast before ~100 concurrent users.
 
-### Cron architecture won't scale with tenants
-All background work runs via GitHub Actions cron (best-effort scheduling) hitting single endpoints that loop **all** tenants in one invocation with no overlap locking (`email-poll` */5, `inbox-process` */2, `reminders-run` */5). As accounts grow, a run can exceed its interval → overlapping runs, duplicate processing, CPU contention with user traffic. Matches the Inngest pick in ADR-001 — this is the workload it should absorb.
+### Cron architecture won't scale with tenants — ✅ RESOLVED (Inngest migration, 2026-07-21)
+This section originally described all background work running via GitHub Actions cron (best-effort scheduling, observed 1–3 hour real-world drift regardless of the written cron expression) hitting single endpoints that loop **all** tenants in one invocation with no overlap locking (`email-poll` */5, `inbox-process` */2, `reminders-run` */5). That architecture has been retired: the 5 GH-Actions cron workflows are deleted and the same jobs now run as Inngest scheduled functions (`ops-heartbeat`, `ops-reminders-scan`, `ops-inbox-process`, `ops-email-poll`), matching the Inngest pick in ADR-001. See [`docs/reference/03-INNGEST-BACKGROUND-JOBS.md`](../reference/03-INNGEST-BACKGROUND-JOBS.md) for the current architecture, function inventory, and free-tier budget. Note: this resolves the *scheduling-reliability* half of the original concern; the "loops all tenants in one invocation with no overlap locking" per-job design is unchanged by this migration and remains a separate, still-open scaling consideration as tenant count grows.
 
 ---
 
