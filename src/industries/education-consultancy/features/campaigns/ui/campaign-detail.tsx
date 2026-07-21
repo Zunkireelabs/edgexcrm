@@ -657,6 +657,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                 <TableHead>Match</TableHead>
                 <TableHead>Score</TableHead>
                 <TableHead>Outcome</TableHead>
+                <TableHead>Winner</TableHead>
                 <TableHead>Source</TableHead>
                 <TableHead className="w-16">Locked</TableHead>
                 <TableHead className="w-16">Actions</TableHead>
@@ -665,7 +666,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
             <TableBody>
               {sortedResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground text-sm py-6">
+                  <TableCell colSpan={8} className="text-center text-muted-foreground text-sm py-6">
                     No results yet. Click &ldquo;Refresh results&rdquo; to fetch from ESPN.
                   </TableCell>
                 </TableRow>
@@ -694,6 +695,19 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                             : <span className="text-muted-foreground">Pending</span>}
                         </TableCell>
                         <TableCell className="text-sm">{outcomeLabel(r.outcome)}</TableCell>
+                        <TableCell className="text-sm">
+                          {r.status !== "final" ? (
+                            <span className="text-muted-foreground">—</span>
+                          ) : r.winner ? (
+                            <Badge className="bg-green-100 text-green-800 hover:bg-green-100 dark:bg-green-950 dark:text-green-300 font-normal">
+                              {r.winner.name}
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100 dark:bg-yellow-950 dark:text-yellow-300 font-normal">
+                              Needs winner
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell>
                           <Badge variant="outline" className="text-xs">
                             {r.source ?? "espn"}
@@ -716,7 +730,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
                       </TableRow>
                       {isMatchExpanded && (
                         <TableRow key={`${r.match_id}-predictors`}>
-                          <TableCell colSpan={7} className="pb-3 pt-0">
+                          <TableCell colSpan={8} className="pb-3 pt-0">
                             <div className="rounded-md border bg-muted/30 text-xs">
                               <table className="w-full">
                                 <thead>
