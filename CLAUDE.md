@@ -193,6 +193,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
    - `00-PRODUCT-VISION.md` — what we're building and why.
    - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
    - **`02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` — target architecture for the AI-native knowledge layer (Orca-ready KB): storage seam → ingestion → pgvector retrieval → agent tools, with tool picks + privacy stance + "when to switch tools" thresholds. Read before building any KB/RAG/Orca-retrieval work; Phase 1/2/3 build briefs reference it.**
+   - **`03-INNGEST-BACKGROUND-JOBS.md` — background/scheduled work runbook: Inngest architecture, environments, function inventory, free-tier budget. Read before adding or changing any scheduled/background job.**
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.
@@ -332,6 +333,23 @@ gh run list --limit 5
 # Rollback (reverts CODE only — not the DB; announce first)
 gh workflow run rollback.yml -f commit_sha=<SHA> -f reason="description"
 ```
+
+---
+
+## Background/Scheduled Work — Inngest, Never GitHub Actions Cron
+
+**All background/scheduled work runs as Inngest scheduled functions in `src/lib/inngest/`, NOT
+GitHub-Actions `schedule:` cron.** This is a deliberate, permanent convention, not a preference —
+GH-Actions cron was tried first and its real-world cadence drifted to 1–3 hours regardless of the
+cron expression written in the workflow file, which broke reminders/inbox/reply-sync freshness.
+The 5 GH-Actions cron workflows that used to do this work have been deleted.
+
+To add a new background job: create `src/lib/inngest/functions/<name>.ts` and register it in the
+`functions` array in `src/app/api/inngest/route.ts`. **Never add a `schedule:` trigger to a GitHub
+Actions workflow for background work again.**
+
+Full runbook (architecture, environments, function inventory, free-tier budget, idempotency
+requirements): [`docs/reference/03-INNGEST-BACKGROUND-JOBS.md`](./docs/reference/03-INNGEST-BACKGROUND-JOBS.md).
 
 ---
 
