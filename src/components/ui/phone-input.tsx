@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -41,11 +41,20 @@ export function PhoneInput({
   placeholder = "Phone number",
 }: PhoneInputProps) {
   const parsed = useMemo(() => parseStoredPhone(value || ""), [value]);
-  const selectedCountry = findCountryValue(parsed.dialCode || DEFAULT_DIAL_CODE);
   const localNumber = parsed.localNumber;
+  const derivedCountry = findCountryValue(parsed.dialCode || DEFAULT_DIAL_CODE);
+  // Picking a country while the number is still blank has nothing to write into
+  // `value` yet — formatPhoneForStorage() can't encode "dial code, no digits" —
+  // so without this the choice is silently dropped on the next render. Track it
+  // locally until there's a number to attach it to. Every consumer mounts this
+  // behind a form/sheet that unmounts on close, so this resets naturally rather
+  // than needing to be watched for `value` going back to empty.
+  const [countryOverride, setCountryOverride] = useState<string | null>(null);
+  const selectedCountry = localNumber ? derivedCountry : (countryOverride ?? derivedCountry);
   const currentDialCode = codeMap[selectedCountry] || DEFAULT_DIAL_CODE;
 
   const handleCountryChange = (countryValue: string) => {
+    setCountryOverride(countryValue);
     const newDialCode = codeMap[countryValue] || DEFAULT_DIAL_CODE;
     if (localNumber) {
       onChange(formatPhoneForStorage(newDialCode, localNumber));

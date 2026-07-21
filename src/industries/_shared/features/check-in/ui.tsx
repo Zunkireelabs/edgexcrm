@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
@@ -235,6 +236,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState(false);
   const [city, setCity] = useState("");
   const [pipelineId, setPipelineId] = useState("");
   const [stageId, setStageId] = useState("");
@@ -596,10 +598,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firstName && !email && !phone) {
-      toast.error("Please provide at least a name, email, or phone");
+    if (!isValidPhoneForCountry(phone)) {
+      setPhoneError(true);
+      toast.error("Please enter a valid phone number for the selected country");
       return;
     }
+    setPhoneError(false);
 
     if (
       industryId === "education_consultancy" &&
@@ -686,6 +690,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setLastName("");
         setEmail("");
         setPhone("");
+        setPhoneError(false);
         setCity("");
         setNotes("");
         setAssignedTo("");
@@ -706,17 +711,26 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     }
   };
 
-  // Pre-fill email or phone in add form based on query
+  // Pre-fill email or phone in add form based on query. Only treat the query
+  // as a phone number when it actually looks like one — a name-based search
+  // (e.g. "Rajesh") has no business landing in the Phone field, especially
+  // now that phone is required and validated on submit.
   useEffect(() => {
     if (showAddForm && query) {
-      const isEmail = query.includes("@");
+      const trimmed = query.trim();
+      const isEmail = trimmed.includes("@");
+      const isPhoneLike = !isEmail && /^[+\d][\d\s\-()]*$/.test(trimmed);
       if (isEmail) {
-        setEmail(query);
+        setEmail(trimmed);
         setPhone("");
-      } else {
-        setPhone(query);
+      } else if (isPhoneLike) {
+        setPhone(trimmed);
         setEmail("");
+      } else {
+        setEmail("");
+        setPhone("");
       }
+      setPhoneError(false);
     }
   }, [showAddForm, query]);
 
@@ -894,13 +908,21 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="phone" className="text-xs">Phone</Label>
+                        <Label htmlFor="phone" className="text-xs">
+                          Phone <span className="text-red-500">*</span>
+                        </Label>
                         <PhoneInput
                           value={phone}
-                          onChange={setPhone}
+                          onChange={(v) => { setPhone(v); setPhoneError(false); }}
                           placeholder="Phone number"
                           size="sm"
+                          error={phoneError}
                         />
+                        {phoneError && (
+                          <p className="text-xs text-red-500">
+                            Enter a valid phone number for the selected country
+                          </p>
+                        )}
                       </div>
                     </div>
 
@@ -1164,6 +1186,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setLastName("");
                           setEmail("");
                           setPhone("");
+                          setPhoneError(false);
                           setCity("");
                           setNotes("");
                           setAssignedTo("");
