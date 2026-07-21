@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, forwardRef, useImperativeHandle } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Link from "@tiptap/extension-link";
@@ -14,12 +14,17 @@ interface TipTapEditorProps {
   minHeight?: number;
 }
 
-export function TipTapEditor({
+export interface TipTapEditorHandle {
+  /** Inserts plain text at the current cursor position (falls back to appending at the end). */
+  insertText: (text: string) => void;
+}
+
+export const TipTapEditor = forwardRef<TipTapEditorHandle, TipTapEditorProps>(function TipTapEditor({
   value,
   onChange,
   placeholder = "Write your message...",
   minHeight = 200,
-}: TipTapEditorProps) {
+}, ref) {
   const editor = useEditor({
     extensions: [
       StarterKit,
@@ -43,6 +48,13 @@ export function TipTapEditor({
     if (editor.getHTML() === value) return;
     editor.commands.setContent(value, { emitUpdate: false });
   }, [editor, value]);
+
+  useImperativeHandle(ref, () => ({
+    insertText: (text: string) => {
+      if (!editor) return;
+      editor.chain().focus().insertContent(text).run();
+    },
+  }), [editor]);
 
   const setLink = () => {
     if (!editor) return;
@@ -105,7 +117,7 @@ export function TipTapEditor({
       </div>
     </div>
   );
-}
+});
 
 function ToolbarButton({
   active,
