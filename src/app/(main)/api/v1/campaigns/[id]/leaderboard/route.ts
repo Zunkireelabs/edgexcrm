@@ -9,7 +9,11 @@ import { scoreSubmissions } from "@/industries/education-consultancy/features/ca
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { annotateIntegrity } from "@/industries/education-consultancy/features/campaigns/lib/integrity";
 import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
+import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
+import { logger } from "@/lib/logger";
 import type { LeadSubmission } from "@/types/database";
+
+const log = logger.child({ module: "campaigns:leaderboard" });
 
 interface CampaignRow {
   id: string;
@@ -62,14 +66,19 @@ export async function GET(
   const matchIdField = config.fields?.match_id ?? "match_id";
   const matchLabelField = config.fields?.match_label ?? "match_label";
 
-  // Load lead_submissions for this form
-  const { data: submissionsRaw, error: subsError } = await db
-    .from("lead_submissions")
-    .select("email, normalized_email, first_name, last_name, phone, custom_fields, created_at")
-    .eq("form_config_id", campaign.form_config_id);
-
-  if (subsError) return apiError("DB_ERROR", "Failed to fetch submissions", 500);
-  const submissions = (submissionsRaw ?? []) as unknown as LeadSubmission[];
+  // Load lead_submissions for this form — paginated, a campaign can have
+  // more than the default 1000-row PostgREST cap (see fetch-submissions.ts).
+  let submissions: LeadSubmission[];
+  try {
+    submissions = await fetchAllSubmissions<LeadSubmission>(
+      db,
+      campaign.form_config_id,
+      "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
+    );
+  } catch (err) {
+    log.error({ err, campaignId: campaign.id }, "Failed to fetch campaign submissions");
+    return apiError("DB_ERROR", "Failed to fetch submissions", 500);
+  }
 
   // Extract distinct match_ids and match labels from submissions
   const matchIds = new Set<string>();
