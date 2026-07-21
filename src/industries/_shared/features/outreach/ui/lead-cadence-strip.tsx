@@ -14,6 +14,7 @@ import {
 import { toast } from "sonner";
 import { useSequences } from "../hooks/use-sequences";
 import { formatDate } from "../lib/format-due";
+import { CadenceTimeline } from "./cadence-timeline";
 
 type EnrollmentStatus = "active" | "paused" | "completed" | "unenrolled";
 
@@ -36,9 +37,19 @@ interface LeadCadenceStripProps {
   leadId: string;
   isAdmin: boolean;
   currentUserId: string;
+  leadFirstName?: string | null;
+  leadLastName?: string | null;
+  leadEmail?: string | null;
 }
 
-export function LeadCadenceStrip({ leadId, isAdmin, currentUserId }: LeadCadenceStripProps) {
+export function LeadCadenceStrip({
+  leadId,
+  isAdmin,
+  currentUserId,
+  leadFirstName = null,
+  leadLastName = null,
+  leadEmail = null,
+}: LeadCadenceStripProps) {
   const { sequences } = useSequences();
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
   const [nextDraftDueAt, setNextDraftDueAt] = useState<string | null>(null);
@@ -128,7 +139,16 @@ export function LeadCadenceStrip({ leadId, isAdmin, currentUserId }: LeadCadence
   const canManage = isAdmin || enrollment?.assigned_to === currentUserId;
 
   if (!enrollment) {
-    if (sequences.length === 0) return null;
+    if (sequences.length === 0) {
+      return (
+        <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-sm text-muted-foreground">
+            No sequences yet — create one in Outreach &rsaquo; Sequences.
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
         <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -153,49 +173,68 @@ export function LeadCadenceStrip({ leadId, isAdmin, currentUserId }: LeadCadence
   }
 
   const totalSteps = sequences.find((s) => s.id === enrollment.sequence_id)?.email_sequence_steps.length;
+  const sequenceName = enrollment.email_sequences?.name ?? "Sequence";
 
   return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
-      <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-      <span className="text-sm truncate">
-        In sequence: <span className="font-medium">{enrollment.email_sequences?.name ?? "Sequence"}</span>
-        {" · Step "}
-        {enrollment.current_step_order}
-        {totalSteps ? `/${totalSteps}` : ""}
-        {nextDraftDueAt && ` · next draft ${formatDate(nextDraftDueAt)}`}
-      </span>
-      <Badge variant={enrollment.status === "active" ? "default" : "secondary"} className="ml-1">
-        {enrollment.status}
-      </Badge>
+    <div className="space-y-2">
+      <div className="rounded-lg border bg-muted/30 px-3 py-2 space-y-1.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          <GitBranch className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <span className="text-sm text-muted-foreground shrink-0">In sequence:</span>
+          <span className="text-sm font-medium truncate min-w-0 max-w-full">{sequenceName}</span>
+          <span className="text-sm text-muted-foreground whitespace-nowrap">
+            {" · Step "}
+            {enrollment.current_step_order}
+            {totalSteps ? `/${totalSteps}` : ""}
+            {nextDraftDueAt && ` · next draft ${formatDate(nextDraftDueAt)}`}
+          </span>
+        </div>
 
-      {canManage && (
-        <div className="ml-auto flex items-center gap-1">
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          ) : (
-            <>
-              {enrollment.status === "active" ? (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction("pause")}>
-                  <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause
-                </Button>
+        <div className="flex items-center gap-2">
+          <Badge variant={enrollment.status === "active" ? "default" : "secondary"}>{enrollment.status}</Badge>
+
+          {canManage && (
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              {busy ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
               ) : (
-                <Button type="button" variant="ghost" size="sm" onClick={() => runAction("resume")}>
-                  <Play className="h-3.5 w-3.5 mr-1.5" /> Resume
-                </Button>
+                <>
+                  {enrollment.status === "active" ? (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => runAction("pause")}>
+                      <Pause className="h-3.5 w-3.5 mr-1.5" /> Pause
+                    </Button>
+                  ) : (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => runAction("resume")}>
+                      <Play className="h-3.5 w-3.5 mr-1.5" /> Resume
+                    </Button>
+                  )}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive"
+                    onClick={() => runAction("unenroll")}
+                  >
+                    <UserX className="h-3.5 w-3.5 mr-1.5" /> Unenroll
+                  </Button>
+                </>
               )}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => runAction("unenroll")}
-              >
-                <UserX className="h-3.5 w-3.5 mr-1.5" /> Unenroll
-              </Button>
-            </>
+            </div>
           )}
         </div>
-      )}
+      </div>
+
+      <CadenceTimeline
+        enrollmentId={enrollment.id}
+        enrollmentStatus={enrollment.status}
+        leadId={leadId}
+        leadFirstName={leadFirstName}
+        leadLastName={leadLastName}
+        leadEmail={leadEmail}
+        sequenceName={sequenceName}
+        canAct={canManage}
+        onChanged={fetchEnrollment}
+      />
     </div>
   );
 }
