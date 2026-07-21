@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from "./server";
+import { scopedClientForTenant } from "./scoped";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
@@ -1026,6 +1027,27 @@ export async function getLeaveForHome(
     pendingLeaveApprovals: approvalsRes.count ?? 0,
     myPendingLeave: mineRes.count ?? 0,
   };
+}
+
+// ---- Home: outreach drafts due (Attention summary line + sidebar badge) ----
+
+/**
+ * Count of MY pending outreach drafts already due (personal scope, every
+ * role including owner/admin — this is My-Work, not the company worklist).
+ * Mirrors the /api/v1/outreach/drafts worklist's active-enrollment inner
+ * join so a paused/completed enrollment's draft drops out of the count.
+ * Caller must gate on getFeatureAccess(industryId, FEATURES.OUTREACH) first.
+ */
+export async function getOutreachDueForHome(tenantId: string, userId: string): Promise<number> {
+  const db = await scopedClientForTenant(tenantId);
+  const { count } = await db
+    .from("sequence_step_drafts")
+    .select("id, sequence_enrollments!inner(status)", { count: "exact", head: true })
+    .eq("assigned_to", userId)
+    .eq("status", "pending")
+    .lte("due_at", new Date().toISOString())
+    .eq("sequence_enrollments.status", "active");
+  return count ?? 0;
 }
 
 // ---- Home: my own recent actions (Recent Activity widget) ----

@@ -34,6 +34,7 @@ interface HomeContentProps {
   isItAgency: boolean;
   currentTenantUserId: string | null;
   leaveSummary: LeaveHomeSummary;
+  outreachDue: number;
 }
 
 export function HomeContent({
@@ -47,6 +48,7 @@ export function HomeContent({
   isItAgency,
   currentTenantUserId,
   leaveSummary,
+  outreachDue,
 }: HomeContentProps) {
   const router = useRouter();
   const [openTasks, setOpenTasks] = useState<PersonalTask[]>(tasks.open);
@@ -95,6 +97,7 @@ export function HomeContent({
         schedule={schedule}
         inboxSnapshot={inboxSnapshot}
         leaveSummary={leaveSummary}
+        outreachDue={outreachDue}
       />
 
       <div className="space-y-4">

@@ -8,9 +8,12 @@ import {
   getMyInboxSnapshot,
   getMyRecentActivity,
   getLeaveForHome,
+  getOutreachDueForHome,
 } from "@/lib/supabase/queries";
 import { canManageHR } from "@/lib/api/permissions";
 import { HomeContent } from "@/components/dashboard/home/home-content";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 export default async function HomePage() {
   const supabase = await createClient();
@@ -25,8 +28,9 @@ export default async function HomePage() {
   const { tenant, userId, permissions } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
+  const outreachEnabled = getFeatureAccess(tenant.industry_id, FEATURES.OUTREACH);
 
-  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, tenantUserResult] =
+  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, outreachDue, tenantUserResult] =
     await Promise.all([
       getMySchedule(tenant.id, userId),
       getMyTasks(tenant.id, userId),
@@ -34,6 +38,7 @@ export default async function HomePage() {
       getMyRecentActivity(tenant.id, userId),
       getMyInboxSnapshot(tenant.id, userId),
       getLeaveForHome(tenant.id, userId, canManageHR(permissions)),
+      outreachEnabled ? getOutreachDueForHome(tenant.id, userId) : Promise.resolve(0),
       (await createServiceClient())
         .from("tenant_users")
         .select("id")
@@ -60,6 +65,7 @@ export default async function HomePage() {
       isItAgency={isItAgency}
       currentTenantUserId={currentTenantUserId}
       leaveSummary={leaveSummary}
+      outreachDue={outreachDue}
     />
   );
 }

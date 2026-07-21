@@ -10,9 +10,10 @@ interface AttentionSummaryProps {
   schedule: ScheduleActivity[];
   inboxSnapshot: InboxSnapshot;
   leaveSummary: LeaveHomeSummary;
+  outreachDue: number;
 }
 
-export function AttentionSummary({ openTasks, schedule, inboxSnapshot, leaveSummary }: AttentionSummaryProps) {
+export function AttentionSummary({ openTasks, schedule, inboxSnapshot, leaveSummary, outreachDue }: AttentionSummaryProps) {
   const today = toLocalDateString(new Date());
   const overdueTasks = openTasks.filter((t) => t.due_date !== null && t.due_date < today).length;
 
@@ -22,13 +23,18 @@ export function AttentionSummary({ openTasks, schedule, inboxSnapshot, leaveSumm
   const unread = inboxSnapshot.unreadCount;
   const { pendingLeaveApprovals, myPendingLeave } = leaveSummary;
 
-  const total = overdueTasks + overdueFollowUps + unread + pendingLeaveApprovals + myPendingLeave;
+  const total = overdueTasks + overdueFollowUps + unread + pendingLeaveApprovals + myPendingLeave + outreachDue;
   if (total === 0) return null;
 
   const parts = [
     overdueTasks > 0 ? `${overdueTasks} overdue ${overdueTasks === 1 ? "task" : "tasks"}` : null,
     overdueFollowUps > 0 ? `${overdueFollowUps} overdue ${overdueFollowUps === 1 ? "follow-up" : "follow-ups"}` : null,
     unread > 0 ? `${unread} unread` : null,
+    outreachDue > 0 ? (
+      <Link key="outreach-due" href="/outreach" className="underline hover:text-amber-700">
+        {outreachDue} outreach {outreachDue === 1 ? "email" : "emails"} due
+      </Link>
+    ) : null,
     pendingLeaveApprovals > 0 ? (
       <Link key="leave-approvals" href="/leave" className="underline hover:text-amber-700">
         {pendingLeaveApprovals} leave {pendingLeaveApprovals === 1 ? "approval" : "approvals"}
