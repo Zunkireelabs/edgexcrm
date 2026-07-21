@@ -2,8 +2,9 @@ import { serve } from "inngest/next";
 import { inngest } from "@/lib/inngest/client";
 import { kbIngest } from "@/lib/ai/ingestion/kb-ingest";
 import { heartbeat } from "@/lib/inngest/functions/heartbeat";
+import { remindersScan } from "@/lib/inngest/functions/reminders";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [kbIngest, heartbeat],
+  functions: [kbIngest, heartbeat, remindersScan],
 });
