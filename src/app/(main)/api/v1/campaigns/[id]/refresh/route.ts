@@ -6,6 +6,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { refreshEspnResults } from "@/industries/education-consultancy/features/campaigns/lib/results-espn";
 import type { CampaignConfig } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
 import type { LeadSubmission } from "@/types/database";
 
 interface CampaignRow {
@@ -45,14 +46,23 @@ export async function POST(
   const matchIdField = config.fields?.match_id ?? "match_id";
   const matchLabelField = config.fields?.match_label ?? "match_label";
 
-  // Load lead_submissions to get all match_ids
-  const { data: subsRaw, error: subsError } = await db
-    .from("lead_submissions")
-    .select("custom_fields")
-    .eq("form_config_id", campaign.form_config_id);
-
-  if (subsError) return apiError("DB_ERROR", "Failed to fetch submissions", 500);
-  const subs = (subsRaw ?? []) as unknown as Pick<LeadSubmission, "custom_fields">[];
+  // Load lead_submissions to get all match_ids — paginated, a campaign can
+  // have more than the default 1000-row PostgREST cap (see fetch-submissions.ts).
+  // This was the root cause of matches never getting auto-discovered for an
+  // ESPN fetch in the first place: a knockout-round match_id only appears in
+  // submissions made once that round's matchup was decided, i.e. late — so an
+  // unpaginated query capped before reaching them meant this route never even
+  // knew those match_ids existed.
+  let subs: Pick<LeadSubmission, "custom_fields">[];
+  try {
+    subs = await fetchAllSubmissions<Pick<LeadSubmission, "custom_fields">>(
+      db,
+      campaign.form_config_id,
+      "custom_fields"
+    );
+  } catch {
+    return apiError("DB_ERROR", "Failed to fetch submissions", 500);
+  }
 
   const matchIds = new Set<string>();
   const matchLabels: Record<string, string> = {};

@@ -7,6 +7,7 @@ import { FEATURES } from "@/industries/_registry";
 import { normalizeEmail } from "@/lib/leads/dedup";
 import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, ScoringSubmission } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
+import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
 
 const VALID_OUTCOMES = new Set(["team_a", "team_b", "draw"]);
 
@@ -80,14 +81,18 @@ export async function PATCH(
 
       // Eligible = anywhere on the campaign leaderboard (any match), not just
       // a predictor of this specific match — owners pick winners individually.
-      const { data: subsRaw, error: subsError } = await db
-        .from("lead_submissions")
-        .select("email, normalized_email, first_name, last_name, phone, custom_fields, created_at")
-        .eq("form_config_id", campaignRow.form_config_id);
-
-      if (subsError) return apiError("DB_ERROR", "Failed to fetch submissions", 500);
-
-      const subs = (subsRaw ?? []) as unknown as ScoringSubmission[];
+      // Paginated — a campaign can have more than the default 1000-row
+      // PostgREST cap (see fetch-submissions.ts).
+      let subs: ScoringSubmission[];
+      try {
+        subs = await fetchAllSubmissions<ScoringSubmission>(
+          db,
+          campaignRow.form_config_id,
+          "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
+        );
+      } catch {
+        return apiError("DB_ERROR", "Failed to fetch submissions", 500);
+      }
       const applicants = scoreSubmissions(subs, {}, safeConfig);
       const isApplicant = applicants.some((e) => e.email === normalizedInput);
 

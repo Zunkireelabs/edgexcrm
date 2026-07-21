@@ -9,6 +9,7 @@ import { apiRateLimited } from "@/lib/api/response";
 import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, MatchResult } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
+import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
 import type { LeadSubmission } from "@/types/database";
 
 const CORS_HEADERS = {
@@ -107,13 +108,13 @@ export async function GET(
     };
   }
 
-  // Load submissions
-  const { data: subsRaw } = await supabase
-    .from("lead_submissions")
-    .select("email, normalized_email, first_name, last_name, phone, custom_fields, created_at")
-    .eq("form_config_id", campaign.form_config_id);
-
-  const submissions = (subsRaw ?? []) as unknown as LeadSubmission[];
+  // Load submissions — paginated, a campaign can have more than the
+  // default 1000-row PostgREST cap (see fetch-submissions.ts).
+  const submissions = await fetchAllSubmissions<LeadSubmission>(
+    supabase,
+    campaign.form_config_id,
+    "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
+  );
 
   const standings = scoreSubmissions(submissions, resultsMap, campaign.config, DEFAULT_LEADERBOARD_FIELDS);
 
