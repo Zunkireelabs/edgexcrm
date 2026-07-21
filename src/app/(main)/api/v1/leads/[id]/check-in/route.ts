@@ -14,6 +14,7 @@ import {
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -105,6 +106,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const explicitTriage =
     isEducation && (moveToStage !== null || currentSlug === "qualified");
 
+  let newAssigned: string | null = null;
   if (explicitTriage) {
     try {
       const targetSlug = moveToStage; // null = stay in current (qualified in-place)
@@ -114,7 +116,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       //   prospects target          → picked, else keep existing (no checker fallback).
       const effectiveTargetIsQualified =
         targetSlug === "qualified" || (targetSlug === null && currentSlug === "qualified");
-      let newAssigned: string | null;
       if (assignToId) {
         newAssigned = assignToId;
       } else if (lead.assigned_to) {
@@ -169,6 +170,19 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     } catch (triageErr) {
       logger.error({ err: triageErr, leadId: id }, "Unexpected error applying check-in triage");
+    }
+
+    // Collaborator parity with applyLeadPatch (deferred in the design spec, now enabled):
+    // the checker retains lifecycle visibility of a lead they walked in, and the assigned
+    // counselor keeps view access across any future reassign. Best-effort — a failure here
+    // must never fail the check-in (the note + assignment already succeeded). Idempotent upsert.
+    try {
+      await addLeadCollaborator(supabase, auth.tenantId, id, auth.userId);
+      if (newAssigned) {
+        await addLeadCollaborator(supabase, auth.tenantId, id, newAssigned);
+      }
+    } catch (collabErr) {
+      logger.error({ err: collabErr, leadId: id }, "Failed to sync check-in collaborators");
     }
 
     return apiSuccess({ checked_in: true, lead_id: id });
