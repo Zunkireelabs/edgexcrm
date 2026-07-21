@@ -150,16 +150,28 @@ jobs:
         env:
           GHCR_USER: ${{ secrets.GHCR_PULL_USER }}
           GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          INNGEST_EVENT_KEY: ${{ secrets.INNGEST_EVENT_KEY }}
+          INNGEST_SIGNING_KEY: ${{ secrets.INNGEST_SIGNING_KEY }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 10m
-          envs: GHCR_USER,GHCR_TOKEN
+          envs: GHCR_USER,GHCR_TOKEN,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY
           script: |
             set -e
             cd /home/zunkireelabs/devprojects/lead-gen-crm
             git pull origin main
+            # Ops env (Inngest) — idempotent managed block. Ops-only: deliberately
+            # sets NO AI_* flag, so prod AI stays dark (ADR-001 D5) while durable
+            # background jobs run.
+            sed -i '/^# --- BEGIN OPS env (managed by GitHub Actions) ---$/,/^# --- END OPS env ---$/d' .env.local
+            {
+              echo "# --- BEGIN OPS env (managed by GitHub Actions) ---"
+              echo "INNGEST_EVENT_KEY=$INNGEST_EVENT_KEY"
+              echo "INNGEST_SIGNING_KEY=$INNGEST_SIGNING_KEY"
+              echo "# --- END OPS env ---"
+            } >> .env.local
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose -f docker-compose.prod.yml pull
             docker compose -f docker-compose.prod.yml up -d
