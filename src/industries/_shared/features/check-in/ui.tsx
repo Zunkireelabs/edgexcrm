@@ -235,6 +235,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [city, setCity] = useState("");
   const [pipelineId, setPipelineId] = useState("");
   const [stageId, setStageId] = useState("");
   const [assignedTo, setAssignedTo] = useState("");
@@ -627,6 +628,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           last_name: lastName || null,
           email: email || null,
           phone: phone || null,
+          city: city || null,
           pipeline_id: pipelineId,
           stage_id: stageId,
           assigned_to: (leadTag !== "student" ? meetWithId : assignedTo) || null,
@@ -684,6 +686,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setLastName("");
         setEmail("");
         setPhone("");
+        setCity("");
         setNotes("");
         setAssignedTo("");
         setMeetWithId("");
@@ -899,6 +902,17 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           size="sm"
                         />
                       </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <Label htmlFor="city" className="text-xs">City</Label>
+                      <Input
+                        id="city"
+                        value={city}
+                        onChange={(e) => setCity(e.target.value)}
+                        placeholder="Kathmandu"
+                        className="h-9"
+                      />
                     </div>
 
                     {industryId !== "travel_agency" && (
@@ -1149,6 +1163,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setLastName("");
                           setEmail("");
                           setPhone("");
+                          setCity("");
                           setNotes("");
                           setAssignedTo("");
                           setDestinations([]);
