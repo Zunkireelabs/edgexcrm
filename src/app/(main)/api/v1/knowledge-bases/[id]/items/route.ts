@@ -20,7 +20,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { KB_MAX_FILE_BYTES, KB_ACCEPTED_TYPES } from "@/lib/knowledge-base/constants";
-import { isIngestionEnabled } from "@/lib/ai/flag";
+import { isIngestionEnabledForTenant } from "@/lib/ai/flag";
 import { inngest } from "@/lib/ai/ingestion/inngest";
 
 const isHttpUrl = (): ((v: unknown) => string | null) => (v) => {
@@ -82,7 +82,7 @@ export async function POST(
   const { data: kb } = await db.from("knowledge_bases").select("id").eq("id", id).single();
   if (!kb) return apiNotFound("Knowledge base");
 
-  const ingestionEnabled = isIngestionEnabled();
+  const ingestionEnabled = await isIngestionEnabledForTenant(auth.tenantId);
   const type = body.type;
   let insertRow: Record<string, unknown>;
 

@@ -10,8 +10,7 @@ import { AssistantDisabled } from "./ai-assistant/assistant-disabled";
 import { useAssistantChat, type AssistantUIMessage } from "./ai-assistant/use-assistant-chat";
 import { fetchConversation } from "./ai-assistant/conversation-history";
 
-const WELCOME_CONTENT =
-  "Hi! I'm your AI assistant. I can help you with:\n\n• Finding and managing leads\n• Understanding your pipeline\n• Answering questions about your CRM\n\nHow can I help you today?";
+const WELCOME_CONTENT = "How can I help today?";
 
 interface AIAssistantPanelProps {
   userFirstName?: string;
@@ -45,7 +44,7 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
     setConversationId(result.conversation.id);
   }
 
-  const panelWidth = isExpanded ? 600 : 420;
+  const panelWidth = isExpanded ? 540 : 380;
 
   return (
     <div
@@ -60,17 +59,17 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
         }`}
       >
         <div
-          className="h-full bg-white border border-gray-200 rounded-xl flex flex-col overflow-hidden shadow-sm"
+          className="h-full flex flex-col overflow-hidden"
           style={{ width: panelWidth }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200 bg-gradient-to-r from-purple-50 to-pink-50">
+          <div className="flex items-center justify-between px-4 py-3">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">AI Assistant</h2>
+                <h2 className="text-sm font-semibold text-gray-900">Orca</h2>
                 <p className="text-[10px] text-gray-500">Powered by Zunkiree AI</p>
               </div>
             </div>
@@ -99,13 +98,6 @@ export function AIAssistantPanel({ userFirstName }: AIAssistantPanelProps) {
             userFirstName={userFirstName}
             onConversationId={setConversationId}
           />
-
-          {/* Footer */}
-          <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-            <p className="text-[10px] text-gray-400 text-center">
-              AI-generated content may be inaccurate. Verify important information.
-            </p>
-          </div>
         </div>
       </div>
     </div>
@@ -120,7 +112,7 @@ interface AssistantPanelThreadProps {
 }
 
 function AssistantPanelThread({ conversationId, initialMessages, userFirstName, onConversationId }: AssistantPanelThreadProps) {
-  const { messages, status, error, disabled, retry, send } = useAssistantChat({
+  const { messages, status, error, disabled, hasPendingApproval, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     initialMessages,
     userFirstName,
@@ -138,21 +130,27 @@ function AssistantPanelThread({ conversationId, initialMessages, userFirstName, 
 
   return (
     <>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50/50">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="flex gap-3">
-            <div className="shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gradient-to-br from-purple-500 to-pink-500">
-              <Sparkles className="w-4 h-4 text-white" />
-            </div>
-            <div className="max-w-[80%] rounded-2xl rounded-bl-md bg-gray-100 text-gray-900 px-4 py-2.5">
-              <p className="text-sm leading-relaxed whitespace-pre-wrap">{WELCOME_CONTENT}</p>
-            </div>
-          </div>
+          <p className="px-1 text-sm leading-relaxed whitespace-pre-wrap text-gray-700">
+            {WELCOME_CONTENT}
+          </p>
         )}
-        <MessageList messages={messages} status={status} error={error} onRetry={retry} />
+        <MessageList
+          messages={messages}
+          status={status}
+          error={error}
+          onRetry={retry}
+          onApproveTool={approveTool}
+          onDenyTool={denyTool}
+        />
         <div ref={messagesEndRef} />
       </div>
-      <ChatInput onSend={send} disabled={status === "submitted" || status === "streaming"} />
+      <ChatInput
+        onSend={send}
+        disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
+        disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
+      />
     </>
   );
 }

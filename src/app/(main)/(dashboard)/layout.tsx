@@ -8,6 +8,7 @@ import { SettingsModalProvider } from "@/contexts/settings-modal-context";
 import { GlobalSearchProvider } from "@/contexts/global-search-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { isAssistantEnabled } from "@/lib/ai/flag";
 import { canAccessList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
@@ -42,6 +43,9 @@ export default async function DashboardLayout({
 
   const maxBranches = tenantData.entitlements.maxBranches;
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  // Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts.
+  // tenantData.tenant is already loaded above, so this is free (no extra query).
+  const aiAssistantEnabled = isAssistantEnabled() && tenantData.tenant.ai_enabled;
 
   const [formConfigs, branches, cookieStore, allLeadLists] = await Promise.all([
     getFormConfigsForTenant(tenantData.tenant.id),
@@ -98,7 +102,7 @@ export default async function DashboardLayout({
     stagingLists,
     allowedNavKeys,
     industryId: tenantData.tenant.industry_id ?? null,
-    isOrcaAvailable: true,
+    isOrcaAvailable: aiAssistantEnabled,
   });
 
   return (
@@ -126,6 +130,7 @@ export default async function DashboardLayout({
             leadLists={leadListsWithCounts}
             stagingLists={stagingLists}
             archiveLists={archiveLists}
+            aiAssistantEnabled={aiAssistantEnabled}
           >
             {children}
           </DashboardShell>

@@ -57,6 +57,7 @@ export interface Tenant {
   timezone: string;
   weekend_days: number[];
   default_currency: string;
+  ai_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -331,6 +332,8 @@ export interface LeadNote {
   content: string;
   created_at: string;
   edited_at: string | null;
+  /** Phase 4C provenance — 'ai_assistant' when written by the AI assistant via create_lead_note, not a human. Optional/defaulted on the client: treat as human unless exactly 'ai_assistant'. */
+  created_via?: "human" | "ai_assistant";
 }
 
 export interface FormAttribution {
@@ -1092,6 +1095,7 @@ export interface Application {
   program_name: string;
   intake_term: string | null;
   country: string | null;
+  countries: string[] | null;
   stage_id: string;
   status: string;
   offer_type: "conditional" | "unconditional" | null;

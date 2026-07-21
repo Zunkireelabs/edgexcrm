@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AiWrittenBadge } from "@/components/dashboard/ai-written-badge";
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -27,6 +28,9 @@ import { ChecklistCard } from "../management-panel";
 import { TaskList } from "@/components/dashboard/tasks/task-list";
 import { type EmailThread, type Email } from "@/industries/_shared/features/email/hooks/use-email-threads";
 import { useConnectedInboxes } from "@/industries/_shared/features/email/hooks/use-connected-inboxes";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+import { LeadCadenceStrip } from "@/industries/_shared/features/outreach/ui/lead-cadence-strip";
 
 // Lazy-load compose dialog so TipTap only loads when the modal is opened
 const ComposeEmailDialog = dynamic(
@@ -125,7 +129,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
   const [appNotes, setAppNotes] = useState<{ id: string; notes: string; created_at: string; updated_at: string | null; institution_name: string | null }[]>([]);
 
-  const hasEmail = industryId === "education_consultancy" || industryId === "travel_agency";
+  const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
+  const hasOutreach = getFeatureAccess(industryId, FEATURES.OUTREACH);
 
   // Connected inboxes for EmailThreadCard (needed to identify own emails for participant display)
   const { inboxes: ownConnectedInboxes } = useConnectedInboxes();
@@ -440,6 +445,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       {/* Emails sub-tab — threads (top) + logged emails (below, "Past activity") */}
       {activeTab === "emails" && (
         <>
+          {hasOutreach && (
+            <div className="mb-3">
+              <LeadCadenceStrip leadId={leadId} isAdmin={isAdmin} currentUserId={currentUserId} />
+            </div>
+          )}
           {isEmailsTabLoading ? (
             <Card className="shadow-none rounded-lg py-0">
               <CardContent className="p-8 text-center">
@@ -637,7 +647,10 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                               {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
-                              <p className="text-sm text-foreground">Note added</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm text-foreground">Note added</p>
+                                {item.note.created_via === "ai_assistant" && <AiWrittenBadge />}
+                              </div>
                               {plain && (
                                 <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                   {plain}

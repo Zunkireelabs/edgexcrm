@@ -12,8 +12,10 @@ SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZ
 LOCAL_DB="postgresql://postgres:postgres@127.0.0.1:54322/postgres"
 
 EMAIL="admin@admizz.local"
+COUNSELOR_EMAIL="counselor@admizz.local"
 PASSWORD="edgexdev123"
 TENANT_ID="22222222-2222-2222-2222-222222222222"
+COUNSELOR_POSITION_ID="22222222-2222-2222-2222-000000000040"
 
 echo "→ Ensuring local stack is reachable..."
 if ! curl -sf "$API_URL/rest/v1/" -H "apikey: $SERVICE_ROLE_KEY" >/dev/null 2>&1; then
@@ -21,19 +23,29 @@ if ! curl -sf "$API_URL/rest/v1/" -H "apikey: $SERVICE_ROLE_KEY" >/dev/null 2>&1
   exit 1
 fi
 
-echo "→ Creating (or finding) auth user $EMAIL..."
-CREATE_RESP="$(curl -s -X POST "$API_URL/auth/v1/admin/users" \
-  -H "apikey: $SERVICE_ROLE_KEY" \
-  -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
-  -H "Content-Type: application/json" \
-  -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\",\"email_confirm\":true}")"
+# ensure_user <email> -> echoes the auth uid (creates if absent, idempotent)
+ensure_user() {
+  local email="$1" resp uid
+  resp="$(curl -s -X POST "$API_URL/auth/v1/admin/users" \
+    -H "apikey: $SERVICE_ROLE_KEY" \
+    -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"$email\",\"password\":\"$PASSWORD\",\"email_confirm\":true}")"
+  uid="$(echo "$resp" | sed -nE 's/.*"id":"([0-9a-f-]{36})".*/\1/p' | head -1)"
+  if [ -z "$uid" ]; then
+    uid="$(psql "$LOCAL_DB" -tAc "select id from auth.users where email='$email' limit 1;")"
+  fi
+  [ -z "$uid" ] && { echo "  Could not create or find $email. Response: $resp" >&2; exit 1; }
+  echo "$uid"
+}
 
-AUTH_UID="$(echo "$CREATE_RESP" | sed -nE 's/.*"id":"([0-9a-f-]{36})".*/\1/p' | head -1)"
-if [ -z "$AUTH_UID" ]; then
-  AUTH_UID="$(psql "$LOCAL_DB" -tAc "select id from auth.users where email='$EMAIL' limit 1;")"
-fi
-[ -z "$AUTH_UID" ] && { echo "  Could not create or find user. Response: $CREATE_RESP" >&2; exit 1; }
-echo "  user_id = $AUTH_UID"
+echo "→ Creating (or finding) auth user $EMAIL..."
+AUTH_UID="$(ensure_user "$EMAIL")"
+echo "  owner user_id = $AUTH_UID"
+
+echo "→ Creating (or finding) auth user $COUNSELOR_EMAIL..."
+COUNSELOR_UID="$(ensure_user "$COUNSELOR_EMAIL")"
+echo "  counselor user_id = $COUNSELOR_UID"
 
 echo "→ Seeding education_consultancy tenant + data..."
 psql "$LOCAL_DB" -v ON_ERROR_STOP=1 <<SQL
@@ -76,22 +88,37 @@ VALUES
   ('22222222-2222-2222-2222-000000000023', '22222222-2222-2222-2222-000000000010', '$TENANT_ID', 'Rejected',   'rejected',   3, '#ef4444', false, true)
 ON CONFLICT (id) DO NOTHING;
 
--- 5. Lead lists (education funnel stages — called "Stage" in UI)
-INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access)
+-- 5. Lead lists (education funnel stages — called "Stage" in UI).
+--    pipeline_id MUST be set to the seeded pipeline (step 3) — apply-lead-patch.ts
+--    nulls out leads.pipeline_id when the target list's own pipeline_id is unset,
+--    which then violates leads.pipeline_id's NOT NULL constraint on any real
+--    update_lead_stage write. On stage, real tenants always set this; only this
+--    local fixture omitted it (see BRIEF-PHASE-4E-ID-RESOLUTION.md live-verification).
+--    ON CONFLICT repairs pipeline_id on existing rows too, not just new ones —
+--    a re-run must fix a DB left over from before this line existed.
+INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access, pipeline_id)
 VALUES
-  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, true,  '#6366f1', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000031', '$TENANT_ID', 'Qualified',      'qualified',       2, true, false, '#3b82f6', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000032', '$TENANT_ID', 'Prospects',      'prospects',       3, true, false, '#f97316', '{"mode":"all"}'::jsonb),
-  ('22222222-2222-2222-2222-000000000033', '$TENANT_ID', 'Applications',   'applications',    4, true, false, '#22c55e', '{"mode":"all"}'::jsonb)
-ON CONFLICT (id) DO NOTHING;
+  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, true,  '#6366f1', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000031', '$TENANT_ID', 'Qualified',      'qualified',       2, true, false, '#3b82f6', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000032', '$TENANT_ID', 'Prospects',      'prospects',       3, true, false, '#f97316', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000033', '$TENANT_ID', 'Applications',   'applications',    4, true, false, '#22c55e', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010')
+ON CONFLICT (id) DO UPDATE SET pipeline_id = EXCLUDED.pipeline_id;
 
 -- 6. Positions (counselor, lead-executive, branch-manager)
+--    permissions MUST carry nav / pipelines / dashboard. resolvePermissions()
+--    (src/lib/api/permissions.ts:85-97) dereferences p.nav.mode,
+--    p.pipelines.mode and p.dashboard.widgets.mode UNGUARDED — only p.lists is
+--    null-checked. A partial JSONB here throws inside authenticateRequest and
+--    every request from a user holding the position 401s. Keep these complete.
 INSERT INTO public.positions (id, tenant_id, name, slug, base_tier, permissions, is_system)
 VALUES
-  ('22222222-2222-2222-2222-000000000040', '$TENANT_ID', 'Counselor',       'counselor',       'member', '{"leadScope":"own","canManageApplications":true}'::jsonb, true),
-  ('22222222-2222-2222-2222-000000000041', '$TENANT_ID', 'Lead Executive',  'lead-executive',  'member', '{"leadScope":"own"}'::jsonb,                              true),
-  ('22222222-2222-2222-2222-000000000042', '$TENANT_ID', 'Branch Manager',  'branch-manager',  'admin',  '{"leadScope":"team"}'::jsonb,                             true)
-ON CONFLICT (id) DO NOTHING;
+  ('22222222-2222-2222-2222-000000000040', '$TENANT_ID', 'Counselor',       'counselor',       'member',
+   '{"leadScope":"own","canManageApplications":true,"nav":{"mode":"all","keys":[]},"pipelines":{"mode":"all","ids":[]},"dashboard":{"widgets":{"mode":"all","keys":[]}}}'::jsonb, true),
+  ('22222222-2222-2222-2222-000000000041', '$TENANT_ID', 'Lead Executive',  'lead-executive',  'member',
+   '{"leadScope":"own","nav":{"mode":"all","keys":[]},"pipelines":{"mode":"all","ids":[]},"dashboard":{"widgets":{"mode":"all","keys":[]}}}'::jsonb, true),
+  ('22222222-2222-2222-2222-000000000042', '$TENANT_ID', 'Branch Manager',  'branch-manager',  'admin',
+   '{"leadScope":"team","nav":{"mode":"all","keys":[]},"pipelines":{"mode":"all","ids":[]},"dashboard":{"widgets":{"mode":"all","keys":[]}}}'::jsonb, true)
+ON CONFLICT (id) DO UPDATE SET permissions = EXCLUDED.permissions;
 
 -- 7. Leads — 30 realistic education leads spread across lists and stages
 INSERT INTO public.leads (tenant_id, first_name, last_name, email, phone, pipeline_id, stage_id, list_id, tags, intake_source, intake_medium, is_final, status, country, custom_fields, display_id)
@@ -133,14 +160,37 @@ VALUES
   ('$TENANT_ID','Santosh',   'Oli',       'santosh.oli@gmail.com',      '+9779878901236', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'website',  'organic',  true, 'enrolled', 'India',  '{"degree_level":"masters","destination":"Germany"}'::jsonb,  'ADM-028'),
   ('$TENANT_ID','Binita',    'Karmacharya','binita.k@gmail.com',        '+9779889012347', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'referral', 'offline',  true, 'enrolled', 'Nepal',  '{"degree_level":"bachelors","destination":"UK"}'::jsonb,     'ADM-029'),
   ('$TENANT_ID','Hari',      'Prasad',    'hari.prasad@gmail.com',      '+9779890123458', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'walk_in',  'check_in', true, 'enrolled', 'Nepal',  '{"degree_level":"diploma","destination":"Australia"}'::jsonb,'ADM-030')
-;
+ON CONFLICT DO NOTHING;
+
+-- 8. Counselor user. Must come AFTER positions (7) — tenant_users.position_id FKs to positions(id).
+--    Counselor-scoped API routes force assignedTo = auth.userId, so a counselor
+--    with no assigned leads sees an empty list and every scoping test passes
+--    vacuously. Step 9 gives them a real, bounded slice.
+INSERT INTO public.tenant_users (tenant_id, user_id, role, position_id)
+VALUES ('$TENANT_ID', '$COUNSELOR_UID', 'counselor', '$COUNSELOR_POSITION_ID')
+ON CONFLICT (tenant_id, user_id) DO UPDATE
+  SET role = 'counselor', position_id = EXCLUDED.position_id;
+
+-- 9. Assign a bounded slice to the counselor: ADM-009..ADM-014 are IN scope,
+--    everything else stays unassigned and is OUT of scope. Write-tool refusal
+--    tests need both halves — an in-scope target that succeeds and an
+--    out-of-scope one that must be refused.
+UPDATE public.leads
+   SET assigned_to = '$COUNSELOR_UID'
+ WHERE tenant_id = '$TENANT_ID'
+   AND display_id IN ('ADM-009','ADM-010','ADM-011','ADM-012','ADM-013','ADM-014');
 
 COMMIT;
 SQL
 
 echo ""
 echo "✅ Education tenant seeded."
-echo "   Login:  $EMAIL / $PASSWORD"
-echo "   Tenant: Admizz Local (education_consultancy)"
-echo "   Leads:  30 seeded across Pre-qualified / Qualified / Prospects / Applications"
-echo "   Studio: http://127.0.0.1:54323"
+echo "   Owner:     $EMAIL / $PASSWORD"
+echo "   Counselor: $COUNSELOR_EMAIL / $PASSWORD  (role=counselor, leadScope=own)"
+echo "   Tenant:    Admizz Local (education_consultancy)"
+echo "   Leads:     30 across Pre-qualified / Qualified / Prospects / Applications"
+echo "              ADM-009..ADM-014 assigned to the counselor (in scope);"
+echo "              the other 24 are unassigned (out of scope — refusal tests)."
+echo "   Cross-tenant probe lead: ce000000-0000-4000-8000-0000000000d1 (Sarah Chen,"
+echo "              cre-capital) — run scripts/seed-real-estate-demo.sh for it."
+echo "   Studio:    http://127.0.0.1:54323"

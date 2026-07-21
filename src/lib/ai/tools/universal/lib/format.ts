@@ -12,6 +12,7 @@ export function leadDisplayName(lead: { first_name?: string | null; last_name?: 
 export function formatLeadRow(l: LeadRow) {
   return {
     id: l.id,
+    displayId: l.display_id ?? null,
     href: leadHref(l.id),
     name: leadDisplayName(l),
     email: l.email ?? null,

@@ -23,6 +23,8 @@ export interface RetrievedChunk {
   title: string;
   type: string;
   url: string | null;
+  /** Phase 4C provenance chain — read from the parent item's `created_via` (the mig-175 CHECK-guarded source of truth), falling back to the chunk's metadata snapshot only when absent. Defaults to "human" for items predating migration 175. */
+  createdVia: "human" | "ai_assistant";
   page?: number;
   section?: string;
 }
@@ -48,6 +50,7 @@ interface KbItemRow {
   knowledge_base_id: string;
   type: string;
   url: string | null;
+  created_via: string | null;
 }
 
 async function embedQuery(query: string): Promise<number[] | null> {
@@ -106,7 +109,7 @@ async function joinToKbItems(db: ScopedClient, rows: HybridSearchRow[]): Promise
   const kbItemIds = [...new Set(rows.map((r) => r.kb_item_id))];
   const { data } = await db
     .from("knowledge_base_items")
-    .select("id, title, knowledge_base_id, type, url")
+    .select("id, title, knowledge_base_id, type, url, created_via")
     .in("id", kbItemIds);
   const itemById = new Map(((data ?? []) as unknown as KbItemRow[]).map((i) => [i.id, i]));
 
@@ -114,7 +117,14 @@ async function joinToKbItems(db: ScopedClient, rows: HybridSearchRow[]): Promise
   for (const row of rows) {
     const item = itemById.get(row.kb_item_id);
     if (!item) continue; // item deleted between chunk write and this read — skip rather than error
-    const metadata = row.metadata as { page?: number; section?: string };
+    const metadata = row.metadata as { page?: number; section?: string; created_via?: string };
+    // Item row's created_via is the guarded source of truth (mig 175 CHECK
+    // constraint); chunk metadata is only a denormalized snapshot from ingest
+    // time, kept for debugging/direct-chunk consumers. Fall back to it only
+    // when the item value is absent (shouldn't happen post-mig-175, but the
+    // item row is fetched by id and could theoretically miss the column on a
+    // stale read path).
+    const createdVia = item.created_via ?? metadata.created_via;
     chunks.push({
       chunkId: row.chunk_id,
       kbItemId: row.kb_item_id,
@@ -125,6 +135,7 @@ async function joinToKbItems(db: ScopedClient, rows: HybridSearchRow[]): Promise
       title: item.title,
       type: item.type,
       url: item.url,
+      createdVia: createdVia === "ai_assistant" ? "ai_assistant" : "human",
       ...(metadata.page !== undefined ? { page: metadata.page } : {}),
       ...(metadata.section ? { section: metadata.section } : {}),
     });

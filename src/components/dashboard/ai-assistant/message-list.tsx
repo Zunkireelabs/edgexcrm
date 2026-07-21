@@ -11,14 +11,16 @@ interface MessageListProps {
   status: ChatStatus;
   error?: Error;
   onRetry: () => void;
+  onApproveTool?: (approvalId: string) => void;
+  onDenyTool?: (approvalId: string) => void;
 }
 
 /** Shared message-list rendering — used by both the dashboard panel and the Ask Orca page. */
-export function MessageList({ messages, status, error, onRetry }: MessageListProps) {
+export function MessageList({ messages, status, error, onRetry, onApproveTool, onDenyTool }: MessageListProps) {
   return (
     <>
       {messages.map((message) => (
-        <ChatMessage key={message.id} message={message} />
+        <ChatMessage key={message.id} message={message} onApproveTool={onApproveTool} onDenyTool={onDenyTool} />
       ))}
       {status === "submitted" && <TypingIndicator />}
       {status === "error" && error && <ErrorBubble message={friendlyErrorMessage(error)} onRetry={onRetry} />}

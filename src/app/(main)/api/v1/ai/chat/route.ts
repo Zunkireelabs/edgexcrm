@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamText, stepCountIs, convertToModelMessages, generateText, type UIMessage } from "ai";
-import { isAssistantEnabled } from "@/lib/ai/flag";
+import { isAssistantEnabled, isAssistantEnabledForTenant } from "@/lib/ai/flag";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
@@ -8,7 +8,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { checkDailyBudget } from "@/lib/ai/budget";
 import "@/lib/ai/tools/packs"; // module-load registration — must run before buildToolset()
 import { buildToolset } from "@/lib/ai/tools/registry";
-import { toAiSdkTools } from "@/lib/ai/tools/adapter";
+import { toAiSdkTools, buildToolApproval, buildDeniedWriteActionRows } from "@/lib/ai/tools/adapter";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
 import { getIndustryAiConfig } from "@/industries/_loader";
 import { model } from "@/lib/ai/provider";
@@ -60,6 +60,10 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
 
+  // Same 404 shape as the env-flag-off path above — a tenant without the
+  // per-tenant grant (migration 174) is indistinguishable from AI being off.
+  if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
+
   const rate = await checkRateLimit(`ai_chat:${auth.userId}`, AI_CHAT_LIMIT);
   if (!rate.allowed) return apiRateLimited(rate.retryAfterSeconds);
 
@@ -110,8 +114,9 @@ export async function POST(request: NextRequest) {
 
   const runId = crypto.randomUUID();
   const toolset = buildToolset(auth);
-  const toolCtx = { auth, db, logger: log, runId };
+  const toolCtx = { auth, db, logger: log, runId, conversationId };
   const tools = toAiSdkTools(toolset, toolCtx);
+  const toolApproval = buildToolApproval(toolset);
 
   const trace = startTrace({ runId, tenantId: auth.tenantId, userId: auth.userId, industryId: auth.industryId, surface: "assistant" });
   trace.span("chat.start", { conversationId, toolCount: toolset.length });
@@ -124,6 +129,7 @@ export async function POST(request: NextRequest) {
     userFirstName,
     role: auth.role,
     today: new Date().toISOString().slice(0, 10),
+    hasWriteTools: toolset.some((t) => t.scope === "write"),
     industryContext: getIndustryAiConfig(auth.industryId)?.promptAddendum,
   });
 
@@ -132,6 +138,7 @@ export async function POST(request: NextRequest) {
     system: systemPrompt,
     messages: modelMessages,
     tools,
+    toolApproval,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
     // One retry before giving up — no cross-provider fallback this slice (only
     // OPENAI_API_KEY is provisioned). provider.ts's model() seam is where a
@@ -164,6 +171,26 @@ export async function POST(request: NextRequest) {
           surface: "assistant",
         });
 
+        // Denied write-tool proposals never reach adapter.ts's execute() wrapper
+        // (the SDK withholds it entirely), so the 'denied' ai_write_actions row is
+        // recorded here instead — scanned directly off the incoming UI messages
+        // (see buildDeniedWriteActionRows's docstring: the SDK's own denial-output
+        // event does not reliably fire for this exact flow, verified live).
+        const deniedRows = buildDeniedWriteActionRows(messages, auth.userId, conversationId);
+        if (deniedRows.length > 0) {
+          // upsert, not insert: the client replays full history every turn, so an
+          // earlier denial in this batch is a guaranteed re-send, not a real conflict.
+          // A plain batch insert aborts the WHOLE statement on that row's UNIQUE
+          // violation, silently dropping every denial after the first — see
+          // BRIEF-PHASE-4A-FIXUP-WRITE-SPINE.md item 1.
+          const { error: deniedInsertError } = await db
+            .from("ai_write_actions")
+            .upsert(deniedRows, { onConflict: "tenant_id,tool_call_id", ignoreDuplicates: true });
+          if (deniedInsertError) {
+            log.error({ err: deniedInsertError }, "ai_write_actions denied-row upsert failed");
+          }
+        }
+
         if (needsTitle) {
           const firstUserText = extractText(lastUserMessage) || extractText(messages[0]);
           if (firstUserText) {
@@ -189,6 +216,9 @@ export async function POST(request: NextRequest) {
           model: event.model?.modelId,
           inputTokens: event.usage.inputTokens,
           outputTokens: event.usage.outputTokens,
+          // A run that used up every step but still wanted to call more
+          // tools — the failure mode that hid the 4E bugs for weeks.
+          stepBudgetExhausted: event.finishReason === "tool-calls" && event.steps.length >= MAX_TOOL_STEPS,
         });
       } catch (err) {
         log.error({ err }, "chat onFinish persistence failed");

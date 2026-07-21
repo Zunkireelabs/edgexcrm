@@ -91,6 +91,7 @@ describe("search_knowledge", () => {
           title: "Doc.pdf",
           type: "file",
           url: null,
+          createdVia: "human",
           page: 2,
         },
       ],
@@ -108,10 +109,62 @@ describe("search_knowledge", () => {
       title: "Doc.pdf",
       knowledgeBase: "General",
       href: "/knowledge-bases/kb-1",
-      citation: { title: "Doc.pdf", kbItemId: "item-1", knowledgeBaseId: "kb-1", page: 2 },
+      createdVia: "human",
+      citation: { title: "Doc.pdf", kbItemId: "item-1", knowledgeBaseId: "kb-1", createdVia: "human", page: 2 },
     });
     expect((result.results[0].snippet as string).length).toBe(300);
     expect(result.note).toBeUndefined();
+  });
+
+  it("marks an AI-authored excerpt hit's title + citation with the (AI-written) suffix (Phase 4C provenance)", async () => {
+    retrieveMock.mockResolvedValue({
+      degraded: false,
+      chunks: [
+        {
+          chunkId: "chunk-1",
+          kbItemId: "item-1",
+          knowledgeBaseId: "kb-1",
+          chunkIndex: 0,
+          content: "Discount cap is 15%.",
+          score: 0.05,
+          title: "Q3 pricing notes",
+          type: "note",
+          url: null,
+          createdVia: "ai_assistant",
+        },
+      ],
+    });
+    const db = fakeDb({ kbs: [KB_ROW], titleHits: [] });
+
+    const result = (await searchKnowledgeTool.execute(fixtureCtx(db), { query: "pricing", limit: 10 })) as {
+      results: Array<Record<string, unknown>>;
+    };
+
+    expect(result.results[0]).toMatchObject({
+      title: "Q3 pricing notes (AI-written)",
+      createdVia: "ai_assistant",
+      citation: expect.objectContaining({ title: "Q3 pricing notes (AI-written)", createdVia: "ai_assistant" }),
+    });
+  });
+
+  it("marks an AI-authored title-only hit with the (AI-written) suffix", async () => {
+    retrieveMock.mockResolvedValue({ degraded: false, chunks: [] });
+    const db = fakeDb({
+      kbs: [KB_ROW],
+      titleHits: [
+        { id: "item-2", knowledge_base_id: "kb-1", type: "note", title: "Refund policy draft", url: null, created_via: "ai_assistant" },
+      ],
+    });
+
+    const result = (await searchKnowledgeTool.execute(fixtureCtx(db), { query: "refund", limit: 10 })) as {
+      results: Array<Record<string, unknown>>;
+    };
+
+    expect(result.results[0]).toMatchObject({
+      kind: "title",
+      title: "Refund policy draft (AI-written)",
+      createdVia: "ai_assistant",
+    });
   });
 
   it("merges in title-only hits not already covered by a chunk hit", async () => {
@@ -162,7 +215,13 @@ describe("search_knowledge", () => {
     };
 
     expect(result.results).toEqual([
-      { kind: "title", title: "Only Title Match", knowledgeBase: "General", href: "/knowledge-bases/kb-1" },
+      {
+        kind: "title",
+        title: "Only Title Match",
+        knowledgeBase: "General",
+        href: "/knowledge-bases/kb-1",
+        createdVia: "human",
+      },
     ]);
     expect(result.note).toBe("No documents have been indexed for semantic/keyword search yet — showing title matches only.");
   });
@@ -202,5 +261,35 @@ describe("search_knowledge", () => {
     };
 
     expect(result.note).toBe("Semantic search was unavailable for this query; results are keyword-only.");
+  });
+
+  // Phase 4C §4.4: an item created by create_knowledge_item this turn has status
+  // 'pending' and zero knowledge_chunks rows until the async kb-ingest Inngest job
+  // runs — so it cannot surface as an excerpt/citation hit in a search_knowledge
+  // call made later in the SAME turn. The retrieve() call (mocked here) only ever
+  // sees rows that exist in knowledge_chunks, and there are none for a same-turn
+  // item — this is a structural guarantee of the async pipeline, not something
+  // search_knowledge itself has to check. Documented finding: the title-only path
+  // (ilike on knowledge_base_items.title, independent of ingestion status) COULD
+  // still surface a same-turn item by title — but that hit carries no `snippet`/
+  // `citation` payload, so the model has nothing quotable to cite as fact from it.
+  it("a same-turn item with no chunks yet cannot produce an excerpt/citation hit", async () => {
+    retrieveMock.mockResolvedValue({ degraded: false, chunks: [] }); // nothing in knowledge_chunks for the new item
+    const db = fakeDb({
+      kbs: [KB_ROW],
+      titleHits: [
+        { id: "item-new", knowledge_base_id: "kb-1", type: "note", title: "Just saved this turn", url: null, created_via: "ai_assistant" },
+      ],
+    });
+
+    const result = (await searchKnowledgeTool.execute(fixtureCtx(db), { query: "just saved", limit: 10 })) as {
+      results: Array<Record<string, unknown>>;
+    };
+
+    expect(result.results.every((r) => r.kind !== "excerpt")).toBe(true);
+    const titleHit = result.results.find((r) => r.kind === "title");
+    expect(titleHit).toMatchObject({ title: "Just saved this turn (AI-written)" });
+    expect(titleHit).not.toHaveProperty("citation");
+    expect(titleHit).not.toHaveProperty("snippet");
   });
 });

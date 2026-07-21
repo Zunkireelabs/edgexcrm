@@ -56,6 +56,8 @@ export const FEATURES = {
   RESOURCING: "resourcing",
   // Industry-scoped (education_consultancy)
   AFFILIATES: "affiliates",
+  // Industry-scoped (it_agency) — email sequencing / cadence engine
+  OUTREACH: "outreach",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

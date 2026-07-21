@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
-import { getLeadCollaboratorsMap } from "@/lib/leads/collaborators";
+import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
@@ -170,7 +170,7 @@ export default async function LeadsPage({
       ? await getListPipeline(activeList.id, tenantData.tenant.id)
       : null;
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult, leadCollaboratorsMap] =
+  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
     await Promise.all([
       getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
       getTeamMembers(tenantData.tenant.id),
@@ -189,8 +189,11 @@ export default async function LeadsPage({
         .eq("tenant_id", tenantData.tenant.id)
         .eq("is_active", true)
         .order("position", { ascending: true }),
-      getLeadCollaboratorsMap(serviceClient, tenantData.tenant.id),
     ]);
+
+  const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
+    serviceClient, tenantData.tenant.id, leads.map((l) => l.id),
+  );
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
@@ -203,6 +206,9 @@ export default async function LeadsPage({
   );
   const positionSlugMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.position_slug])
+  );
+  const memberRoleMap = Object.fromEntries(
+    teamMembers.map((m) => [m.user_id, m.role])
   );
 
   const industry = industryResult.data as Industry | null;
@@ -246,7 +252,7 @@ export default async function LeadsPage({
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <ListKanbanView
           listSlug={activeList.slug}
           pipeline={pipeline}
@@ -262,6 +268,8 @@ export default async function LeadsPage({
           isAdmin={isAdmin}
           canEditLeads={tenantData.permissions.canEditLeads}
           restrictToSelf={tenantData.permissions.leadScope === "own"}
+          leadCollaborators={leadCollaboratorsMap}
+          formMap={formMap}
         />
       </div>
     );
@@ -271,7 +279,7 @@ export default async function LeadsPage({
   if (canShowFunnelKanban) {
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <FunnelKanbanBoard
           lists={activeFunnelLists}
           leads={leads}
@@ -299,8 +307,9 @@ export default async function LeadsPage({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{pageHeading}</h1>
       <LeadsTable
+        pageHeading={pageHeading}
+        pageHeadingClassName="shrink-0 text-lg font-bold pl-4 pt-4 mb-4 pr-6"
         leads={leads}
         openTaskLeadIds={openTaskLeadIds}
         leadCollaborators={leadCollaboratorsMap}
@@ -330,11 +339,17 @@ export default async function LeadsPage({
         assignableMembers={assignableMembers}
         memberBranchMap={memberBranchMap}
         defaultListId={activeList && !activeList.is_staging && !activeList.is_archive ? activeList.id : undefined}
+        lockedList={
+          activeList && activeList.slug !== "delete"
+            ? { id: activeList.id, name: activeList.name, is_archive: activeList.is_archive }
+            : undefined
+        }
         activeListSlug={activeList?.slug ?? null}
         activeFunnelKey={activeFunnelLists.length > 0 ? funnelParam ?? null : null}
         hasListPipeline={hasListPipeline}
         isTeamScoped={tenantData.permissions.leadScope === "team"}
         roleMap={roleMap}
+        memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
         allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
         currentUserPositionSlug={tenantData.positionSlug}

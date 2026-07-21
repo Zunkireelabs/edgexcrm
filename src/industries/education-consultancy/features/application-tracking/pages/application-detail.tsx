@@ -48,6 +48,7 @@ import { ApplicationTabs } from "../components/application-tabs";
 import { AutocompleteInput } from "../components/autocomplete-input";
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
@@ -144,7 +145,7 @@ export function ApplicationDetailPage({
   // for this edit session instead of being unrepresentable, which would
   // otherwise leave the intakeLegacyAmbiguous guard impossible to satisfy.
   const [intakeYearLegacyOutOfRange, setIntakeYearLegacyOutOfRange] = useState<string | null>(null);
-  const [country, setCountry] = useState("");
+  const [countries, setCountries] = useState<string[]>([]);
   const [degreeLevel, setDegreeLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [deadline, setDeadline] = useState("");
@@ -158,17 +159,17 @@ export function ApplicationDetailPage({
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
   const {
-    agents, partnerColleges, countries, intakeMonths, intakeYears,
+    agents, partnerColleges, countries: countryOptions, intakeMonths, intakeYears,
     createPartnerCollege, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData();
   const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
   const [addUniversityDialogOpen, setAddUniversityDialogOpen] = useState(false);
   const [pendingUniversityName, setPendingUniversityName] = useState("");
 
-  // Colleges tagged to the selected country (+ untagged) rank first; every
-  // college stays selectable so the autocomplete's dedupe check never misses
-  // one — see getCollegeSuggestions().
-  const collegeSuggestions = getCollegeSuggestions(partnerColleges, country);
+  // Colleges tagged to any of the selected countries (+ untagged) rank first;
+  // every college stays selectable so the autocomplete's dedupe check never
+  // misses one — see getCollegeSuggestions().
+  const collegeSuggestions = getCollegeSuggestions(partnerColleges, countries);
 
   // Settings' normal rolling window, plus the current application's own
   // out-of-window legacy year if it has one — so it's an actual selectable
@@ -243,7 +244,7 @@ export function ApplicationDetailPage({
     setIntakeYearLegacyOutOfRange(rawYear && !intakeYears.includes(rawYear) ? rawYear : null);
     setIntakeTouched(false);
     setIntakeLegacyAmbiguous(raw.trim() !== "" && (matchedMonth == null || rawYear == null));
-    setCountry(application.country ?? "");
+    setCountries(application.countries ?? []);
     setDegreeLevel(application.degree_level ?? "");
     setFieldOfStudy(application.field_of_study ?? "");
     setDeadline(application.application_deadline ?? "");
@@ -286,7 +287,7 @@ export function ApplicationDetailPage({
         university_name: universityName.trim(),
         program_name: programName.trim(),
         intake_term: intakeTermPatch,
-        country: country.trim() || null,
+        countries,
         degree_level: degreeLevel && degreeLevel !== "__none__" ? degreeLevel : null,
         field_of_study: fieldOfStudy && fieldOfStudy !== "__none__" ? fieldOfStudy : null,
         application_deadline: deadline || null,
@@ -513,10 +514,10 @@ export function ApplicationDetailPage({
                     {application.intake_term && (
                       <span className="text-xs text-muted-foreground">{application.intake_term}</span>
                     )}
-                    {application.country && (
+                    {application.countries && application.countries.length > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        {application.country}
+                        {application.countries.join(", ")}
                       </span>
                     )}
                     {application.application_deadline && (
@@ -627,20 +628,23 @@ export function ApplicationDetailPage({
 
               {/* Country */}
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Destination</Label>
                 {editing ? (
-                  <Select value={country} onValueChange={setCountry}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select destination" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {countries.map((c) => (
-                        <SelectItem key={c} value={c}>{c}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <DestinationsMultiSelect
+                    selected={countries}
+                    onChange={setCountries}
+                    options={countryOptions}
+                    label="Destination"
+                    optional={false}
+                  />
                 ) : (
-                  <p className="text-sm">{application.country ?? "—"}</p>
+                  <>
+                    <Label className="text-xs text-muted-foreground">Destination</Label>
+                    <p className="text-sm">
+                      {application.countries && application.countries.length > 0
+                        ? application.countries.join(", ")
+                        : "—"}
+                    </p>
+                  </>
                 )}
               </div>
 
@@ -960,7 +964,7 @@ export function ApplicationDetailPage({
         open={addUniversityDialogOpen}
         onOpenChange={setAddUniversityDialogOpen}
         initialName={pendingUniversityName}
-        countries={countries}
+        countries={countryOptions}
         createPartnerCollege={createPartnerCollege}
         createProgram={createProgram}
         fetchDistinctProgramNames={fetchDistinctProgramNames}

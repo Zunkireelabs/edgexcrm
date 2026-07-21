@@ -36,6 +36,7 @@ import {
   MapPin,
   Globe,
   FileText,
+  User,
 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import type { PipelineStage, PipelineWithCounts } from "@/types/database";
@@ -44,6 +45,7 @@ import {
   HEARD_ABOUT_US,
 } from "@/industries/_shared/features/lead-lists/taxonomies";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
+import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
 import {
   ACADEMIC_LEVELS,
   TEST_TYPES,
@@ -61,6 +63,10 @@ interface LeadResult {
   stage_name: string | null;
   stage_color: string | null;
   pipeline_name: string | null;
+  list_name: string | null;
+  list_slug: string | null;
+  assigned_to: string | null;
+  assigned_to_name: string | null;
   created_at: string;
 }
 
@@ -96,6 +102,7 @@ interface CheckInPageProps {
   stages: PipelineStage[];
   teamMembers: TeamMember[];
   allBranchMembers: TeamMember[];
+  branchNames?: Record<string, string>;
   industryId: string;
   canAssignAny: boolean;
   canAssignOwnCheckIns: boolean;
@@ -191,7 +198,7 @@ function LeadExtraDetails({ details }: { details: Record<string, unknown> }) {
   );
 }
 
-export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
+export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranchMembers, branchNames = {}, industryId, canAssignAny, canAssignOwnCheckIns, currentUserId, isAdmin, bypassQualification = false }: CheckInPageProps) {
   const router = useRouter();
   const { destinations: destOptions, fieldsOfStudy: fieldOfStudyOptions, studyLevels: studyLevelOptions } = useEduTaxonomy();
   const memberNameById = new Map(
@@ -202,9 +209,16 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;
+  const isLeadExecutive = (m: TeamMember) => m.position_slug === "lead-executive";
+  const leadExecMembers = allBranchMembers.filter(isLeadExecutive);
+  // education_consultancy shows Assigned To + Meet With as two independent columns;
+  // every other industry keeps the single flip-column (new-walk-in vs meet-with).
+  const eduCols = industryId === "education_consultancy";
   const [assigningId, setAssigningId] = useState<string | null>(null);
   const [checkingOutId, setCheckingOutId] = useState<string | null>(null);
   const [meetWithId, setMeetWithId] = useState<string>("");
+  const [assignToId, setAssignToId] = useState<string>("");
+  const [moveToStage, setMoveToStage] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LeadResult[]>([]);
@@ -230,7 +244,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [submitting, setSubmitting] = useState(false);
 
   // Student-only education fields (revealed when the Student tag is active)
-  const [destination, setDestination] = useState("");
+  const [destinations, setDestinations] = useState<string[]>([]);
   const [studyLevel, setStudyLevel] = useState("");
   const [fieldOfStudy, setFieldOfStudy] = useState("");
   const [referralSource, setReferralSource] = useState("");
@@ -352,6 +366,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   const handleViewDetails = async (lead: LeadResult) => {
     setSelectedLead(lead);
+    setAssignToId(lead.assigned_to ?? "");
+    setMoveToStage("");
     setLoadingDetails(true);
     try {
       const res = await fetch(`/api/v1/leads/${lead.id}`);
@@ -370,6 +386,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const handleCloseDetails = () => {
     setSelectedLead(null);
     setLeadDetails(null);
+    setAssignToId("");
+    setMoveToStage("");
   };
 
   const handleCheckIn = async (leadId: string) => {
@@ -381,7 +399,11 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       const res = await fetch(`/api/v1/leads/${leadId}/check-in`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ meet_with_id: meetWithId || null }),
+        body: JSON.stringify({
+          meet_with_id: meetWithId || null,
+          assign_to_id: assignToId || null,
+          move_to_stage: moveToStage || null,
+        }),
       });
       if (!res.ok) {
         toast.error("Failed to check in");
@@ -394,6 +416,8 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       setResults([]);
       setSearched(false);
       setMeetWithId("");
+      setAssignToId("");
+      setMoveToStage("");
       setCheckingIn(null);
     } catch {
       toast.error("Failed to check in");
@@ -451,6 +475,72 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         );
         toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
       }
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Assigned To always writes the lead's counselor (assigned_to),
+  // independent of Meet With — mirrors handleAssign's is_new branch for every row.
+  const handleAssignCounselor = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    if (!record.lead_id) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      const res = await fetch(`/api/v1/leads/${record.lead_id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: userId }),
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        const academicMsg = errJson?.error?.details?.academic?.[0] as string | undefined;
+        if (academicMsg && userId) {
+          toast.error(academicMsg);
+          setPendingAssignGate({ record, userId });
+          return;
+        }
+        toast.error("Failed to assign lead");
+        return;
+      }
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, assigned_to: userId, assigned_to_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Lead assigned" : "Lead unassigned");
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setAssigningId(null);
+    }
+  };
+
+  // education_consultancy: Meet With always writes the per-visit note field
+  // (meet_with_id), independent of the lead's counselor assignment.
+  const handleAssignMeetWith = async (record: CheckInRecord, userId: string | null) => {
+    if (assigningId) return;
+    setAssigningId(record.id);
+    try {
+      const name = userId ? memberNameById.get(userId) ?? null : null;
+      const res = await fetch(`/api/v1/check-ins/${record.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ meet_with_id: userId }),
+      });
+      if (!res.ok) {
+        toast.error("Failed to update meet-with");
+        return;
+      }
+      setCheckIns((prev) =>
+        prev.map((c) =>
+          c.id === record.id ? { ...c, meet_with_id: userId, meet_with_name: name } : c,
+        ),
+      );
+      toast.success(userId ? "Meet-with updated" : "Meet-with cleared");
     } catch {
       toast.error("Failed to update");
     } finally {
@@ -552,7 +642,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           // Student-only structured education fields
           ...(industryId !== "travel_agency" && leadTag === "student"
             ? {
-                destinations: destination ? [destination] : [],
+                destinations,
                 degree_level: studyLevel || null,
                 field_of_study: fieldOfStudy || null,
               }
@@ -597,7 +687,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
         setNotes("");
         setAssignedTo("");
         setMeetWithId("");
-        setDestination("");
+        setDestinations([]);
         setStudyLevel("");
         setFieldOfStudy("");
         setReferralSource("");
@@ -842,21 +932,12 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {leadTag === "student" && (
                           <div className="rounded-md border bg-muted/30 p-3 space-y-3">
                             <div className="grid grid-cols-2 gap-3">
-                              <div className="space-y-1">
-                                <Label className="text-xs">Destination</Label>
-                                <Select value={destination} onValueChange={setDestination}>
-                                  <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Select destination (optional)" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {destOptions.map((d) => (
-                                      <SelectItem key={d} value={d}>
-                                        {d}
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              </div>
+                              <DestinationsMultiSelect
+                                selected={destinations}
+                                onChange={setDestinations}
+                                options={destOptions}
+                                label="Destination"
+                              />
                               <div className="space-y-1">
                                 <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
@@ -1070,7 +1151,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                           setPhone("");
                           setNotes("");
                           setAssignedTo("");
-                          setDestination("");
+                          setDestinations([]);
                           setStudyLevel("");
                           setFieldOfStudy("");
                           setReferralSource("");
@@ -1230,19 +1311,16 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         <div className="text-xs font-medium truncate">{checkedInByName}</div>
                       </div>
 
-                      {/* Assigned To / Meet with — depends on whether the lead was new (walk-in) or already existed */}
-                      {(() => {
-                        const isStudent = (record.tags ?? []).includes("student");
-                        const isNew = isStudent && record.is_new;
-                        const colLabel = isNew ? "Assigned To" : "Meet with";
-                        const colMembers = isNew ? counselorMembers : allBranchMembers;
-                        return (
-                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
-                            <div className="text-[10px] text-muted-foreground">{colLabel}</div>
-                            {meetWithId == null && canAssignThis ? (
+                      {/* Assigned To / Meet with — education_consultancy gets both as independent
+                          columns; every other industry keeps the flip-column (new-walk-in vs meet-with). */}
+                      {eduCols ? (
+                        <>
+                          <div className="w-32 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Assigned To</div>
+                            {record.assigned_to == null && canAssignThis ? (
                               <Select
                                 value="__unassigned__"
-                                onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                onValueChange={(v) => handleAssignCounselor(record, v === "__unassigned__" ? null : v)}
                                 disabled={assigningId === record.id}
                               >
                                 <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
@@ -1250,7 +1328,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="__unassigned__">Not selected</SelectItem>
-                                  {colMembers.map((m) => (
+                                  {counselorMembers.map((m) => (
                                     <SelectItem key={m.user_id} value={m.user_id}>
                                       {m.name || m.email.split("@")[0]}
                                     </SelectItem>
@@ -1258,11 +1336,69 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 </SelectContent>
                               </Select>
                             ) : (
-                              <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              <div className="text-xs font-medium truncate">{record.assigned_to_name || <span className="text-muted-foreground italic">—</span>}</div>
                             )}
                           </div>
-                        );
-                      })()}
+
+                          <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                            <div className="text-[10px] text-muted-foreground">Meet With</div>
+                            {record.meet_with_id == null && canAssignThis ? (
+                              <Select
+                                value="__unassigned__"
+                                onValueChange={(v) => handleAssignMeetWith(record, v === "__unassigned__" ? null : v)}
+                                disabled={assigningId === record.id}
+                              >
+                                <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                  {allBranchMembers.map((m) => (
+                                    <SelectItem key={m.user_id} value={m.user_id}>
+                                      {m.name || m.email.split("@")[0]}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <div className="text-xs font-medium truncate">{record.meet_with_name || <span className="text-muted-foreground italic">—</span>}</div>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        (() => {
+                          const isStudent = (record.tags ?? []).includes("student");
+                          const isNew = isStudent && record.is_new;
+                          const colLabel = isNew ? "Assigned To" : "Meet with";
+                          const colMembers = isNew ? counselorMembers : allBranchMembers;
+                          return (
+                            <div className="w-36 shrink-0 min-w-0" onClick={(e) => e.stopPropagation()}>
+                              <div className="text-[10px] text-muted-foreground">{colLabel}</div>
+                              {meetWithId == null && canAssignThis ? (
+                                <Select
+                                  value="__unassigned__"
+                                  onValueChange={(v) => handleAssign(record, v === "__unassigned__" ? null : v)}
+                                  disabled={assigningId === record.id}
+                                >
+                                  <SelectTrigger className="h-6 w-full border-none bg-transparent px-0 shadow-none text-xs hover:bg-muted focus:ring-0 font-medium">
+                                    <SelectValue placeholder="Select..." />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__unassigned__">Not selected</SelectItem>
+                                    {colMembers.map((m) => (
+                                      <SelectItem key={m.user_id} value={m.user_id}>
+                                        {m.name || m.email.split("@")[0]}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <div className="text-xs font-medium truncate">{meetWithName || <span className="text-muted-foreground italic">—</span>}</div>
+                              )}
+                            </div>
+                          );
+                        })()
+                      )}
 
                       {/* Notes */}
                       <div className="flex-1 min-w-0">
@@ -1349,11 +1485,24 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   <span>{selectedLead.phone}</span>
                 </div>
               )}
-              {selectedLead.pipeline_name && (
-                <div className="flex items-center gap-3 text-sm">
-                  <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                  <span>{selectedLead.pipeline_name}</span>
-                </div>
+              {industryId === "education_consultancy" ? (
+                <>
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Stage: {selectedLead.list_name || "—"}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-sm">
+                    <User className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>Assigned To: {selectedLead.assigned_to_name || "Unassigned"}</span>
+                  </div>
+                </>
+              ) : (
+                selectedLead.pipeline_name && (
+                  <div className="flex items-center gap-3 text-sm">
+                    <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span>{selectedLead.pipeline_name}</span>
+                  </div>
+                )
               )}
               <div className="flex items-center gap-3 text-sm">
                 <Calendar className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -1374,6 +1523,65 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
             {leadDetails && !loadingDetails && (
               <LeadExtraDetails details={leadDetails} />
+            )}
+
+            {/* Education triage: assign an owning counselor, and move un-triaged leads
+                into Qualified/Prospect. Hidden for leads already in Prospects or
+                Applications (advanced stages — only Meet With applies). Meet With
+                below is separate and untouched. */}
+            {industryId === "education_consultancy" && selectedLead.list_slug !== "prospects" && selectedLead.list_slug !== "applications" && (
+              <div className="mb-4 space-y-3">
+                {selectedLead.list_slug !== "qualified" && (
+                  <div>
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Move to stage</p>
+                    <Select value={moveToStage || "__none__"} onValueChange={(v) => setMoveToStage(v === "__none__" ? "" : v)}>
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Keep current stage" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Keep current stage</SelectItem>
+                        <SelectItem value="qualified">Qualified</SelectItem>
+                        <SelectItem value="prospects">Prospect</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                {(selectedLead.list_slug === "qualified" || moveToStage) && (() => {
+                  const targetStage = moveToStage || selectedLead.list_slug;
+                  const assignPool = targetStage === "qualified" ? leadExecMembers
+                    : targetStage === "prospects" ? counselorMembers
+                    : [];
+                  const placeholder = targetStage === "qualified"
+                    ? "Assign lead executive (optional)"
+                    : "Assign counselor (optional)";
+                  return (
+                    <div>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Assign to</p>
+                      <Select value={assignToId || "__none__"} onValueChange={(v) => setAssignToId(v === "__none__" ? "" : v)}>
+                        <SelectTrigger className="h-9">
+                          <SelectValue placeholder={placeholder} />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">No one selected</SelectItem>
+                          {assignPool.map((m) => {
+                            const branch = branchNames[m.branch_id ?? ""];
+                            return (
+                              <SelectItem key={m.user_id} value={m.user_id}>
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{m.name || m.email.split("@")[0]}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {(m.position_name ?? m.role)}{branch ? ` · ${branch}` : ""}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  );
+                })()}
+              </div>
             )}
 
             {/* Meet with — who the visitor is meeting today */}

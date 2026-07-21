@@ -11,6 +11,7 @@
   --font-mono: var(--font-geist-mono);
   --color-sidebar-bg: var(--sidebar-bg);
   --color-content-bg: var(--content-bg);
+  --color-page-bg: var(--page-bg);
   --color-nav-active: var(--nav-active);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -85,6 +86,7 @@
   /* Layout surfaces (Zunkireelabs standard) */
   --sidebar-bg: #ffffff;   /* app chrome: sidebar + header + frame */
   --content-bg: #fafbfd;   /* scrolling content pane */
+  --page-bg: #edeef2;      /* desktop behind the floating app card (light) */
   --nav-active: #f0f0f0;   /* active segmented tab (Ops/Orca) on white chrome */
   /* Sidebar */
   --sidebar: #ebebeb;
@@ -124,6 +126,7 @@
   /* Layout surfaces (Zunkireelabs standard) */
   --sidebar-bg: #171717;   /* dark chrome */
   --content-bg: #1e1e1e;   /* dark content pane */
+  --page-bg: #0a0a0a;      /* dark desktop */
   --nav-active: #2a2a2a;   /* active tab on dark chrome */
   --sidebar: #262626;
   --sidebar-foreground: #fafafa;

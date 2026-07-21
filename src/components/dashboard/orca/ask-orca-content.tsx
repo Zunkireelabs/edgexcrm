@@ -34,7 +34,7 @@ interface AskOrcaThreadProps {
 }
 
 function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskOrcaThreadProps) {
-  const { messages, status, error, disabled, retry, send } = useAssistantChat({
+  const { messages, status, error, disabled, hasPendingApproval, retry, send, approveTool, denyTool } = useAssistantChat({
     id: conversationId,
     userFirstName,
     onConversationId,
@@ -61,9 +61,7 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
             What can I do for you?
           </h1>
 
-          <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">
-            <ChatInput onSend={send} placeholder="Ask anything or start a task..." />
-          </div>
+          <ChatInput onSend={send} placeholder="Ask anything or start a task..." />
 
           <div className="mt-4">
             <p className="text-xs text-muted-foreground text-center mb-3">Try asking Orca:</p>
@@ -88,16 +86,22 @@ function AskOrcaThread({ conversationId, userFirstName, onConversationId }: AskO
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="flex-1 overflow-y-auto space-y-4 py-4">
-        <MessageList messages={messages} status={status} error={error} onRetry={retry} />
+        <MessageList
+          messages={messages}
+          status={status}
+          error={error}
+          onRetry={retry}
+          onApproveTool={approveTool}
+          onDenyTool={denyTool}
+        />
         <div ref={messagesEndRef} />
       </div>
-      <div className="rounded-2xl border border-border shadow-sm overflow-hidden bg-card">
-        <ChatInput
-          onSend={send}
-          disabled={status === "submitted" || status === "streaming"}
-          placeholder="Ask anything or start a task..."
-        />
-      </div>
+      <ChatInput
+        onSend={send}
+        disabled={status === "submitted" || status === "streaming" || hasPendingApproval}
+        disabledHint={hasPendingApproval ? "Approve or deny the pending action to continue" : undefined}
+        placeholder="Ask anything or start a task..."
+      />
     </div>
   );
 }

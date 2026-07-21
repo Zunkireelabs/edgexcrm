@@ -113,7 +113,7 @@ export function LeadPreviewPanel({
   };
 
   return (
-    <div className="w-[380px] shrink-0 bg-white border border-gray-200 rounded-lg flex flex-col h-full overflow-hidden shadow-sm mr-6">
+    <div className="w-[380px] shrink-0 bg-white border-l border-gray-200 flex flex-col h-full overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h2 className="text-base font-semibold text-gray-900">Preview</h2>

@@ -1,6 +1,7 @@
 import { FEATURES, INDUSTRIES } from "../_registry";
 import type { IndustryManifest } from "../_types";
 import { offeringsMeta } from "./features/offerings/meta";
+import { emailMeta } from "../_shared/features/email/meta";
 import { aiConfig } from "./ai/agent";
 
 /**
@@ -19,7 +20,7 @@ import { aiConfig } from "./ai/agent";
  */
 export const manifest: IndustryManifest = {
   id: INDUSTRIES.REAL_ESTATE,
-  features: [{ meta: offeringsMeta }],
+  features: [{ meta: offeringsMeta }, { meta: emailMeta }],
   sidebar: [
     {
       featureId: FEATURES.OFFERINGS,

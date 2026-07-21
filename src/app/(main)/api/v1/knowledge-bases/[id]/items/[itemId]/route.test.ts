@@ -4,7 +4,7 @@ import type { AuthContext } from "@/lib/api/auth";
 
 const authenticateRequestMock = vi.fn();
 const scopedClientMock = vi.fn();
-const isIngestionEnabledMock = vi.fn();
+const isIngestionEnabledForTenantMock = vi.fn();
 const sendMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({
@@ -12,7 +12,7 @@ vi.mock("@/lib/api/auth", () => ({
   requireAdmin: () => true,
 }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
-vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabled: isIngestionEnabledMock }));
+vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabledForTenant: isIngestionEnabledForTenantMock }));
 vi.mock("@/lib/ai/ingestion/inngest", () => ({ inngest: { send: sendMock } }));
 vi.mock("@/lib/api/audit", () => ({
   createAuditLog: vi.fn(async () => {}),
@@ -56,14 +56,14 @@ function fakeDb(existingRow: Record<string, unknown>, updatedRow: Record<string,
 beforeEach(() => {
   authenticateRequestMock.mockReset();
   scopedClientMock.mockReset();
-  isIngestionEnabledMock.mockReset();
+  isIngestionEnabledForTenantMock.mockReset();
   sendMock.mockReset();
   authenticateRequestMock.mockResolvedValue(AUTH);
 });
 
 describe("PATCH /api/v1/knowledge-bases/[id]/items/[itemId] — ingestion re-trigger", () => {
-  it("flag off: updates content without touching status or sending an event", async () => {
-    isIngestionEnabledMock.mockReturnValue(false);
+  it("disabled: updates content without touching status or sending an event", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(false);
     const existing = { id: "item-1", type: "note", title: "T", content: "old", status: "ready" };
     const updated = { ...existing, content: "new" };
     const db = fakeDb(existing, updated);
@@ -79,8 +79,8 @@ describe("PATCH /api/v1/knowledge-bases/[id]/items/[itemId] — ingestion re-tri
     expect(sendMock).not.toHaveBeenCalled();
   });
 
-  it("flag on: re-sending note content sets status pending and sends an ingest event", async () => {
-    isIngestionEnabledMock.mockReturnValue(true);
+  it("enabled: re-sending note content sets status pending and sends an ingest event", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
     const existing = { id: "item-1", type: "note", title: "T", content: "old", status: "ready" };
     const updated = { ...existing, content: "new", status: "pending" };
     const db = fakeDb(existing, updated);
@@ -98,8 +98,8 @@ describe("PATCH /api/v1/knowledge-bases/[id]/items/[itemId] — ingestion re-tri
     });
   });
 
-  it("flag on: title-only update does not re-trigger ingestion", async () => {
-    isIngestionEnabledMock.mockReturnValue(true);
+  it("enabled: title-only update does not re-trigger ingestion", async () => {
+    isIngestionEnabledForTenantMock.mockResolvedValue(true);
     const existing = { id: "item-1", type: "note", title: "T", content: "old", status: "ready" };
     const updated = { ...existing, title: "New Title" };
     const db = fakeDb(existing, updated);

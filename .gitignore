@@ -57,3 +57,7 @@ temp_ss/
 .claude/scheduled_tasks.lock
 .claude/settings.local.json
 .aider*
+
+# graphify skill output (generated knowledge graph — regenerated locally via /graphify, never committed)
+graphify-out/
+src/graphify-out/

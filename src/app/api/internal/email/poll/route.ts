@@ -20,6 +20,13 @@ export async function POST(request: Request) {
     return apiUnauthorized();
   }
 
+  // Path A: inbound reply-sync requires the restricted gmail.readonly scope
+  // (+ CASA), which we don't ship yet. Keep the poller dormant until Path B.
+  // Flip EMAIL_REPLY_SYNC_ENABLED=true (and restore the readonly scope) then.
+  if (process.env.EMAIL_REPLY_SYNC_ENABLED !== "true") {
+    return apiSuccess({ disabled: true, accounts_polled: 0, new_inbound_count: 0, errors: 0 });
+  }
+
   const supabase = await createServiceClient();
 
   // Load connected accounts for tenants whose industry the email feature is

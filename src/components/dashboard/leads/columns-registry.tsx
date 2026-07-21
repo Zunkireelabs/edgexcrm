@@ -8,11 +8,10 @@ import { prospectIndustryLabel } from "@/industries/it-agency/leads/prospect-ind
 import { MoveToListSelector } from "@/components/dashboard/leads/move-to-list-selector";
 import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
+import { AssigneeSelector, AssigneeChip } from "@/components/dashboard/leads/assignee-selector";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 
-// Column width constants — kept in sync with leads-table.tsx
-export const NAME_COLUMN_WIDTH = 180;
-export const EMAIL_COLUMN_WIDTH = 200;
+// Fixed cap for the mobile card-style sub-block (not part of desktop column resize).
 export const EMAIL_MOBILE_WIDTH = 140;
 
 export interface LeadColumnCtx {
@@ -40,6 +39,10 @@ export interface LeadColumnCtx {
   onRestore?: (leadId: string) => Promise<void>;
   /** it_agency Sales Leads "no next task" flag — lead IDs with at least one open (todo/in_progress) task. */
   openTaskLeadIds?: Set<string>;
+  /** Members eligible for inline reassignment via the Assigned column's picker. Non-education industries only. */
+  assignableMembers?: { user_id: string; name: string; email: string }[];
+  /** Inline lead reassignment from the Assigned column (non-education industries, normal view, admin/owner only). */
+  onAssignChange?: (leadId: string, memberId: string | null) => Promise<void>;
 }
 
 export interface LeadColumn {
@@ -147,7 +150,9 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead, ctx) => (
         <td key="name" className="px-3 py-1.5">
-          <div className="group/name relative" style={{ width: NAME_COLUMN_WIDTH }}>
+          {/* @container: the inline preview icon only renders once this cell has room for it —
+              driven by the cell's real (possibly drag-resized) width, not a guessed breakpoint. */}
+          <div className="group/name relative @container/name flex items-center gap-1 min-w-0 w-full">
             {ctx.unreadLeadIds.has(lead.id) && (
               <span
                 className="absolute -left-2.5 top-1/2 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-red-500"
@@ -156,7 +161,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
             )}
             <Link
               href={`/leads/${lead.id}`}
-              className="text-sm font-medium text-[#0f0f10] hover:underline block pr-0 group-hover/name:pr-[72px] transition-[padding] duration-100"
+              className="flex-1 block min-w-0 text-sm font-medium text-[#0f0f10] hover:underline"
             >
               <TruncatedText
                 text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
@@ -167,10 +172,11 @@ const STATIC_COLUMNS: LeadColumn[] = [
                 e.stopPropagation();
                 ctx.onPreviewToggle(lead.id);
               }}
-              className="absolute right-0 top-1/2 -translate-y-1/2 opacity-0 group-hover/name:opacity-100 transition-opacity md:inline-flex hidden items-center gap-1 px-2 py-0.5 text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded border border-gray-200"
+              aria-label="Preview lead"
+              title="Preview"
+              className="hidden md:@[110px]/name:inline-flex shrink-0 items-center justify-center h-6 w-6 rounded text-gray-500 opacity-0 group-hover/name:opacity-100 hover:bg-gray-100 hover:text-gray-700 transition-opacity"
             >
-              <Eye size={12} />
-              Preview
+              <Eye size={14} />
             </button>
           </div>
           {/* Mobile: email + preview icon */}
@@ -296,7 +302,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead) => (
       <td key="email" className="px-3 py-1.5 hidden md:table-cell text-sm font-normal text-[#787871]">
-        <TruncatedText text={lead.email || ""} maxWidth={EMAIL_COLUMN_WIDTH} />
+        <TruncatedText text={lead.email || ""} className="min-w-[140px]" />
       </td>
     ),
   },
@@ -330,11 +336,18 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Location
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-        {lead.city || <span className="text-gray-400">—</span>}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the real column; fall back to the legacy custom_fields value
+      // for leads whose city answer was never promoted (form-submitted leads
+      // that posted it nested under custom_fields instead of top-level).
+      const cf = (lead.custom_fields || {}) as Record<string, unknown>;
+      const city = lead.city || (typeof cf.city === "string" ? cf.city : null);
+      return (
+        <td key="location" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
+          {city || <span className="text-gray-400">—</span>}
+        </td>
+      );
+    },
   },
 
   // ── assigned
@@ -351,12 +364,38 @@ const STATIC_COLUMNS: LeadColumn[] = [
     renderTd: (lead, ctx) => {
       const assignedEmail = lead.assigned_to ? ctx.memberMap[lead.assigned_to] : null;
       const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
+      const label = assignedName || (assignedEmail ? assignedEmail.split("@")[0] : "");
+
+      // Education keeps its exact plain-text render — protects counselor / shared-pool /
+      // branch-manager assignment logic that reads/writes assigned_to elsewhere.
+      if (ctx.industryId === "education_consultancy") {
+        return (
+          <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
+            {assignedEmail ? (
+              <span>{label}</span>
+            ) : (
+              <span className="text-gray-400">—</span>
+            )}
+          </td>
+        );
+      }
+
+      const editable =
+        !!ctx.isAdmin &&
+        !!ctx.onAssignChange &&
+        !!ctx.assignableMembers &&
+        ctx.assignableMembers.length > 0;
+
       return (
-        <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-          {assignedEmail ? (
-            <span>{assignedName || assignedEmail.split("@")[0]}</span>
+        <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell" onClick={(e) => e.stopPropagation()}>
+          {editable ? (
+            <AssigneeSelector
+              currentAssigneeId={lead.assigned_to ?? null}
+              members={ctx.assignableMembers!}
+              onChange={(memberId) => ctx.onAssignChange!(lead.id, memberId)}
+            />
           ) : (
-            <span className="text-gray-400">—</span>
+            <AssigneeChip seed={lead.assigned_to ?? null} label={label} />
           )}
         </td>
       );
@@ -399,7 +438,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
             />
           ) : (
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${
+              className={`inline-flex items-center px-2 py-0.5 rounded-[8px] text-xs font-medium whitespace-nowrap ${
                 stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
               }`}
               style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
@@ -430,7 +469,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       return (
         <td key="source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
           {label ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+            <span className="text-xs px-2 py-0.5 rounded-[8px] bg-gray-100 text-gray-700 whitespace-nowrap">
               {label}
             </span>
           ) : (
@@ -478,17 +517,24 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Form Source
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
-        {lead.form_source ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
-            {lead.form_source}
-          </span>
-        ) : (
-          <span className="text-gray-400">—</span>
-        )}
-      </td>
-    ),
+    renderTd: (lead) => {
+      // Prefer the dedicated form_source column; fall back to intake_account
+      // (the page/slug the lead's form posted from) — the public Form
+      // Builder submit API never writes form_source, so this column would
+      // otherwise show blank for every one of those leads.
+      const display = lead.form_source || lead.intake_account;
+      return (
+        <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
+          {display ? (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+              {display}
+            </span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      );
+    },
   },
 
   // ── medium (intake_medium)

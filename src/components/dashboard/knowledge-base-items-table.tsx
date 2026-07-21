@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileText, Link as LinkIcon, StickyNote, Download, MoreHorizontal, Pencil, Trash2, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { AiWrittenBadge } from "@/components/dashboard/ai-written-badge";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,8 @@ interface KBItem {
   content?: string | null;
   status: string;
   created_at: string;
+  /** Phase 4C provenance — 'ai_assistant' when written by the AI assistant via create_knowledge_item, not a human. */
+  created_via?: "human" | "ai_assistant";
   [key: string]: unknown;
 }
 
@@ -174,6 +177,7 @@ export function KnowledgeBaseItemsTable({
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <span className="font-medium text-gray-900 truncate max-w-[260px]">{item.title}</span>
+                    {item.created_via === "ai_assistant" && <AiWrittenBadge />}
                     {item.type === "link" && item.url && (
                       <a
                         href={item.url}

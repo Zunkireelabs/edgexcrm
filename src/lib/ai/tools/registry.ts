@@ -1,18 +1,18 @@
 import type { AuthContext } from "@/lib/api/auth";
 import type { IndustryId } from "@/industries/_registry";
+import { isWriteToolsEnabled } from "@/lib/ai/flag";
 import type { AgentTool } from "./types";
 
 const tools: AgentTool[] = [];
 
 export function registerTool(tool: AgentTool): void {
-  if (tool.scope === "write") {
-    throw new Error("write-scope tools are not permitted before Phase 4");
-  }
   tools.push(tool);
 }
 
 export function buildToolset(auth: AuthContext): AgentTool[] {
+  const writeToolsEnabled = isWriteToolsEnabled();
   return tools.filter((tool) => {
+    if (tool.scope === "write" && !writeToolsEnabled) return false;
     if (tool.industries !== undefined) {
       if (auth.industryId === null) return false;
       if (!tool.industries.includes(auth.industryId as IndustryId)) return false;

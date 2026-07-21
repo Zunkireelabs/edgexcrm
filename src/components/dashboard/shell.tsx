@@ -53,6 +53,7 @@ import {
   Filter,
   Target,
   FolderOpen,
+  Send,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -137,6 +138,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   FileSignature,
   Gauge,
   FolderOpen,
+  Send,
 };
 
 function NavSectionHeader({ label }: { label: string }) {
@@ -176,7 +178,7 @@ function SidebarGroupRender({
         type="button"
         aria-expanded={expanded}
         onClick={() => setExpanded((v) => !v)}
-        className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
+        className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
             : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
@@ -198,7 +200,7 @@ function SidebarGroupRender({
                 key={child.href}
                 href={child.href}
                 onClick={onNavigate}
-                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
+                className={`w-full flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
                     : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
@@ -237,6 +239,8 @@ interface DashboardShellProps {
   leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
+  /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
+  aiAssistantEnabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -256,12 +260,17 @@ export function DashboardShell({
   leadLists = [],
   stagingLists = [],
   archiveLists = [],
+  aiAssistantEnabled = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isOrcaRoute = pathname === "/orca" || pathname.startsWith("/orca/");
+  // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
+  // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
+  // consistent with the (hidden) mode-switcher tab above.
+  const isOrcaRoute = aiAssistantEnabled && (pathname === "/orca" || pathname.startsWith("/orca/"));
   const navMode = isOrcaRoute ? "orca" : "ops";
+  const isLeadsFullBleed = pathname === "/leads";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
@@ -336,7 +345,7 @@ export function DashboardShell({
         key={item.href}
         href={item.href}
         onClick={handleClick}
-        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
+        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
             : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
@@ -392,28 +401,30 @@ export function DashboardShell({
         </span>
       </div>
 
-      {/* Mode switcher */}
-      <div className="px-3 pb-2">
-        <Tabs value={navMode} onValueChange={handleNavModeChange}>
-          <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
-            <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <LayoutGrid className="w-3.5 h-3.5" />
-              Ops
-            </TabsTrigger>
-            <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
-              <Bot className="w-3.5 h-3.5" />
-              Orca
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled) */}
+      {aiAssistantEnabled && (
+        <div className="px-3 pb-2">
+          <Tabs value={navMode} onValueChange={handleNavModeChange}>
+            <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
+              <TabsTrigger value="ops" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Ops
+              </TabsTrigger>
+              <TabsTrigger value="orca" className="text-xs gap-1.5 data-[state=active]:bg-nav-active data-[state=active]:shadow-sm">
+                <Bot className="w-3.5 h-3.5" />
+                Orca
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
 
       {/* Global Search row — top of nav, opens command palette */}
       <div className="px-3 pb-1">
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>
@@ -446,7 +457,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Leads" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -458,7 +469,7 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 <Suspense key="lead-lists-nav" fallback={
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                     <Users className="w-[18px] h-[18px] shrink-0" />
                     All Leads
                   </div>
@@ -514,7 +525,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Sales" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -547,7 +558,7 @@ export function DashboardShell({
                   if (processingLists.length === 0 && salesLists.length === 0) {
                     return ungroupedLists.length > 0 ? (
                       <Suspense key="lead-lists-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                           <Users className="w-[18px] h-[18px] shrink-0" />
                           All Leads
                         </div>
@@ -566,7 +577,7 @@ export function DashboardShell({
                   return (
                     <>
                       <Suspense key="lead-processing-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                           <Filter className="w-[18px] h-[18px] shrink-0" />
                           Lead Processing
                         </div>
@@ -581,7 +592,7 @@ export function DashboardShell({
                         />
                       </Suspense>
                       <Suspense key="sales-leads-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                           <Target className="w-[18px] h-[18px] shrink-0" />
                           Sales Leads
                         </div>
@@ -597,7 +608,7 @@ export function DashboardShell({
                       </Suspense>
                       {ungroupedLists.length > 0 && (
                         <Suspense key="lead-lists-nav" fallback={
-                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                             <Users className="w-[18px] h-[18px] shrink-0" />
                             All Leads
                           </div>
@@ -612,6 +623,7 @@ export function DashboardShell({
                     </>
                   );
                 })()}
+                {itItem("/outreach") && renderIndustryEntry(itItem("/outreach")!)}
                 {archiveLists.length > 0 && (
                   <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
                 )}
@@ -692,7 +704,7 @@ export function DashboardShell({
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
-                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                   <span className="w-[18px] h-[18px] shrink-0" />
                   Leads Organise
                 </div>
@@ -710,7 +722,7 @@ export function DashboardShell({
                 if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium text-[#0f172a]">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>
@@ -817,89 +829,111 @@ export function DashboardShell({
   );
 
   return (
-    <div className="flex h-screen bg-sidebar-bg">
-      {/* Desktop sidebar - Zunkireelabs style */}
-      <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-sidebar-bg print:hidden">
-        {sidebarContent}
-      </aside>
+    <div
+      className={`flex h-screen transition-all duration-500 ease-out ${
+        aiAssistantEnabled && isAssistantOpen
+          ? "bg-page-bg md:p-2 md:gap-2"
+          : "bg-sidebar-bg"
+      }`}
+    >
+      {/* App card — the whole CRM as one floating rounded object (framed only when AI is on) */}
+      <div
+        className={`flex flex-1 min-w-0 bg-sidebar-bg transition-all duration-500 ease-out ${
+          aiAssistantEnabled ? "md:overflow-hidden" : ""
+        } ${
+          aiAssistantEnabled && isAssistantOpen
+            ? "md:rounded-2xl md:shadow-[0_0_0_1px_#00001d13,0_6px_20px_rgba(0,0,0,0.06)]"
+            : "md:rounded-none md:shadow-none"
+        }`}
+      >
+        {/* Desktop sidebar - Zunkireelabs style */}
+        <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-sidebar-bg print:hidden">
+          {sidebarContent}
+        </aside>
 
-      {/* Main content area with header */}
-      <div className="flex flex-col flex-1 min-w-0 h-full bg-sidebar-bg">
-        {/* Top Header Bar - Zunkireelabs style */}
-        <header className="bg-sidebar-bg px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
-          {/* Mobile menu button */}
-          <div className="md:hidden">
-            {mounted ? (
-              <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-                <SheetTrigger asChild>
-                  <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                    <Menu className="h-5 w-5 text-gray-600" />
-                  </button>
-                </SheetTrigger>
-                <SheetContent side="left" className="w-60 p-0">
-                  {sidebarContent}
-                </SheetContent>
-              </Sheet>
-            ) : (
-              <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-                <Menu className="h-5 w-5 text-gray-600" />
-              </button>
-            )}
-          </div>
+        {/* Main content area with header */}
+        <div className="flex flex-col flex-1 min-w-0 h-full bg-sidebar-bg">
+          {/* Top Header Bar - Zunkireelabs style */}
+          <header className="bg-sidebar-bg px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              {mounted ? (
+                <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+                  <SheetTrigger asChild>
+                    <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                      <Menu className="h-5 w-5 text-gray-600" />
+                    </button>
+                  </SheetTrigger>
+                  <SheetContent side="left" className="w-60 p-0">
+                    {sidebarContent}
+                  </SheetContent>
+                </Sheet>
+              ) : (
+                <button className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+                  <Menu className="h-5 w-5 text-gray-600" />
+                </button>
+              )}
+            </div>
 
-          {/* Spacer — keeps the right section right-aligned */}
-          <div className="flex-1" />
+            {/* Spacer — keeps the right section right-aligned */}
+            <div className="flex-1" />
 
-          {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
-          <div className="flex items-center gap-3">
-            {/* AI Assistant Button */}
-            <button
-              onClick={toggleAssistant}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${
-                isAssistantOpen
-                  ? "bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md"
-                  : "hover:bg-gray-100 text-gray-700"
+            {/* Right Section - Assistant, Notifications & Tenant Dropdown */}
+            <div className="flex items-center gap-3">
+              {/* AI Assistant Button — hidden entirely (not just its requests 404) when disabled */}
+              {aiAssistantEnabled && (
+                <button
+                  onClick={toggleAssistant}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-[8px] border text-sm font-medium transition-all ${
+                    isAssistantOpen
+                      ? "border-gray-300 bg-gray-100 text-gray-900"
+                      : "border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <Sparkles className="w-4 h-4 text-purple-500" />
+                  <span className="hidden sm:inline">Ask Orca</span>
+                </button>
+              )}
+
+              {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
+              <BranchSwitcher
+                branches={branches}
+                maxBranches={maxBranches}
+                userBranchId={userBranchId}
+                leadScope={leadScope}
+                selectedBranchId={selectedBranchId}
+              />
+
+              {/* Notifications Dropdown */}
+              <NotificationsDropdown />
+
+              {/* Account menu moved to the sidebar footer (bottom-left) */}
+            </div>
+          </header>
+
+          {/* Content container - flex layout */}
+          <div className="flex-1 min-w-0 overflow-hidden flex">
+            {/* Main content - shrinks when AI panel opens */}
+            <main
+              className={`flex-1 min-h-0 overflow-auto bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
+                isLeadsFullBleed ? "mr-4" : "p-4 mr-4"
               }`}
+              style={{ borderRadius: "8px 8px 0 0", border: "1px solid #00001d13" }}
             >
-              <Sparkles className={`w-4 h-4 ${isAssistantOpen ? "text-white" : "text-purple-500"}`} />
-              <span className="text-sm font-medium hidden sm:inline">Assistant</span>
-            </button>
-
-            {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
-            <BranchSwitcher
-              branches={branches}
-              maxBranches={maxBranches}
-              userBranchId={userBranchId}
-              leadScope={leadScope}
-              selectedBranchId={selectedBranchId}
-            />
-
-            {/* Notifications Dropdown */}
-            <NotificationsDropdown />
-
-            {/* Account menu moved to the sidebar footer (bottom-left) */}
-          </div>
-        </header>
-
-        {/* Content container with AI Panel - flex layout */}
-        <div className="flex-1 min-w-0 overflow-hidden flex">
-          {/* Main content - shrinks when AI panel opens */}
-          <main
-            className="flex-1 min-h-0 overflow-auto p-4 mr-4 mb-4 bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none"
-            style={{
-              borderRadius: '8px',
-              border: '1px solid #00001d13'
-            }}
-          >
-            {children}
-          </main>
-
-          {/* AI Assistant Panel */}
-          <div className="print:hidden">
-            <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
+              {children}
+            </main>
           </div>
         </div>
       </div>
+
+      {/* AI Assistant Panel — now OUTSIDE the app card, in the right gutter on the page bg.
+          Not mounted at all when disabled, so a disabled tenant has no path to open it
+          (button hidden above; this is belt-and-braces). */}
+      {aiAssistantEnabled && (
+        <div className="print:hidden">
+          <AIAssistantPanel userFirstName={userName.split(" ")[0]} />
+        </div>
+      )}
     </div>
   );
 }

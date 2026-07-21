@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback, cloneElement, isValidElement, type ReactElement, type ReactNode, type CSSProperties, type MouseEvent as ReactMouseEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,6 +46,7 @@ import {
   Columns3,
   MoreHorizontal,
   Pencil,
+  Eye,
   Building2,
   ArrowRightLeft,
   Archive,
@@ -109,6 +110,7 @@ interface LeadsTableProps {
   userBranchId?: string | null;
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
+  memberRoleMap?: Record<string, string>;
   positionSlugMap?: Record<string, string | null>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
@@ -125,6 +127,8 @@ interface LeadsTableProps {
   /** Id of the currently active list, when it's a visible stage (not staging/archive) —
    *  pre-selects Add-Lead's Stage dropdown so the new lead lands where the creator is looking. */
   defaultListId?: string;
+  /** When set, Add Lead locks the Stage to this list (the active page). */
+  lockedList?: { id: string; name: string; is_archive: boolean };
   /** it_agency funnel key when viewing a whole funnel (no single list active). */
   activeFunnelKey?: string | null;
   /** When true the active list (or funnel) has a pipeline/stages and can show kanban. */
@@ -149,6 +153,17 @@ interface LeadsTableProps {
   /** Namespaces the "Edit columns" localStorage prefs so this view's column choices don't bleed
    * into/from other LeadsTable consumers sharing the same tenant+user (e.g. "contacts"). */
   columnPrefsScope?: string;
+  /** Page title (e.g. "Raw", "Contacts"), rendered above the toolbar. Owned by LeadsTable (rather
+   * than the calling page) so the Preview panel — a flex sibling of this whole column — can span
+   * the full height of the content area instead of being pushed down by a title rendered above it. */
+  pageHeading?: string;
+  /** Full override for the pageHeading's className — each consumer had its own spacing (e.g.
+   * Contacts' tighter mb-1 vs Leads' mb-4, or Leads' extra pl-4/pt-4 for its full-bleed <main>). */
+  pageHeadingClassName?: string;
+  /** Optional subtitle under pageHeading — e.g. Contacts' "Walk-in visitors tagged as Other". */
+  pageSubheading?: string;
+  /** Extra content between the heading and the toolbar — e.g. leads-organise's ReconciliationPanel. */
+  beforeTable?: ReactNode;
 }
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
@@ -158,6 +173,62 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
   const first = firstName?.charAt(0)?.toUpperCase() || "";
   const last = lastName?.charAt(0)?.toUpperCase() || "";
   return first + last || "?";
+}
+
+const MIN_COLUMN_WIDTH = 60;
+
+const TOOLBAR_BTN =
+  "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
+
+// A manually-resized column is pinned to a single line and clipped with an ellipsis at the
+// boundary — like Excel/Sheets/Airtable — instead of spilling its text into the next column.
+// Only applied once the user has actually dragged that column; untouched columns are unaffected.
+function resizedCellStyle(base: CSSProperties | undefined, width: number): CSSProperties {
+  return {
+    ...base,
+    width,
+    maxWidth: width,
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+  };
+}
+
+// Wraps a registry-rendered <th> with a drag handle on its right edge and (once resized) an
+// explicit width — lets columns be resized without every column definition in
+// columns-registry.tsx knowing about resizing.
+function withResizableTh(
+  col: LeadColumn,
+  ctx: LeadColumnCtx,
+  width: number | undefined,
+  onResizeStart: (e: ReactMouseEvent<HTMLSpanElement>, key: string) => void,
+): ReactNode {
+  const thElement = col.renderTh(ctx);
+  if (!isValidElement(thElement)) return thElement;
+  const props = thElement.props as { className?: string; style?: CSSProperties; children?: ReactNode };
+  return cloneElement(thElement as ReactElement<Record<string, unknown>>, {
+    className: `${props.className ?? ""} relative`,
+    style: width ? resizedCellStyle(props.style, width) : props.style,
+    children: (
+      <>
+        {props.children}
+        <span
+          onMouseDown={(e) => onResizeStart(e, col.key)}
+          className="absolute right-0 top-0 h-full w-1.5 -mr-0.5 cursor-col-resize select-none touch-none z-10 hover:bg-blue-400/50 active:bg-blue-500/60"
+        />
+      </>
+    ),
+  });
+}
+
+// Mirrors a resized column's width (and single-line ellipsis clipping) onto its <td> so body
+// cells line up with the header and never overflow into the neighboring column.
+function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNode {
+  if (!width || !isValidElement(tdElement)) return tdElement;
+  const props = tdElement.props as { style?: CSSProperties };
+  return cloneElement(tdElement as ReactElement<Record<string, unknown>>, {
+    style: resizedCellStyle(props.style, width),
+  });
 }
 
 export function LeadsTable({
@@ -180,6 +251,7 @@ export function LeadsTable({
   userBranchId = null,
   leadLists = [],
   roleMap,
+  memberRoleMap = {},
   positionSlugMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
@@ -191,6 +263,7 @@ export function LeadsTable({
   memberBranchMap = {},
   activeListSlug = null,
   defaultListId,
+  lockedList,
   activeFunnelKey = null,
   hasListPipeline = false,
   isTeamScoped = false,
@@ -201,6 +274,10 @@ export function LeadsTable({
   hideTagFilter = false,
   excludeDefaultVisibleKeys = [],
   columnPrefsScope,
+  pageHeading,
+  pageHeadingClassName = "shrink-0 text-lg font-bold mb-4 pr-6",
+  pageSubheading,
+  beforeTable,
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy" && !hideTagFilter;
@@ -247,6 +324,46 @@ export function LeadsTable({
   const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
   // it_agency: Fit-Qualified → Sales Leads graduation reuses the move-to-list dialog/API.
   const [isGraduateMove, setIsGraduateMove] = useState(false);
+
+  // Column resize (session-only — drag handle lives in the header, width mirrors onto <td>s).
+  // "name" is seeded with a default: under table-layout:auto a column whose cell content is
+  // overflow-hidden (TruncatedText) has an effective min-content width of 0, so with no width
+  // pinned it gets starved by neighboring columns (e.g. long emails) and collapses instead of
+  // sizing to fit typical names. A pinned default gives it the same fixed-width-then-ellipsis
+  // behavior as a manually resized column, and the user can still drag it wider.
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({ name: 200 });
+  const columnResizeRef = useRef<{ key: string; startX: number; startWidth: number } | null>(null);
+
+  const handleColumnResizeStart = useCallback((e: ReactMouseEvent<HTMLSpanElement>, key: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.parentElement as HTMLElement | null;
+    const startWidth = th?.getBoundingClientRect().width ?? 150;
+    columnResizeRef.current = { key, startX: e.clientX, startWidth };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }, []);
+
+  useEffect(() => {
+    function onMouseMove(e: MouseEvent) {
+      const drag = columnResizeRef.current;
+      if (!drag) return;
+      const nextWidth = Math.max(MIN_COLUMN_WIDTH, drag.startWidth + (e.clientX - drag.startX));
+      setColumnWidths((prev) => (prev[drag.key] === nextWidth ? prev : { ...prev, [drag.key]: nextWidth }));
+    }
+    function onMouseUp() {
+      if (!columnResizeRef.current) return;
+      columnResizeRef.current = null;
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    }
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
 
   // Smart suggestion — stable key derived from the staging list's id
   const stagingListId = isStagingView ? (localLeads[0]?.list_id ?? null) : null;
@@ -1097,6 +1214,41 @@ export function LeadsTable({
       leadLists: leadLists.length > 0 ? leadLists : undefined,
       canEditLeads: canEditRows,
       isAdmin,
+      assignableMembers:
+        industryId !== "education_consultancy"
+          ? Array.from(
+              new Map(
+                (assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [
+                  m.user_id,
+                  m,
+                ]),
+              ).values(),
+            )
+          : undefined,
+      // Inline reassignment from the table (normal view, non-education, admin/owner only).
+      // Mirrors onStageChange: optimistic + revert.
+      onAssignChange:
+        isAdmin && viewMode === "normal" && industryId !== "education_consultancy"
+          ? async (leadId: string, memberId: string | null) => {
+              setLocalLeads((prev) =>
+                prev.map((l) => (l.id === leadId ? { ...l, assigned_to: memberId } : l)),
+              );
+              try {
+                const res = await fetch(`/api/v1/leads/${leadId}`, {
+                  method: "PATCH",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ assigned_to: memberId }),
+                });
+                if (!res.ok) throw new Error("Failed to reassign");
+              } catch {
+                setLocalLeads((prev) =>
+                  prev.map((l) =>
+                    l.id === leadId ? { ...(leads.find((orig) => orig.id === leadId) ?? l) } : l,
+                  ),
+                );
+              }
+            }
+          : undefined,
       // Inline stage change from the table (normal view only). Optimistic + revert,
       // mirroring onListMove. stage_id is editable by non-admins server-side.
       onStageChange:
@@ -1164,7 +1316,7 @@ export function LeadsTable({
       openTaskLeadIds,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds],
+    [memberMap, memberNames, formMap, entityMap, branchMap, memberBranchMap, roleMap, stages, industryId, selectedIds, unreadLeadIds, leadLists, viewMode, intakeListId, canEditRows, leads, openTaskLeadIds, assignableMembers, teamMembers, isAdmin],
   );
 
   // Total column count: 2 anchors (select + avatar) + visible data columns + 1 actions column
@@ -1217,11 +1369,7 @@ export function LeadsTable({
                       ]
                     : []),
                   ...counselors
-                    .filter(
-                      ([userId]) =>
-                        (counselorCounts.get(userId) ?? 0) > 0 &&
-                        allowedAssigneePositions.has(positionSlugMap?.[userId] ?? "")
-                    )
+                    .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
                     .map(([userId, email]) => ({
                       value: userId,
                       label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
@@ -1256,7 +1404,10 @@ export function LeadsTable({
               setCurrentPage(1);
             },
             options: counselors
-              .filter(([userId]) => !eduStageGated || (collaboratorCounts.get(userId) ?? 0) > 0)
+              .filter(([userId]) =>
+                (collaboratorCounts.get(userId) ?? 0) > 0 &&
+                memberRoleMap[userId] !== "owner" &&
+                memberRoleMap[userId] !== "admin")
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
@@ -1360,7 +1511,12 @@ export function LeadsTable({
   return (
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
-      <div className={`flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden transition-[padding] duration-500 ease-out ${previewLead ? 'pr-4' : 'pr-6'}`}>
+      <div className="flex flex-col flex-1 min-h-0 min-w-0 gap-1 overflow-hidden">
+        {pageHeading && <h1 className={pageHeadingClassName}>{pageHeading}</h1>}
+        {pageSubheading && (
+          <p className="shrink-0 text-sm text-muted-foreground mb-4 pr-6">{pageSubheading}</p>
+        )}
+        {beforeTable}
 
       {/* Enhanced Toolbar - matching pipeline style */}
       <div className="shrink-0">
@@ -1379,7 +1535,7 @@ export function LeadsTable({
               placeholder="Search leads..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full h-7 pl-7 pr-3 rounded-md border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
+              className="w-full h-7 pl-7 pr-3 rounded-[8px] border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
             />
           </div>
 
@@ -1387,7 +1543,7 @@ export function LeadsTable({
           <button
             type="button"
             onClick={() => setColumnDialogOpen(true)}
-            className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+            className={TOOLBAR_BTN}
           >
             <Columns3 className="h-3 w-3 shrink-0" />
             <span>Edit columns</span>
@@ -1402,7 +1558,7 @@ export function LeadsTable({
                   ? `/leads?list=${activeListSlug}&view=kanban`
                   : `/leads?funnel=${activeFunnelKey}&view=kanban`
               )}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              className={TOOLBAR_BTN}
             >
               <Columns4 className="h-3 w-3 shrink-0" />
               <span>Kanban view</span>
@@ -1419,7 +1575,7 @@ export function LeadsTable({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+                className={TOOLBAR_BTN}
               >
                 <ArrowUpDown className="h-3 w-3 shrink-0" />
                 Sort
@@ -1477,7 +1633,7 @@ export function LeadsTable({
             <button
               type="button"
               onClick={exportCSV}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              className={TOOLBAR_BTN}
             >
               <Download className="h-3 w-3 shrink-0" />
               Export
@@ -1489,7 +1645,7 @@ export function LeadsTable({
             <button
               type="button"
               onClick={() => setAddLeadOpen(true)}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
             >
               <Plus className="h-3 w-3 shrink-0" />
               Add Lead
@@ -1656,11 +1812,15 @@ export function LeadsTable({
       )}
 
       {/* Table - Compact style with sticky header and horizontal scroll */}
-      <div className="flex-1 min-h-0 bg-white rounded-[0.75rem] border border-gray-200 flex flex-col overflow-hidden">
+      <div className="flex-1 min-h-0 bg-white flex flex-col overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
-          <table className="w-full min-w-[900px]">
-          <thead className="sticky top-0 z-10">
-            <tr className="border-b border-gray-200 bg-gray-50">
+          {/* w-max lets the table grow past the scroll container when column widths demand it
+              (e.g. a manually-widened Name column) instead of being pinned to exactly 100% of
+              the container and forced to steal width from other columns. min-w-[max(...)] keeps
+              the old floor: fill the container on wide screens, never shrink below 900px on narrow ones. */}
+          <table className="w-max min-w-[max(900px,100%)]">
+          <thead className="sticky top-0 z-10 [&_th]:shadow-[inset_0_1px_0_0_#e5e7eb,inset_0_-1px_0_0_#e5e7eb]">
+            <tr className="bg-gray-50">
               {/* Anchor: select checkbox */}
               <th className="pl-3 pr-1 py-2 text-left w-10">
                 <Checkbox
@@ -1674,7 +1834,9 @@ export function LeadsTable({
               {/* Anchor: avatar */}
               <th className="px-2 py-2 text-left w-8"></th>
               {/* Data columns from registry */}
-              {visibleColumns.map((col) => col.renderTh(columnCtx))}
+              {visibleColumns.map((col) =>
+                withResizableTh(col, columnCtx, columnWidths[col.key], handleColumnResizeStart)
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -1719,6 +1881,10 @@ export function LeadsTable({
                           </button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
+                          <DropdownMenuItem onClick={() => columnCtx.onPreviewToggle(lead.id)}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            Preview
+                          </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => router.push(`/leads/${lead.id}?edit=1`)}>
                             <Pencil className="h-4 w-4 mr-2" />
                             Edit
@@ -1733,7 +1899,9 @@ export function LeadsTable({
                       </div>
                     </td>
                     {/* Data columns from registry */}
-                    {visibleColumns.map((col) => col.renderTd(lead, columnCtx))}
+                    {visibleColumns.map((col) =>
+                      withResizedTd(col.renderTd(lead, columnCtx), columnWidths[col.key])
+                    )}
                   </tr>
                 );
               })
@@ -1797,7 +1965,7 @@ export function LeadsTable({
       {/* Lead Preview Panel - side by side with animation */}
       <div
         className={`h-full transition-all duration-500 ease-out overflow-hidden ${
-          previewLead ? 'w-[404px] opacity-100' : 'w-0 opacity-0'
+          previewLead ? 'w-[380px] opacity-100' : 'w-0 opacity-0'
         }`}
       >
         <div
@@ -2132,6 +2300,7 @@ export function LeadsTable({
           userBranchId={userBranchId}
           currentUserPositionSlug={currentUserPositionSlug}
           defaultListId={defaultListId}
+          lockedList={lockedList}
         />
       )}
 

@@ -8,12 +8,15 @@ interface ChatInputProps {
   onSend: (message: string) => void;
   disabled?: boolean;
   placeholder?: string;
+  /** Shown just above the input while `disabled` is true, so the user knows why they can't type. */
+  disabledHint?: string;
 }
 
 export function ChatInput({
   onSend,
   disabled = false,
-  placeholder = "Ask me anything...",
+  placeholder = "Ask anything...",
+  disabledHint,
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -47,8 +50,11 @@ export function ChatInput({
   };
 
   return (
-    <div className="flex items-end gap-2 p-4 border-t border-gray-200 bg-white">
-      <div className="flex-1 relative">
+    <div className="px-4 pb-0">
+      {disabled && disabledHint && (
+        <p className="px-1 pb-2 text-xs text-gray-500">{disabledHint}</p>
+      )}
+      <div className="relative rounded-2xl border border-gray-200 bg-white shadow-sm focus-within:border-gray-300 focus-within:shadow transition-all">
         <textarea
           ref={textareaRef}
           value={message}
@@ -57,17 +63,17 @@ export function ChatInput({
           placeholder={placeholder}
           disabled={disabled}
           rows={1}
-          className="w-full resize-none rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-sm outline-none disabled:opacity-50 disabled:cursor-not-allowed"
         />
+        <Button
+          size="icon"
+          onClick={handleSubmit}
+          disabled={disabled || !message.trim()}
+          className="absolute bottom-2.5 right-2.5 h-9 w-9 rounded-full shrink-0"
+        >
+          <Send className="h-4 w-4" />
+        </Button>
       </div>
-      <Button
-        size="icon"
-        onClick={handleSubmit}
-        disabled={disabled || !message.trim()}
-        className="h-10 w-10 rounded-xl shrink-0"
-      >
-        <Send className="h-4 w-4" />
-      </Button>
     </div>
   );
 }

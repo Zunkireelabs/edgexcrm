@@ -11,7 +11,7 @@ import {
   getImportSourceReconciliation,
   getTeamMembersWithPositions,
 } from "@/lib/supabase/queries";
-import { getLeadCollaboratorsMap } from "@/lib/leads/collaborators";
+import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ReconciliationPanel } from "@/components/dashboard/leads-organise/reconciliation-panel";
@@ -104,7 +104,6 @@ export default async function LeadsOrganiseCockpitPage({
     formConfigs,
     industryResult,
     entitiesResult,
-    leadCollaboratorsMap,
   ] = await Promise.all([
     getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
     getTeamMembers(tenantData.tenant.id),
@@ -125,8 +124,11 @@ export default async function LeadsOrganiseCockpitPage({
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("position", { ascending: true }),
-    getLeadCollaboratorsMap(serviceClient, tenantData.tenant.id),
   ]);
+
+  const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
+    serviceClient, tenantData.tenant.id, leads.map((l) => l.id),
+  );
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
@@ -143,6 +145,9 @@ export default async function LeadsOrganiseCockpitPage({
   const positionSlugMap = Object.fromEntries(
     teamMembersWithPositions.map((m) => [m.user_id, m.position_slug])
   );
+  const memberRoleMap = Object.fromEntries(
+    teamMembers.map((m) => [m.user_id, m.role])
+  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -158,9 +163,9 @@ export default async function LeadsOrganiseCockpitPage({
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <h1 className="shrink-0 text-lg font-bold mb-4 pr-6">{stagingList.name}</h1>
-      <ReconciliationPanel rows={reconciliationRows} />
       <LeadsTable
+        pageHeading={stagingList.name}
+        beforeTable={<ReconciliationPanel rows={reconciliationRows} />}
         leads={leads}
         leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}
@@ -180,6 +185,7 @@ export default async function LeadsOrganiseCockpitPage({
         userBranchId={tenantData.branchId}
         leadLists={pipelineLists}
         roleMap={roleMap}
+        memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView

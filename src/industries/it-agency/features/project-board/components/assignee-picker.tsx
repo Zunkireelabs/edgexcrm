@@ -2,14 +2,11 @@
 
 import { useState, useRef, useEffect } from "react";
 import { Check, UserCircle2, X } from "lucide-react";
+import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 
-function initials(email: string): string {
-  const parts = email.split("@")[0].split(/[._-]/);
-  return parts
-    .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase() ?? "")
-    .join("");
+function memberLabel(m: TeamMember): string {
+  return m.name || m.email.split("@")[0];
 }
 
 interface AssigneePickerProps {
@@ -17,9 +14,10 @@ interface AssigneePickerProps {
   team: TeamMember[];
   onChange: (userId: string | null) => void;
   disabled?: boolean;
+  showName?: boolean;
 }
 
-export function AssigneePicker({ assigneeId, team, onChange, disabled }: AssigneePickerProps) {
+export function AssigneePicker({ assigneeId, team, onChange, disabled, showName = false }: AssigneePickerProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -41,11 +39,8 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled }: Assigne
 
   if (disabled) {
     return assignee ? (
-      <span
-        title={assignee.email}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-violet-100 text-violet-700 text-xs font-semibold"
-      >
-        {initials(assignee.email)}
+      <span title={assignee.email} className="inline-flex">
+        <MemberAvatar userId={assignee.user_id} name={memberLabel(assignee)} size={28} />
       </span>
     ) : (
       <UserCircle2 className="h-5 w-5 text-muted-foreground/40" />
@@ -57,12 +52,21 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled }: Assigne
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-semibold transition-colors hover:ring-2 hover:ring-violet-300"
+        className={showName
+          ? "inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 -mx-1 transition-colors hover:bg-gray-100"
+          : "inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors hover:ring-2 hover:ring-violet-300"}
         title={assignee?.email ?? "Set assignee"}
-        style={assignee ? { backgroundColor: "#ede9fe", color: "#6d28d9" } : undefined}
       >
         {assignee ? (
-          initials(assignee.email)
+          <>
+            <MemberAvatar userId={assignee.user_id} name={memberLabel(assignee)} size={28} />
+            {showName && <span className="truncate text-sm text-gray-700">{memberLabel(assignee)}</span>}
+          </>
+        ) : showName ? (
+          <>
+            <UserCircle2 className="h-5 w-5 text-muted-foreground/50" />
+            <span className="text-sm text-gray-400">Unassigned</span>
+          </>
         ) : (
           <UserCircle2 className="h-4 w-4 text-muted-foreground/50" />
         )}
@@ -78,10 +82,8 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled }: Assigne
                 onClick={() => handleSelect(m.user_id)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
               >
-                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-violet-100 text-violet-700 text-[10px] font-semibold shrink-0">
-                  {initials(m.email)}
-                </span>
-                <span className="truncate text-gray-700">{m.name || m.email.split("@")[0]}</span>
+                <MemberAvatar userId={m.user_id} name={memberLabel(m)} />
+                <span className="truncate text-gray-700">{memberLabel(m)}</span>
                 {m.user_id === assigneeId && <Check className="h-3 w-3 text-violet-600 ml-auto shrink-0" />}
               </button>
             ))}

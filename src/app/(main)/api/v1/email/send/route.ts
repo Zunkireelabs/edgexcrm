@@ -10,9 +10,11 @@ import {
   apiServiceUnavailable,
   apiNotFound,
   apiError,
+  apiRateLimited,
 } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { checkRateLimit, EMAIL_SEND_LIMIT } from "@/lib/api/rate-limit";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { validate, required, maxLength, isUUID } from "@/lib/api/validation";
 import { emitEvent } from "@/lib/api/audit";
@@ -29,6 +31,9 @@ export async function POST(request: Request) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.EMAIL)) return apiForbidden();
+
+  const rate = await checkRateLimit(`email_send:${auth.userId}`, EMAIL_SEND_LIMIT);
+  if (!rate.allowed) return apiRateLimited(rate.retryAfterSeconds);
 
   const body = await request.json();
 

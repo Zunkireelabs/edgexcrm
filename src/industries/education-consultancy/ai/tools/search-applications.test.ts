@@ -69,7 +69,7 @@ const APPLICATIONS = [
     lead_id: "lead-1",
     university_name: "Oxford",
     program_name: "MSc CS",
-    country: "UK",
+    countries: ["UK"],
     intake_term: "Fall 2026",
     status: "applied",
     offer_type: null,

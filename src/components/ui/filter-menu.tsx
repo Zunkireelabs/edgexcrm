@@ -76,7 +76,7 @@ export function FilterMenu({ filters, activeCount, onClearAll }: FilterMenuProps
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors ${
+          className={`inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors ${
             activeCount > 0
               ? "border-[#0f0f10] bg-[#0000170b] text-[#0f0f10]"
               : "border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"

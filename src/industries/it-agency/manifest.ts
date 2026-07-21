@@ -10,6 +10,8 @@ import { proposalsMeta } from "./features/proposals/meta";
 import { resourcingMeta } from "./features/resourcing/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { insightsMeta } from "../_shared/features/insights/meta";
+import { emailMeta } from "../_shared/features/email/meta";
+import { outreachMeta } from "../_shared/features/outreach/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -25,6 +27,8 @@ export const manifest: IndustryManifest = {
     { meta: resourcingMeta },
     { meta: leadListsMeta },
     { meta: insightsMeta },
+    { meta: emailMeta },
+    { meta: outreachMeta },
   ],
   sidebar: [
     {
@@ -56,6 +60,12 @@ export const manifest: IndustryManifest = {
       href: "/proposals",
       label: "Proposals",
       icon: "FileSignature",
+    },
+    {
+      featureId: FEATURES.OUTREACH,
+      href: "/outreach",
+      label: "Outreach",
+      icon: "Send",
     },
     {
       featureId: FEATURES.RESOURCING,
