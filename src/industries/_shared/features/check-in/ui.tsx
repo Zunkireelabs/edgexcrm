@@ -956,7 +956,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 <Label className="text-xs">Interested Degree Level</Label>
                                 <Select value={studyLevel} onValueChange={setStudyLevel}>
                                   <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Select level (optional)" />
+                                    <SelectValue placeholder="Select level" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {studyLevelOptions.map((lvl) => (
@@ -971,7 +971,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 <Label className="text-xs">Field of Study</Label>
                                 <Select value={fieldOfStudy} onValueChange={setFieldOfStudy}>
                                   <SelectTrigger className="h-9">
-                                    <SelectValue placeholder="Select field (optional)" />
+                                    <SelectValue placeholder="Select field" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     {fieldOfStudyOptions.map((f) => (
