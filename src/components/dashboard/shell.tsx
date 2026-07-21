@@ -385,6 +385,7 @@ export function DashboardShell({
       href: entry.href,
       label: entry.label,
       icon: INDUSTRY_ICONS[entry.icon] ?? FileText,
+      badge: entry.href === "/outreach" ? counts.outreach_due || undefined : undefined,
     });
   }
 

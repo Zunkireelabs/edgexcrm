@@ -447,7 +447,14 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
         <>
           {hasOutreach && (
             <div className="mb-3">
-              <LeadCadenceStrip leadId={leadId} isAdmin={isAdmin} currentUserId={currentUserId} />
+              <LeadCadenceStrip
+                leadId={leadId}
+                isAdmin={isAdmin}
+                currentUserId={currentUserId}
+                leadFirstName={leadFirstName}
+                leadLastName={leadLastName}
+                leadEmail={leadEmail}
+              />
             </div>
           )}
           {isEmailsTabLoading ? (

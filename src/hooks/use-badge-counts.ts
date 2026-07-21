@@ -6,9 +6,15 @@ interface BadgeCounts {
   unread_notifications: number;
   unread_leads: number;
   unread_lead_ids: string[];
+  outreach_due: number;
 }
 
-const DEFAULT_COUNTS: BadgeCounts = { unread_notifications: 0, unread_leads: 0, unread_lead_ids: [] };
+const DEFAULT_COUNTS: BadgeCounts = {
+  unread_notifications: 0,
+  unread_leads: 0,
+  unread_lead_ids: [],
+  outreach_due: 0,
+};
 
 async function fetchCounts(): Promise<BadgeCounts | null> {
   try {
