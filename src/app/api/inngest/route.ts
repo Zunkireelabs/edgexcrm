@@ -3,8 +3,10 @@ import { inngest } from "@/lib/inngest/client";
 import { kbIngest } from "@/lib/ai/ingestion/kb-ingest";
 import { heartbeat } from "@/lib/inngest/functions/heartbeat";
 import { remindersScan } from "@/lib/inngest/functions/reminders";
+import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
+import { emailPoll } from "@/lib/inngest/functions/email-poll";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [kbIngest, heartbeat, remindersScan],
+  functions: [kbIngest, heartbeat, remindersScan, inboxProcess, emailPoll],
 });
