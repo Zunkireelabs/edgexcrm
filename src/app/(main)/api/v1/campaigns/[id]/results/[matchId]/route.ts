@@ -8,6 +8,9 @@ import { normalizeEmail } from "@/lib/leads/dedup";
 import { scoreSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import type { CampaignConfig, ScoringSubmission } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
+import { logger } from "@/lib/logger";
+
+const log = logger.child({ module: "campaigns:results" });
 
 const VALID_OUTCOMES = new Set(["team_a", "team_b", "draw"]);
 
@@ -90,7 +93,8 @@ export async function PATCH(
           campaignRow.form_config_id,
           "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
         );
-      } catch {
+      } catch (err) {
+        log.error({ err, campaignId: campaignRow.id }, "Failed to fetch campaign submissions");
         return apiError("DB_ERROR", "Failed to fetch submissions", 500);
       }
       const applicants = scoreSubmissions(subs, {}, safeConfig);

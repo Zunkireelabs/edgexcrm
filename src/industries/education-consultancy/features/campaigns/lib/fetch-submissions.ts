@@ -29,6 +29,7 @@ export async function fetchAllSubmissions<T>(
       .select(columns)
       .eq("form_config_id", formConfigId)
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true }) // unique tiebreaker — created_at alone isn't guaranteed distinct, and offset pagination needs a fully deterministic order or a row at a page boundary can be skipped or duplicated
       .range(from, from + PAGE_SIZE - 1);
 
     if (error) throw new Error(error.message);

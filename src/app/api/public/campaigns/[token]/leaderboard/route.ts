@@ -110,11 +110,19 @@ export async function GET(
 
   // Load submissions — paginated, a campaign can have more than the
   // default 1000-row PostgREST cap (see fetch-submissions.ts).
-  const submissions = await fetchAllSubmissions<LeadSubmission>(
-    supabase,
-    campaign.form_config_id,
-    "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
-  );
+  let submissions: LeadSubmission[];
+  try {
+    submissions = await fetchAllSubmissions<LeadSubmission>(
+      supabase,
+      campaign.form_config_id,
+      "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
+    );
+  } catch {
+    return NextResponse.json(
+      { error: { code: "DB_ERROR", message: "Failed to fetch submissions" } },
+      { status: 500, headers: CORS_HEADERS }
+    );
+  }
 
   const standings = scoreSubmissions(submissions, resultsMap, campaign.config, DEFAULT_LEADERBOARD_FIELDS);
 

@@ -10,7 +10,10 @@ import type { CampaignConfig, MatchResult } from "@/industries/education-consult
 import { annotateIntegrity } from "@/industries/education-consultancy/features/campaigns/lib/integrity";
 import { DEFAULT_LEADERBOARD_FIELDS } from "@/industries/education-consultancy/features/campaigns/lib/constants";
 import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
+import { logger } from "@/lib/logger";
 import type { LeadSubmission } from "@/types/database";
+
+const log = logger.child({ module: "campaigns:leaderboard" });
 
 interface CampaignRow {
   id: string;
@@ -72,7 +75,8 @@ export async function GET(
       campaign.form_config_id,
       "email, normalized_email, first_name, last_name, phone, custom_fields, created_at"
     );
-  } catch {
+  } catch (err) {
+    log.error({ err, campaignId: campaign.id }, "Failed to fetch campaign submissions");
     return apiError("DB_ERROR", "Failed to fetch submissions", 500);
   }
 

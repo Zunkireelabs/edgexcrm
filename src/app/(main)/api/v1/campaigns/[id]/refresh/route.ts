@@ -7,7 +7,10 @@ import { FEATURES } from "@/industries/_registry";
 import { refreshEspnResults } from "@/industries/education-consultancy/features/campaigns/lib/results-espn";
 import type { CampaignConfig } from "@/industries/education-consultancy/features/campaigns/lib/scoring";
 import { fetchAllSubmissions } from "@/industries/education-consultancy/features/campaigns/lib/fetch-submissions";
+import { logger } from "@/lib/logger";
 import type { LeadSubmission } from "@/types/database";
+
+const log = logger.child({ module: "campaigns:refresh" });
 
 interface CampaignRow {
   id: string;
@@ -60,7 +63,8 @@ export async function POST(
       campaign.form_config_id,
       "custom_fields"
     );
-  } catch {
+  } catch (err) {
+    log.error({ err, campaignId: campaign.id }, "Failed to fetch campaign submissions");
     return apiError("DB_ERROR", "Failed to fetch submissions", 500);
   }
 
