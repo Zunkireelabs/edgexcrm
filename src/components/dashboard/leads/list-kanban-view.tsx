@@ -31,6 +31,8 @@ interface ListKanbanViewProps {
   isAdmin: boolean;
   canEditLeads?: boolean;
   restrictToSelf?: boolean;
+  leadCollaborators?: Record<string, string[]>;
+  formMap?: Record<string, string>;
 }
 
 export function ListKanbanView({
@@ -48,6 +50,8 @@ export function ListKanbanView({
   isAdmin,
   canEditLeads,
   restrictToSelf,
+  leadCollaborators = {},
+  formMap = {},
 }: ListKanbanViewProps) {
   const router = useRouter();
   const [manageOpen, setManageOpen] = useState(false);
@@ -92,6 +96,8 @@ export function ListKanbanView({
         industryId={industryId}
         canEditLeads={canEditLeads}
         restrictToSelf={restrictToSelf}
+        leadCollaborators={leadCollaborators}
+        formMap={formMap}
       />
 
       {isAdmin && (
