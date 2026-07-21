@@ -951,6 +951,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                                 onChange={setDestinations}
                                 options={destOptions}
                                 label="Destination"
+                                optional={false}
                               />
                               <div className="space-y-1">
                                 <Label className="text-xs">Interested Degree Level</Label>
