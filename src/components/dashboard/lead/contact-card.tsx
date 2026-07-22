@@ -5,6 +5,7 @@ import { Mail, Phone, MessageSquare, CheckSquare, MoreHorizontal, MessageCircle,
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -260,13 +261,23 @@ export function ContactCard({
               </div>
               <div>
                 <p className="text-xs text-muted-foreground mb-1">Phone</p>
-                <Input
-                  className="h-8 text-sm"
-                  type="tel"
-                  value={draft.phone}
-                  placeholder="+977 98..."
-                  onChange={(e) => onDraftChange?.("phone", e.target.value)}
-                />
+                {industryId === "education_consultancy" ? (
+                  <PhoneInput
+                    value={draft.phone}
+                    onChange={(v) => onDraftChange?.("phone", v)}
+                    placeholder="Phone number"
+                    size="sm"
+                    error={!!editErrors.phone}
+                  />
+                ) : (
+                  <Input
+                    className="h-8 text-sm"
+                    type="tel"
+                    value={draft.phone}
+                    placeholder="+977 98..."
+                    onChange={(e) => onDraftChange?.("phone", e.target.value)}
+                  />
+                )}
                 {editErrors.phone && (
                   <p className="text-xs text-destructive mt-1">{editErrors.phone}</p>
                 )}
