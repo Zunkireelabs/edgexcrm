@@ -598,12 +598,20 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
 
   const handleAddLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isValidPhoneForCountry(phone)) {
-      setPhoneError(true);
-      toast.error("Please enter a valid phone number for the selected country");
-      return;
+    if (industryId === "education_consultancy") {
+      if (!isValidPhoneForCountry(phone)) {
+        setPhoneError(true);
+        toast.error("Please enter a valid phone number for the selected country");
+        return;
+      }
+      setPhoneError(false);
+    } else {
+      // non-education (travel): keep old lenient guard
+      if (!firstName && !email && !phone) {
+        toast.error("Please provide at least a name, email, or phone");
+        return;
+      }
     }
-    setPhoneError(false);
 
     if (
       industryId === "education_consultancy" &&
@@ -909,7 +917,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="phone" className="text-xs">
-                          Phone <span className="text-red-500">*</span>
+                          Phone {industryId === "education_consultancy" && <span className="text-red-500">*</span>}
                         </Label>
                         <PhoneInput
                           value={phone}
@@ -926,16 +934,18 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                       </div>
                     </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="city" className="text-xs">City</Label>
-                      <Input
-                        id="city"
-                        value={city}
-                        onChange={(e) => setCity(e.target.value)}
-                        placeholder="Kathmandu"
-                        className="h-9"
-                      />
-                    </div>
+                    {industryId === "education_consultancy" && (
+                      <div className="space-y-1">
+                        <Label htmlFor="city" className="text-xs">City</Label>
+                        <Input
+                          id="city"
+                          value={city}
+                          onChange={(e) => setCity(e.target.value)}
+                          placeholder="Kathmandu"
+                          className="h-9"
+                        />
+                      </div>
+                    )}
 
                     {industryId !== "travel_agency" && (
                       <div className="space-y-3">
