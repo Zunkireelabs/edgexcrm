@@ -1,3 +1,5 @@
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
+
 type ValidatorFn = (value: unknown) => string | null;
 
 export function validate(
@@ -71,6 +73,21 @@ export function optionalMaxLength(n: number): ValidatorFn {
     if (value === undefined || value === null || value === "") return null;
     if (typeof value !== "string") return null;
     if (value.length > n) return `Must be at most ${n} characters`;
+    return null;
+  };
+}
+
+/**
+ * Country-aware phone format check (libphonenumber-js via isValidPhoneForCountry).
+ * Optional field — only validates when a value is present. Callers gate this
+ * per-industry (education_consultancy only) rather than baking the gate in here.
+ */
+export function isPhoneForCountry(): ValidatorFn {
+  return (value) => {
+    if (!value || typeof value !== "string") return null;
+    if (!isValidPhoneForCountry(value)) {
+      return "Please enter a valid phone number for the selected country";
+    }
     return null;
   };
 }
