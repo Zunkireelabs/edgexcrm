@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
     delay_days: s.delay_days ?? 0,
     subject_template: s.subject_template ?? "",
     body_template: s.body_template ?? "",
+    draft_source: s.draft_source ?? "template",
+    ai_instructions: s.ai_instructions ?? null,
   }));
 
   const { data: createdSteps, error: stepsInsertError } = await db

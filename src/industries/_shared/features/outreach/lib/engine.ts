@@ -1,5 +1,8 @@
 import { renderTemplate } from "@/lib/email/render-template";
 import { emitEvent } from "@/lib/api/audit";
+import { isOutreachDraftEnabledForTenant } from "@/lib/ai/flag";
+import { draftSequenceEmail } from "@/lib/ai/draft-email";
+import { logger } from "@/lib/logger";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
 import type { Lead } from "@/types/database";
@@ -19,6 +22,7 @@ export interface SequenceStepRow {
   draft_source: string;
   subject_template: string;
   body_template: string;
+  ai_instructions: string | null;
 }
 
 export interface SequenceEnrollmentRow {
@@ -67,18 +71,40 @@ export class EnrollmentConflictError extends Error {
 }
 
 /**
- * The draft SEAM. Stage 1 renders subject/body from the step's stored
- * templates. When step.draft_source === 'ai', swap in a call to the AI
- * drafter here (see src/app/(main)/api/v1/real-estate/comms/draft/route.ts
- * for the precedent shape; a shared src/lib/ai drafter is future work) —
- * everything downstream (drafts table, worklist, send-log) is unchanged.
+ * The draft SEAM. Template-merge is the default for every ordinary step —
+ * cheap, consistent, no AI, no PII egress. When step.draft_source === 'ai'
+ * (an admin-opted auto-AI step) AND the tenant clears the D5 gate
+ * (isOutreachDraftEnabledForTenant), this calls the shared AI drafter
+ * instead. Any gate failure or drafter error falls through to the template
+ * path — the cadence never breaks, and a gate-off tenant never reaches the
+ * model.
  */
-export function generateStepDraft(params: {
-  step: Pick<SequenceStepRow, "draft_source" | "subject_template" | "body_template">;
+export async function generateStepDraft(params: {
+  step: Pick<SequenceStepRow, "draft_source" | "subject_template" | "body_template" | "ai_instructions">;
   lead: LeadTemplateContext;
+  tenantId: string;
   tenantName: string;
-}): GeneratedDraft {
-  const { step, lead, tenantName } = params;
+  sequence: { name: string; description: string | null };
+  stepOrder: number;
+  totalSteps: number;
+}): Promise<GeneratedDraft> {
+  const { step, lead, tenantId, tenantName, sequence, stepOrder, totalSteps } = params;
+
+  if (step.draft_source === "ai" && (await isOutreachDraftEnabledForTenant(tenantId))) {
+    try {
+      const result = await draftSequenceEmail({
+        tenantId,
+        tenantName,
+        lead,
+        sequence,
+        step: { stepOrder, totalSteps, instructions: step.ai_instructions ?? null },
+      });
+      return { subject: result.subject, body_html: result.body_html, source: "ai" };
+    } catch (err) {
+      logger.error({ err, tenantId, sequenceName: sequence.name, stepOrder }, "outreach AI draft failed, falling back to template");
+    }
+  }
+
   const ctx = { lead: lead as unknown as Lead, tenant: { name: tenantName } };
   return {
     subject: renderTemplate(step.subject_template, ctx),
@@ -104,6 +130,18 @@ async function loadTenantName(db: ScopedClient, tenantId: string): Promise<strin
   return (data as { name: string } | null)?.name ?? "";
 }
 
+async function loadSequenceMeta(
+  db: ScopedClient,
+  sequenceId: string
+): Promise<{ name: string; description: string | null; totalSteps: number }> {
+  const [{ data: seq }, { count }] = await Promise.all([
+    db.from("email_sequences").select("name, description").eq("id", sequenceId).maybeSingle(),
+    db.from("email_sequence_steps").select("id", { count: "exact", head: true }).eq("sequence_id", sequenceId),
+  ]);
+  const seqRow = seq as { name: string; description: string | null } | null;
+  return { name: seqRow?.name ?? "", description: seqRow?.description ?? null, totalSteps: count ?? 0 };
+}
+
 async function createDraftForStep(
   db: ScopedClient,
   auth: AuthContext,
@@ -113,13 +151,22 @@ async function createDraftForStep(
   }
 ): Promise<SequenceStepDraftRow | null> {
   const { enrollment, step } = params;
-  const [lead, tenantName] = await Promise.all([
+  const [lead, tenantName, sequenceMeta] = await Promise.all([
     loadLeadTemplateContext(db, enrollment.lead_id),
     loadTenantName(db, auth.tenantId),
+    loadSequenceMeta(db, step.sequence_id),
   ]);
   if (!lead) return null;
 
-  const drafted = generateStepDraft({ step, lead, tenantName });
+  const drafted = await generateStepDraft({
+    step,
+    lead,
+    tenantId: auth.tenantId,
+    tenantName,
+    sequence: { name: sequenceMeta.name, description: sequenceMeta.description },
+    stepOrder: step.step_order,
+    totalSteps: sequenceMeta.totalSteps,
+  });
   const dueAt = new Date(Date.now() + step.delay_days * 24 * 60 * 60 * 1000).toISOString();
 
   const { data, error } = await db

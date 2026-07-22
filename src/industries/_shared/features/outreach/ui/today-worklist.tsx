@@ -16,6 +16,7 @@ export interface Draft {
   subject: string;
   body_html: string;
   status: "pending" | "sent" | "skipped";
+  draft_source: "template" | "ai";
   leads: { first_name: string | null; last_name: string | null; email: string | null } | null;
   sequence_enrollments: {
     sequence_id: string;
@@ -24,7 +25,11 @@ export interface Draft {
   } | null;
 }
 
-export function TodayWorklist() {
+interface TodayWorklistProps {
+  isAdmin: boolean;
+}
+
+export function TodayWorklist({ isAdmin }: TodayWorklistProps) {
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAll, setShowAll] = useState(false);
@@ -50,6 +55,11 @@ export function TodayWorklist() {
   const removeDraft = (id: string) => {
     setDrafts((prev) => prev.filter((d) => d.id !== id));
     setActiveDraft(null);
+  };
+
+  const updateDraft = (updated: Draft) => {
+    setDrafts((prev) => prev.map((d) => (d.id === updated.id ? { ...d, ...updated } : d)));
+    setActiveDraft((prev) => (prev && prev.id === updated.id ? { ...prev, ...updated } : prev));
   };
 
   const todayCount = drafts.filter((d) => new Date(d.due_at) <= new Date()).length;
@@ -112,9 +122,11 @@ export function TodayWorklist() {
 
       <DraftReviewPanel
         draft={activeDraft}
+        isAdmin={isAdmin}
         onOpenChange={(open) => !open && setActiveDraft(null)}
         onSent={removeDraft}
         onSkipped={removeDraft}
+        onUpdated={updateDraft}
       />
     </div>
   );

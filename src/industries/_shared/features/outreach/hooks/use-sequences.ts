@@ -8,6 +8,8 @@ export interface SequenceStep {
   delay_days: number;
   subject_template: string;
   body_template: string;
+  draft_source: "template" | "ai";
+  ai_instructions: string | null;
 }
 
 export interface Sequence {
