@@ -1,3 +1,4 @@
+import { isValidPhoneNumber } from "libphonenumber-js";
 import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "./country-codes";
 
 /**
@@ -86,4 +87,21 @@ export function formatPhoneForTel(phone: string): string {
  */
 export function formatPhoneForWhatsApp(phone: string): string {
   return formatPhoneForTel(phone).replace(/^\+/, "");
+}
+
+// Validates a stored "+<dialCode>-<local>" phone against the real
+// length/format rules for that dial code (libphonenumber-js), not just a
+// generic digit-count floor. Passed as a full E.164-ish string rather than
+// pinned to one guessed ISO country — several of our dial codes are shared
+// by multiple countries (+1: US/Canada/Jamaica/..., +7: Russia/Kazakhstan),
+// and letting the library match the digits themselves avoids validating
+// against the wrong country's pattern for those.
+export function isValidPhoneForCountry(phone: string): boolean {
+  const { dialCode, localNumber } = parseStoredPhone(phone);
+  if (!localNumber) return false;
+  try {
+    return isValidPhoneNumber(`${dialCode}${localNumber}`);
+  } catch {
+    return false;
+  }
 }

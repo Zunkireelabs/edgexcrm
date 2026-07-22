@@ -30,6 +30,7 @@
     "googleapis": "^173.0.0",
     "inngest": "^4.13.0",
     "langfuse": "^3.38.20",
+    "libphonenumber-js": "^1.13.9",
     "lucide-react": "^0.575.0",
     "next": "16.1.6",
     "next-themes": "^0.4.6",
