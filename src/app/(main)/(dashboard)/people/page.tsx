@@ -11,6 +11,7 @@ export default async function PeoplePage() {
     <PeopleDirectory
       canManageHR={canManageHR(tenantData.permissions)}
       currentUserId={tenantData.userId}
+      industryId={tenantData.tenant.industry_id}
     />
   );
 }

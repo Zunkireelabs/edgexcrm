@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { isReservedCustomField } from "@/lib/leads/reserved-custom-fields";
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
 
 // Standard professional fields for B2B leads
 const PROFESSIONAL_FIELDS = [
@@ -34,6 +35,7 @@ export function ProfessionalDetailsCard({
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Get other custom fields that aren't in our standard professional fields
   const professionalFieldKeys: string[] = PROFESSIONAL_FIELDS.map((f) => f.key);
@@ -63,9 +65,20 @@ export function ProfessionalDetailsCard({
   const cancelEditing = () => {
     setIsEditing(false);
     setEditValues({});
+    setFieldErrors({});
   };
 
   const saveChanges = async () => {
+    if (
+      industryId === "education_consultancy" &&
+      editValues.office_phone?.trim() &&
+      !isValidPhoneForCountry(editValues.office_phone.trim())
+    ) {
+      setFieldErrors({ office_phone: "Please enter a valid phone number for the selected country" });
+      return;
+    }
+    setFieldErrors({});
+
     setIsSaving(true);
     try {
       // Merge edited professional fields with other custom fields
@@ -100,6 +113,13 @@ export function ProfessionalDetailsCard({
 
   const handleInputChange = (key: string, value: string) => {
     setEditValues((prev) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   };
 
   return (
@@ -151,12 +171,18 @@ export function ProfessionalDetailsCard({
           PROFESSIONAL_FIELDS.map((field) => (
             <div key={field.key} className="grid grid-cols-[140px_1fr] gap-4 text-sm items-center">
               <span className="text-muted-foreground">{field.label}</span>
-              <Input
-                value={editValues[field.key] || ""}
-                onChange={(e) => handleInputChange(field.key, e.target.value)}
-                placeholder={`Enter ${field.label.toLowerCase()}`}
-                className="h-8 text-sm"
-              />
+              <div>
+                <Input
+                  value={editValues[field.key] || ""}
+                  onChange={(e) => handleInputChange(field.key, e.target.value)}
+                  placeholder={`Enter ${field.label.toLowerCase()}`}
+                  className="h-8 text-sm"
+                  type={field.key === "office_phone" ? "tel" : "text"}
+                />
+                {fieldErrors[field.key] && (
+                  <p className="text-xs text-destructive mt-1">{fieldErrors[field.key]}</p>
+                )}
+              </div>
             </div>
           ))
         ) : hasProfessionalData ? (

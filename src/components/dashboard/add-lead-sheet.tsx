@@ -252,6 +252,7 @@ export function AddLeadSheet({
       email: formData.email,
       firstName: formData.firstName,
       phone: formData.phone,
+      industryId,
     });
 
     setErrors(newErrors);

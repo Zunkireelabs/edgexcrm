@@ -8,7 +8,7 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, isIn } from "@/lib/api/validation";
+import { validate, isIn, isPhoneForCountry } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
   const { valid, errors } = validate(body, {
     employment_type: body.employment_type !== undefined ? [isIn(EMPLOYMENT_TYPES)] : [],
     employment_status: body.employment_status !== undefined ? [isIn(EMPLOYMENT_STATUSES)] : [],
+    phone: auth.industryId === "education_consultancy" ? [isPhoneForCountry()] : [],
   });
   if (!valid) return apiValidationError(errors);
 

@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EntitySelectField } from "@/components/form/entity-select-field";
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
 import { CheckCircle, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 
@@ -186,6 +187,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(val)) {
           newErrors[field.name] = "Invalid email address";
+        }
+      }
+      if (field.type === "tel" && val && isEducation) {
+        if (!isValidPhoneForCountry(formatPhoneWithCode(val) || "")) {
+          newErrors[field.name] = "Please enter a valid phone number for the selected country";
         }
       }
       if (field.validation?.pattern && val) {

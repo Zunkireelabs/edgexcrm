@@ -16,7 +16,7 @@ import {
   apiRateLimited,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, isUUID, optionalMaxLength, isIn, isEmail } from "@/lib/api/validation";
+import { validate, required, isUUID, optionalMaxLength, isIn, isEmail, isPhoneForCountry } from "@/lib/api/validation";
 import { PROSPECT_INDUSTRY_VALUES } from "@/industries/it-agency/leads/prospect-industries";
 import { SALUTATION_VALUES } from "@/industries/it-agency/leads/salutations";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
@@ -519,6 +519,19 @@ async function handlePost(request: NextRequest) {
     ...coerceAcademicPayload(body),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
+
+  // Country-aware phone format check — education_consultancy only, format-only
+  // (doesn't make phone required). Runs after the phone-resolution IIFE above so
+  // it validates the final "+<dial>-<local>" shape, not raw client input. Scoped
+  // to is_final like the schema validation above it — the public form's
+  // per-step savePartial() draft saves (is_final omitted) must never hard-fail
+  // here, since failures there are swallowed client-side as non-blocking.
+  if (tenant.industry_id === "education_consultancy" && body.is_final === true) {
+    const { valid: validPhone, errors: phoneErrors } = validate(leadPayload, {
+      phone: [isPhoneForCountry()],
+    });
+    if (!validPhone) return apiValidationError(phoneErrors);
+  }
 
   // For tenants with lead-lists: assign new leads to the correct list when list_id not supplied.
   // Only applies to brand-new inserts — the update path strips list_id from its payload.

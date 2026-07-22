@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/server";
+import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
@@ -126,6 +127,17 @@ export async function applyLeadPatch(
 ): Promise<ApplyLeadPatchOutcome> {
   const { requestId, ip, userAgent } = opts;
   const body: Record<string, unknown> = { ...rawBody };
+
+  // Country-aware phone format check — education_consultancy only, format-only
+  // (a patch clearing/omitting phone is still allowed; this only rejects an
+  // invalid non-empty value).
+  if (auth.industryId === "education_consultancy") {
+    const { valid: validPhone, errors: phoneErrors } = validate(body, {
+      phone: [isPhoneForCountry()],
+    });
+    if (!validPhone) return { kind: "validation", errors: phoneErrors };
+  }
+
   const log = createRequestLogger({
     requestId,
     method: "PATCH",

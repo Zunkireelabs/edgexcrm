@@ -449,6 +449,7 @@ export function LeadDetailV2({
       email: draft.email,
       firstName: draft.first_name,
       phone: draft.phone,
+      industryId: tenant.industry_id,
     });
     setEditErrors(errors);
     return Object.keys(errors).length === 0;

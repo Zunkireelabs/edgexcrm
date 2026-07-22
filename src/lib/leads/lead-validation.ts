@@ -1,3 +1,5 @@
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
+
 export function isValidEmail(email: string): boolean {
   if (!email) return true;
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -20,6 +22,7 @@ export function validateLeadIdentity(fields: {
   email?: string;
   firstName?: string;
   phone?: string;
+  industryId?: string | null;
 }): LeadIdentityErrors {
   const errors: LeadIdentityErrors = {};
 
@@ -29,8 +32,16 @@ export function validateLeadIdentity(fields: {
   if (fields.email && !isValidEmail(fields.email)) {
     errors.email = "Please enter a valid email address";
   }
-  if (fields.phone && !isValidPhone(fields.phone)) {
-    errors.phone = "Please enter a valid phone number";
+  if (fields.phone) {
+    // education_consultancy gets the strict, country-aware format check;
+    // every other industry keeps the old digit-count floor (no regression).
+    const phoneValid =
+      fields.industryId === "education_consultancy"
+        ? isValidPhoneForCountry(fields.phone)
+        : isValidPhone(fields.phone);
+    if (!phoneValid) {
+      errors.phone = "Please enter a valid phone number";
+    }
   }
 
   return errors;
