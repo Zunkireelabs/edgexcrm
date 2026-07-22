@@ -6,6 +6,7 @@ import { Loader2, Users, Pencil, X, Plus, Camera } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { PhoneInput } from "@/components/ui/phone-input";
 import { Label } from "@/components/ui/label";
 import {
   Table, TableHeader, TableRow, TableHead, TableBody, TableCell,
@@ -17,6 +18,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { createClient } from "@/lib/supabase/client";
+import { isValidPhoneForCountry } from "@/lib/phone-utils";
 
 const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 const PHOTO_ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -71,9 +73,11 @@ const EMPLOYMENT_STATUSES = [
 export function PeopleDirectory({
   canManageHR,
   currentUserId,
+  industryId,
 }: {
   canManageHR: boolean;
   currentUserId: string;
+  industryId?: string | null;
 }) {
   const [rows, setRows] = useState<EmployeeRow[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -219,6 +223,7 @@ export function PeopleDirectory({
           jobTitleSuggestions={jobTitleSuggestions}
           canManageHR={canManageHR}
           isSelf={editTarget.user_id === currentUserId}
+          industryId={industryId}
           onClose={() => setEditTarget(null)}
           onSaved={(updated) => {
             setRows((prev) => prev.map((r) => (r.tenant_user_id === updated.tenant_user_id ? updated : r)));
@@ -253,6 +258,7 @@ function EmployeeEditSheet({
   jobTitleSuggestions,
   canManageHR,
   isSelf,
+  industryId,
   onClose,
   onSaved,
 }: {
@@ -261,11 +267,13 @@ function EmployeeEditSheet({
   jobTitleSuggestions: string[];
   canManageHR: boolean;
   isSelf: boolean;
+  industryId?: string | null;
   onClose: () => void;
   onSaved: (row: EmployeeRow) => void;
 }) {
   const [jobTitle, setJobTitle] = useState(row.profile?.job_title ?? "");
   const [phone, setPhone] = useState(row.profile?.phone ?? "");
+  const [phoneError, setPhoneError] = useState(false);
   const [employmentType, setEmploymentType] = useState(row.profile?.employment_type ?? "");
   const [employmentStatus, setEmploymentStatus] = useState(row.profile?.employment_status ?? "active");
   const [departmentId, setDepartmentId] = useState(row.profile?.department_id ?? "");
@@ -348,6 +356,17 @@ function EmployeeEditSheet({
   );
 
   async function save() {
+    if (
+      industryId === "education_consultancy" &&
+      phone.trim() &&
+      !isValidPhoneForCountry(phone.trim())
+    ) {
+      setPhoneError(true);
+      toast.error("Please enter a valid phone number for the selected country");
+      return;
+    }
+    setPhoneError(false);
+
     setSaving(true);
     try {
       const patch: Record<string, unknown> = { job_title: jobTitle || null, phone: phone || null };
@@ -455,7 +474,19 @@ function EmployeeEditSheet({
           </div>
           <div className="space-y-1.5">
             <Label>Phone</Label>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={!canEditAtAll} />
+            {industryId === "education_consultancy" ? (
+              <PhoneInput
+                value={phone}
+                onChange={(v) => { setPhone(v); setPhoneError(false); }}
+                disabled={!canEditAtAll}
+                error={phoneError}
+              />
+            ) : (
+              <Input value={phone} onChange={(e) => setPhone(e.target.value)} disabled={!canEditAtAll} />
+            )}
+            {phoneError && (
+              <p className="text-xs text-destructive">Enter a valid phone number for the selected country</p>
+            )}
           </div>
 
           {canEditHRFields && (
