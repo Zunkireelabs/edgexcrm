@@ -107,6 +107,9 @@ jobs:
               echo "OPENAI_API_KEY=$OPENAI_API_KEY"
               echo "AI_ASSISTANT_ENABLED=true"
               echo "AI_INGESTION_ENABLED=true"
+              # Outreach AI-drafting Stage 2 (docs/OUTREACH-AI-DRAFT-BRIEF.md). Still
+              # double-gated: a tenant also needs tenants.ai_enabled (mig 174). Prod stays off.
+              echo "AI_OUTREACH_DRAFT_ENABLED=true"
               # Phase 4 write tools on stage. Still double-gated: a tenant also
               # needs tenants.ai_enabled (mig 174), and every write is
               # approval-gated in the UI before it runs. Prod stays off.

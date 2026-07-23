@@ -3,6 +3,8 @@ export interface SequenceStepInput {
   delay_days?: number;
   subject_template?: string;
   body_template?: string;
+  draft_source?: "template" | "ai";
+  ai_instructions?: string | null;
 }
 
 /** Shared shape check for sequence step arrays on both create (POST) and edit (PATCH). */
@@ -20,6 +22,12 @@ export function validateSequenceSteps(steps: unknown): string | null {
       (typeof s.delay_days !== "number" || !Number.isInteger(s.delay_days) || s.delay_days < 0)
     ) {
       return "delay_days must be a non-negative integer";
+    }
+    if (s.draft_source !== undefined && s.draft_source !== "template" && s.draft_source !== "ai") {
+      return "draft_source must be 'template' or 'ai'";
+    }
+    if (s.draft_source === "ai" && !s.ai_instructions?.trim()) {
+      return "ai_instructions is required when draft_source is 'ai'";
     }
   }
   if (!orders.has(1)) return "steps must start at step_order 1";

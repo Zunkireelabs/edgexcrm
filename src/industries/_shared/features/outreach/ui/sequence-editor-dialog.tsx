@@ -12,6 +12,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { TipTapEditor, type TipTapEditorHandle } from "@/industries/_shared/features/email/components/tiptap-editor";
@@ -24,6 +26,8 @@ interface StepDraft {
   delay_days: number;
   subject_template: string;
   body_template: string;
+  draft_source: "template" | "ai";
+  ai_instructions: string;
 }
 
 interface SequenceEditorDialogProps {
@@ -41,7 +45,7 @@ function newKey() {
 
 function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
   if (!sequence) {
-    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "" }];
+    return [{ key: newKey(), delay_days: 0, subject_template: "", body_template: "", draft_source: "template", ai_instructions: "" }];
   }
   return [...sequence.email_sequence_steps]
     .sort((a, b) => a.step_order - b.step_order)
@@ -50,6 +54,8 @@ function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
       delay_days: s.delay_days,
       subject_template: s.subject_template,
       body_template: s.body_template,
+      draft_source: s.draft_source ?? "template",
+      ai_instructions: s.ai_instructions ?? "",
     }));
 }
 
@@ -78,7 +84,10 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
   };
 
   const addStep = () => {
-    setSteps((prev) => [...prev, { key: newKey(), delay_days: 3, subject_template: "", body_template: "" }]);
+    setSteps((prev) => [
+      ...prev,
+      { key: newKey(), delay_days: 3, subject_template: "", body_template: "", draft_source: "template", ai_instructions: "" },
+    ]);
   };
 
   const removeStep = (index: number) => {
@@ -128,6 +137,11 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
       toast.error("Add at least one step");
       return;
     }
+    const missingInstructions = steps.find((s) => s.draft_source === "ai" && !s.ai_instructions.trim());
+    if (missingInstructions) {
+      toast.error("Add AI instructions for every step with auto-draft enabled");
+      return;
+    }
 
     const payload = {
       name: name.trim(),
@@ -137,6 +151,8 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
         delay_days: i === 0 ? 0 : s.delay_days,
         subject_template: s.subject_template,
         body_template: s.body_template,
+        draft_source: s.draft_source,
+        ai_instructions: s.ai_instructions.trim() || null,
       })),
     };
 
@@ -275,6 +291,32 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
                       onChange={(html) => updateStep(index, { body_template: html })}
                       minHeight={140}
                     />
+                  </div>
+
+                  <div className="space-y-2 pt-1 border-t">
+                    <div className="flex items-center gap-2 pt-2">
+                      <Checkbox
+                        id={`auto-ai-${step.key}`}
+                        checked={step.draft_source === "ai"}
+                        onCheckedChange={(checked) => updateStep(index, { draft_source: checked === true ? "ai" : "template" })}
+                      />
+                      <Label htmlFor={`auto-ai-${step.key}`} className="text-xs font-normal text-muted-foreground cursor-pointer">
+                        Auto-draft with AI at fire time (default: use the template above)
+                      </Label>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">AI instructions (optional)</Label>
+                      <Textarea
+                        value={step.ai_instructions}
+                        onChange={(e) => updateStep(index, { ai_instructions: e.target.value })}
+                        placeholder="Guidance for AI drafts of this step — tone, what to mention, what to avoid..."
+                        className="min-h-16 text-sm"
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Used both by the rep&apos;s on-demand &ldquo;Draft with AI&rdquo; button and by auto-draft above. AI
+                        drafts are always reviewed by a human before sending — a template stays the fallback.
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>

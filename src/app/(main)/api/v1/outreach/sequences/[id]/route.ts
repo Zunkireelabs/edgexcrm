@@ -20,6 +20,31 @@ import {
 
 type Props = { params: Promise<{ id: string }> };
 
+/**
+ * True when the incoming step array differs from the stored steps ONLY in
+ * subject_template/body_template/ai_instructions — never in step_order,
+ * delay_days, draft_source, or step count. Structural changes affect the
+ * cadence math for in-flight enrollments and stay blocked while any are
+ * active/paused; text-only edits affect only newly-generated drafts, so they
+ * proceed even with active enrollments.
+ */
+function isTextOnlyStepDiff(
+  existing: Array<{ step_order: number; delay_days: number; draft_source: string }>,
+  incoming: SequenceStepInput[]
+): boolean {
+  if (existing.length !== incoming.length) return false;
+  const sortedExisting = [...existing].sort((a, b) => a.step_order - b.step_order);
+  const sortedIncoming = [...incoming].sort((a, b) => a.step_order - b.step_order);
+  for (let i = 0; i < sortedExisting.length; i++) {
+    const e = sortedExisting[i];
+    const n = sortedIncoming[i];
+    if (e.step_order !== n.step_order) return false;
+    if (e.delay_days !== (n.delay_days ?? 0)) return false;
+    if (e.draft_source !== (n.draft_source ?? "template")) return false;
+  }
+  return true;
+}
+
 export async function GET(_request: NextRequest, { params }: Props) {
   const { id } = await params;
   const auth = await authenticateRequest();
@@ -77,13 +102,26 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     const stepsError = validateSequenceSteps(body.steps);
     if (stepsError) return apiValidationError({ steps: [stepsError] });
 
-    const { count: liveEnrollmentCount } = await db
-      .from("sequence_enrollments")
-      .select("id", { count: "exact", head: true })
+    const { data: existingSteps } = await db
+      .from("email_sequence_steps")
+      .select("step_order, delay_days, draft_source")
       .eq("sequence_id", id)
-      .in("status", ["active", "paused"]);
-    if ((liveEnrollmentCount ?? 0) > 0) {
-      return apiConflict("Cannot edit steps while the sequence has active enrollments");
+      .order("step_order", { ascending: true });
+
+    const textOnlyEdit = isTextOnlyStepDiff(
+      (existingSteps ?? []) as unknown as Array<{ step_order: number; delay_days: number; draft_source: string }>,
+      body.steps as SequenceStepInput[]
+    );
+
+    if (!textOnlyEdit) {
+      const { count: liveEnrollmentCount } = await db
+        .from("sequence_enrollments")
+        .select("id", { count: "exact", head: true })
+        .eq("sequence_id", id)
+        .in("status", ["active", "paused"]);
+      if ((liveEnrollmentCount ?? 0) > 0) {
+        return apiConflict("Cannot edit steps while the sequence has active enrollments");
+      }
     }
 
     const { error: deleteError } = await db.from("email_sequence_steps").delete().eq("sequence_id", id);
@@ -98,6 +136,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
       delay_days: s.delay_days ?? 0,
       subject_template: s.subject_template ?? "",
       body_template: s.body_template ?? "",
+      draft_source: s.draft_source ?? "template",
+      ai_instructions: s.ai_instructions ?? null,
     }));
     const { error: insertError } = await db.from("email_sequence_steps").insert(steps);
     if (insertError) {

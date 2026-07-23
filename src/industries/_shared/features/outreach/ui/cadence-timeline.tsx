@@ -18,6 +18,7 @@ interface CadenceTimelineProps {
   leadEmail: string | null;
   sequenceName: string;
   canAct: boolean;
+  isAdmin: boolean;
   onChanged: () => void;
 }
 
@@ -86,6 +87,7 @@ export function CadenceTimeline({
   leadEmail,
   sequenceName,
   canAct,
+  isAdmin,
   onChanged,
 }: CadenceTimelineProps) {
   const { data, loading, refresh } = useCadence(enrollmentId);
@@ -101,8 +103,13 @@ export function CadenceTimeline({
       subject: item.subject,
       body_html: item.body_html ?? "",
       status: "pending",
+      draft_source: "template",
       leads: { first_name: leadFirstName, last_name: leadLastName, email: leadEmail },
-      sequence_enrollments: { sequence_id: "", status: enrollmentStatus, email_sequences: { name: sequenceName } },
+      sequence_enrollments: {
+        sequence_id: data?.sequence.id ?? "",
+        status: enrollmentStatus,
+        email_sequences: { name: sequenceName },
+      },
     });
   };
 
@@ -110,6 +117,11 @@ export function CadenceTimeline({
     setActiveDraft(null);
     refresh();
     onChanged();
+  };
+
+  const handleUpdated = (updated: Draft) => {
+    setActiveDraft(updated);
+    refresh();
   };
 
   if (loading && !data) {
@@ -192,9 +204,11 @@ export function CadenceTimeline({
 
       <DraftReviewPanel
         draft={activeDraft}
+        isAdmin={isAdmin}
         onOpenChange={(open) => !open && setActiveDraft(null)}
         onSent={handleDone}
         onSkipped={handleDone}
+        onUpdated={handleUpdated}
       />
     </div>
   );
