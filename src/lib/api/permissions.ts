@@ -82,8 +82,9 @@ export function resolvePermissions(
   const p = positionPermissions;
   return {
     baseTier: "member",
-    allowedNavKeys: p.nav.mode === "all" ? null : new Set(p.nav.keys),
-    pipelineAccess: p.pipelines.mode === "all" ? "all" : { ids: new Set(p.pipelines.ids) },
+    allowedNavKeys: p.nav && p.nav.mode === "allow" ? new Set(p.nav.keys) : null,
+    pipelineAccess:
+      p.pipelines && p.pipelines.mode === "allow" ? { ids: new Set(p.pipelines.ids) } : "all",
     listAccess: p.lists && p.lists.mode === "allow" ? { ids: new Set(p.lists.ids) } : "all",
     leadScope: p.leadScope, // "team" treated as "all" by callers in v1; see helpers below
     sharedPoolListIds: new Set(p.sharedPoolListIds ?? []),
@@ -94,7 +95,9 @@ export function resolvePermissions(
     canManageHR: p.canManageHR === true,
     canExport: false, // export is owner/admin only; position config cannot grant it
     dashboardWidgets:
-      p.dashboard.widgets.mode === "all" ? null : new Set(p.dashboard.widgets.keys),
+      p.dashboard && p.dashboard.widgets && p.dashboard.widgets.mode === "allow"
+        ? new Set(p.dashboard.widgets.keys)
+        : null,
   };
 }
 
