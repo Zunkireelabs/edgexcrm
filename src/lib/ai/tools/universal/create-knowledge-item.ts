@@ -3,6 +3,7 @@ import { requireAdmin } from "@/lib/api/auth";
 import { isIngestionEnabled } from "@/lib/ai/flag";
 import { inngest } from "@/lib/ai/ingestion/inngest";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalUuid } from "./lib/sanitize";
 
@@ -55,6 +56,7 @@ export const createKnowledgeItemTool: AgentTool<CreateKnowledgeItemInput> = {
   scope: "write",
   async execute(ctx, input) {
     const { db, auth, toolCallId, runId } = ctx;
+    assertUserAuth(auth);
 
     if (!requireAdmin(auth)) {
       return { error: "Only tenant admins can add items to a knowledge base." };

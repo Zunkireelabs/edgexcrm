@@ -6,7 +6,7 @@ vi.mock("@/lib/supabase/scoped", () => ({
   scopedClientForTenant: scopedClientForTenantMock,
 }));
 
-function fakeDb(row: { ai_enabled: boolean } | null) {
+function fakeDb(row: { ai_enabled?: boolean; ai_agents_enabled?: boolean } | null) {
   const query = {
     eq: vi.fn(() => query),
     maybeSingle: vi.fn(() => Promise.resolve({ data: row })),
@@ -115,5 +115,63 @@ describe("isIngestionEnabledForTenant", () => {
     const { isIngestionEnabledForTenant } = await import("./flag");
 
     expect(await isIngestionEnabledForTenant("tenant-1")).toBe(false);
+  });
+});
+
+describe("isAgentsEnabled (env-only)", () => {
+  afterEach(() => {
+    delete process.env.AI_AGENTS_ENABLED;
+  });
+
+  it("reflects AI_AGENTS_ENABLED only", async () => {
+    const { isAgentsEnabled } = await import("./flag");
+    process.env.AI_AGENTS_ENABLED = "true";
+    expect(isAgentsEnabled()).toBe(true);
+    process.env.AI_AGENTS_ENABLED = "false";
+    expect(isAgentsEnabled()).toBe(false);
+    delete process.env.AI_AGENTS_ENABLED;
+    expect(isAgentsEnabled()).toBe(false);
+  });
+});
+
+describe("isAgentsEnabledForTenant — three-way layered gate", () => {
+  beforeEach(() => {
+    scopedClientForTenantMock.mockReset();
+  });
+
+  afterEach(() => {
+    delete process.env.AI_AGENTS_ENABLED;
+  });
+
+  it("false when the env flag is off, without querying the tenant", async () => {
+    process.env.AI_AGENTS_ENABLED = "false";
+    const { isAgentsEnabledForTenant } = await import("./flag");
+
+    expect(await isAgentsEnabledForTenant("tenant-1")).toBe(false);
+    expect(scopedClientForTenantMock).not.toHaveBeenCalled();
+  });
+
+  it("false when env is on but tenants.ai_enabled is false — base consent gate not met", async () => {
+    process.env.AI_AGENTS_ENABLED = "true";
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ ai_enabled: false, ai_agents_enabled: true }));
+    const { isAgentsEnabledForTenant } = await import("./flag");
+
+    expect(await isAgentsEnabledForTenant("tenant-1")).toBe(false);
+  });
+
+  it("false when env + ai_enabled are true but tenants.ai_agents_enabled is false", async () => {
+    process.env.AI_AGENTS_ENABLED = "true";
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ ai_enabled: true, ai_agents_enabled: false }));
+    const { isAgentsEnabledForTenant } = await import("./flag");
+
+    expect(await isAgentsEnabledForTenant("tenant-1")).toBe(false);
+  });
+
+  it("true only when the env flag, ai_enabled, and ai_agents_enabled are all true", async () => {
+    process.env.AI_AGENTS_ENABLED = "true";
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ ai_enabled: true, ai_agents_enabled: true }));
+    const { isAgentsEnabledForTenant } = await import("./flag");
+
+    expect(await isAgentsEnabledForTenant("tenant-1")).toBe(true);
   });
 });

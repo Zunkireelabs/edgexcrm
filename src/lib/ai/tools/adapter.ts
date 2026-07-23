@@ -1,6 +1,7 @@
 import { tool, type ToolSet, type ToolApprovalStatus } from "ai";
 import type { Logger } from "pino";
 import { startTrace } from "@/lib/ai/telemetry";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool, ToolContext } from "./types";
 
 /**
@@ -9,6 +10,10 @@ import type { AgentTool, ToolContext } from "./types";
  * `{ error }` payload instead of crashing the stream.
  */
 export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
+  // Phase 5.1a: no chat-route caller passes an AgentAuthContext yet (only the
+  // future agent runtime, 5.1b, will) — fail loudly rather than silently
+  // recording undefined session fields on the trace/audit rows below.
+  assertUserAuth(ctx.auth);
   const tools: ToolSet = {};
 
   for (const agentTool of toolset) {
@@ -16,6 +21,7 @@ export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
       description: agentTool.description,
       inputSchema: agentTool.inputSchema,
       execute: async (input, options) => {
+        assertUserAuth(ctx.auth); // re-assert inside the closure — narrowing above doesn't cross this boundary
         const log = ctx.logger.child({ tool: agentTool.id, runId: ctx.runId, scope: agentTool.scope });
         const trace = startTrace({
           runId: ctx.runId,
@@ -122,6 +128,7 @@ async function executeWriteTool(
   toolCallId: string,
   log: Logger,
 ): Promise<unknown> {
+  assertUserAuth(ctx.auth);
   const { data: existing } = await ctx.db
     .from("ai_write_actions")
     .select("status, result")

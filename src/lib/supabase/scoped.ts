@@ -76,6 +76,7 @@
 
 import { createServiceClient } from "./server";
 import type { AuthContext } from "@/lib/api/auth";
+import type { AgentAuthContext } from "@/lib/ai/agent-auth";
 
 type RawClient = Awaited<ReturnType<typeof createServiceClient>>;
 
@@ -178,7 +179,7 @@ export async function scopedClientForTenant(tenantId: string) {
   };
 }
 
-export async function scopedClient(auth: AuthContext) {
+export async function scopedClient(auth: AuthContext | AgentAuthContext) {
   return scopedClientForTenant(auth.tenantId);
 }
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { canViewLead } from "./lib/lead-visibility";
 import { leadDisplayName, leadHref } from "./lib/format";
@@ -21,6 +22,7 @@ export const getLeadTool: AgentTool<z.infer<typeof inputSchema>> = {
   scope: "read",
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
 
     const { data: lead } = await db.from("leads").select("*").eq("id", input.leadId).is("deleted_at", null).maybeSingle();
     if (!lead) return { error: "Lead not found." };

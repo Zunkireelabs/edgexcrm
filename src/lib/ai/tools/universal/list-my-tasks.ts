@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalUuid } from "./lib/sanitize";
 
@@ -23,6 +24,7 @@ export const listMyTasksTool: AgentTool<z.infer<typeof inputSchema>> = {
   scope: "read",
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
 
     const isAdmin = auth.permissions.baseTier === "owner" || auth.permissions.baseTier === "admin";
     const assigneeId = input.forUserId && isAdmin ? input.forUserId : auth.userId;

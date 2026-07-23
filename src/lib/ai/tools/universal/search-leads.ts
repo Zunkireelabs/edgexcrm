@@ -2,6 +2,7 @@ import { z } from "zod";
 import { canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
@@ -40,6 +41,7 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
   scope: "read",
   async execute(ctx, input) {
     const { auth, db } = ctx;
+    assertUserAuth(auth);
 
     let resolvedListId: string | null = null;
     let archiveListIds: string[] = [];
