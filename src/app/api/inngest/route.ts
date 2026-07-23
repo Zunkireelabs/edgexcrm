@@ -5,8 +5,9 @@ import { heartbeat } from "@/lib/inngest/functions/heartbeat";
 import { remindersScan } from "@/lib/inngest/functions/reminders";
 import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
+import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [kbIngest, heartbeat, remindersScan, inboxProcess, emailPoll],
+  functions: [kbIngest, heartbeat, remindersScan, inboxProcess, emailPoll, agentLeadTriage],
 });

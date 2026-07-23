@@ -8,12 +8,17 @@ import type { AgentTool, ToolContext } from "./types";
  * Adapts our AgentTool registry into the `tools` object streamText() expects.
  * Every execute() is wrapped so a thrown error becomes a model-visible
  * `{ error }` payload instead of crashing the stream.
+ *
+ * Phase 5.1b (doc 03 §1): a background agent's AgentAuthContext now flows
+ * through here too (the agent runtime calls this same adapter to build its
+ * toolset) — read-scope tools apply their own auth-aware scoping (see
+ * lead-visibility.ts), so no blanket assertUserAuth gate belongs at this
+ * level anymore. `executeWriteTool` below still asserts a real user session
+ * before running any scope:"write" tool — the runtime never hands one to an
+ * agent's toolset in the first place (asserted in agents/runtime.ts), and
+ * this is the defense-in-depth backstop if that ever regresses.
  */
 export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
-  // Phase 5.1a: no chat-route caller passes an AgentAuthContext yet (only the
-  // future agent runtime, 5.1b, will) — fail loudly rather than silently
-  // recording undefined session fields on the trace/audit rows below.
-  assertUserAuth(ctx.auth);
   const tools: ToolSet = {};
 
   for (const agentTool of toolset) {
@@ -21,14 +26,13 @@ export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
       description: agentTool.description,
       inputSchema: agentTool.inputSchema,
       execute: async (input, options) => {
-        assertUserAuth(ctx.auth); // re-assert inside the closure — narrowing above doesn't cross this boundary
         const log = ctx.logger.child({ tool: agentTool.id, runId: ctx.runId, scope: agentTool.scope });
         const trace = startTrace({
           runId: ctx.runId,
           tenantId: ctx.auth.tenantId,
-          userId: ctx.auth.userId,
+          userId: "userId" in ctx.auth ? ctx.auth.userId : undefined,
           industryId: ctx.auth.industryId,
-          surface: "assistant",
+          surface: "actorType" in ctx.auth ? "background_agent" : "assistant",
         });
         trace.span(`tool:${agentTool.id}`, { input, scope: agentTool.scope });
         log.info({ input }, "tool call started");

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { canViewLead } from "./lib/lead-visibility";
 import { leadDisplayName, leadHref } from "./lib/format";
@@ -21,8 +20,10 @@ export const getLeadTool: AgentTool<z.infer<typeof inputSchema>> = {
   inputSchema,
   scope: "read",
   async execute(ctx, input) {
+    // Phase 5.1b (doc 03 §1): scoped by auth.permissions via canViewLead below,
+    // which accepts both a real user's AuthContext and a background agent's
+    // AgentAuthContext — no assertUserAuth gate needed on this read tool.
     const { db, auth } = ctx;
-    assertUserAuth(auth);
 
     const { data: lead } = await db.from("leads").select("*").eq("id", input.leadId).is("deleted_at", null).maybeSingle();
     if (!lead) return { error: "Lead not found." };
