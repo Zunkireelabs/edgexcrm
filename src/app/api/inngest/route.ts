@@ -6,8 +6,17 @@ import { remindersScan } from "@/lib/inngest/functions/reminders";
 import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
 import { displayIdBackfillSweep } from "@/lib/inngest/functions/display-id-backfill-sweep";
+import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [kbIngest, heartbeat, remindersScan, inboxProcess, emailPoll, displayIdBackfillSweep],
+  functions: [
+    kbIngest,
+    heartbeat,
+    remindersScan,
+    inboxProcess,
+    emailPoll,
+    displayIdBackfillSweep,
+    agentLeadTriage,
+  ],
 });
