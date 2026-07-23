@@ -27,6 +27,19 @@ export interface AssignablePosition {
   base_tier: string;
 }
 
+export interface AgentReviewItem {
+  id: string;
+  kind: string;
+  status: string;
+  subjectType: string | null;
+  subjectId: string | null;
+  subjectLabel: string | null;
+  agentId: string;
+  agentName: string;
+  payload: Record<string, unknown>;
+  createdAt: string;
+}
+
 const ACCEPTED_OUTPUT_STATUSES = new Set(["accepted", "edited_accepted"]);
 
 interface IdentityRow {
@@ -53,6 +66,35 @@ interface OutputRow {
 interface PositionRow {
   id: string;
   name: string;
+}
+
+interface OutputQueueRow {
+  id: string;
+  agent_id: string;
+  kind: string;
+  status: string;
+  subject_type: string | null;
+  subject_id: string | null;
+  payload: Record<string, unknown>;
+  created_at: string;
+}
+
+interface AgentIdentityNameRow {
+  id: string;
+  display_name: string;
+}
+
+interface LeadLookupRow {
+  id: string;
+  first_name: string | null;
+  last_name: string | null;
+  email: string | null;
+  display_id: string | null;
+}
+
+function leadSubjectLabel(lead: LeadLookupRow): string {
+  const name = [lead.first_name, lead.last_name].filter(Boolean).join(" ").trim();
+  return name || lead.email || lead.display_id || "Lead";
 }
 
 /**
@@ -93,7 +135,11 @@ export async function getAgentFleet(tenantId: string): Promise<AgentFleetItem[]>
 
   const outputsByAgent = new Map<string, { accepted: number; total: number }>();
   for (const o of (outputs ?? []) as unknown as OutputRow[]) {
-    if (o.status === "expired") continue; // excluded from the acceptance-rate denominator
+    // Only REVIEWED outcomes count toward the denominator — 'proposed' rows are
+    // still awaiting a human decision (not yet a success/failure signal) and
+    // 'expired' rows were never decided either; counting them drags a fresh,
+    // working agent's rate down toward 0% for no reason.
+    if (o.status === "expired" || o.status === "proposed") continue;
     const entry = outputsByAgent.get(o.agent_id) ?? { accepted: 0, total: 0 };
     entry.total++;
     if (ACCEPTED_OUTPUT_STATUSES.has(o.status)) entry.accepted++;
@@ -145,4 +191,69 @@ export async function getAssignablePositions(tenantId: string): Promise<Assignab
     .select("id, name, base_tier")
     .order("base_tier", { ascending: true });
   return (data ?? []) as unknown as AssignablePosition[];
+}
+
+/**
+ * Server query for the /orca/review human review surface — every
+ * `agent_outputs` row still awaiting a decision, newest first, enriched
+ * with the producing agent's display name and (for lead-subject outputs)
+ * a human-readable label for the lead.
+ */
+export async function getReviewQueue(tenantId: string): Promise<AgentReviewItem[]> {
+  const db = await scopedClientForTenant(tenantId);
+
+  const { data: outputs } = await db
+    .from("agent_outputs")
+    .select("id, agent_id, kind, status, subject_type, subject_id, payload, created_at")
+    .eq("status", "proposed")
+    .order("created_at", { ascending: false });
+
+  const rows = (outputs ?? []) as unknown as OutputQueueRow[];
+  if (rows.length === 0) return [];
+
+  const agentIds = [...new Set(rows.map((r) => r.agent_id))];
+  const leadIds = [
+    ...new Set(
+      rows
+        .filter((r) => r.subject_type === "lead" && r.subject_id !== null)
+        .map((r) => r.subject_id as string),
+    ),
+  ];
+
+  const [{ data: identities }, { data: leads }] = await Promise.all([
+    db.from("agent_identities").select("id, display_name").in("id", agentIds),
+    leadIds.length > 0
+      ? db.from("leads").select("id, first_name, last_name, email, display_id").in("id", leadIds)
+      : Promise.resolve({ data: [] as LeadLookupRow[] }),
+  ]);
+
+  const agentNameById = new Map(
+    ((identities ?? []) as unknown as AgentIdentityNameRow[]).map((a) => [a.id, a.display_name]),
+  );
+  const leadLabelById = new Map(
+    ((leads ?? []) as unknown as LeadLookupRow[]).map((l) => [l.id, leadSubjectLabel(l)]),
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    status: r.status,
+    subjectType: r.subject_type,
+    subjectId: r.subject_id,
+    subjectLabel: r.subject_type === "lead" && r.subject_id ? (leadLabelById.get(r.subject_id) ?? null) : null,
+    agentId: r.agent_id,
+    agentName: agentNameById.get(r.agent_id) ?? "Unknown agent",
+    payload: r.payload,
+    createdAt: r.created_at,
+  }));
+}
+
+/** Count of `agent_outputs` rows still awaiting review — drives the /orca Review nav badge. */
+export async function getPendingReviewCount(tenantId: string): Promise<number> {
+  const db = await scopedClientForTenant(tenantId);
+  const { count } = await db
+    .from("agent_outputs")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "proposed");
+  return count ?? 0;
 }
