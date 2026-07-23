@@ -1,3 +1,4 @@
+import type { IndustryId } from "@/industries/_registry";
 import type { AgentDefinition } from "./types";
 
 const definitions: AgentDefinition[] = [];
@@ -12,6 +13,15 @@ export function getAgentDefinition(key: string): AgentDefinition | undefined {
 
 export function getAgentDefinitionsForEvent(event: string): AgentDefinition[] {
   return definitions.filter((d) => d.triggers.some((t) => "event" in t && t.event === event));
+}
+
+// Universal defs (industries === undefined) plus any whose `industries` list
+// includes this tenant's industry — the same "universal + industry-matched"
+// rule buildToolset(auth) applies to registry tools (tools/registry.ts).
+export function getAgentDefinitionsForIndustry(industryId: string | null): AgentDefinition[] {
+  return definitions.filter(
+    (d) => d.industries === undefined || (industryId !== null && d.industries.includes(industryId as IndustryId)),
+  );
 }
 
 // Test-only: mirrors registry.ts's __clearRegistryForTests.
