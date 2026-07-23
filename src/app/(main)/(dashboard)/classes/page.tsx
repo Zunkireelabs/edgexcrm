@@ -2,9 +2,11 @@ import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
-import { leadIdsVisibleToAssignee, branchMemberIds } from "@/lib/leads/branch-membership";
+import { branchMemberIds } from "@/lib/leads/branch-membership";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { ClassesWorkspace } from "@/industries/education-consultancy/features/classes/pages/classes-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -48,14 +50,26 @@ export default async function ClassesRoute() {
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES)) notFound();
 
   const supabase = await createServiceClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
 
-  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null);
+  const poolSlug = tenantData.tenant.industry_id === "education_consultancy" && tenantData.positionSlug && tenantData.branchId
+    ? (POSITION_ROUTE_MAP[tenantData.positionSlug] ?? null)
+    : null;
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null, poolSlug);
 
   let leadIds: string[] | null = null;
   let teamMemberIds: string[] | null = null;
 
   if (scope.restrictToSelf && scope.userId) {
-    leadIds = await leadIdsVisibleToAssignee(supabase, tenantData.tenant.id, scope.userId);
+    // Visibility-scoped (uncapped; migration 179) — includes collaborator-visible leads,
+    // not just direct assignments.
+    const { data, error } = await visibleLeadsBase(userClient, tenantData.tenant.id, scope).is("deleted_at", null);
+    if (error) {
+      console.error("[classes/page] own-scope lead visibility query failed", {
+        tenantId: tenantData.tenant.id, userId: scope.userId, error,
+      });
+    }
+    leadIds = (data ?? []).map((l: { id: string }) => l.id);
   } else if (scope.branchId) {
     teamMemberIds = await branchMemberIds(supabase, tenantData.tenant.id, scope.branchId);
   }

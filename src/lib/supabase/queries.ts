@@ -3,9 +3,10 @@ import { scopedClientForTenant } from "./scoped";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
-import { branchMemberIds, leadIdsForBranch, sharedBranchLeadIdsForAssignee, getLeadMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
-import { collaboratorLeadIdsForUser, isLeadCollaborator } from "@/lib/leads/collaborators";
+import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
+import { visibleLeadsBase, type LeadVisibilityScope } from "@/lib/leads/visibility-query";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -73,21 +74,27 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
 }
 
 /**
- * Live lead count per list, for sidebar stage rows. Same chunked-range caveat as
- * getLeads: PostgREST caps a response at 1000 rows, so we page until short.
- * Fine at today's it_agency volumes; revisit alongside the broader pagination TODO
- * if a tenant's stage-lists grow past a few thousand leads each.
+ * Live lead count per list, for sidebar stage rows. Scoped to the viewer (D1,
+ * migration 179): owner/admin get tenant-wide counts (unchanged); a counselor or
+ * branch-manager's badge now matches exactly the rows they see in that list,
+ * instead of a tenant-wide count via the service client.
  */
-export async function getLeadListCounts(tenantId: string, listIds: string[]): Promise<Record<string, number>> {
+export async function getLeadListCounts(
+  tenantId: string,
+  listIds: string[],
+  // Required (not optional) so every call site makes an explicit choice — an
+  // accidentally-omitted scope must not silently fall back to tenant-wide counts.
+  // Pass `undefined` explicitly for the owner/admin (unrestricted) case.
+  scope: LeadVisibilityScope | undefined,
+): Promise<Record<string, number>> {
   if (listIds.length === 0) return {};
-  const supabase = await createServiceClient();
+  const supabase = await createClient();
   const counts: Record<string, number> = {};
+  // Single visibility-scoped query covering all lists, paged like the pre-migration-179
+  // version — NOT one RPC call per list (that fired N round trips on every page nav).
   const CHUNK = 1000;
   for (let from = 0; ; from += CHUNK) {
-    const { data, error } = await supabase
-      .from("leads")
-      .select("list_id")
-      .eq("tenant_id", tenantId)
+    const { data, error } = await visibleLeadsBase(supabase, tenantId, scope)
       .in("list_id", listIds)
       .is("deleted_at", null)
       .is("converted_at", null)
@@ -122,43 +129,11 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const supabase = await createClient();
 
-  // Compute filter sets once. Both self-scope (counselor) and branch-scope use INLINE column
-  // filters (assigned_to) rather than .in("id", 500+ uuids), which overflows Node/undici's 16 KB
-  // URL limit (UND_ERR_HEADERS_OVERFLOW) and returns empty results.
-  let sharedIds: string[] | null = null;
-  let memberIds: string[] | null = null;
-  if (scope?.restrictToSelf && scope.userId) {
-    // Widen own-scope to leads the user has ever been assigned (collaborators),
-    // so handed-off leads stay visible. Merged with branch shared-in ids and
-    // position-appropriate unassigned cross-branch leads (e.g. Pre-qualified for Lead Callers).
-    const [branchShared, collab, pooled] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, tenantId, scope.userId),
-      collaboratorLeadIdsForUser(supabase, tenantId, scope.userId),
-      scope.crossBranchPoolListSlug && scope.userBranchId
-        ? unassignedCrossBranchLeadIds(supabase, tenantId, scope.userBranchId, scope.crossBranchPoolListSlug)
-        : Promise.resolve([]),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    sharedIds = [...new Set([...branchShared, ...collab, ...pooled])].slice(0, 300);
-  } else if (scope?.branchId) {
-    // branchMemberIds reads OTHER users' tenant_users rows. The RLS client (createClient) can't
-    // see them — the tenant_users SELECT policy is (user_id = auth.uid()) — so it would return []
-    // and .in("assigned_to", []) yields zero leads. Use the service client to resolve real members.
-    const svc = await createServiceClient();
-    [memberIds, sharedIds] = await Promise.all([
-      branchMemberIds(svc, tenantId, scope.branchId),
-      leadIdsForBranch(svc, tenantId, scope.branchId).then((ids) => ids.slice(0, 300)),
-    ]);
-  }
-
-  // Factory applied on every range page so all filters + stable sort are consistent.
-  // `widen` controls the own-scope collaborator/shared-branch widening: when false we fall
-  // back to a plain assigned_to filter (used if the widened OR query errors — see loop below).
-  const buildQuery = (widen: boolean) => {
-    let q = supabase
-      .from("leads")
-      .select("*")
-      .eq("tenant_id", tenantId)
+  // Shared filter chain applied on top of whichever base the caller resolves to (the
+  // visibility-scoped RPC, or the plain assigned-only fallback below) so both stay
+  // in lockstep — a stable sort + every non-visibility filter, identical either way.
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q
       .is("converted_at", null)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
@@ -168,30 +143,6 @@ export async function getLeads(
       q = q.not("deleted_at", "is", null);
     } else {
       q = q.is("deleted_at", null);
-    }
-
-    // Scope (hotfix shape — inline assigned_to filters, never .in("id", 500+ uuids) which
-    // overflows undici's 16KB URL limit). DO NOT replace with .in("id", selfIds/branchIds).
-    if (scope?.restrictToSelf && scope.userId) {
-      if (widen && sharedIds && sharedIds.length > 0) {
-        q = q.or(`assigned_to.eq.${scope.userId},id.in.(${sharedIds.join(",")})`);
-      } else {
-        q = q.eq("assigned_to", scope.userId);
-      }
-    } else if (memberIds !== null) {
-      // Build OR parts:
-      // 1. Leads assigned to any branch member
-      // 2. Unassigned leads whose origin branch is this branch (e.g. walk-ins from Check-In)
-      // 3. Leads shared INTO this branch via lead_branches (cross-branch sends)
-      const orParts: string[] = [];
-      if (memberIds.length > 0) {
-        orParts.push(`assigned_to.in.(${memberIds.join(",")})`);
-      }
-      orParts.push(`and(assigned_to.is.null,branch_id.eq.${scope!.branchId})`);
-      if (sharedIds && sharedIds.length > 0) {
-        orParts.push(`id.in.(${sharedIds.join(",")})`);
-      }
-      q = q.or(orParts.join(","));
     }
 
     if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
@@ -214,24 +165,33 @@ export async function getLeads(
     return q;
   };
 
+  // Base query is visibility-scoped via leads_visible_to_user() (own/branch, uncapped —
+  // migration 179) or the plain unrestricted select (owner/admin, unchanged).
+  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope));
+
+  // Own-scope fallback: a plain assigned-only query, bypassing the visibility RPC
+  // entirely. Restores the pre-migration-179 safety net — if the RPC ever errors
+  // (bad param, transient DB error), a counselor's directly-assigned leads must
+  // still render instead of the page going blank.
+  const buildFallbackQuery = () =>
+    applyFilters(supabase.from("leads").select("*").eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!));
+
   // TEMPORARY: loads the whole list into the client; proper server-side pagination is the real roadmap fix.
   // PostgREST caps each response at max-rows=1000, so .limit() alone can't exceed that. We page in CHUNK-sized
   // slices via .range() and concatenate until a short page or the caller's ceiling (scope.limit) is reached.
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
 
-  // Page through every range with a FIXED widen setting. Returns null on any page error
+  // Page through every range with a FIXED query builder. Returns null on any page error
   // so the caller can cleanly retry the WHOLE query with a narrower filter — avoiding
-  // mid-stream offset drift or a permanently-flipped flag (both would silently drop rows).
-  const fetchPaged = async (widen: boolean): Promise<Lead[] | null> => {
+  // mid-stream offset drift (partial-then-narrowed results would silently drop rows).
+  const fetchPaged = async (build: () => ReturnType<typeof applyFilters>): Promise<Lead[] | null> => {
     const acc: Lead[] = [];
     for (let from = 0; from < max; from += CHUNK) {
       const to = Math.min(from + CHUNK, max) - 1;
-      const { data, error } = await buildQuery(widen).range(from, to);
+      const { data, error } = await build().range(from, to);
       if (error) {
-        console.error("[getLeads] leads query page failed", {
-          tenantId, listId: scope?.listId, from, widen, error,
-        });
+        console.error("[getLeads] leads query page failed", { tenantId, listId: scope?.listId, from, error });
         return null;
       }
       acc.push(...((data ?? []) as Lead[]));
@@ -240,16 +200,14 @@ export async function getLeads(
     return acc;
   };
 
-  // Own-scope users start widened (so collaborator/shared-branch leads show too).
-  const widenInitial = !!(scope?.restrictToSelf && scope.userId && sharedIds && sharedIds.length > 0);
-  let result = await fetchPaged(widenInitial);
-  // Defensive: if the widened own-scope query failed, retry the WHOLE query assigned-only
-  // (from offset 0) so a user's own leads never vanish behind a collaborator-widening failure.
-  if (result === null && widenInitial) {
-    console.error("[getLeads] widened own-scope query failed; retrying assigned-only", {
-      tenantId, userId: scope?.userId, sharedIdCount: sharedIds?.length,
+  let result = await fetchPaged(buildQuery);
+  // Defensive: if the own-scope visibility-RPC query failed, retry assigned-only
+  // (from offset 0) so a user's own leads never vanish behind an RPC failure.
+  if (result === null && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeads] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
     });
-    result = await fetchPaged(false);
+    result = await fetchPaged(buildFallbackQuery);
   }
   return result ?? [];
 }
@@ -518,10 +476,12 @@ export async function getLeadsForPipeline(
   const supabase = await createClient();
 
   // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
-  let query = supabase
-    .from("leads")
-    .select("*")
-    .eq("tenant_id", tenantId)
+  // Own-scope base is visibility-scoped via leads_visible_to_user() (uncapped; migration 179).
+  // Branch-scope stays the plain unrestricted select — its narrower members-only OR clause
+  // below is applied on top, unchanged (Decision D2 — do not unify with getLeads' branch scope).
+  let query = (options?.restrictToSelf && options.userId
+    ? visibleLeadsBase(supabase, tenantId, { restrictToSelf: true, userId: options.userId })
+    : supabase.from("leads").select("*").eq("tenant_id", tenantId))
     .is("deleted_at", null)
     .is("converted_at", null)
     .not("stage_id", "is", null)
@@ -538,21 +498,7 @@ export async function getLeadsForPipeline(
     query = query.in("pipeline_id", options.pipelineIds);
   }
 
-  if (options?.restrictToSelf && options.userId) {
-    // Inline column filter avoids .in("id", 500+ uuids) URL overflow.
-    // Widen to collaborator leads (ever assigned) so handed-off leads stay on the board.
-    const [shared, collab] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, tenantId, options.userId),
-      collaboratorLeadIdsForUser(supabase, tenantId, options.userId),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    const extra = [...new Set([...shared, ...collab])].slice(0, 300);
-    if (extra.length > 0) {
-      query = query.or(`assigned_to.eq.${options.userId},id.in.(${extra.join(",")})`);
-    } else {
-      query = query.eq("assigned_to", options.userId);
-    }
-  } else if (options?.branchId) {
+  if (options?.branchId && !(options?.restrictToSelf && options.userId)) {
     // Service client: tenant_users RLS hides other users' rows from the RLS client.
     const svc = await createServiceClient();
     const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
@@ -564,9 +510,10 @@ export async function getLeadsForPipeline(
     }
   }
 
-  const { data: leads, error: leadsError } = await query.order("created_at", { ascending: false });
+  const { data: leadsData, error: leadsError } = await query.order("created_at", { ascending: false });
   if (leadsError) throw leadsError;
-  if (!leads || leads.length === 0) return [];
+  const leads = (leadsData ?? []) as Lead[];
+  if (leads.length === 0) return [];
 
   // Fetch checklist counts - use tenant_id filter instead of .in() to avoid URL length limits
   const { data: checklistCounts, error: clError } = await supabase
