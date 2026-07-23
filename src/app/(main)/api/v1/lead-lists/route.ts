@@ -11,9 +11,10 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
-import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { getLeadListCounts } from "@/lib/supabase/queries";
+import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import type { LeadList } from "@/types/database";
 
 function slugify(name: string): string {
@@ -59,7 +60,6 @@ export async function GET(request: NextRequest) {
   if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) return apiForbidden();
 
   const supabase = await createServiceClient();
-  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
 
   const { data: lists, error } = await supabase
     .from("lead_lists")
@@ -79,15 +79,13 @@ export async function GET(request: NextRequest) {
 
   // Count leads per list, visibility-scoped to the caller (uncapped; migration 179).
   // Previously missed collaborator-visible leads entirely for own-scope — this also fixes that.
-  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  const countEntries = await Promise.all(accessible.map(async (l) => {
-    const { count } = await visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact", head: true })
-      .eq("list_id", l.id)
-      .is("deleted_at", null)
-      .is("converted_at", null);
-    return [l.id, count ?? 0] as const;
-  }));
-  const countMap: Record<string, number> = Object.fromEntries(countEntries);
+  // Shares getLeadListCounts (one batched query, not one RPC call per list) rather than
+  // reimplementing the same pagination here.
+  const poolSlug = auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+    ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+    : null;
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
+  const countMap = await getLeadListCounts(auth.tenantId, accessible.map((l) => l.id), scope);
 
   const result = accessible.map((l) => ({ ...l, count: countMap[l.id] ?? 0 }));
   log.info({ total: result.length }, "Lead lists fetched");

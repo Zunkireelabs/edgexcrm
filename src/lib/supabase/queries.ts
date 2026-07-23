@@ -82,18 +82,30 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
 export async function getLeadListCounts(
   tenantId: string,
   listIds: string[],
-  scope?: LeadVisibilityScope,
+  // Required (not optional) so every call site makes an explicit choice — an
+  // accidentally-omitted scope must not silently fall back to tenant-wide counts.
+  // Pass `undefined` explicitly for the owner/admin (unrestricted) case.
+  scope: LeadVisibilityScope | undefined,
 ): Promise<Record<string, number>> {
   if (listIds.length === 0) return {};
   const supabase = await createClient();
   const counts: Record<string, number> = {};
-  await Promise.all(listIds.map(async (listId) => {
-    const { count } = await visibleLeadsBase(supabase, tenantId, scope, { count: "exact", head: true })
-      .eq("list_id", listId)
+  // Single visibility-scoped query covering all lists, paged like the pre-migration-179
+  // version — NOT one RPC call per list (that fired N round trips on every page nav).
+  const CHUNK = 1000;
+  for (let from = 0; ; from += CHUNK) {
+    const { data, error } = await visibleLeadsBase(supabase, tenantId, scope)
+      .in("list_id", listIds)
       .is("deleted_at", null)
-      .is("converted_at", null);
-    counts[listId] = count ?? 0;
-  }));
+      .is("converted_at", null)
+      .range(from, from + CHUNK - 1);
+    if (error) throw error;
+    for (const row of data ?? []) {
+      const lid = (row as { list_id: string | null }).list_id;
+      if (lid) counts[lid] = (counts[lid] ?? 0) + 1;
+    }
+    if (!data || data.length < CHUNK) break;
+  }
   return counts;
 }
 
@@ -117,11 +129,11 @@ export async function getLeads(
 ): Promise<Lead[]> {
   const supabase = await createClient();
 
-  // Factory applied on every range page so all filters + stable sort are consistent.
-  // Base query is visibility-scoped via leads_visible_to_user() (own/branch, uncapped —
-  // migration 179) or the plain unrestricted select (owner/admin, unchanged).
-  const buildQuery = () => {
-    let q = visibleLeadsBase(supabase, tenantId, scope)
+  // Shared filter chain applied on top of whichever base the caller resolves to (the
+  // visibility-scoped RPC, or the plain assigned-only fallback below) so both stay
+  // in lockstep — a stable sort + every non-visibility filter, identical either way.
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q
       .is("converted_at", null)
       .order("created_at", { ascending: false })
       .order("id", { ascending: false });
@@ -153,27 +165,51 @@ export async function getLeads(
     return q;
   };
 
+  // Base query is visibility-scoped via leads_visible_to_user() (own/branch, uncapped —
+  // migration 179) or the plain unrestricted select (owner/admin, unchanged).
+  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope));
+
+  // Own-scope fallback: a plain assigned-only query, bypassing the visibility RPC
+  // entirely. Restores the pre-migration-179 safety net — if the RPC ever errors
+  // (bad param, transient DB error), a counselor's directly-assigned leads must
+  // still render instead of the page going blank.
+  const buildFallbackQuery = () =>
+    applyFilters(supabase.from("leads").select("*").eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!));
+
   // TEMPORARY: loads the whole list into the client; proper server-side pagination is the real roadmap fix.
   // PostgREST caps each response at max-rows=1000, so .limit() alone can't exceed that. We page in CHUNK-sized
   // slices via .range() and concatenate until a short page or the caller's ceiling (scope.limit) is reached.
   const CHUNK = 1000;
   const max = scope?.limit ?? 1000;
 
-  // Page through every range. On a page error, return what was accumulated so far
-  // rather than throwing — matches the prior fallback's fail-safe intent (never
-  // hard-error the leads list).
-  const acc: Lead[] = [];
-  for (let from = 0; from < max; from += CHUNK) {
-    const to = Math.min(from + CHUNK, max) - 1;
-    const { data, error } = await buildQuery().range(from, to);
-    if (error) {
-      console.error("[getLeads] leads query page failed", { tenantId, listId: scope?.listId, from, error });
-      break;
+  // Page through every range with a FIXED query builder. Returns null on any page error
+  // so the caller can cleanly retry the WHOLE query with a narrower filter — avoiding
+  // mid-stream offset drift (partial-then-narrowed results would silently drop rows).
+  const fetchPaged = async (build: () => ReturnType<typeof applyFilters>): Promise<Lead[] | null> => {
+    const acc: Lead[] = [];
+    for (let from = 0; from < max; from += CHUNK) {
+      const to = Math.min(from + CHUNK, max) - 1;
+      const { data, error } = await build().range(from, to);
+      if (error) {
+        console.error("[getLeads] leads query page failed", { tenantId, listId: scope?.listId, from, error });
+        return null;
+      }
+      acc.push(...((data ?? []) as Lead[]));
+      if (!data || data.length < CHUNK) break;
     }
-    acc.push(...((data ?? []) as Lead[]));
-    if (!data || data.length < CHUNK) break;
+    return acc;
+  };
+
+  let result = await fetchPaged(buildQuery);
+  // Defensive: if the own-scope visibility-RPC query failed, retry assigned-only
+  // (from offset 0) so a user's own leads never vanish behind an RPC failure.
+  if (result === null && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeads] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
+    });
+    result = await fetchPaged(buildFallbackQuery);
   }
-  return acc;
+  return result ?? [];
 }
 
 /**

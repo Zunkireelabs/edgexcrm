@@ -29,7 +29,14 @@ export function visibleLeadsBase(
   scope: LeadVisibilityScope | undefined,
   rpcOpts?: { count?: "exact" | "planned" | "estimated"; head?: boolean },
 ) {
-  if (scope?.restrictToSelf && scope.userId) {
+  if (scope?.restrictToSelf) {
+    // Fail closed: restrictToSelf with no userId must never fall through to the
+    // unrestricted tenant-wide query below — that would leak the whole tenant to a
+    // counselor-scope viewer. This is a caller contract violation, not live input;
+    // throwing surfaces the bug immediately instead of silently over-widening.
+    if (!scope.userId) {
+      throw new Error("visibleLeadsBase: scope.restrictToSelf requires scope.userId");
+    }
     const params: Record<string, string> = {
       p_tenant: tenantId,
       p_user: scope.userId,

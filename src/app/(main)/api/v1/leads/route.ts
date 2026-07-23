@@ -137,12 +137,16 @@ export async function GET(request: NextRequest) {
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
   const useSharedPool = !!(auth.branchId && isSharedPoolList(auth.permissions, resolvedListId));
 
-  // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
-  // not just their own — stays on the plain service-client query (unrelated to the
-  // collaborator/branch visibility this fix addresses).
-  let query = useSharedPool
-    ? supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", auth.tenantId)
-    : visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact" });
+  // Only own-scope routes through the uncapped visibility RPC (the actual fix — needs
+  // the RLS-context client for auth.uid()). Shared-pool, branch-scope, and unrestricted
+  // (owner/admin) all stay on the plain service-client query, filtered below exactly as
+  // before this PR — branch-scope deliberately keeps its own narrower, hand-rolled OR
+  // clause rather than adopting leads_visible_to_user()'s wider branch predicate (that
+  // predicate also matches unassigned leads whose branch_id matches, which this endpoint
+  // never surfaced before; same reasoning as Decision D2 for getLeadsForPipeline).
+  let query = (!useSharedPool && scope.restrictToSelf && scope.userId)
+    ? visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact" })
+    : supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", auth.tenantId);
 
   query = query.is("deleted_at", null);
 
@@ -168,8 +172,23 @@ export async function GET(request: NextRequest) {
     assignedTo = null;
   } else if (scope.restrictToSelf) {
     assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
+  } else if (scope.branchId) {
+    // Reverted to the pre-existing narrower branch-scope logic (unchanged by this PR):
+    // leads assigned to branch members AND leads shared into this branch via lead_branches.
+    const { data: sharedRows } = await supabase
+      .from("lead_branches")
+      .select("lead_id")
+      .eq("tenant_id", auth.tenantId)
+      .eq("branch_id", scope.branchId);
+    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
+    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
+      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
+    } else if (sharedLeadIds.length > 0) {
+      query = query.in("id", sharedLeadIds);
+    } else {
+      query = query.in("assigned_to", auth.branchMemberIds);
+    }
   }
-  // scope.branchId (team-scope) visibility is applied inside visibleLeadsBase() above — nothing more to do here.
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.
