@@ -77,5 +77,18 @@ export function buildDraftTools(ctx: DraftToolsContext): ToolSet {
         return { ok: true, message: "Task suggestion recorded for human review." };
       },
     }),
+    propose_email: tool({
+      description:
+        "Propose an email draft (subject + body) for the subject of this run. This only records a draft " +
+        "for a human to review, edit, and send — it never sends anything or touches any lead's data.",
+      inputSchema: z.object({
+        subject: z.string().trim().min(1).max(200),
+        body: z.string().trim().min(1).max(5000),
+      }),
+      execute: async (input) => {
+        await insertOutput("draft_email", { subject: input.subject, body: input.body });
+        return { ok: true, message: "Email draft recorded for human review." };
+      },
+    }),
   };
 }

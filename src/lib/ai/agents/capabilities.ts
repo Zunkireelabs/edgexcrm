@@ -30,6 +30,7 @@ const READ_TOOL_PHRASES: Record<string, string> = {
 const DRAFT_TOOL_PHRASES: Record<string, string> = {
   propose_score: "draft a fit/quality score",
   propose_task: "draft a follow-up task",
+  propose_email: "draft a follow-up email",
 };
 
 /** Best-effort de-slugify for any id this map doesn't (yet) know about — keeps unknown ids readable instead of throwing. */

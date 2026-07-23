@@ -16,6 +16,7 @@ const scopedClientMock = vi.fn();
 vi.mock("@/lib/ai/flag", () => ({ isAgentsEnabledForTenant: isAgentsEnabledForTenantMock }));
 vi.mock("@/lib/ai/budget", () => ({ checkAgentDailyBudget: checkAgentDailyBudgetMock }));
 vi.mock("@/lib/ai/tools/packs", () => ({}));
+vi.mock("@/lib/ai/agents/packs", () => ({}));
 vi.mock("@/lib/ai/tools/registry", () => ({ getRegisteredTools: getRegisteredToolsMock }));
 vi.mock("@/lib/ai/tools/adapter", () => ({ toAiSdkTools: toAiSdkToolsMock }));
 vi.mock("./draft-tools", () => ({ buildDraftTools: buildDraftToolsMock }));
