@@ -54,6 +54,7 @@ import {
   Target,
   FolderOpen,
   Send,
+  Inbox,
   type LucideIcon,
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -73,6 +74,7 @@ import { LeadListsNavGroup } from "@/components/dashboard/lead-lists-nav-group";
 import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group";
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
+import { ReviewNavBadge } from "@/components/dashboard/orca/review-nav-badge";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -97,13 +99,14 @@ const UNIVERSAL_NAV_BOTTOM = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
-const ORCA_NAV = [
+const ORCA_NAV: Array<{ href: string; label: string; icon: LucideIcon; adminOnly?: boolean }> = [
   { href: "/orca", label: "Overview", icon: LayoutDashboard },
   { href: "/orca/activity", label: "Ask Orca", icon: MessageSquare },
   { href: "/orca/structure", label: "Org Structure", icon: Network },
   { href: "/orca/roles", label: "Roles", icon: Contact },
   { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
   { href: "/orca/agents", label: "Agents", icon: Bot },
+  { href: "/orca/review", label: "Review", icon: Inbox, adminOnly: true },
   { href: "/orca/compare", label: "Compare", icon: GitCompare },
 ];
 
@@ -333,7 +336,7 @@ export function DashboardShell({
     (e) => e.position === "after-pipeline",
   );
 
-  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number; onClick?: () => void }) {
+  function renderNavItem(item: { href: string; label: string; icon: LucideIcon; badge?: number; badgeSlot?: React.ReactNode; onClick?: () => void }) {
     const isActive =
       pathname === item.href ||
       (item.href !== "/dashboard" && item.href !== "/orca" && pathname.startsWith(item.href));
@@ -353,11 +356,15 @@ export function DashboardShell({
       >
         <item.icon className="w-[18px] h-[18px]" />
         {item.label}
-        {item.badge ? (
-          <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
-            {item.badge > 9 ? "9+" : item.badge}
-          </Badge>
-        ) : null}
+        {item.badgeSlot !== undefined
+          ? item.badgeSlot
+          : item.badge
+            ? (
+                <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
+                  {item.badge > 9 ? "9+" : item.badge}
+                </Badge>
+              )
+            : null}
       </Link>
     );
   }
@@ -759,7 +766,11 @@ export function DashboardShell({
           )
         ) : (
           <>
-            {ORCA_NAV.map(renderNavItem)}
+            {ORCA_NAV.filter((item) => !item.adminOnly || role === "owner" || role === "admin").map((item) =>
+              item.href === "/orca/review"
+                ? renderNavItem({ ...item, badgeSlot: <ReviewNavBadge /> })
+                : renderNavItem(item),
+            )}
           </>
         )}
       </nav>

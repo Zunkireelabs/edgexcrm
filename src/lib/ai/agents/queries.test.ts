@@ -75,7 +75,7 @@ describe("getAgentFleet", () => {
     expect(item.assignedRole).toBe("Unassigned");
   });
 
-  it("computes acceptance rate over accepted+edited_accepted / non-expired outputs, and rolls up runs/position", async () => {
+  it("computes acceptance rate over accepted+edited_accepted / reviewed outputs (excludes expired+proposed), and rolls up runs/position", async () => {
     getAgentDefinitionMock.mockReturnValue({ description: "Scores leads" });
     scopedClientForTenantMock.mockResolvedValue(
       fakeDb({
@@ -103,6 +103,7 @@ describe("getAgentFleet", () => {
             { agent_id: "a1", status: "edited_accepted" },
             { agent_id: "a1", status: "dismissed" },
             { agent_id: "a1", status: "expired" }, // excluded from the denominator entirely
+            { agent_id: "a1", status: "proposed" }, // still unreviewed — excluded from the denominator too
           ],
         },
         positions: { data: [{ id: "p1", name: "Sales Rep" }] },
@@ -113,9 +114,104 @@ describe("getAgentFleet", () => {
     const [item] = await getAgentFleet("tenant-1");
 
     expect(item.tasksCompleted).toBe(1); // only the 'completed' run counts
-    expect(item.successRate).toBe(67); // 2 accepted / 3 non-expired, rounded
+    expect(item.successRate).toBe(67); // 2 accepted / 3 reviewed, rounded
     expect(item.assignedRole).toBe("Sales Rep");
     expect(item.lastActive).toBe("2026-01-02T00:01:00Z"); // most recent activity across runs
+  });
+
+  it("returns successRate null when an agent's outputs are all still 'proposed' (unreviewed)", async () => {
+    getAgentDefinitionMock.mockReturnValue({ description: "Scores leads" });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_identities: {
+          data: [
+            {
+              id: "a1",
+              agent_key: "lead-triage",
+              display_name: "Lead Triage",
+              position_id: null,
+              status: "active",
+              created_at: "2026-01-01",
+            },
+          ],
+        },
+        agent_runs: { data: [] },
+        agent_outputs: {
+          data: [
+            { agent_id: "a1", status: "proposed" },
+            { agent_id: "a1", status: "proposed" },
+          ],
+        },
+        positions: { data: [] },
+      }),
+    );
+    const { getAgentFleet } = await import("./queries");
+
+    const [item] = await getAgentFleet("tenant-1");
+
+    expect(item.successRate).toBeNull();
+  });
+});
+
+describe("getReviewQueue", () => {
+  it("returns proposed rows enriched with agentName and lead subjectLabel", async () => {
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_outputs: {
+          data: [
+            {
+              id: "out-1",
+              agent_id: "a1",
+              kind: "score_suggestion",
+              status: "proposed",
+              subject_type: "lead",
+              subject_id: "lead-1",
+              payload: { score: 80, reasoning: "Strong fit" },
+              created_at: "2026-01-02T00:00:00Z",
+            },
+            {
+              id: "out-2",
+              agent_id: "a1",
+              kind: "task_suggestion",
+              status: "proposed",
+              subject_type: "lead",
+              subject_id: "lead-2",
+              payload: { title: "Follow up", description: null, dueDate: null },
+              created_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+        },
+        agent_identities: { data: [{ id: "a1", display_name: "Lead Triage" }] },
+        leads: {
+          data: [
+            { id: "lead-1", first_name: "Ada", last_name: "Lovelace", email: "ada@example.com", display_id: "L-1" },
+            { id: "lead-2", first_name: null, last_name: null, email: "no-name@example.com", display_id: "L-2" },
+          ],
+        },
+      }),
+    );
+    const { getReviewQueue } = await import("./queries");
+
+    const items = await getReviewQueue("tenant-1");
+
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      id: "out-1",
+      agentName: "Lead Triage",
+      subjectLabel: "Ada Lovelace",
+    });
+    expect(items[1]).toMatchObject({
+      id: "out-2",
+      agentName: "Lead Triage",
+      subjectLabel: "no-name@example.com", // falls back to email when no name
+    });
+  });
+
+  it("returns [] when there are no proposed outputs", async () => {
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ agent_outputs: { data: [] } }));
+    const { getReviewQueue } = await import("./queries");
+
+    expect(await getReviewQueue("tenant-1")).toEqual([]);
   });
 });
 

@@ -130,6 +130,7 @@ export function buildNavIndex({
       { href: "/orca/roles", label: "Orca Roles", keywords: ["orca", "roles"] },
       { href: "/orca/tasks", label: "Orca Tasks", keywords: ["orca", "tasks"] },
       { href: "/orca/agents", label: "Orca Agents", keywords: ["orca", "agents", "bots"] },
+      { href: "/orca/review", label: "Orca Review", keywords: ["orca", "review", "approve", "suggestions", "queue"] },
       { href: "/orca/compare", label: "Orca Compare", keywords: ["orca", "compare"] },
     ];
     for (const page of orcaPages) {
