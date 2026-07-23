@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { leadPatchErrorResult, UNDOABLE_LEAD_FIELDS } from "./lib/lead-patch-result";
 
@@ -35,6 +36,7 @@ export const undoLeadActionTool: AgentTool<UndoLeadActionInput> = {
   scope: "write",
   async execute(ctx) {
     const { db, auth, runId } = ctx;
+    assertUserAuth(auth);
 
     const { data } = await db
       .from("ai_write_actions")

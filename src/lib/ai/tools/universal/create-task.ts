@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalString, optionalUuid } from "./lib/sanitize";
 import { createTaskForUser, TASK_PRIORITIES } from "@/lib/tasks/create-task";
@@ -47,6 +48,7 @@ export const createTaskTool: AgentTool<CreateTaskToolInput> = {
   scope: "write",
   async execute(ctx, input) {
     const { db, auth, runId } = ctx;
+    assertUserAuth(auth);
 
     const outcome = await createTaskForUser(
       db,

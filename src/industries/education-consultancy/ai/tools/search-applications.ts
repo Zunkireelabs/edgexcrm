@@ -5,6 +5,7 @@ import { leadHref } from "@/lib/ai/tools/universal/lib/format";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 
 const inputSchema = z.object({
   query: optionalString(z.string().max(200).optional()).describe(
@@ -46,6 +47,7 @@ export const searchApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
   industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
     if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) {
       return { error: "Application tracking is not available for this tenant." };
     }

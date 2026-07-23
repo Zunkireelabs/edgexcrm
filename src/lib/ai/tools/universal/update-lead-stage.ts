@@ -2,6 +2,7 @@ import { z } from "zod";
 import { INDUSTRIES } from "@/industries/_registry";
 import { canAccessList } from "@/lib/api/permissions";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool, ToolContext } from "../types";
 import { optionalString, optionalUuid } from "./lib/sanitize";
 import { leadPatchErrorResult, undoableLeadPrevious } from "./lib/lead-patch-result";
@@ -54,6 +55,7 @@ export const updateLeadStageTool: AgentTool<UpdateLeadStageInput> = {
   industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
   async execute(ctx, input) {
     const { auth, runId } = ctx;
+    assertUserAuth(auth);
 
     // Convention: semantic constraints like "at least one of X/Y" belong here,
     // not as a zod .refine() on the schema. A schema-level refine failure

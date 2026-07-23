@@ -5,6 +5,7 @@ import { canViewLead } from "@/lib/ai/tools/universal/lib/lead-visibility";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { deriveLifecycle, type InvestorCommitment } from "@/industries/real-estate/lib/commitments";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 
 const inputSchema = z.object({
   // leadId is required in the tool's contract, but a NIL-uuid placeholder
@@ -27,6 +28,7 @@ export const getInvestorCommitmentsTool: AgentTool<z.infer<typeof inputSchema>> 
   industries: ["real_estate"],
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
     if (!getFeatureAccess(auth.industryId, FEATURES.OFFERINGS)) return { error: "Offerings are not available for this tenant." };
 
     const { data: lead } = await db

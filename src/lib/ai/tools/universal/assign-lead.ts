@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalUuid } from "./lib/sanitize";
 import { leadPatchErrorResult, undoableLeadPrevious } from "./lib/lead-patch-result";
@@ -28,6 +29,7 @@ export const assignLeadTool: AgentTool<AssignLeadInput> = {
   scope: "write",
   async execute(ctx, input) {
     const { auth, runId } = ctx;
+    assertUserAuth(auth);
 
     const outcome = await applyLeadPatch(
       auth,
