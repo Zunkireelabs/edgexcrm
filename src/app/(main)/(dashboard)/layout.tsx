@@ -9,7 +9,7 @@ import { GlobalSearchProvider } from "@/contexts/global-search-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { isAssistantEnabled } from "@/lib/ai/flag";
-import { canAccessList, resolveEffectiveBranch } from "@/lib/api/permissions";
+import { canAccessList, resolveEffectiveBranch, leadQueryScope } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
 import type { LeadList } from "@/types/database";
@@ -76,8 +76,9 @@ export default async function DashboardLayout({
   // it_agency funnel sidebar rows show a live lead count. Scoped to funnel-tagged
   // lists only (not the whole tenant) to keep this off the hot path for every page nav.
   const funnelListIds = leadLists.filter((l) => l.funnel_key != null).map((l) => l.id);
+  const countScope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId);
   const funnelListCounts =
-    funnelListIds.length > 0 ? await getLeadListCounts(tenantData.tenant.id, funnelListIds) : {};
+    funnelListIds.length > 0 ? await getLeadListCounts(tenantData.tenant.id, funnelListIds, countScope) : {};
   const leadListsWithCounts = leadLists.map((l) => ({ ...l, count: funnelListCounts[l.id] }));
 
   const industrySidebarItems = getIndustrySidebarItems(

@@ -50,28 +50,6 @@ export async function leadIdsForBranch(
   return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
 }
 
-// Lead IDs a user can see as a per-branch assignee — membership rows ∪ legacy leads.assigned_to (covers unbranched leads).
-// NOTE: returns the FULL combined set (can be 500+ IDs). Passing this into .in("id", result) builds a long URL
-// that exceeds Node/undici's 16 KB maxHeaderSize at ~440+ leads.
-// For queries on the LEADS table, use sharedBranchLeadIdsForAssignee + inline assigned_to filter instead.
-// This function is still correct for cross-table queries (e.g. applications, classes) where you need
-// the full ID list to filter a foreign-key column — chunk that .in() call into ≤250-ID batches.
-export async function leadIdsVisibleToAssignee(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  db: SupabaseClient<any>,
-  tenantId: string,
-  userId: string,
-): Promise<string[]> {
-  const [m, l] = await Promise.all([
-    db.from("lead_branches").select("lead_id").eq("tenant_id", tenantId).eq("assigned_to", userId),
-    db.from("leads").select("id").eq("tenant_id", tenantId).eq("assigned_to", userId).is("deleted_at", null),
-  ]);
-  const ids = new Set<string>();
-  (m.data ?? []).forEach((r: { lead_id: string }) => ids.add(r.lead_id));
-  (l.data ?? []).forEach((r: { id: string }) => ids.add(r.id));
-  return [...ids];
-}
-
 // URL-safe subset: ONLY lead_branches rows for this assignee (the "shared-in" set, normally small).
 // Use this to build an inline OR filter on the leads table:
 //   if (sharedIds.length > 0) q.or(`assigned_to.eq.${userId},id.in.(${sharedIds})`)
@@ -88,8 +66,8 @@ export async function sharedBranchLeadIdsForAssignee(
   return (data ?? []).map((r: { lead_id: string }) => r.lead_id);
 }
 
-// Targeted visibility check for a single lead — avoids enumerating all assigned IDs.
-// Use instead of leadIdsVisibleToAssignee(...).includes(leadId) to prevent URL overflow.
+// Targeted visibility check for a single lead — avoids enumerating all assigned IDs
+// to prevent URL overflow.
 export async function shouldLeadBeVisibleToAssignee(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   db: SupabaseClient<any>,
