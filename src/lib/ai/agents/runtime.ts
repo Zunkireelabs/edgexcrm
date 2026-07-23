@@ -6,6 +6,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { isAgentsEnabledForTenant } from "@/lib/ai/flag";
 import { checkAgentDailyBudget } from "@/lib/ai/budget";
 import "@/lib/ai/tools/packs"; // module-load registration — must run before getRegisteredTools()
+import "@/lib/ai/agents/packs"; // module-load registration — must run before getAgentDefinition(s)
 import { getRegisteredTools } from "@/lib/ai/tools/registry";
 import { toAiSdkTools } from "@/lib/ai/tools/adapter";
 import { logger } from "@/lib/logger";

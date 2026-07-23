@@ -16,7 +16,7 @@ interface ReviewContentProps {
   items: AgentReviewItem[];
 }
 
-const EDITABLE_KINDS = new Set(["score_suggestion", "task_suggestion"]);
+const EDITABLE_KINDS = new Set(["score_suggestion", "task_suggestion", "draft_email"]);
 
 interface ScoreDraft {
   score: string;
@@ -27,6 +27,11 @@ interface TaskDraft {
   title: string;
   description: string;
   dueDate: string;
+}
+
+interface EmailDraft {
+  subject: string;
+  body: string;
 }
 
 function PayloadPreview({ item }: { item: AgentReviewItem }) {
@@ -52,7 +57,16 @@ function PayloadPreview({ item }: { item: AgentReviewItem }) {
       </div>
     );
   }
-  // draft_email / lead_summary — no editor built for these yet, render raw payload
+  if (item.kind === "draft_email") {
+    const p = item.payload as { subject?: string; body?: string };
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-gray-900">{p.subject}</p>
+        <p className="text-sm text-gray-600 whitespace-pre-wrap">{p.body}</p>
+      </div>
+    );
+  }
+  // lead_summary — no editor built for this yet, render raw payload
   return (
     <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-3">
       {JSON.stringify(item.payload, null, 2)}
@@ -85,6 +99,7 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({ score: "", reasoning: "" });
   const [taskDraft, setTaskDraft] = useState<TaskDraft>({ title: "", description: "", dueDate: "" });
+  const [emailDraft, setEmailDraft] = useState<EmailDraft>({ subject: "", body: "" });
 
   function openEdit(item: AgentReviewItem) {
     if (item.kind === "score_suggestion") {
@@ -93,6 +108,9 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
     } else if (item.kind === "task_suggestion") {
       const p = item.payload as { title?: string; description?: string | null; dueDate?: string | null };
       setTaskDraft({ title: p.title ?? "", description: p.description ?? "", dueDate: p.dueDate ?? "" });
+    } else if (item.kind === "draft_email") {
+      const p = item.payload as { subject?: string; body?: string };
+      setEmailDraft({ subject: p.subject ?? "", body: p.body ?? "" });
     }
     setEditingId(item.id);
   }
@@ -146,6 +164,14 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
         ...(taskDraft.description.trim() ? { description: taskDraft.description.trim() } : {}),
         ...(taskDraft.dueDate.trim() ? { dueDate: taskDraft.dueDate.trim() } : {}),
       });
+      return;
+    }
+    if (item.kind === "draft_email") {
+      if (!emailDraft.subject.trim() || !emailDraft.body.trim()) {
+        toast.error("Subject and body are required");
+        return;
+      }
+      decide(item, "accept", { subject: emailDraft.subject.trim(), body: emailDraft.body.trim() });
     }
   }
 
@@ -228,6 +254,20 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
                       type="date"
                       value={taskDraft.dueDate}
                       onChange={(e) => setTaskDraft((d) => ({ ...d, dueDate: e.target.value }))}
+                    />
+                  </div>
+                ) : isEditing && item.kind === "draft_email" ? (
+                  <div className="space-y-2">
+                    <Label>Subject</Label>
+                    <Input
+                      value={emailDraft.subject}
+                      onChange={(e) => setEmailDraft((d) => ({ ...d, subject: e.target.value }))}
+                    />
+                    <Label>Body</Label>
+                    <Textarea
+                      rows={8}
+                      value={emailDraft.body}
+                      onChange={(e) => setEmailDraft((d) => ({ ...d, body: e.target.value }))}
                     />
                   </div>
                 ) : (

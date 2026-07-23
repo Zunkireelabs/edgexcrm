@@ -31,6 +31,10 @@ const EDITED_PAYLOAD_SCHEMAS: Record<string, z.ZodTypeAny> = {
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
       .optional(),
   }),
+  draft_email: z.object({
+    subject: z.string().trim().min(1).max(200),
+    body: z.string().trim().min(1).max(5000),
+  }),
 };
 
 interface Props {

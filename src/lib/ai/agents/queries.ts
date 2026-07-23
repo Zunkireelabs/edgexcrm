@@ -1,4 +1,5 @@
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import "@/lib/ai/agents/packs"; // module-load registration — must run before getAgentDefinition(s)
 import { getAgentDefinition, getAgentDefinitionsForIndustry } from "./registry";
 import { describeCapabilities, type AgentCapabilitySummary } from "./capabilities";
 

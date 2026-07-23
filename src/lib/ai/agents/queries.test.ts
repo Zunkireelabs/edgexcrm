@@ -5,6 +5,7 @@ const getAgentDefinitionMock = vi.fn();
 const getAgentDefinitionsForIndustryMock = vi.fn();
 
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClientForTenant: scopedClientForTenantMock }));
+vi.mock("@/lib/ai/agents/packs", () => ({}));
 vi.mock("./registry", () => ({
   getAgentDefinition: getAgentDefinitionMock,
   getAgentDefinitionsForIndustry: getAgentDefinitionsForIndustryMock,

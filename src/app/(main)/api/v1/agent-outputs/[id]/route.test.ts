@@ -88,19 +88,51 @@ describe("PATCH /api/v1/agent-outputs/[id]", () => {
     expect(res.status).toBe(422);
   });
 
-  it("422s for an editedPayload on a kind with no editor (draft_email)", async () => {
+  it("422s for an editedPayload on a kind with no editor (lead_summary)", async () => {
     authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
-    scopedClientMock.mockResolvedValue(dbWithExisting({ id: "output-1", kind: "draft_email", status: "proposed" }));
+    scopedClientMock.mockResolvedValue(dbWithExisting({ id: "output-1", kind: "lead_summary", status: "proposed" }));
     const { PATCH } = await import("./route");
 
     const res = await PATCH(
-      fakeReq({ decision: "accept", editedPayload: { subject: "hi" } }),
+      fakeReq({ decision: "accept", editedPayload: { summary: "hi" } }),
       { params },
     );
     const body = await res.json();
 
     expect(res.status).toBe(422);
     expect(body.error.details.editedPayload[0]).toMatch(/no editor/i);
+  });
+
+  it("accepts a valid edited draft_email payload -> status 'edited_accepted', payload persisted", async () => {
+    authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
+    const db = dbWithExisting({ id: "output-1", kind: "draft_email", status: "proposed" });
+    scopedClientMock.mockResolvedValue(db);
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(
+      fakeReq({ decision: "accept", editedPayload: { subject: "Hi there", body: "Following up on your application." } }),
+      { params },
+    );
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    const [sawUpdate] = db.__updateSpy.mock.calls[0];
+    expect(sawUpdate.status).toBe("edited_accepted");
+    expect(sawUpdate.payload).toEqual({ subject: "Hi there", body: "Following up on your application." });
+    expect(body.data.status).toBe("edited_accepted");
+  });
+
+  it("422s for an edited draft_email payload missing a body", async () => {
+    authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
+    scopedClientMock.mockResolvedValue(dbWithExisting({ id: "output-1", kind: "draft_email", status: "proposed" }));
+    const { PATCH } = await import("./route");
+
+    const res = await PATCH(
+      fakeReq({ decision: "accept", editedPayload: { subject: "Hi there", body: "" } }),
+      { params },
+    );
+
+    expect(res.status).toBe(422);
   });
 
   it("accepts without editedPayload -> status 'accepted'", async () => {
