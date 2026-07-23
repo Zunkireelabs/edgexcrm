@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { getBranchIds } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
@@ -29,9 +29,10 @@ import {
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
 import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
-import { branchMemberIds, sharedBranchLeadIdsForAssignee, syncOriginMembership, unassignedCrossBranchLeadIds } from "@/lib/leads/branch-membership";
+import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
-import { addLeadCollaborator, collaboratorLeadIdsForUser } from "@/lib/leads/collaborators";
+import { addLeadCollaborator } from "@/lib/leads/collaborators";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import {
   normalizeEmail,
   normalizePhone,
@@ -96,6 +97,7 @@ export async function GET(request: NextRequest) {
   const listSlug = searchParams.get("list");
 
   const supabase = await createServiceClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
 
   // Resolve ?list=slug for lead-lists feature
   let resolvedListId: string | null = null;
@@ -127,11 +129,22 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  let query = supabase
-    .from("leads")
-    .select("*", { count: "exact" })
-    .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null);
+  // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback).
+  // Computed before the base query so visibleLeadsBase() can use it (uncapped; migration 179).
+  const poolSlug = auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
+    ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
+    : null;
+  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
+  const useSharedPool = !!(auth.branchId && isSharedPoolList(auth.permissions, resolvedListId));
+
+  // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
+  // not just their own — stays on the plain service-client query (unrelated to the
+  // collaborator/branch visibility this fix addresses).
+  let query = useSharedPool
+    ? supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", auth.tenantId)
+    : visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact" });
+
+  query = query.is("deleted_at", null);
 
   if (!includeConverted) {
     query = query.is("converted_at", null);
@@ -148,53 +161,15 @@ export async function GET(request: NextRequest) {
     query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
   }
 
-  // Scope enforcement: own (counselor) + team (branch manager, with §4.1 NULL-branch fallback)
-  const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  if (auth.branchId && isSharedPoolList(auth.permissions, resolvedListId)) {
-    // This list is a branch-wide shared pool for an own-scope holder: show ALL branch leads,
-    // not just their own. auth.branchMemberIds is empty for own-scope, so resolve explicitly.
-    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId);
+  if (useSharedPool) {
+    // auth.branchMemberIds is empty for own-scope, so resolve explicitly.
+    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId!);
     query = query.in("assigned_to", memberIds);
     assignedTo = null;
   } else if (scope.restrictToSelf) {
-    // Inline column filter — avoids .in("id", 500+ uuids) which overflows Node/undici URL limits.
-    // Widen to leads the user is a collaborator on (ever assigned) so handed-off leads stay visible.
-    // Also widen to unassigned cross-branch leads matching the user's position route (e.g. Pre-qualified for Lead Callers).
-    const poolSlug = auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
-      ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
-      : null;
-    const [sharedIds, collabIds, poolIds] = await Promise.all([
-      sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId),
-      collaboratorLeadIdsForUser(supabase, auth.tenantId, auth.userId),
-      poolSlug && auth.branchId
-        ? unassignedCrossBranchLeadIds(supabase, auth.tenantId, auth.branchId, poolSlug)
-        : Promise.resolve([]),
-    ]);
-    // Cap at 300 UUIDs — ~11 KB — to stay well under undici's 16 KB URL limit.
-    const rawExtra = [...new Set([...sharedIds, ...collabIds, ...poolIds])];
-    const extraIds = rawExtra.slice(0, 300);
-    if (extraIds.length > 0) {
-      query = query.or(`assigned_to.eq.${auth.userId},id.in.(${extraIds.join(",")})`);
-    } else {
-      query = query.eq("assigned_to", auth.userId);
-    }
-    assignedTo = null; // self-scoped users: ignore any client assignedTo param
-  } else if (scope.branchId) {
-    // Include leads assigned to branch members AND leads shared into this branch via lead_branches
-    const { data: sharedRows } = await supabase
-      .from("lead_branches")
-      .select("lead_id")
-      .eq("tenant_id", auth.tenantId)
-      .eq("branch_id", scope.branchId);
-    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
-    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
-      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
-    } else if (sharedLeadIds.length > 0) {
-      query = query.in("id", sharedLeadIds);
-    } else {
-      query = query.in("assigned_to", auth.branchMemberIds);
-    }
+    assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
   }
+  // scope.branchId (team-scope) visibility is applied inside visibleLeadsBase() above — nothing more to do here.
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param.

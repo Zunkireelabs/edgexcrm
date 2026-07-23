@@ -11,9 +11,9 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
-import { sharedBranchLeadIdsForAssignee } from "@/lib/leads/branch-membership";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import type { LeadList } from "@/types/database";
 
 function slugify(name: string): string {
@@ -59,6 +59,7 @@ export async function GET(request: NextRequest) {
   if (!getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) return apiForbidden();
 
   const supabase = await createServiceClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
 
   const { data: lists, error } = await supabase
     .from("lead_lists")
@@ -76,35 +77,17 @@ export async function GET(request: NextRequest) {
     canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId, l.id)
   );
 
-  // Count leads per list, respecting caller's lead scope
+  // Count leads per list, visibility-scoped to the caller (uncapped; migration 179).
+  // Previously missed collaborator-visible leads entirely for own-scope — this also fixes that.
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-  let countQuery = supabase
-    .from("leads")
-    .select("list_id", { count: "exact" })
-    .eq("tenant_id", auth.tenantId)
-    .is("deleted_at", null)
-    .is("converted_at", null)
-    .not("list_id", "is", null);
-
-  if (scope.restrictToSelf) {
-    // Inline column filter — avoids .in("id", 500+ uuids) URL overflow.
-    const sharedIds = await sharedBranchLeadIdsForAssignee(supabase, auth.tenantId, auth.userId);
-    if (sharedIds.length > 0) {
-      countQuery = countQuery.or(`assigned_to.eq.${auth.userId},id.in.(${sharedIds.join(",")})`);
-    } else {
-      countQuery = countQuery.eq("assigned_to", auth.userId);
-    }
-  } else if (scope.branchId) {
-    countQuery = countQuery.in("assigned_to", auth.branchMemberIds);
-  }
-
-  const { data: countRows } = await countQuery.select("list_id");
-  const countMap: Record<string, number> = {};
-  for (const row of countRows ?? []) {
-    if (row.list_id) {
-      countMap[row.list_id] = (countMap[row.list_id] ?? 0) + 1;
-    }
-  }
+  const countEntries = await Promise.all(accessible.map(async (l) => {
+    const { count } = await visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact", head: true })
+      .eq("list_id", l.id)
+      .is("deleted_at", null)
+      .is("converted_at", null);
+    return [l.id, count ?? 0] as const;
+  }));
+  const countMap: Record<string, number> = Object.fromEntries(countEntries);
 
   const result = accessible.map((l) => ({ ...l, count: countMap[l.id] ?? 0 }));
   log.info({ total: result.length }, "Lead lists fetched");
