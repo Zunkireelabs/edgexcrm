@@ -233,6 +233,7 @@ export function LeadCadenceStrip({
         leadEmail={leadEmail}
         sequenceName={sequenceName}
         canAct={canManage}
+        isAdmin={isAdmin}
         onChanged={fetchEnrollment}
       />
     </div>

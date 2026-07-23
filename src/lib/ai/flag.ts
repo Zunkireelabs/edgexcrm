@@ -19,6 +19,15 @@ export function isWriteToolsEnabled(): boolean {
   return process.env.AI_WRITE_TOOLS_ENABLED === "true";
 }
 
+// Outreach AI-drafting Stage 2 prod-safety switch: flag off => the "Draft with
+// AI" button stays hidden and auto-AI steps fall back to template-merge at
+// fire time (draft-source:'template'), so the cadence never breaks and no
+// lead PII reaches a model. Stays off everywhere but stage until ADR-001 D5
+// is signed.
+export function isOutreachDraftEnabled(): boolean {
+  return process.env.AI_OUTREACH_DRAFT_ENABLED === "true";
+}
+
 // ADR-001 Decision 5: the env flags above are the environment-wide kill
 // switch; tenants.ai_enabled (migration 174) is the per-tenant grant a
 // signed client consent describes. Both must be true — neither alone is
@@ -41,5 +50,10 @@ export async function isAssistantEnabledForTenant(tenantId: string): Promise<boo
 
 export async function isIngestionEnabledForTenant(tenantId: string): Promise<boolean> {
   if (!isIngestionEnabled()) return false;
+  return tenantAiEnabled(tenantId);
+}
+
+export async function isOutreachDraftEnabledForTenant(tenantId: string): Promise<boolean> {
+  if (!isOutreachDraftEnabled()) return false;
   return tenantAiEnabled(tenantId);
 }

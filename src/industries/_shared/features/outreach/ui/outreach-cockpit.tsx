@@ -31,7 +31,7 @@ export function OutreachCockpit({ role, currentUserId }: OutreachCockpitProps) {
         </TabsList>
 
         <TabsContent value="today" className="min-h-0">
-          <TodayWorklist />
+          <TodayWorklist isAdmin={isAdmin} />
         </TabsContent>
 
         <TabsContent value="sequences" className="min-h-0">
