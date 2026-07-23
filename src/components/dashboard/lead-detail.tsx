@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
 import { formatPhoneForTel } from "@/lib/phone-utils";
 import type { Lead, LeadNote, LeadChecklist, PipelineStage, Tenant } from "@/types/database";
 import { Button } from "@/components/ui/button";
@@ -145,29 +144,21 @@ export function LeadDetail({
   async function addNote() {
     if (!newNote.trim()) return;
     setAddingNote(true);
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    const { data, error } = await supabase
-      .from("lead_notes")
-      .insert({
-        lead_id: lead.id,
-        user_id: user!.id,
-        user_email: user!.email!,
-        content: newNote.trim(),
-      })
-      .select()
-      .single();
-
-    setAddingNote(false);
-    if (error) {
-      toast.error("Failed to add note");
-    } else {
-      setNotes([data as LeadNote, ...notes]);
+    try {
+      const res = await fetch(`/api/v1/leads/${lead.id}/notes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: newNote.trim() }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(json?.error?.message || "Failed to add note");
+      setNotes([json.data as LeadNote, ...notes]);
       setNewNote("");
       toast.success("Note added");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to add note");
+    } finally {
+      setAddingNote(false);
     }
   }
 

@@ -18,7 +18,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { createClient } from "@/lib/supabase/client";
 import type { LeadList } from "@/types/database";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
@@ -73,16 +72,12 @@ export function QualifyRowButton({
       if (!res.ok) throw new Error("Failed to qualify lead");
 
       if (note.trim()) {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("lead_notes").insert({
-            lead_id: leadId,
-            user_id: user.id,
-            user_email: user.email ?? "",
-            content: note.trim(),
-          });
-        }
+        const noteRes = await fetch(`/api/v1/leads/${leadId}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: note.trim() }),
+        });
+        if (!noteRes.ok) throw new Error("Failed to add note");
       }
 
       await onQualified(qualifiedList.id);

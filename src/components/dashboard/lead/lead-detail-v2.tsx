@@ -20,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
 import type { Lead, LeadList, LeadNote, LeadChecklist, PipelineStage, Tenant, TenantEntity, Industry } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
@@ -652,15 +651,14 @@ export function LeadDetailV2({
 
       // Insert note if provided
       if (qualifyNote.trim()) {
-        const supabase = createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          await supabase.from("lead_notes").insert({
-            lead_id: currentLead.id,
-            user_id: user.id,
-            user_email: user.email ?? "",
-            content: qualifyNote.trim(),
-          });
+        const noteRes = await fetch(`/api/v1/leads/${currentLead.id}/notes`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: qualifyNote.trim() }),
+        });
+        if (!noteRes.ok) {
+          const noteJson = await noteRes.json().catch(() => null);
+          toast.error(noteJson?.error?.message || "Failed to add note");
         }
       }
 
