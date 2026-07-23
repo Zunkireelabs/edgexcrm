@@ -7,7 +7,15 @@
 >
 > Move entries between sections as their state changes. Cross-reference shipped features to their SESSION-LOG entry and commit SHA, then keep them in `## ✅ Shipped` here only briefly before relying on FEATURE-CATALOG as the source of truth.
 
-Last updated: 2026-07-10 (it_agency Delivery **Tiers 0–4 batch BUILT ON BRANCH** `feature/it-agency-delivery-tier0` — 12 commits, migs 129–135 local-only, PR #160 held at the merge gate; **all pending merge to stage.** Per-tier record in memory `project_it_agency_delivery_workflow`. Prior: 2026-07-09 Phase 1+1.5 shipped to stage.)
+Last updated: **2026-07-23** (Outreach AI-drafting Stage 2 merged to stage — PR #282, mig 178. Reconciled after ~2 weeks of drift: Inngest COMPLETE on prod; outreach sequencing Stage 1 on prod + Stage 2 on stage; AI-native Phases 1–3 on stage; email-productionization Path A on stage. Prior real update: 2026-07-10.)
+
+---
+
+## ⛔ The dominant constraint right now: the D5 privacy gate
+
+A large share of in-flight work is **AI-native** (the "Orca" track), and several features are **built and live on `stage` but cannot promote to prod** until **ADR-001 Decision 5 (D5)** is signed. D5 is the **privacy sign-off** allowing lead PII to egress to a third-party LLM in production; it rests on (a) a signed DPA / zero-retention posture with the AI provider and (b) per-tenant client consent recorded as `tenants.ai_enabled` (mig 174). Every AI feature is double-gated (`env flag AND tenants.ai_enabled`) and ships stage-only until D5. **D5 is a business/legal decision from Sadin, not a code task** — signing it unblocks the whole AI column at once. Refs: `docs/reference/02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md`, `docs/ai-native-efforts/`.
+
+Items marked **`[D5-blocked]`** below are done-on-stage, waiting only on this gate.
 
 ---
 
@@ -49,24 +57,18 @@ Sadin signed off on building this. Has at least a paragraph of intent. Ready for
 
 ### IT-agency industry (`it_agency`)
 
-Four first-round candidates for the IT-agency manifest. All are industry-scoped (live under `src/industries/it-agency/features/<feature>/`). Approved 2026-05-25.
+The 2026-05-25 first-round candidates. **✓ Both delivered** as part of **Bucket C** (Proposals / Service Catalog / Deals v2 / view-tracking + sectioned sidebar) — **on STAGE, pending a consolidated prod promotion** (⚠️ prod split-brain risk, migs 102–109 must promote as one batch). See Recently shipped + memory `project_it_agency_bucket_c`.
 
-- **Service catalog / packages**
-  - Define service packages (name, description, hours, price). Listed on `/services` page; potentially used as templates for quotes.
-  - Could reuse the existing `tenant_entities` table with IT-flavored UI, or get its own table — design decision at planning time.
-
-- **Proposal / SOW generator**
-  - Template-based proposal builder; IT-agency analog to the education form-builder.
-  - Edit templates, fill placeholders, output as shareable link.
-  - Bigger / more ambitious — best as a v2 once the other three have set the pattern.
+- ~~**Service catalog / packages**~~ — ✓ shipped to stage (Service Catalog in Bucket C).
+- ~~**Proposal / SOW generator**~~ — ✓ shipped to stage (Proposals in Bucket C; e-sign accept step 3b still ON HOLD, 3 open decisions).
 
 ### IT-agency Delivery backlog (Tiers 2–4 — from pm/coo gap analysis 2026-07-09)
 
 The near-term delivery work (Tier 0 correctness + Tier 1 handoff + AI-synth vision UI) is in **Planned / next up** above. These are the deeper items — approved as *direction*, sequenced after the handoff feeds them clean signal. Source: `/pm-it-agency` + `/coo-it-agency` gap backlogs. **Keystone findings:** the shipped health/reconciliation engine is *starved* (no task-estimate UI — Tier 0 fixes it); the sales↔delivery machines don't talk at the handoff (Tier 1); the **billing → margin → retention** third of the value chain is absent (Tier 2 below).
 
-- **Tier 2 — See the money. ✓ BOTH BUILT (branch, pending merge).** (a) **Cost rate → gross-margin** (`tenant_users.cost_rate` + `time_entries.cost_rate_snapshot`, admin-only Cost/Margin tiles; mig 132). (b) **Milestone-triggered invoicing spine** (`invoices` + `invoice_line_items` + INV-#### numbering + `invoiced_at` double-bill guard; mig 133).
-- **Tier 3 — Structure + retention. ✓ BOTH BUILT (branch, pending merge).** (a) **Structured status-report sections** (Accomplishments/In-progress/Risks/Asks/Client-message + period-diff; mig 130). (b) **Client status share** via public token (`(widget)/reports/share/[token]`, no internal hours; mig 131).
-- **Tier 4 — Methodology depth.** ✓ **BUILT (branch, pending merge):** **unified approvals inbox** (timesheets + milestones + CRs, one queue); **milestone lifecycle transitions** (Start/Submit/Reopen/Pull-back state machine — feeds the inbox; no mig); **task start/stop timer → timesheet** (`active_timers` + `time_entries.source`; mig 135; net-new, not in the original list); **"who hasn't logged" timesheet compliance** (admin view, weekend/holiday/leave-aware; no mig). — **STILL OPEN:** **Risk register / RAID "R" (M) ← next pick**, Sprints/cycles + burndown/velocity (L), milestone↔task phases (M), allocation date-bounds + over-allocation conflict (M), engagement-typed project templates (M), timesheet *submission* half (M), portfolio / cross-project health roll-up (M), task dependencies / blocked-by (M–L), structured retro + project close/archive (S–M), delivery notifications/reminders (M), unified-approvals live count badge (touches universal `attention-summary.tsx`), full client-facing read-only portal (L).
+- **Tier 2 — See the money. ✓ BOTH ON STAGE** (PR #160, 2026-07-10). (a) **Cost rate → gross-margin** (`tenant_users.cost_rate` + `time_entries.cost_rate_snapshot`, admin-only Cost/Margin tiles; mig 132). (b) **Milestone-triggered invoicing spine** (`invoices` + `invoice_line_items` + INV-#### numbering + `invoiced_at` double-bill guard; mig 133).
+- **Tier 3 — Structure + retention. ✓ BOTH ON STAGE** (PR #160). (a) **Structured status-report sections** (Accomplishments/In-progress/Risks/Asks/Client-message + period-diff; mig 130). (b) **Client status share** via public token (`(widget)/reports/share/[token]`, no internal hours; mig 131).
+- **Tier 4 — Methodology depth.** ✓ **ON STAGE** (PR #160): **unified approvals inbox** (timesheets + milestones + CRs, one queue); **milestone lifecycle transitions** (Start/Submit/Reopen/Pull-back state machine — feeds the inbox; no mig); **task start/stop timer → timesheet** (`active_timers` + `time_entries.source`; mig 135; net-new, not in the original list); **"who hasn't logged" timesheet compliance** (admin view, weekend/holiday/leave-aware; no mig). — **STILL OPEN:** **Risk register / RAID "R" (M) ← next pick**, Sprints/cycles + burndown/velocity (L), milestone↔task phases (M), allocation date-bounds + over-allocation conflict (M), engagement-typed project templates (M), timesheet *submission* half (M), portfolio / cross-project health roll-up (M), task dependencies / blocked-by (M–L), structured retro + project close/archive (S–M), delivery notifications/reminders (M), unified-approvals live count badge (touches universal `attention-summary.tsx`), full client-facing read-only portal (L).
 
 ### Travel-agency industry (`travel_agency`)
 
@@ -93,7 +95,7 @@ New industry shipped to branch 2026-06-10 (first tenant **Arya Travels**): itine
 
 ### Education-consultancy (`education_consultancy`)
 
-Deferred follow-ups surfaced while planning **Lead Lists** (2026-06-20). All confirmed by Sadin as "later" — captured so they're not lost. Lead Lists itself is in **In progress** below.
+Deferred follow-ups surfaced while planning **Lead Lists** (2026-06-20). All confirmed by Sadin as "later" — captured so they're not lost. Lead Lists itself has **shipped** (stage + mig 111 on prod) — see Recently shipped.
 
 - **Class Bookings** (Test Prep deal track) — a 2nd deal object parallel to Applications (one student → many bookings). From Admizz's `Test Classes_Bookings` sheet: fields = Test Prep type (IELTS/PTE/…), Joining Date, Fee Paid Amount, Test Booked, Amount Paid for Test Booking. Build mirrors the Applications feature (board + booking object + per-lead rail). The Lead Lists "qualify" step routes a student into Application and/or Class track.
 - **Spreadsheet → CRM importer** — one-off mapped import of Admizz's 3 real workbooks (`temp_ss/cus-admizz-docs/`: Prospects_Leads, Applications, Test Classes_Bookings; ~3,000+ rows) into leads / applications / class-bookings. Own carefully-reviewed task on the shared DB; explicitly **not** part of Lead Lists. (A general import feature is the bigger sibling.)
@@ -104,7 +106,7 @@ Deferred follow-ups surfaced while planning **Lead Lists** (2026-06-20). All con
 
 ### Other industries
 
-_(no approved features yet)_
+- **CRE / `real_estate`** — industry scaffolded on stage (migs 164–167: industry + offerings + investor commitments + offering documents); `/coo-real-estate` advisory skill covers the investor-raise + IR workflow. Feature build not yet sequenced.
 
 ---
 
@@ -112,11 +114,11 @@ _(no approved features yet)_
 
 Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance criteria, scope, key files identified. Ready for the next build session.
 
-- **it_agency Delivery — Tier 0 "make the shipped engine truthful"** (industry-scoped `it_agency`) — **✓ BUILT ON BRANCH 2026-07-10 (`feature/it-agency-delivery-tier0`, pending merge).** Three small correctness fixes on the just-shipped cockpit: (1) **task-level `estimated_minutes` capture in the cockpit UI** — the shipped health / %-complete / est-vs-actual reconciliation engine is *starved* because no screen lets a PM enter per-task estimates (silently degrades to done-count ratios + blank variance); (2) **utilization period-scoping fix** — currently divides all-time billable hours by one week's capacity; (3) **board-card HealthDot accuracy** — uses a billable-minutes proxy + drops the due-date clause, so it disagrees with the cockpit's authoritative health. All S. Enriches the structured signal a future AI-synth reads.
+- **it_agency Delivery — Tier 0 "make the shipped engine truthful"** (industry-scoped `it_agency`) — **✓ ON STAGE (PR #160, 2026-07-10, migs 128–135).** Three small correctness fixes on the just-shipped cockpit: (1) **task-level `estimated_minutes` capture in the cockpit UI** — the shipped health / %-complete / est-vs-actual reconciliation engine is *starved* because no screen lets a PM enter per-task estimates (silently degrades to done-count ratios + blank variance); (2) **utilization period-scoping fix** — currently divides all-time billable hours by one week's capacity; (3) **board-card HealthDot accuracy** — uses a billable-minutes proxy + drops the due-date clause, so it disagrees with the cockpit's authoritative health. All S. Enriches the structured signal a future AI-synth reads.
 
-- **it_agency Delivery — Tier 1 Deal/Proposal → Project handoff** (industry-scoped `it_agency`) — **✓ BUILT ON BRANCH 2026-07-10 (mig 134, renamed from 129 at rebase onto stage; pending merge).** `convert-to-project` drops the accepted proposal's line-item hours / total / rate / scope narrative + the deal's billing contact, forcing the PM to re-key the baseline from memory at the Qualify gate ("estimate amnesia"). Seed the project brief / baseline-estimate / budget / rate and copy contacts from the won deal + proposal; stamp baseline provenance into `project_events`. Likely needs a proposal→project link migration. Size M.
+- **it_agency Delivery — Tier 1 Deal/Proposal → Project handoff** (industry-scoped `it_agency`) — **✓ ON STAGE (PR #160, mig 134).** `convert-to-project` drops the accepted proposal's line-item hours / total / rate / scope narrative + the deal's billing contact, forcing the PM to re-key the baseline from memory at the Qualify gate ("estimate amnesia"). Seed the project brief / baseline-estimate / budget / rate and copy contacts from the won deal + proposal; stamp baseline provenance into `project_events`. Likely needs a proposal→project link migration. Size M.
 
-- **it_agency Delivery — AI-synth VISION UI (preview only)** (industry-scoped `it_agency`) — **✓ BUILT ON BRANCH 2026-07-10 (flag-gated preview, Zunkiree admin only; pending merge).** Flag-gated, non-functional preview of AI-assisted delivery (a "✨ Draft with AI" affordance on status reports + a "Project pulse" card), *sample content only* — NO LLM / keys / deps / writes / migration. Purpose: make the direction visible and pre-shape the seam before the real AI foundation exists. Zunkiree admin only; graduates into the real surface when the AI-native foundation lands (`docs/ai-native-efforts/`).
+- **it_agency Delivery — AI-synth VISION UI (preview only)** (industry-scoped `it_agency`) — **✓ ON STAGE (PR #160, flag-gated preview, Zunkiree admin only).** Flag-gated, non-functional preview of AI-assisted delivery (a "✨ Draft with AI" affordance on status reports + a "Project pulse" card), *sample content only* — NO LLM / keys / deps / writes / migration. Purpose: make the direction visible and pre-shape the seam before the real AI foundation exists. Zunkiree admin only; graduates into the real surface when the AI-native foundation lands (`docs/ai-native-efforts/`).
 
 - **Insights → "Admin Dashboard" funnel widget** (education_consultancy) — **requested by Admizz's client 2026-06-13; blocked on 2 decisions before build.**
   - **Brief**: `docs/INSIGHTS-DASHBOARDS-BRIEF.md` §16. A new `funnel` widget for the Insights catalog: 4-phase education funnel (Leads → Prospects → Applications → Conversion), each with Total / New / active / Lost; lands in a 2nd dashboard "Admin Dashboard" (owner/admin only via empty grant).
@@ -130,11 +132,11 @@ Has a brief in `docs/<FEATURE>-BRIEF.md` or a detailed section here. Acceptance 
   - **Open default-columns call (Sadin)**: defaults currently = today's set; consider making it_agency default-show Company/Designation/Prospect Industry now that they're populated.
   - **Status**: approved; awaiting Sonnet pickup for Phase 1.
 
-- **AI-Native Knowledge Layer** (universal; Orca-ready RAG over the KB)
-  - **Blueprint / decision record**: `docs/reference/02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` (written 2026-06-05, approved). Four layers: StorageProvider seam → ingestion pipeline → pgvector retrieval → Orca agent tools. Tool picks (OpenAI embeddings, Claude/GPT vision OCR, pgvector, R2 as the storage target), privacy stance, and "when to switch tools" thresholds all captured there.
-  - **Phasing** (each gets its own brief referencing the blueprint): **Phase 1** = StorageProvider seam (consolidate the duplicated KB + `lead-documents` signed-URL logic onto one `S3Client`-based interface; R2-ready; no new vendors — cheap/safe, the natural next build). **Phase 2** = ingestion + `knowledge_chunks` pgvector + `retrieve()` module (new table, parser, embeddings, cron worker, new secrets). **Phase 3** = Orca agent tools (gated on Orca's agent framework being real).
-  - **Open decisions** (in the blueprint): confirm embedding vendor (OpenAI vs Voyage), OCR approach (vision-reuse vs Mistral vs defer), DPA/student-PII sign-off owner.
-  - **Status**: blueprint approved; Phase 1 brief is the next Opus deliverable when Sadin picks it up.
+- **AI-Native / Orca track — Knowledge Layer + agent write-tools** (universal; Orca-ready) — **`[D5-blocked]` for prod.**
+  - **Blueprint / decision record**: `docs/reference/02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` + ADR-001 (ACCEPTED: Orca-inside, agents-as-employees, AI SDK + Inngest + Langfuse + pgvector). Master plan in `docs/ai-native-efforts/`.
+  - **On STAGE now**: **Phases 1–3** (#227, migs 164–170) — AI assistant foundation, `knowledge_chunks` + pgvector hybrid search/retrieval. Read-only assistant + retrieval work on stage behind `AI_ASSISTANT_ENABLED` + `tenants.ai_enabled`.
+  - **Built, unmerged**: **Phase 4A/4B/4C write-actions** on `feature/ai-phase-4-writes` (migs 173/175 scaffolding on stage; 4C reviewed + fixed) behind a **9-item decision queue**.
+  - **Next Opus deliverable**: resolve the decision queue → stage the write-tools behind the flag. **All prod promotion blocked on D5.**
 
 - **Email Automation — Phase 1.2** (universal; spec'd 2026-06-08 night, **PARKED — not a blocker**)
   - **Spine**: `docs/EMAIL-AUTOMATION-ARCHITECTURE-BRIEF.md` (§2 sender decision + §5 Phase 1.2). Phase 1.1 + 1.1b already shipped to prod (RESEND key live; rules fire on lead creation).
@@ -150,14 +152,15 @@ _(Project Workspace moved to Recently shipped — it_agency `/projects` workspac
 
 Someone is actively building it. Each entry includes: owner, ETA, branch link, brief link.
 
-- **Email Sequencing (Outreach) — Stage 1** (industry-scoped `it_agency`) — headless spine in build via Sonnet (stop-at-review) on `feature/outreach-sequencing` (off `origin/stage`); awaiting Opus review, not merged.
-  - Cadence engine with an interim manual-send model: build a multi-step sequence → enroll a lead → per-step template draft → rep reviews/edits/copies/sends from their own Gmail → logs it in EdgeX (`lead_activities`) → auto-advances to the next step. Migration 176 (`email_sequences`/`email_sequence_steps`/`sequence_enrollments`/`sequence_step_drafts`). `draft_source`/`sent_via` seam columns so AI-drafting and EdgeX-native send can swap in later with no schema rework.
-  - Stage 1 ships headless: gated placeholder page only, no cockpit UI. **Stage 2 (Brief 2 of 2, not started):** sequencing cockpit (build/edit sequences) + lead-detail tab (enroll, see enrollment status, worklist of due drafts).
+- **Outreach email sequencing + AI-drafting** (industry-scoped `it_agency`) — **sequencing LIVE ON PROD (migs 176/177); AI-drafting Stage 2 on STAGE (`[D5-blocked]` for prod).**
+  - **Shipped**: cadence engine + manual-send model (#267), then the cadence timeline / needs-attention surfaces / draft-due bell (#270) — sequencing Stage 1 is on prod (migs 176/177). Build a multi-step sequence → enroll a lead → per-step template draft → rep copies/sends from their own inbox → logs to `lead_activities` → auto-advances.
+  - **Stage 2 — AI-drafting** merged to STAGE (**PR #282, `a566448b`, mig 178**): optional AI drafter — template-first default, on-demand "Draft with AI", admin save-as-template (genericization confirm), optional per-step auto-AI. Two-part D5 gate; gate-off degrades to template with zero model calls. **Next**: stage soak → prod promotion **after D5**. EdgeX-native send waits on the email-productionization ladder.
 
-- **Lead Lists — lifecycle segmentation** (industry-scoped `education_consultancy`) — **plan approved 2026-06-20; Phase 1 in build via Sonnet (stop-at-review) on `feature/lead-lists` (off `origin/stage @ 4b23916`).** Brief: `docs/LEAD-LISTS-BRIEF.md`; design/rationale: `~/.claude/plans/now-what-we-need-enchanted-parrot.md`.
-  - Single-membership lifecycle lists (Pre-qualified → Qualified → Prospects → Archived + admin "+ add list") replacing the confusing `lead_type` lead/prospect split. "All Leads" master + nested lists in nav; standalone Contacts nav removed for education (Prospects replaces it). Per-list access by position; counselor own-scoping preserved.
-  - **Phase 1 (in build):** `lead_lists` table + additive `leads` columns (`list_id`/`destinations`/`field_of_study`/`degree_level`/`archive_reason`) + RLS; nav group; list filter; move-to-list (mirrors `lead_type`; archive captures Drop Reason). **Migration file only — NOT applied** (shared DB needs Sadin GO). **Phase 2:** lean Create-Lead fields (Destination multi / Field of Study / Degree Level, seeded taxonomies) + qualify flow + list-management UI. **Phase 3:** new-tenant list provisioning + counsellor data cleanup + docs.
-  - Deferred (logged under Approved ▸ Education-consultancy): Class Bookings, spreadsheet importer, Processing Fee/Consent in prospect context, centralized list-access, multi-membership segments, `lead_type`→`list_id` migration.
+- **Email productionization (Path A, send-only)** (universal, all 8 industries) — **MERGED TO STAGE 2026-07-20 (PR #264, `e8032b0b`); prod NOT promoted.**
+  - Connected Inboxes + compose promoted to all industries; Path A = drop `gmail.readonly` (Restricted/CASA), keep `gmail.send` (Sensitive, $0); reply-sync dormant behind `EMAIL_REPLY_SYNC_ENABLED`; send rate-limit 50/5min. Runbook: `docs/email-productionization/`.
+  - **Ladder**: (1) sequencing + AI-draft with interim human-copy-send ✅ built; (2) **new EdgeX domain + verify → EdgeX-native send** ← next; (3) Path B (CASA + autonomous send agents).
+
+- **it_agency — Leads split into two funnels** (industry-scoped `it_agency`) — **WIP on `feature/it-agency-two-funnels`; PR #199 OPEN to stage, CI green. DO NOT MERGE until Sadin says final** (then request Anish approval). Splits "All Leads" into **Lead Processing** + **Sales Leads** with a 3-tier Funnel/Stage/Status model (mig 154).
 
 - **Unified Inbox (omnichannel)** — universal/Global; **Phases 1+2+3a on `stage` (`0279241`); real WhatsApp LIVE end-to-end on `dev-lead-crm`; NOT on prod.** Full detail + dev wiring + prod checklist: **`docs/UNIFIED-INBOX-BRIEF.md`**.
   - **Live now:** 3-pane UI · channel-agnostic tables (mig 044) · sandbox + **WhatsApp Cloud API** channels · inbound (Meta webhook → route by phone_number_id → queue) + outbound + **read receipts** · connect-a-channel Settings UI · **AES-256-GCM token encryption** · enforced 24h-window guard · notifications-on-inbound + deep-link · counselor scoping · realtime · AI seams (4 declared tools). Dev auto-drain cron `*/1`; permanent System User token.
@@ -165,10 +168,15 @@ Someone is actively building it. Each entry includes: owner, ETA, branch link, b
 
 ---
 
-## ✅ Recently shipped (last 30 days)
+## ✅ Recently shipped (last ~45 days)
 
 Cross-reference only. The authoritative current state lives in `docs/FEATURE-CATALOG.md`. Sessions live in `docs/SESSION-LOG.md`.
 
+- **Inngest background-jobs migration** — **COMPLETE, all 4 phases on PROD** (PRs #272/#273/#274/#275; promotes #279/#280). GH-Actions `schedule:` cron fully decommissioned; Inngest is the sole scheduler (reminders scan, inbox-process, email-poll + heartbeat). Runbook: `docs/reference/03-INNGEST-BACKGROUND-JOBS.md`.
+- **HRMS — Phase 1 (People & Resourcing) + Phase 2 (Leave & Attendance)** — **SHIPPED TO PROD 2026-07-07** (universal HR core + it_agency edge; employee = `tenant_users` + `employee_profiles`; migs 112–123 staged per-batch). Later phases (payroll/performance/ESS) not yet built.
+- **Lead Lists — lifecycle segmentation** (education_consultancy) — lifecycle lists (Pre-qualified → Qualified → Prospects → Applications → Archived), called "Stage" in the UI. Shipped to stage (#103); **mig 111 shipped to PROD 2026-07-07** (resolved a live split-brain — the UI was live but dataless).
+- **Email productionization (Path A)** + **Outreach sequencing Stage 1** — see In progress above (email Path A on stage; sequencing on prod). Listed there to keep the AI/email ladder in one place.
+- **Dev-workflow + deployment hardening** — branch protection (main+stage), migration ledger (`schema_migrations`) + auto-migration runner in the deploy pipelines, rollback fix, CODEOWNERS, Migration/Promotion guards, blocking CI test gate (Vitest). See `docs/dev-collab/`.
 - **it_agency Delivery cockpit — Phase 1 + 1.5** (`project-board`, industry-scoped `it_agency`) — **SHIPPED TO STAGE 2026-07-09** (PR #159, migration 128; dogfood on Zunkiree Labs). Project cockpit `/projects/[id]`: **Brief → Qualify** gate (immutable baseline estimate + DoD + engagement model + dates + budget), **control layer** (health RAG, %-complete, budget), **milestones / issues / change-requests / status-reports**, and the **`project_events` append-only decision ledger** (the institutional-memory seam). Phase 1.5 unified the project home (folded Billable/Contacts/Tasks into cockpit Overview, repointed 12 links `/time-tracking/projects/[id]` → `/projects/[id]`, old route → redirect, non-admin view-vs-mutate role split). Briefs: `docs/IT-AGENCY-DELIVERY-PHASE1-BRIEF.md` + `docs/IT-AGENCY-DELIVERY-PHASE1.5-UNIFY-BRIEF.md`. **Owed:** Sadin stage click-through; prod promotion (128 → prod at promote-time via the `production-db` gate). Near-term follow-ups (Tier 0/1) in **Planned** above; deeper backlog in **Approved ▸ IT-agency Delivery**.
 - **Branches (multi-office)** (`branches`, **Global — plan-gated Enterprise only, NOT industry-scoped**) — **SHIPPED TO PROD 2026-06-17** (`main` @ `fdd715f`; `stage` @ `98027f2`). Call sign `BRANCHES`. Branch/office layer for multi-office tenants (launch customer Admizz; KTM/Birgunj/Janakpur). Branch is orthogonal to Position (one reusable "Branch Manager" position + `tenant_users.branch_id`), inert when single-branch (NULL = pre-feature behavior, no backfill), gated on `entitlements.maxBranches > 1`. P0 entitlements seam (mig `051`) → P1a backend (migs `052`/`053`, `leadScope:"team"` + §4.1/§4.2 guards + branches API) → P1b UI (Settings manager, per-user picker, leads column + bulk assign) → P2 global header switcher (`edgex_branch` cookie, all-scope only) across dashboard/leads/pipeline. Migs `051`/`052`/`053` already on shared DB; Admizz seeded enterprise. Phase 3 (per-form default branch, round-robin, branch-scoped Insights) = separate brief. Authoritative detail: FEATURE-CATALOG `branches` row; brief archived at `docs/archive/features/BRANCHES-BRIEF.md`.
 - **Campaigns (prediction leaderboard)** (`campaigns`, industry-scoped `education_consultancy`) — **FEATURE COMPLETE: Phase 1 + 1.5 + 1.6 (2026-06-15) + Phase 2 (2026-06-16) all on prod.** Call sign `CAMPAIGN-KICKOFF`. Admizz "Campaigns" nav + FIFA WC 2026 "Predict & Win" leaderboard (ESPN auto-fetch/score/rank) + public masked API + gear Agent-prompt handoff. Phase 2 (`7e6133c`, code-only): admin manual result-override + Revert-to-ESPN, admin-only integrity-flag overlay (shared phone/name clusters), config-driven Study Abroad Interest column. Authoritative detail: FEATURE-CATALOG `campaigns` row; brief `docs/CAMPAIGNS-BRIEF.md` (safe to archive).
