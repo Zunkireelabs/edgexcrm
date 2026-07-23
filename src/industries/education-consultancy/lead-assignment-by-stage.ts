@@ -23,6 +23,7 @@ interface RosterMemberForStage {
   name?: string | null;
   position_slug: string | null;
   branch_id: string | null;
+  role?: string | null;
 }
 
 export interface StageAssigneeCandidate {
@@ -40,6 +41,8 @@ export interface StageAssigneeCandidate {
  * Fallback when the base list is empty (keeps the picker from ever being dead-empty):
  *   1. branch-manager(s) of the lead's branch
  *   2. the line position tenant-wide (ignore branch)
+ *
+ * Admins are always a valid assignee at any stage — appended last, after the above.
  */
 export function stageAssigneeCandidates(
   roster: RosterMemberForStage[],
@@ -56,9 +59,14 @@ export function stageAssigneeCandidates(
   const branchManagersInBranch = roster.filter((m) => m.position_slug === "branch-manager" && inBranch(m));
 
   const base = viewerIsBranchManager ? lineTeamInBranch : [...lineTeamInBranch, ...branchManagersInBranch];
-  if (base.length > 0) return base;
+  const candidates =
+    base.length > 0
+      ? base
+      : branchManagersInBranch.length > 0
+        ? branchManagersInBranch
+        : roster.filter((m) => m.position_slug != null && lineSlugs.includes(m.position_slug));
 
-  if (branchManagersInBranch.length > 0) return branchManagersInBranch;
-
-  return roster.filter((m) => m.position_slug != null && lineSlugs.includes(m.position_slug));
+  const seen = new Set(candidates.map((m) => m.user_id));
+  const admins = roster.filter((m) => m.role === "admin" && !seen.has(m.user_id));
+  return [...candidates, ...admins];
 }

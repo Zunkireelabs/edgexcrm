@@ -650,7 +650,7 @@ async function handlePost(request: NextRequest) {
         .maybeSingle(),
       supabase
         .from("tenant_users")
-        .select("positions(slug)")
+        .select("role, positions(slug)")
         .eq("user_id", leadPayload.assigned_to as string)
         .eq("tenant_id", tenantId)
         .maybeSingle(),
@@ -660,7 +660,8 @@ async function handlePost(request: NextRequest) {
       ? (assigneeRow?.positions[0] ?? null)
       : assigneeRow?.positions;
     const assigneeSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
-    let permitted = !!assigneeSlug && allowed.includes(assigneeSlug);
+    // Admins are always a valid assignee at any stage.
+    let permitted = assigneeRow?.role === "admin" || (!!assigneeSlug && allowed.includes(assigneeSlug));
     if (!permitted && creationBranchId) {
       const { data: branchRow } = await supabase
         .from("branches")
