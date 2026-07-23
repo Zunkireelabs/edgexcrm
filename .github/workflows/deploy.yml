@@ -173,19 +173,25 @@ jobs:
               echo "INNGEST_SIGNING_KEY=$INNGEST_SIGNING_KEY"
               echo "# --- END OPS env ---"
             } >> .env.local
-            # AI env — idempotent managed block. SCOPED to outreach AI-drafting only
-            # (ADR-001 D5 sign-off docs/ai-native-efforts/working/D5-SIGNOFF-OUTREACH.md,
-            # 2026-07-23). Deliberately sets ONLY AI_OUTREACH_DRAFT_ENABLED — the
-            # assistant, KB ingestion, and write tools stay DARK on prod (separate,
-            # un-signed D5 features). Still double-gated: a tenant also needs
-            # tenants.ai_enabled (mig 174) before any token is sent. AI_PROVIDER is
-            # pinned (never inferred from which key exists) — it determines which
-            # third party receives customer data, so changing it is a disclosure event.
+            # AI env — idempotent managed block. Prod scope = READ-ONLY Orca +
+            # outreach drafting (ADR-001 D5; outreach sheet
+            # docs/ai-native-efforts/working/D5-SIGNOFF-OUTREACH.md, 2026-07-23).
+            # Enables the assistant (AI_ASSISTANT_ENABLED) + KB ingestion/retrieval
+            # (AI_INGESTION_ENABLED) + outreach drafting. Deliberately does NOT set
+            # AI_WRITE_TOOLS_ENABLED — Phase 4 write tools stay DARK on prod (unmerged,
+            # behind hard gates + decision queue). Still double-gated per feature: a
+            # tenant also needs tenants.ai_enabled (mig 174) before any token is sent,
+            # so only opted-in tenants (currently zunkireelabs-crm) are affected.
+            # AI_PROVIDER is pinned (never inferred from which key exists) — it
+            # determines which third party receives customer data, so changing it is a
+            # disclosure event.
             sed -i '/^# --- BEGIN AI env (managed by GitHub Actions) ---$/,/^# --- END AI env ---$/d' .env.local
             {
               echo "# --- BEGIN AI env (managed by GitHub Actions) ---"
               echo "OPENAI_API_KEY=$OPENAI_API_KEY"
               echo "AI_PROVIDER=openai"
+              echo "AI_ASSISTANT_ENABLED=true"
+              echo "AI_INGESTION_ENABLED=true"
               echo "AI_OUTREACH_DRAFT_ENABLED=true"
               echo "LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY"
               echo "LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY"
