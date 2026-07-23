@@ -15,6 +15,7 @@ import {
   Clock,
   Activity,
   Target,
+  ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -35,6 +36,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { AgentFleetItem, AgentCatalogEntry, AssignablePosition } from "@/lib/ai/agents/queries";
+import { formatAgentRelativeTime } from "@/lib/ai/agents/labels";
+import { AgentDetailDrawer } from "@/components/dashboard/orca/agent-detail-drawer";
 
 type AgentStatus = "active" | "paused";
 
@@ -70,29 +73,20 @@ const STATUS_CONFIG: Record<AgentStatus, { label: string; text: string; dot: str
   },
 };
 
-function formatRelativeTime(iso: string | null): string {
-  if (!iso) return "Never";
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
-}
-
 export function AgentsContent({ agents, catalog, positions, agentsActive }: AgentsContentProps) {
   const router = useRouter();
   const [searchQuery, setSearchQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<AgentStatus | "all">("all");
   const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
+  const [detailAgentId, setDetailAgentId] = useState<string | null>(null);
 
   const [hireOpen, setHireOpen] = useState(false);
   const [hiring, setHiring] = useState(false);
   const [hireAgentKey, setHireAgentKey] = useState<string>(catalog[0]?.key ?? "");
   const [hirePositionId, setHirePositionId] = useState<string>(positions[0]?.id ?? "");
   const [hireDisplayName, setHireDisplayName] = useState("");
+
+  const selectedCatalogEntry = catalog.find((c) => c.key === hireAgentKey);
 
   const filteredAgents = agents.filter((agent) => {
     const matchesSearch =
@@ -307,7 +301,29 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                 </button>
               </div>
 
-              <p className="text-sm text-gray-500 mb-4">{agent.description}</p>
+              <p className="text-sm text-gray-500 mb-2">{agent.description}</p>
+
+              {/* Capability summary — what will it do / what can it touch */}
+              {agent.capabilities && (
+                <div className="mb-3 space-y-1">
+                  <p className="text-xs text-gray-500">{agent.capabilities.trigger}</p>
+                  {agent.capabilities.drafts.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      <span className="font-medium text-gray-600">Drafts:</span> {agent.capabilities.drafts.join(", ")}
+                    </p>
+                  )}
+                  {agent.capabilities.produces.length > 0 && (
+                    <p className="text-xs text-gray-500">
+                      <span className="font-medium text-gray-600">Produces:</span>{" "}
+                      {agent.capabilities.produces.join(", ")}
+                    </p>
+                  )}
+                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                    <ShieldCheck className="w-3 h-3" />
+                    Draft-only
+                  </span>
+                </div>
+              )}
 
               {/* Stats Row */}
               <div className="flex items-center gap-4 mb-4 text-xs">
@@ -320,7 +336,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                 </div>
                 <div className="flex items-center gap-1 text-gray-400">
                   <Clock className="w-3 h-3" />
-                  <span>{formatRelativeTime(agent.lastActive)}</span>
+                  <span>{formatAgentRelativeTime(agent.lastActive)}</span>
                 </div>
               </div>
 
@@ -330,10 +346,15 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                   Assigned to: <span className="font-medium text-gray-700">{agent.assignedRole}</span>
                 </span>
                 <div className="flex items-center gap-1">
+                  {/* Automation-level settings (schedule/thresholds) — 5.4, stays dead until then */}
                   <button className="p-1.5 hover:bg-gray-100 rounded transition-colors" title="Configure">
                     <Settings2 className="w-4 h-4 text-gray-400" />
                   </button>
-                  <button className="p-1.5 hover:bg-gray-100 rounded transition-colors" title="View logs">
+                  <button
+                    onClick={() => setDetailAgentId(agent.id)}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                    title="View logs"
+                  >
                     <FileText className="w-4 h-4 text-gray-400" />
                   </button>
                 </div>
@@ -382,10 +403,24 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                     ))}
                   </SelectContent>
                 </Select>
-                {catalog.find((c) => c.key === hireAgentKey) && (
-                  <p className="text-xs text-muted-foreground">
-                    {catalog.find((c) => c.key === hireAgentKey)?.description}
-                  </p>
+                {selectedCatalogEntry && (
+                  <div className="space-y-1 rounded-md bg-gray-50 p-2.5">
+                    <p className="text-xs text-muted-foreground">{selectedCatalogEntry.description}</p>
+                    <p className="text-xs text-gray-500">{selectedCatalogEntry.capabilities.trigger}</p>
+                    {selectedCatalogEntry.capabilities.drafts.length > 0 && (
+                      <p className="text-xs text-gray-500">
+                        <span className="font-medium text-gray-600">Drafts:</span>{" "}
+                        {selectedCatalogEntry.capabilities.drafts.join(", ")}
+                      </p>
+                    )}
+                    {selectedCatalogEntry.capabilities.produces.length > 0 && (
+                      <p className="text-xs text-gray-500">
+                        <span className="font-medium text-gray-600">Produces:</span>{" "}
+                        {selectedCatalogEntry.capabilities.produces.join(", ")}
+                      </p>
+                    )}
+                    <p className="text-xs italic text-gray-500">{selectedCatalogEntry.capabilities.guarantee}</p>
+                  </div>
                 )}
               </div>
 
@@ -410,7 +445,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                 <Input
                   value={hireDisplayName}
                   onChange={(e) => setHireDisplayName(e.target.value)}
-                  placeholder={catalog.find((c) => c.key === hireAgentKey)?.name}
+                  placeholder={selectedCatalogEntry?.name}
                 />
               </div>
             </div>
@@ -426,6 +461,14 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AgentDetailDrawer
+        agentId={detailAgentId}
+        open={detailAgentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailAgentId(null);
+        }}
+      />
     </div>
   );
 }

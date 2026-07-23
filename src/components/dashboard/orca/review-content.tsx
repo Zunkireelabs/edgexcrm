@@ -10,17 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import type { AgentReviewItem } from "@/lib/ai/agents/queries";
+import { KIND_LABELS, formatAgentRelativeTime } from "@/lib/ai/agents/labels";
 
 interface ReviewContentProps {
   items: AgentReviewItem[];
 }
-
-const KIND_LABELS: Record<string, string> = {
-  score_suggestion: "Score suggestion",
-  task_suggestion: "Task suggestion",
-  draft_email: "Draft email",
-  lead_summary: "Lead summary",
-};
 
 const EDITABLE_KINDS = new Set(["score_suggestion", "task_suggestion"]);
 
@@ -33,17 +27,6 @@ interface TaskDraft {
   title: string;
   description: string;
   dueDate: string;
-}
-
-function formatRelativeTime(iso: string): string {
-  const diffMs = Date.now() - new Date(iso).getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  if (diffMin < 1) return "Just now";
-  if (diffMin < 60) return `${diffMin} minute${diffMin === 1 ? "" : "s"} ago`;
-  const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return `${diffHr} hour${diffHr === 1 ? "" : "s"} ago`;
-  const diffDay = Math.floor(diffHr / 24);
-  return `${diffDay} day${diffDay === 1 ? "" : "s"} ago`;
 }
 
 function PayloadPreview({ item }: { item: AgentReviewItem }) {
@@ -208,7 +191,7 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
                     </div>
                   )}
                 </div>
-                <span className="text-xs text-gray-400 whitespace-nowrap">{formatRelativeTime(item.createdAt)}</span>
+                <span className="text-xs text-gray-400 whitespace-nowrap">{formatAgentRelativeTime(item.createdAt)}</span>
               </div>
 
               <div className="mb-4">

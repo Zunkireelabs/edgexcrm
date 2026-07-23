@@ -1,5 +1,6 @@
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getAgentDefinition, getAgentDefinitionsForIndustry } from "./registry";
+import { describeCapabilities, type AgentCapabilitySummary } from "./capabilities";
 
 export interface AgentFleetItem {
   id: string;
@@ -13,12 +14,52 @@ export interface AgentFleetItem {
   successRate: number | null; // null when the agent has produced zero outputs — render "—", never a fake 0/100
   lastActive: string | null; // ISO timestamp; humanize client-side
   createdAt: string;
+  capabilities: AgentCapabilitySummary | null; // null when the registry def is missing (hired agent whose def was removed)
 }
 
 export interface AgentCatalogEntry {
   key: string;
   name: string;
   description: string;
+  capabilities: AgentCapabilitySummary;
+}
+
+export interface AgentDetailStats {
+  tasksCompleted: number;
+  successRate: number | null;
+  lastActive: string | null;
+}
+
+export interface AgentDetailRun {
+  id: string;
+  triggerEvent: string;
+  subjectLabel: string | null;
+  status: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+  durationMs: number | null;
+  error: string | null;
+}
+
+export interface AgentDetailOutput {
+  id: string;
+  kind: string;
+  status: string;
+  createdAt: string;
+  reviewedAt: string | null;
+}
+
+export interface AgentDetail {
+  id: string;
+  agentKey: string;
+  displayName: string;
+  status: "active" | "paused";
+  positionName: string | null;
+  createdAt: string;
+  capabilities: AgentCapabilitySummary | null;
+  stats: AgentDetailStats;
+  recentRuns: AgentDetailRun[];
+  recentOutputs: AgentDetailOutput[];
 }
 
 export interface AssignablePosition {
@@ -90,6 +131,26 @@ interface LeadLookupRow {
   last_name: string | null;
   email: string | null;
   display_id: string | null;
+}
+
+interface DetailRunRow {
+  id: string;
+  trigger_event: string;
+  subject_type: string | null;
+  subject_id: string | null;
+  status: string;
+  usage: Record<string, unknown> | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+interface DetailOutputRow {
+  id: string;
+  kind: string;
+  status: string;
+  created_at: string;
+  reviewed_at: string | null;
 }
 
 function leadSubjectLabel(lead: LeadLookupRow): string {
@@ -164,6 +225,7 @@ export async function getAgentFleet(tenantId: string): Promise<AgentFleetItem[]>
       successRate: outStats && outStats.total > 0 ? Math.round((outStats.accepted / outStats.total) * 100) : null,
       lastActive: runStats?.last ?? null,
       createdAt: r.created_at,
+      capabilities: def ? describeCapabilities(def) : null,
     };
   });
 }
@@ -180,7 +242,7 @@ export async function getAgentCatalog(tenantId: string, industryId: string | nul
 
   return getAgentDefinitionsForIndustry(industryId)
     .filter((d) => !hiredKeys.has(d.key))
-    .map((d) => ({ key: d.key, name: d.name, description: d.description }));
+    .map((d) => ({ key: d.key, name: d.name, description: d.description, capabilities: describeCapabilities(d) }));
 }
 
 /** Positions this tenant can assign a hired agent to — mirrors the api/v1/positions GET shape, trimmed to what the dialog needs. */
@@ -256,4 +318,112 @@ export async function getPendingReviewCount(tenantId: string): Promise<number> {
     .select("*", { count: "exact", head: true })
     .eq("status", "proposed");
   return count ?? 0;
+}
+
+/**
+ * Server query for the Agent Detail drawer — one hired agent's capability
+ * summary, lifetime stats (same rollup math as getAgentFleet, computed over
+ * this agent's full run/output history), and its most recent 20 runs/outputs
+ * for the "what it's done" timeline. Returns null when the id isn't a hired
+ * agent in this tenant (cross-tenant or unknown id).
+ */
+export async function getAgentDetail(tenantId: string, agentId: string): Promise<AgentDetail | null> {
+  const db = await scopedClientForTenant(tenantId);
+
+  const { data: identity } = await db
+    .from("agent_identities")
+    .select("id, agent_key, display_name, position_id, status, created_at")
+    .eq("id", agentId)
+    .maybeSingle();
+
+  const row = identity as unknown as IdentityRow | null;
+  if (!row) return null;
+
+  const [{ data: position }, { data: runs }, { data: outputs }] = await Promise.all([
+    row.position_id
+      ? db.from("positions").select("id, name").eq("id", row.position_id).maybeSingle()
+      : Promise.resolve({ data: null as PositionRow | null }),
+    db
+      .from("agent_runs")
+      .select("id, trigger_event, subject_type, subject_id, status, usage, error, started_at, finished_at")
+      .eq("agent_id", agentId)
+      .order("started_at", { ascending: false }),
+    db
+      .from("agent_outputs")
+      .select("id, kind, status, created_at, reviewed_at")
+      .eq("agent_id", agentId)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  const runRows = (runs ?? []) as unknown as DetailRunRow[];
+  const outputRows = (outputs ?? []) as unknown as DetailOutputRow[];
+
+  // Stats roll up over the FULL history (mirrors getAgentFleet's math); the
+  // timeline below only shows the most recent slice of that same data.
+  let tasksCompleted = 0;
+  let lastActive: string | null = null;
+  for (const r of runRows) {
+    if (r.status === "completed") tasksCompleted++;
+    const activity = r.finished_at ?? r.started_at;
+    if (activity && (!lastActive || activity > lastActive)) lastActive = activity;
+  }
+  let accepted = 0;
+  let reviewed = 0;
+  for (const o of outputRows) {
+    if (o.status === "expired" || o.status === "proposed") continue;
+    reviewed++;
+    if (ACCEPTED_OUTPUT_STATUSES.has(o.status)) accepted++;
+  }
+
+  const recentRunRows = runRows.slice(0, 20);
+  const recentOutputRows = outputRows.slice(0, 20);
+
+  const leadIds = [
+    ...new Set(
+      recentRunRows
+        .filter((r) => r.subject_type === "lead" && r.subject_id !== null)
+        .map((r) => r.subject_id as string),
+    ),
+  ];
+  const { data: leads } =
+    leadIds.length > 0
+      ? await db.from("leads").select("id, first_name, last_name, email, display_id").in("id", leadIds)
+      : { data: [] as LeadLookupRow[] };
+  const leadLabelById = new Map(
+    ((leads ?? []) as unknown as LeadLookupRow[]).map((l) => [l.id, leadSubjectLabel(l)]),
+  );
+
+  const def = getAgentDefinition(row.agent_key);
+
+  return {
+    id: row.id,
+    agentKey: row.agent_key,
+    displayName: row.display_name,
+    status: row.status,
+    positionName: (position as unknown as PositionRow | null)?.name ?? null,
+    createdAt: row.created_at,
+    capabilities: def ? describeCapabilities(def) : null,
+    stats: {
+      tasksCompleted,
+      successRate: reviewed > 0 ? Math.round((accepted / reviewed) * 100) : null,
+      lastActive,
+    },
+    recentRuns: recentRunRows.map((r) => ({
+      id: r.id,
+      triggerEvent: r.trigger_event,
+      subjectLabel: r.subject_type === "lead" && r.subject_id ? (leadLabelById.get(r.subject_id) ?? null) : null,
+      status: r.status,
+      startedAt: r.started_at,
+      finishedAt: r.finished_at,
+      durationMs: typeof r.usage?.duration_ms === "number" ? (r.usage.duration_ms as number) : null,
+      error: r.error,
+    })),
+    recentOutputs: recentOutputRows.map((o) => ({
+      id: o.id,
+      kind: o.kind,
+      status: o.status,
+      createdAt: o.created_at,
+      reviewedAt: o.reviewed_at,
+    })),
+  };
 }
