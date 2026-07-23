@@ -10,11 +10,25 @@ import {
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { getAgentDetail } from "@/lib/ai/agents/queries";
 
 const VALID_STATUSES = ["active", "paused"] as const;
 
 interface Props {
   params: Promise<{ id: string }>;
+}
+
+export async function GET(_request: NextRequest, { params }: Props) {
+  const { id } = await params;
+
+  const auth = await authenticateRequest();
+  if (!auth) return apiUnauthorized();
+  if (!requireAdmin(auth)) return apiForbidden();
+
+  const detail = await getAgentDetail(auth.tenantId, id);
+  if (!detail) return apiNotFound("Agent");
+
+  return apiSuccess(detail);
 }
 
 export async function PATCH(request: NextRequest, { params }: Props) {
