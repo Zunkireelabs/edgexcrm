@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { validate, isPhoneForCountry } from "@/lib/api/validation";
+import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
@@ -543,6 +544,9 @@ export async function applyLeadPatch(
     if (body[field] !== undefined) {
       updatePayload[field] = body[field];
     }
+  }
+  if (typeof updatePayload.phone === "string") {
+    updatePayload.phone = normalizePhoneForStorage(updatePayload.phone as string);
   }
   Object.assign(updatePayload, coerceAcademicPayload(body));
 

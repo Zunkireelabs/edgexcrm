@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { normalizePhoneForStorage } from "@/lib/phone-utils";
 import { getBranchIds } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
@@ -458,7 +459,7 @@ async function handlePost(request: NextRequest) {
     first_name: body.first_name || null,
     last_name: body.last_name || null,
     email: body.email || null,
-    phone: await (async () => {
+    phone: normalizePhoneForStorage(await (async () => {
       const rawPhone = String(body.phone || "").trim();
       if (!rawPhone) return null;
       // Normalize: replace spaces between country code and number with hyphen
@@ -485,7 +486,7 @@ async function handlePost(request: NextRequest) {
         } catch { /* fall through to raw phone */ }
       }
       return rawPhone || null;
-    })(),
+    })()),
     city: body.city || null,
     country: body.country || null,
     custom_fields: body.custom_fields || {},
