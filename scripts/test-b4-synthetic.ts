@@ -21,7 +21,7 @@ config({ path: ".env.local" });
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const SYNTHETIC_TENANT = "a0000000-0000-0000-0000-000000000001";
-const ADMIZZ_TENANT = "febeb37c-b0ea-43e9-9cd1-40e0a1bd0b89";
+const ADMIZZ_TENANT = "febeb37c-521c-4f29-adbb-0195b2eede88";
 
 if (!SUPABASE_URL || !SERVICE_KEY) {
   console.error("Missing env vars");
