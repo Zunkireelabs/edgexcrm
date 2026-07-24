@@ -41,6 +41,7 @@ export default async function EditFormPage({
     <FormBuilderPage
       formConfig={formConfig as FormConfig}
       tenantSlug={tenantData.tenant.slug}
+      industryId={tenantData.tenant.industry_id}
     />
   );
 }

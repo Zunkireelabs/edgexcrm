@@ -10,6 +10,7 @@ import {
 } from "@/components/ui/popover";
 import type { FormField } from "@/types/database";
 import { toFieldName } from "../lib/validation";
+import { DESTINATIONS, FIELDS_OF_STUDY } from "@/industries/_shared/features/lead-lists/taxonomies";
 
 type FieldType = FormField["type"];
 
@@ -27,17 +28,46 @@ const FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
   { type: "entity_select", label: "Entity Select", description: "Select from partner colleges / entities" },
 ];
 
+// Reserved presets — map to real `leads` columns (leads.destinations TEXT[],
+// leads.field_of_study TEXT) instead of a free-typed custom_fields key, so
+// forms stop reinventing this question under a new synonym every time
+// (interested_country, dream_destination, preferred_destination, ... — 8
+// different keys were found scattered across prod before this fix).
+// Education-only: DESTINATIONS/FIELDS_OF_STUDY are education vocab.
+const RESERVED_FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
+  { type: "checkbox", label: "Study Destination", description: "Preferred country/countries to study in (multi-select)" },
+  { type: "select", label: "Field of Study", description: "Area of academic interest" },
+];
+
 interface FieldTypePickerProps {
   onSelect: (field: FormField) => void;
+  industryId?: string | null;
 }
 
+const RESERVED: Record<string, { name: string; options: { label: string; value: string }[] }> = {
+  "Study Destination": {
+    name: "destinations",
+    options: DESTINATIONS.map((d) => ({ label: d, value: d })),
+  },
+  "Field of Study": {
+    name: "field_of_study",
+    options: FIELDS_OF_STUDY.map((f) => ({ label: f, value: f })),
+  },
+};
+
 function buildDefaultField(type: FieldType, label: string): FormField {
+  const reserved = RESERVED[label];
   const base: FormField = {
-    name: toFieldName(label) || type,
+    name: reserved?.name ?? (toFieldName(label) || type),
     label,
     type,
     required: false,
   };
+
+  if (reserved) {
+    base.options = reserved.options;
+    return base;
+  }
 
   if (type === "select" || type === "radio") {
     base.options = [
@@ -53,8 +83,10 @@ function buildDefaultField(type: FieldType, label: string): FormField {
   return base;
 }
 
-export function FieldTypePicker({ onSelect }: FieldTypePickerProps) {
+export function FieldTypePicker({ onSelect, industryId }: FieldTypePickerProps) {
   const [open, setOpen] = useState(false);
+  const fieldTypes =
+    industryId === "education_consultancy" ? [...FIELD_TYPES, ...RESERVED_FIELD_TYPES] : FIELD_TYPES;
 
   function handleSelect(type: FieldType, label: string) {
     onSelect(buildDefaultField(type, label));
@@ -74,9 +106,9 @@ export function FieldTypePicker({ onSelect }: FieldTypePickerProps) {
           Choose field type
         </p>
         <div className="space-y-0.5">
-          {FIELD_TYPES.map(({ type, label, description }) => (
+          {fieldTypes.map(({ type, label, description }) => (
             <button
-              key={type}
+              key={label}
               className="w-full flex items-start gap-3 px-2 py-2 rounded-md hover:bg-muted text-left"
               onClick={() => handleSelect(type, label)}
             >

@@ -26,9 +26,14 @@ interface StepEditorProps {
   stepIndex: number;
   totalSteps: number;
   dispatch: React.Dispatch<BuilderAction>;
+  industryId?: string | null;
 }
 
-export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditorProps) {
+// Reserved field names locked to real `leads` columns (see field-type-picker.tsx)
+// — inline label-driven rename must not touch their key either.
+const RESERVED_FIELD_NAMES = new Set(["destinations", "field_of_study"]);
+
+export function StepEditor({ step, stepIndex, totalSteps, dispatch, industryId }: StepEditorProps) {
   const [editingField, setEditingField] = useState<{ field: FormField; fieldIndex: number } | null>(null);
 
   // Generate stable IDs for sortable — use field name + index as fallback
@@ -119,7 +124,9 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
                         payload: {
                           stepIndex,
                           fieldIndex,
-                          field: { ...field, label: newLabel, name: toFieldName(newLabel) || field.name },
+                          field: RESERVED_FIELD_NAMES.has(field.name)
+                            ? { ...field, label: newLabel }
+                            : { ...field, label: newLabel, name: toFieldName(newLabel) || field.name },
                         },
                       });
                     }}
@@ -128,7 +135,7 @@ export function StepEditor({ step, stepIndex, totalSteps, dispatch }: StepEditor
               </SortableContext>
             </DndContext>
 
-            <FieldTypePicker onSelect={handleAddField} />
+            <FieldTypePicker onSelect={handleAddField} industryId={industryId} />
           </div>
       </div>
 
