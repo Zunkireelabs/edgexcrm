@@ -182,12 +182,21 @@ export default async function LeadDetailPage({
     ASSIGN_CHAIN_POSITIONS.has(tenantData.positionSlug) &&
     tenantData.permissions.baseTier === "member";
   const nextSlug = isChainMember ? nextPositionSlug(tenantData.positionSlug) : null;
-  const nextPositionMembers = nextSlug
+  const nextPositionLineTeam = nextSlug
     ? roster.filter(
         (m) =>
           m.position_slug === nextSlug &&
           (tenantData.branchId == null || m.branch_id === tenantData.branchId),
       )
+    : [];
+  // Admins are always a valid "send to next" target, appended after the position-chain team.
+  const nextPositionMembers = nextSlug
+    ? [
+        ...nextPositionLineTeam,
+        ...roster.filter(
+          (m) => m.role === "admin" && !nextPositionLineTeam.some((t) => t.user_id === m.user_id),
+        ),
+      ]
     : [];
 
   // Admins, owners, and branch-managers have no chain position, so the block above leaves
@@ -254,14 +263,21 @@ export default async function LeadDetailPage({
   const revertTargetMember = revertTargetUserId
     ? roster.find((m) => m.user_id === revertTargetUserId)
     : null;
+  const revertTargetPeers = revertTargetMember
+    ? roster.filter(
+        (m) =>
+          m.position_slug === revertTargetMember.position_slug &&
+          (revertTargetMember.branch_id == null || m.branch_id === revertTargetMember.branch_id),
+      )
+    : [];
+  // Admins are always a valid revert target, appended after the previous holder's peers.
   const revertTargetMembers = revertTargetMember
-    ? roster
-        .filter(
-          (m) =>
-            m.position_slug === revertTargetMember.position_slug &&
-            (revertTargetMember.branch_id == null || m.branch_id === revertTargetMember.branch_id),
-        )
-        .map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
+    ? [
+        ...revertTargetPeers,
+        ...roster.filter(
+          (m) => m.role === "admin" && !revertTargetPeers.some((t) => t.user_id === m.user_id),
+        ),
+      ].map((m) => ({ user_id: m.user_id, email: m.email, name: m.name }))
     : [];
 
   return (

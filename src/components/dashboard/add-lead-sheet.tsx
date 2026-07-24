@@ -388,7 +388,7 @@ export function AddLeadSheet({
     ? branches.find((b) => b.id === effectiveBranchId) ?? null
     : null;
 
-  const eduAssignableMembers = !isEducation
+  const eduAssignableMembersScoped = !isEducation
     ? assignableMembers
     : !selectedStageSlug
       ? [] // no Stage chosen yet → nothing to assign to
@@ -402,6 +402,16 @@ export function AddLeadSheet({
           // both hold an allowed position AND belong to the selected branch.
           return isSelectedBranchMgr || (positionAllowed && inBranch);
         });
+  // Admins are always assignable at any education stage, appended after the normal team.
+  const eduAssignableMembers =
+    isEducation && selectedStageSlug
+      ? [
+          ...eduAssignableMembersScoped,
+          ...assignableMembers.filter(
+            (m) => m.role === "admin" && !eduAssignableMembersScoped.some((s) => s.user_id === m.user_id),
+          ),
+        ]
+      : eduAssignableMembersScoped;
 
   const assigneeOptions = isEducation ? eduAssignableMembers : assignableMembers;
   const assigneeDisabled =

@@ -395,9 +395,13 @@ export async function applyLeadPatch(
       auth.permissions.baseTier === "member" &&
       auth.permissions.leadScope !== "team";
 
+    // Admins are always a valid assignment target (education_consultancy only) —
+    // bypasses the chain/branch restrictions below, forward or revert.
+    const isAdminTarget = auth.industryId === "education_consultancy" && targetRole === "admin";
+
     if (isChainCaller && isRevert) {
       // Revert: the assignee must be the previous holder or a same-position peer in
-      // their branch. First-holder (no prior handoff) may not revert.
+      // their branch — or an admin. First-holder (no prior handoff) may not revert.
       if (!revertPrevHolderId) {
         return { kind: "forbidden", message: "First holder cannot revert this lead" };
       }
@@ -417,19 +421,19 @@ export async function applyLeadPatch(
         effectiveSlug != null &&
         effectiveSlug === prevSlug &&
         (prevBranchId == null || targetBranchId === prevBranchId);
-      if (!okPeer) {
+      if (!okPeer && !isAdminTarget) {
         return { kind: "forbidden" };
       }
     } else if (isChainCaller) {
       // Forward chain check: education chain-position callers may only assign to their
-      // allowed chain targets.
+      // allowed chain targets — or an admin.
       // Cross-branch pool grab: restrict to self + same-position peers (no forward-to-next hop).
       // Normal own-scope assign keeps the full chain targets (peer + next position).
       const allowed = new Set(
         isCrossBranchPooledAssign ? peerSlugs(auth.positionSlug) : assignableTargetSlugs(auth.positionSlug),
       );
       const okBranch = auth.branchId == null || targetBranchId === auth.branchId;
-      if (!effectiveSlug || !allowed.has(effectiveSlug) || !okBranch) {
+      if (!isAdminTarget && (!effectiveSlug || !allowed.has(effectiveSlug) || !okBranch)) {
         return { kind: "forbidden" };
       }
     }
@@ -493,11 +497,13 @@ export async function applyLeadPatch(
       if (body.assigned_to !== undefined && body.assigned_to !== null) {
         const { data: targetMember } = await supabase
           .from("tenant_users")
-          .select("branch_id")
+          .select("branch_id, role")
           .eq("tenant_id", auth.tenantId)
           .eq("user_id", body.assigned_to as string)
           .single();
-        if (!targetMember || targetMember.branch_id !== auth.branchId) {
+        // Admins are always a valid target, regardless of branch (education_consultancy only).
+        const isAdminTarget = auth.industryId === "education_consultancy" && targetMember?.role === "admin";
+        if (!targetMember || (targetMember.branch_id !== auth.branchId && !isAdminTarget)) {
           return { kind: "forbidden" };
         }
       }
