@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { scoreRun } from "@/lib/ai/telemetry";
 
 const DECISIONS = ["accept", "dismiss"] as const;
 
@@ -63,8 +64,8 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const db = await scopedClient(auth);
 
-  const { data: existingRaw } = await db.from("agent_outputs").select("id, kind, status").eq("id", id).maybeSingle();
-  const existing = existingRaw as unknown as { id: string; kind: string; status: string } | null;
+  const { data: existingRaw } = await db.from("agent_outputs").select("id, kind, status, run_id").eq("id", id).maybeSingle();
+  const existing = existingRaw as unknown as { id: string; kind: string; status: string; run_id: string } | null;
   if (!existing) return apiNotFound("Agent output");
 
   if (existing.status !== "proposed") {
@@ -107,6 +108,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     log.error({ error }, "Failed to update agent output");
     return apiError("DB_ERROR", "Failed to update agent output", 500);
   }
+
+  const REVIEW_OUTCOME_VALUE: Record<string, number> = { accepted: 1, edited_accepted: 0.5, dismissed: 0 };
+  void scoreRun(existing.run_id, "review_outcome", REVIEW_OUTCOME_VALUE[nextStatus] ?? 0, `decision=${nextStatus};kind=${existing.kind}`);
 
   log.info({ agentOutputId: id, status: nextStatus }, "Agent output reviewed");
   return apiSuccess(data);

@@ -11,6 +11,7 @@ const buildDraftToolsMock = vi.fn();
 const generateTextMock = vi.fn();
 const modelMock = vi.fn();
 const startTraceMock = vi.fn();
+const scoreRunMock = vi.fn();
 const scopedClientMock = vi.fn();
 
 vi.mock("@/lib/ai/flag", () => ({ isAgentsEnabledForTenant: isAgentsEnabledForTenantMock }));
@@ -26,7 +27,7 @@ vi.mock("@/lib/ai/models", () => ({
   MODELS: { openai: { agent: "gpt-4o-mini", fast: "gpt-4o-mini" }, anthropic: { agent: "claude-sonnet-5", fast: "claude-haiku-4-5" } },
   ACTIVE_PROVIDER: "openai",
 }));
-vi.mock("@/lib/ai/telemetry", () => ({ startTrace: startTraceMock }));
+vi.mock("@/lib/ai/telemetry", () => ({ startTrace: startTraceMock, scoreRun: scoreRunMock }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 
 interface FakeDbHandle {
@@ -35,20 +36,26 @@ interface FakeDbHandle {
   updates: Array<{ table: string; row: unknown }>;
 }
 
-function fakeDb(opts: { identityStatus?: string | null; runInsertError?: { message: string } } = {}): FakeDbHandle {
+function fakeDb(opts: { identityStatus?: string | null; runInsertError?: { message: string }; outputCount?: number } = {}): FakeDbHandle {
   const inserts: Array<{ table: string; row: unknown }> = [];
   const updates: Array<{ table: string; row: unknown }> = [];
 
   function chainFor(table: string) {
     return {
-      select: () => ({
-        eq: () => ({
-          maybeSingle: () => {
-            if (table !== "agent_identities") return Promise.resolve({ data: null });
-            if (opts.identityStatus === null) return Promise.resolve({ data: null });
-            return Promise.resolve({ data: { status: opts.identityStatus ?? "active" } });
-          },
-        }),
+      select: (cols?: unknown, selectOpts?: { count?: string; head?: boolean }) => ({
+        eq: () => {
+          // agent_outputs count query (output_produced scoring)
+          if (table === "agent_outputs" && selectOpts?.count === "exact") {
+            return Promise.resolve({ count: opts.outputCount ?? 0 });
+          }
+          return {
+            maybeSingle: () => {
+              if (table !== "agent_identities") return Promise.resolve({ data: null });
+              if (opts.identityStatus === null) return Promise.resolve({ data: null });
+              return Promise.resolve({ data: { status: opts.identityStatus ?? "active" } });
+            },
+          };
+        },
       }),
       insert: (row: unknown) => {
         inserts.push({ table, row });
@@ -276,5 +283,41 @@ describe("runAgent — draft tools are filtered by def.toolIds", () => {
     expect(callArgs.tools).not.toHaveProperty("propose_score");
     expect(callArgs.tools).not.toHaveProperty("propose_task");
     expect(callArgs.tools).not.toHaveProperty("propose_email");
+  });
+});
+
+describe("runAgent — output_produced eval baseline scoring", () => {
+  it("scores output_produced=1 when the run has agent_outputs rows", async () => {
+    const { db } = fakeDb({ outputCount: 1 });
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER);
+
+    expect(scoreRunMock).toHaveBeenCalledWith("run-123", "output_produced", 1);
+  });
+
+  it("scores output_produced=0 when the run has no agent_outputs rows", async () => {
+    const { db } = fakeDb({ outputCount: 0 });
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER);
+
+    expect(scoreRunMock).toHaveBeenCalledWith("run-123", "output_produced", 0);
+  });
+
+  it("does NOT emit output_produced on the failed path — scoreRunMock never called with that name", async () => {
+    generateTextMock.mockRejectedValue(new Error("model exploded"));
+    const { db } = fakeDb({ outputCount: 1 });
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    const result = await runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER);
+
+    expect(result.status).toBe("failed");
+    // scoreRun must never have been called with "output_produced" on the failed path
+    const outputProducedCalls = scoreRunMock.mock.calls.filter((c: unknown[]) => c[1] === "output_produced");
+    expect(outputProducedCalls).toHaveLength(0);
   });
 });

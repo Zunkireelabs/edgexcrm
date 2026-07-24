@@ -1,7 +1,7 @@
 import { generateText, stepCountIs } from "ai";
 import { model } from "@/lib/ai/provider";
 import { MODELS, ACTIVE_PROVIDER } from "@/lib/ai/models";
-import { startTrace } from "@/lib/ai/telemetry";
+import { startTrace, scoreRun } from "@/lib/ai/telemetry";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { isAgentsEnabledForTenant } from "@/lib/ai/flag";
 import { checkAgentDailyBudget } from "@/lib/ai/budget";
@@ -181,6 +181,20 @@ export async function runAgent(
     });
 
     trace.end({ ok: true, model: MODELS[ACTIVE_PROVIDER][modelKind], inputTokens: usage.inputTokens, outputTokens: usage.outputTokens });
+
+    // Best-effort eval baseline (doc 03 §51): did this run actually propose anything? A run that
+    // completes but emits nothing is a silent no-op acceptance-rate can't surface. Telemetry only —
+    // never allowed to affect run status, hence its own swallow.
+    try {
+      const { count } = await db
+        .from("agent_outputs")
+        .select("id", { count: "exact", head: true })
+        .eq("run_id", runId);
+      scoreRun(runId, "output_produced", count && count > 0 ? 1 : 0);
+    } catch (scoreErr) {
+      logger.warn({ scoreErr, runId }, "output_produced scoring failed (non-blocking)");
+    }
+
     return { status: "completed", runId };
   } catch (err) {
     const message = err instanceof Error ? err.message.slice(0, MAX_ERROR_LENGTH) : "Agent run failed";
