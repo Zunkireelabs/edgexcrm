@@ -1,6 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { logger } from "@/lib/logger";
 import { dispatchWebhookEvent } from "@/lib/webhooks/dispatcher";
+import { emitDomainEvent } from "@/lib/ai/agents/events";
 
 interface AuditLogInput {
   tenantId: string;
@@ -86,6 +87,18 @@ export async function emitEvent(input: EventInput): Promise<string | null> {
       payload: input.payload,
     }).catch((err) => {
       logger.error({ err, eventType: input.type }, "Webhook dispatch error (non-blocking)");
+    });
+
+    // Fan into the agent runner non-blocking — same choke point as webhooks
+    // above (doc 03 §2). No-ops unless AI_AGENTS_ENABLED, so this is inert
+    // everywhere but local until Phase 5 ships.
+    emitDomainEvent({
+      tenantId: input.tenantId,
+      type: input.type,
+      entityType: input.entityType,
+      entityId: input.entityId,
+    }).catch((err) => {
+      logger.error({ err, eventType: input.type }, "Domain event emission error (non-blocking)");
     });
 
     return data?.id ?? null;

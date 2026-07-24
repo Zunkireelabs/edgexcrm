@@ -1,12 +1,13 @@
 import { z } from "zod";
 import type { AuthContext } from "@/lib/api/auth";
+import type { AgentAuthContext } from "@/lib/ai/agent-auth";
 import type { ResolvedPermissions } from "@/lib/api/permissions";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { Logger } from "pino";
 import type { IndustryId } from "@/industries/_registry";
 
 export interface ToolContext {
-  auth: AuthContext; // Phase 3 widens to AuthContext | AgentAuthContext
+  auth: AuthContext | AgentAuthContext; // background agents (Phase 5) act via AgentAuthContext, never a real session
   db: ScopedClient; // ALWAYS scopedClient(auth) — never the service client
   logger: Logger; // request logger, child-scoped per tool call
   runId: string; // correlates audit rows + telemetry trace

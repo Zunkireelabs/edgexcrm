@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { streamText, stepCountIs, convertToModelMessages, generateText, type UIMessage } from "ai";
-import { isAssistantEnabled, isAssistantEnabledForTenant } from "@/lib/ai/flag";
+import {
+  streamText,
+  stepCountIs,
+  convertToModelMessages,
+  generateText,
+  InvalidToolApprovalSignatureError,
+  InvalidToolApprovalError,
+  ToolCallNotFoundForApprovalError,
+  type UIMessage,
+} from "ai";
+import { isAssistantEnabled, isAssistantEnabledForTenant, getToolApprovalSecret } from "@/lib/ai/flag";
 import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
@@ -118,6 +127,11 @@ export async function POST(request: NextRequest) {
   const tools = toAiSdkTools(toolset, toolCtx);
   const toolApproval = buildToolApproval(toolset);
 
+  const toolApprovalSecret = getToolApprovalSecret();
+  if (!toolApprovalSecret && toolset.some((t) => t.scope === "write")) {
+    log.error("write tools active without AI_TOOL_APPROVAL_SECRET — approval requests are unsigned and client-forgeable");
+  }
+
   const trace = startTrace({ runId, tenantId: auth.tenantId, userId: auth.userId, industryId: auth.industryId, surface: "assistant" });
   trace.span("chat.start", { conversationId, toolCount: toolset.length });
 
@@ -139,6 +153,7 @@ export async function POST(request: NextRequest) {
     messages: modelMessages,
     tools,
     toolApproval,
+    experimental_toolApprovalSecret: toolApprovalSecret,
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
     // One retry before giving up — no cross-provider fallback this slice (only
     // OPENAI_API_KEY is provisioned). provider.ts's model() seam is where a
@@ -226,7 +241,16 @@ export async function POST(request: NextRequest) {
       }
     },
     onError: (event) => {
-      log.error({ err: event.error }, "streamText error");
+      const err = event.error;
+      if (
+        InvalidToolApprovalSignatureError.isInstance(err) ||
+        InvalidToolApprovalError.isInstance(err) ||
+        ToolCallNotFoundForApprovalError.isInstance(err)
+      ) {
+        log.error({ err, userId: auth.userId, tenantId: auth.tenantId, runId }, "rejected forged/invalid tool approval — write blocked");
+      } else {
+        log.error({ err }, "streamText error");
+      }
     },
   });
 

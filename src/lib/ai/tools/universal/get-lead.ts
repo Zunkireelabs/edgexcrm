@@ -20,6 +20,9 @@ export const getLeadTool: AgentTool<z.infer<typeof inputSchema>> = {
   inputSchema,
   scope: "read",
   async execute(ctx, input) {
+    // Phase 5.1b (doc 03 §1): scoped by auth.permissions via canViewLead below,
+    // which accepts both a real user's AuthContext and a background agent's
+    // AgentAuthContext — no assertUserAuth gate needed on this read tool.
     const { db, auth } = ctx;
 
     const { data: lead } = await db.from("leads").select("*").eq("id", input.leadId).is("deleted_at", null).maybeSingle();

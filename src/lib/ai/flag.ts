@@ -19,6 +19,18 @@ export function isWriteToolsEnabled(): boolean {
   return process.env.AI_WRITE_TOOLS_ENABLED === "true";
 }
 
+/**
+ * Secret for the AI SDK's HMAC-SHA256 signing of write-tool approval requests
+ * (experimental_toolApprovalSecret). Absent → the SDK does not sign or verify,
+ * preserving today's behavior (approvals unsigned). Must be set wherever
+ * AI_WRITE_TOOLS_ENABLED is on, else approvals are client-forgeable.
+ * Empty string is treated as unset so an accidentally-blank env can't enable
+ * signing with an empty key.
+ */
+export function getToolApprovalSecret(): string | undefined {
+  return process.env.AI_TOOL_APPROVAL_SECRET || undefined;
+}
+
 // Outreach AI-drafting Stage 2 prod-safety switch: flag off => the "Draft with
 // AI" button stays hidden and auto-AI steps fall back to template-merge at
 // fire time (draft-source:'template'), so the cadence never breaks and no
@@ -56,4 +68,33 @@ export async function isIngestionEnabledForTenant(tenantId: string): Promise<boo
 export async function isOutreachDraftEnabledForTenant(tenantId: string): Promise<boolean> {
   if (!isOutreachDraftEnabled()) return false;
   return tenantAiEnabled(tenantId);
+}
+
+// Phase 5 prod-safety switch: flag off => emitDomainEvent() no-ops and no
+// Inngest agent function runs for any tenant. Stays off everywhere but local
+// until the agent runtime (5.1b) ships and Sadin signs off flipping stage.
+export function isAgentsEnabled(): boolean {
+  return process.env.AI_AGENTS_ENABLED === "true";
+}
+
+// Migration 179: mirrors ai_enabled (mig 174) — the per-tenant grant. Agents
+// send data to the AI provider, so the base D5 consent gate (tenantAiEnabled)
+// still applies on top of this agent-specific switch.
+async function tenantAgentsEnabled(tenantId: string): Promise<boolean> {
+  const db = await scopedClientForTenant(tenantId);
+  const { data } = await db
+    .fromGlobal("tenants")
+    .select("ai_agents_enabled")
+    .eq("id", tenantId)
+    .maybeSingle();
+  return (data as { ai_agents_enabled: boolean } | null)?.ai_agents_enabled === true;
+}
+
+// Three-way layered gate — ALL must be true: the env kill switch, the base
+// AI consent gate (tenants.ai_enabled), and the agent-specific per-tenant
+// grant (tenants.ai_agents_enabled). Any one alone is insufficient.
+export async function isAgentsEnabledForTenant(tenantId: string): Promise<boolean> {
+  if (!isAgentsEnabled()) return false;
+  if (!(await tenantAiEnabled(tenantId))) return false;
+  return tenantAgentsEnabled(tenantId);
 }

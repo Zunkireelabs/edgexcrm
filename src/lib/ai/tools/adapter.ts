@@ -1,12 +1,22 @@
 import { tool, type ToolSet, type ToolApprovalStatus } from "ai";
 import type { Logger } from "pino";
 import { startTrace } from "@/lib/ai/telemetry";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool, ToolContext } from "./types";
 
 /**
  * Adapts our AgentTool registry into the `tools` object streamText() expects.
  * Every execute() is wrapped so a thrown error becomes a model-visible
  * `{ error }` payload instead of crashing the stream.
+ *
+ * Phase 5.1b (doc 03 §1): a background agent's AgentAuthContext now flows
+ * through here too (the agent runtime calls this same adapter to build its
+ * toolset) — read-scope tools apply their own auth-aware scoping (see
+ * lead-visibility.ts), so no blanket assertUserAuth gate belongs at this
+ * level anymore. `executeWriteTool` below still asserts a real user session
+ * before running any scope:"write" tool — the runtime never hands one to an
+ * agent's toolset in the first place (asserted in agents/runtime.ts), and
+ * this is the defense-in-depth backstop if that ever regresses.
  */
 export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
   const tools: ToolSet = {};
@@ -20,9 +30,9 @@ export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
         const trace = startTrace({
           runId: ctx.runId,
           tenantId: ctx.auth.tenantId,
-          userId: ctx.auth.userId,
+          userId: "userId" in ctx.auth ? ctx.auth.userId : undefined,
           industryId: ctx.auth.industryId,
-          surface: "assistant",
+          surface: "actorType" in ctx.auth ? "background_agent" : "assistant",
         });
         trace.span(`tool:${agentTool.id}`, { input, scope: agentTool.scope });
         log.info({ input }, "tool call started");
@@ -122,6 +132,7 @@ async function executeWriteTool(
   toolCallId: string,
   log: Logger,
 ): Promise<unknown> {
+  assertUserAuth(ctx.auth);
   const { data: existing } = await ctx.db
     .from("ai_write_actions")
     .select("status, result")

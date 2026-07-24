@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { canAccessPipeline } from "@/lib/api/permissions";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
 import { optionalString, optionalUuid } from "./lib/sanitize";
@@ -19,6 +20,7 @@ export const pipelineSummaryTool: AgentTool<z.infer<typeof inputSchema>> = {
   scope: "read",
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
 
     let pipelineId: string | null = null;
     if (input.pipelineId) {
