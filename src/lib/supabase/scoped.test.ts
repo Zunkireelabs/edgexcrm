@@ -138,6 +138,75 @@ describe("scopedClientForTenant", () => {
   });
 });
 
+// 5.Gb — danger-behavior characterization. scoped.ts:47-74 documents these as
+// review-only invariants (the wrapper cannot enforce them at compile time);
+// these tests pin the actual runtime behavior so a regression that weakens
+// tenant scoping — e.g. someone "helpfully" making update()/delete() add an
+// id filter automatically, silently changing what a bare .update()/.delete()
+// call does — gets caught here instead of only in review.
+describe("scopedClientForTenant — danger-behavior characterization (scoped.ts:47-74)", () => {
+  it("update() with no caller-supplied filter carries ONLY the tenant_id filter — proves the wrapper does not add an id filter, so a bare .update(vals) targets every row in the tenant", async () => {
+    const updateChain = chain();
+    const tableApi = { update: vi.fn(() => updateChain) };
+    fromMock.mockReturnValue(tableApi);
+
+    const db = await scopedClientForTenant("tenant-1");
+    db.from("leads").update({ status: "won" });
+
+    expect(updateChain.eq).toHaveBeenCalledTimes(1);
+    expect(updateChain.eq).toHaveBeenCalledWith("tenant_id", "tenant-1");
+  });
+
+  it("update(vals).eq('id', x) — the safe pattern — carries both the tenant_id and the caller's id filter", async () => {
+    const updateChain = chain();
+    const tableApi = { update: vi.fn(() => updateChain) };
+    fromMock.mockReturnValue(tableApi);
+
+    const db = await scopedClientForTenant("tenant-1");
+    db.from("leads").update({ status: "won" }).eq("id", "lead-1");
+
+    expect(updateChain.eq).toHaveBeenNthCalledWith(1, "tenant_id", "tenant-1");
+    expect(updateChain.eq).toHaveBeenNthCalledWith(2, "id", "lead-1");
+    expect(updateChain.eq).toHaveBeenCalledTimes(2);
+  });
+
+  it("delete() with no caller-supplied filter carries ONLY the tenant_id filter — same hazard as update()", async () => {
+    const deleteChain = chain();
+    const tableApi = { delete: vi.fn(() => deleteChain) };
+    fromMock.mockReturnValue(tableApi);
+
+    const db = await scopedClientForTenant("tenant-1");
+    db.from("leads").delete();
+
+    expect(deleteChain.eq).toHaveBeenCalledTimes(1);
+    expect(deleteChain.eq).toHaveBeenCalledWith("tenant_id", "tenant-1");
+  });
+
+  it("delete().eq('id', x) — the safe pattern — carries both the tenant_id and the caller's id filter", async () => {
+    const deleteChain = chain();
+    const tableApi = { delete: vi.fn(() => deleteChain) };
+    fromMock.mockReturnValue(tableApi);
+
+    const db = await scopedClientForTenant("tenant-1");
+    db.from("leads").delete().eq("id", "lead-1");
+
+    expect(deleteChain.eq).toHaveBeenNthCalledWith(1, "tenant_id", "tenant-1");
+    expect(deleteChain.eq).toHaveBeenNthCalledWith(2, "id", "lead-1");
+    expect(deleteChain.eq).toHaveBeenCalledTimes(2);
+  });
+
+  it("upsert() forwards the caller-supplied onConflict verbatim — does NOT auto-add tenant_id to it, so a caller who omits tenant_id from onConflict gets that exact (dangerous) value forwarded, uncorrected", async () => {
+    const tableApi = { upsert: vi.fn(() => "upserted") };
+    fromMock.mockReturnValue(tableApi);
+
+    const db = await scopedClientForTenant("tenant-1");
+    // Caller forgot to include tenant_id in onConflict — the wrapper does not fix this.
+    db.from("intake_years").upsert({ name: "2036" }, { onConflict: "name" });
+
+    expect(tableApi.upsert).toHaveBeenCalledWith({ name: "2036", tenant_id: "tenant-1" }, { onConflict: "name" });
+  });
+});
+
 describe("scopedClient", () => {
   it("delegates to scopedClientForTenant using auth.tenantId", async () => {
     const selectChain = chain();
