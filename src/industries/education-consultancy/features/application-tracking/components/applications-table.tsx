@@ -5,9 +5,22 @@ import { useRouter } from "next/navigation";
 import { StatusBadge } from "./status-badge";
 import type { Application, ApplicationStage } from "@/types/database";
 
+export const APPLICATION_COLUMNS = [
+  { key: "university", label: "University" },
+  { key: "program", label: "Program" },
+  { key: "intake", label: "Intake" },
+  { key: "country", label: "Country" },
+  { key: "status", label: "Status" },
+  { key: "deadline", label: "Deadline" },
+] as const;
+
+export const APPLICATION_DEFAULT_COLUMN_KEYS: string[] = APPLICATION_COLUMNS.map((c) => c.key);
+
 interface ApplicationsTableProps {
   applications: Application[];
   stages: ApplicationStage[];
+  /** Which of APPLICATION_COLUMNS to render, in addition to the always-shown Student column. */
+  visibleKeys?: string[];
 }
 
 function formatDate(dateString: string | null): string {
@@ -25,9 +38,14 @@ function getLeadId(app: Application): string {
   return (app.leads as { id?: string } | null)?.id ?? app.lead_id;
 }
 
-export function ApplicationsTable({ applications, stages }: ApplicationsTableProps) {
+export function ApplicationsTable({
+  applications,
+  stages,
+  visibleKeys = APPLICATION_DEFAULT_COLUMN_KEYS,
+}: ApplicationsTableProps) {
   const router = useRouter();
   const stageMap = new Map(stages.map((s) => [s.id, s]));
+  const show = (key: string) => visibleKeys.includes(key);
 
   if (applications.length === 0) {
     return (
@@ -43,12 +61,12 @@ export function ApplicationsTable({ applications, stages }: ApplicationsTablePro
         <thead>
           <tr className="border-b bg-muted/30 text-xs text-muted-foreground uppercase tracking-wide">
             <th className="px-4 py-3 text-left font-medium">Student</th>
-            <th className="px-4 py-3 text-left font-medium">University</th>
-            <th className="px-4 py-3 text-left font-medium">Program</th>
-            <th className="px-4 py-3 text-left font-medium">Intake</th>
-            <th className="px-4 py-3 text-left font-medium">Country</th>
-            <th className="px-4 py-3 text-left font-medium">Status</th>
-            <th className="px-4 py-3 text-left font-medium">Deadline</th>
+            {show("university") && <th className="px-4 py-3 text-left font-medium">University</th>}
+            {show("program") && <th className="px-4 py-3 text-left font-medium">Program</th>}
+            {show("intake") && <th className="px-4 py-3 text-left font-medium">Intake</th>}
+            {show("country") && <th className="px-4 py-3 text-left font-medium">Country</th>}
+            {show("status") && <th className="px-4 py-3 text-left font-medium">Status</th>}
+            {show("deadline") && <th className="px-4 py-3 text-left font-medium">Deadline</th>}
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
@@ -67,27 +85,39 @@ export function ApplicationsTable({ applications, stages }: ApplicationsTablePro
                     {getStudentName(app)}
                   </Link>
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">{app.university_name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{app.program_name}</td>
-                <td className="px-4 py-3 text-muted-foreground">{app.intake_term ?? "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {app.countries && app.countries.length > 0 ? app.countries.join(", ") : "—"}
-                </td>
-                <td className="px-4 py-3">
-                  {stage ? (
-                    <StatusBadge
-                      slug={stage.slug}
-                      name={stage.name}
-                      color={stage.color}
-                      terminalType={stage.terminal_type}
-                    />
-                  ) : (
-                    <span className="text-muted-foreground text-xs">{app.status}</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-muted-foreground text-xs">
-                  {formatDate(app.application_deadline)}
-                </td>
+                {show("university") && (
+                  <td className="px-4 py-3 text-muted-foreground">{app.university_name}</td>
+                )}
+                {show("program") && (
+                  <td className="px-4 py-3 text-muted-foreground">{app.program_name}</td>
+                )}
+                {show("intake") && (
+                  <td className="px-4 py-3 text-muted-foreground">{app.intake_term ?? "—"}</td>
+                )}
+                {show("country") && (
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {app.countries && app.countries.length > 0 ? app.countries.join(", ") : "—"}
+                  </td>
+                )}
+                {show("status") && (
+                  <td className="px-4 py-3">
+                    {stage ? (
+                      <StatusBadge
+                        slug={stage.slug}
+                        name={stage.name}
+                        color={stage.color}
+                        terminalType={stage.terminal_type}
+                      />
+                    ) : (
+                      <span className="text-muted-foreground text-xs">{app.status}</span>
+                    )}
+                  </td>
+                )}
+                {show("deadline") && (
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
+                    {formatDate(app.application_deadline)}
+                  </td>
+                )}
               </tr>
             );
           })}
