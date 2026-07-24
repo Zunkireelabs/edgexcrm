@@ -132,15 +132,19 @@ export async function runAgent(
 
   const modelKind = def.defaultModel ?? "fast";
   const toolCtx = { auth: agentAuth, db, logger, runId };
+  const draftTools = buildDraftTools({
+    agentId,
+    runId,
+    db,
+    subjectType: trigger.subjectType ?? "unknown",
+    subjectId: trigger.subjectId ?? "",
+  });
   const tools = {
     ...toAiSdkTools(toolset, toolCtx),
-    ...buildDraftTools({
-      agentId,
-      runId,
-      db,
-      subjectType: trigger.subjectType ?? "unknown",
-      subjectId: trigger.subjectId ?? "",
-    }),
+    // Draft tools, like registry read tools, are gated by def.toolIds — an
+    // agent only gets the draft tools it declares. (Previously every agent
+    // got all draft tools.)
+    ...Object.fromEntries(Object.entries(draftTools).filter(([id]) => def.toolIds.includes(id))),
   };
 
   try {

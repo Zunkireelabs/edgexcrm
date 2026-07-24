@@ -25,12 +25,14 @@ const TRIGGER_EVENT_PHRASES: Record<string, string> = {
 const READ_TOOL_PHRASES: Record<string, string> = {
   get_lead: "read a lead's full profile",
   search_leads: "search across leads",
+  pipeline_summary: "read the pipeline summary",
 };
 
 const DRAFT_TOOL_PHRASES: Record<string, string> = {
   propose_score: "draft a fit/quality score",
   propose_task: "draft a follow-up task",
   propose_email: "draft a follow-up email",
+  propose_digest: "compile the daily digest",
 };
 
 /** Best-effort de-slugify for any id this map doesn't (yet) know about — keeps unknown ids readable instead of throwing. */

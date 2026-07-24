@@ -7,8 +7,18 @@ import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
 import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 import { agentFollowUpDrafter } from "@/lib/inngest/functions/agent-follow-up-drafter";
+import { agentDailyDigest } from "@/lib/inngest/functions/agent-daily-digest";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
-  functions: [kbIngest, heartbeat, remindersScan, inboxProcess, emailPoll, agentLeadTriage, agentFollowUpDrafter],
+  functions: [
+    kbIngest,
+    heartbeat,
+    remindersScan,
+    inboxProcess,
+    emailPoll,
+    agentLeadTriage,
+    agentFollowUpDrafter,
+    agentDailyDigest,
+  ],
 });

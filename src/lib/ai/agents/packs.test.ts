@@ -29,4 +29,19 @@ describe("agents/packs.ts registration", () => {
     expect(getAgentDefinition("lead-triage")).toBeDefined();
     expect(getAgentDefinitionsForIndustry("it_agency").map((d) => d.key)).toContain("lead-triage");
   });
+
+  it("registers daily-digest as universal — present for every industry", () => {
+    expect(getAgentDefinition("daily-digest")).toBeDefined();
+    expect(getAgentDefinitionsForIndustry("it_agency").map((d) => d.key)).toContain("daily-digest");
+    expect(getAgentDefinitionsForIndustry("education_consultancy").map((d) => d.key)).toContain("daily-digest");
+  });
+
+  it("describeCapabilities on daily-digest surfaces the cron trigger, the digest draft tool, and its output kind", () => {
+    const def = getAgentDefinition("daily-digest")!;
+    const summary = describeCapabilities(def);
+
+    expect(summary.trigger).toMatch(/schedule/i);
+    expect(summary.drafts).toContain("compile the daily digest");
+    expect(summary.produces).toEqual(["Daily digest"]);
+  });
 });
