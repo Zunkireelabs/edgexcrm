@@ -1,5 +1,5 @@
 import { redirect, notFound } from "next/navigation";
-import { getCurrentUserTenant } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getTeamMembers } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
@@ -78,7 +78,7 @@ export default async function ApplicationsRoute() {
   }
   // else: leadScope 'all' → no filter
 
-  const [stagesResult, applications] = await Promise.all([
+  const [stagesResult, applications, teamMembers] = await Promise.all([
     supabase
       .from("application_stages")
       .select("*")
@@ -98,6 +98,8 @@ export default async function ApplicationsRoute() {
           return (data ?? []) as Application[];
         })()
       : fetchApplicationsByLeadIds(supabase, tenantData.tenant.id, leadIds),
+    // Roster for resolving applications.created_by → name/email in the Created By filter.
+    getTeamMembers(tenantData.tenant.id),
   ]);
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];
@@ -108,6 +110,7 @@ export default async function ApplicationsRoute() {
         stages={stages}
         applications={applications}
         canManageApplications={tenantData.permissions.canManageApplications}
+        teamMembers={teamMembers.map((m) => ({ user_id: m.user_id, name: m.name, email: m.email }))}
       />
     </div>
   );
