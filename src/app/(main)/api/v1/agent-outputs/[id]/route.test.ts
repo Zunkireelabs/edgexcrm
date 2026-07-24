@@ -4,12 +4,14 @@ import type { AuthContext } from "@/lib/api/auth";
 
 const authenticateRequestMock = vi.fn();
 const scopedClientMock = vi.fn();
+const scoreRunMock = vi.fn();
 
 vi.mock("@/lib/api/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api/auth")>();
   return { ...actual, authenticateRequest: authenticateRequestMock };
 });
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
+vi.mock("@/lib/ai/telemetry", () => ({ scoreRun: scoreRunMock }));
 
 const ADMIN_AUTH = { userId: "user-1", tenantId: "tenant-1", role: "admin" } as unknown as AuthContext;
 const VIEWER_AUTH = { userId: "user-2", tenantId: "tenant-1", role: "viewer" } as unknown as AuthContext;
@@ -20,7 +22,9 @@ function fakeReq(body: unknown): NextRequest {
 
 const params = Promise.resolve({ id: "output-1" });
 
-function dbWithExisting(existing: { id: string; kind: string; status: string } | null, updatedRow?: Record<string, unknown>) {
+function dbWithExisting(existing: { id: string; kind: string; status: string; run_id?: string } | null, updatedRow?: Record<string, unknown>) {
+  const runId = (existing as { run_id?: string } | null)?.run_id ?? "run-1";
+  const existingWithRunId = existing ? { ...existing, run_id: runId } : null;
   const updateSpy = vi.fn((row: Record<string, unknown>) => ({
     eq: vi.fn(() => ({
       select: vi.fn(() => ({
@@ -30,7 +34,7 @@ function dbWithExisting(existing: { id: string; kind: string; status: string } |
   }));
   return {
     from: vi.fn(() => ({
-      select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: existing })) })) })),
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ maybeSingle: vi.fn(() => Promise.resolve({ data: existingWithRunId })) })) })),
       update: updateSpy,
     })),
     __updateSpy: updateSpy,
@@ -41,6 +45,7 @@ describe("PATCH /api/v1/agent-outputs/[id]", () => {
   beforeEach(() => {
     authenticateRequestMock.mockReset();
     scopedClientMock.mockReset();
+    scoreRunMock.mockReset();
   });
 
   it("returns 403 for a non-owner/admin caller", async () => {
@@ -187,5 +192,38 @@ describe("PATCH /api/v1/agent-outputs/[id]", () => {
     const [sawUpdate] = db.__updateSpy.mock.calls[0];
     expect(sawUpdate.status).toBe("dismissed");
     expect(body.data.status).toBe("dismissed");
+  });
+
+  it("review_outcome score=1 is emitted for an unedited accept", async () => {
+    authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
+    const db = dbWithExisting({ id: "output-1", kind: "score_suggestion", status: "proposed", run_id: "run-1" });
+    scopedClientMock.mockResolvedValue(db);
+    const { PATCH } = await import("./route");
+
+    await PATCH(fakeReq({ decision: "accept" }), { params });
+
+    expect(scoreRunMock).toHaveBeenCalledWith("run-1", "review_outcome", 1, expect.stringContaining("accepted"));
+  });
+
+  it("review_outcome score=0.5 is emitted for an edited accept", async () => {
+    authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
+    const db = dbWithExisting({ id: "output-1", kind: "score_suggestion", status: "proposed", run_id: "run-1" });
+    scopedClientMock.mockResolvedValue(db);
+    const { PATCH } = await import("./route");
+
+    await PATCH(fakeReq({ decision: "accept", editedPayload: { score: 42, reasoning: "adjusted" } }), { params });
+
+    expect(scoreRunMock).toHaveBeenCalledWith("run-1", "review_outcome", 0.5, expect.stringContaining("edited_accepted"));
+  });
+
+  it("review_outcome score=0 is emitted for a dismiss", async () => {
+    authenticateRequestMock.mockResolvedValue(ADMIN_AUTH);
+    const db = dbWithExisting({ id: "output-1", kind: "task_suggestion", status: "proposed", run_id: "run-1" });
+    scopedClientMock.mockResolvedValue(db);
+    const { PATCH } = await import("./route");
+
+    await PATCH(fakeReq({ decision: "dismiss" }), { params });
+
+    expect(scoreRunMock).toHaveBeenCalledWith("run-1", "review_outcome", 0, expect.stringContaining("dismissed"));
   });
 });
