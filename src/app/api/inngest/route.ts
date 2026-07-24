@@ -8,6 +8,7 @@ import { emailPoll } from "@/lib/inngest/functions/email-poll";
 import { displayIdBackfillSweep } from "@/lib/inngest/functions/display-id-backfill-sweep";
 import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 import { agentFollowUpDrafter } from "@/lib/inngest/functions/agent-follow-up-drafter";
+import { agentDailyDigest } from "@/lib/inngest/functions/agent-daily-digest";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -20,5 +21,6 @@ export const { GET, POST, PUT } = serve({
     displayIdBackfillSweep,
     agentLeadTriage,
     agentFollowUpDrafter,
+    agentDailyDigest,
   ],
 });

@@ -1,7 +1,7 @@
 import type { IndustryId } from "@/industries/_registry";
 
-/** Mirrors agent_outputs.kind's CHECK constraint (migration 179). */
-export type AgentOutputKind = "draft_email" | "lead_summary" | "score_suggestion" | "task_suggestion";
+/** agent_outputs.kind is free-text (no CHECK constraint) — this union is the app-level source of truth. */
+export type AgentOutputKind = "draft_email" | "lead_summary" | "score_suggestion" | "task_suggestion" | "daily_digest";
 
 export interface AgentDefinitionContext {
   tenantId: string;

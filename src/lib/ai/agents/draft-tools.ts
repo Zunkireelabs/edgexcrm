@@ -27,13 +27,17 @@ export interface DraftToolsContext {
 export function buildDraftTools(ctx: DraftToolsContext): ToolSet {
   const { agentId, runId, db, subjectType, subjectId } = ctx;
 
-  async function insertOutput(kind: string, payload: Record<string, unknown>): Promise<void> {
+  async function insertOutput(
+    kind: string,
+    payload: Record<string, unknown>,
+    subject: { subjectType: string | null; subjectId: string | null } = { subjectType, subjectId },
+  ): Promise<void> {
     const { error } = await db.from("agent_outputs").insert({
       run_id: runId,
       agent_id: agentId,
       kind,
-      subject_type: subjectType,
-      subject_id: subjectId,
+      subject_type: subject.subjectType,
+      subject_id: subject.subjectId,
       payload,
       status: "proposed",
     });
@@ -88,6 +92,24 @@ export function buildDraftTools(ctx: DraftToolsContext): ToolSet {
       execute: async (input) => {
         await insertOutput("draft_email", { subject: input.subject, body: input.body });
         return { ok: true, message: "Email draft recorded for human review." };
+      },
+    }),
+    propose_digest: tool({
+      description:
+        "Record the tenant's daily digest — a short, plain-language summary of the day's pipeline " +
+        "activity for the whole team to read. This is tenant-wide (not about one lead) and only " +
+        "records a summary for humans; it changes nothing and sends nothing.",
+      inputSchema: z.object({
+        summary: z.string().trim().min(1).max(5000),
+        highlights: z.array(z.string().trim().min(1).max(300)).max(10).optional(),
+      }),
+      execute: async (input) => {
+        await insertOutput(
+          "daily_digest",
+          { summary: input.summary, highlights: input.highlights ?? [] },
+          { subjectType: null, subjectId: null },
+        );
+        return { ok: true, message: "Daily digest recorded for the team." };
       },
     }),
   };

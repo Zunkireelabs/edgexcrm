@@ -230,3 +230,51 @@ describe("runAgent — happy path and failure recording", () => {
     expect(runUpdate?.row).toMatchObject({ status: "failed" });
   });
 });
+
+describe("runAgent — draft tools are filtered by def.toolIds", () => {
+  // buildDraftTools always hands back every draft tool regardless of the run's
+  // subject — runAgent (not draft-tools.ts) is responsible for narrowing to
+  // what this agent declared.
+  const ALL_DRAFT_TOOLS = { propose_score: {}, propose_task: {}, propose_email: {}, propose_digest: {} };
+
+  it("only includes the draft tools declared in def.toolIds — an agent that omits propose_email never gets it", async () => {
+    buildDraftToolsMock.mockReturnValue(ALL_DRAFT_TOOLS);
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER);
+
+    const callArgs = generateTextMock.mock.calls[0][0];
+    expect(callArgs.tools).toHaveProperty("propose_score");
+    expect(callArgs.tools).toHaveProperty("propose_task");
+    expect(callArgs.tools).not.toHaveProperty("propose_email");
+    expect(callArgs.tools).not.toHaveProperty("propose_digest");
+  });
+
+  it("a subject-less digest agent gets propose_digest but not propose_score/propose_email", async () => {
+    buildDraftToolsMock.mockReturnValue(ALL_DRAFT_TOOLS);
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    const digestDef: AgentDefinition = {
+      key: "daily-digest",
+      name: "Daily Digest",
+      description: "test",
+      triggers: [{ cron: "0 2 * * *" }],
+      toolIds: ["pipeline_summary", "search_leads", "propose_digest"],
+      outputKinds: ["daily_digest"],
+      maxSteps: 6,
+      systemPrompt: () => "system prompt",
+    };
+
+    await runAgent(digestDef, agentAuth(), { event: "cron/daily-digest", subjectType: null, subjectId: null });
+
+    const callArgs = generateTextMock.mock.calls[0][0];
+    expect(callArgs.tools).toHaveProperty("propose_digest");
+    expect(callArgs.tools).not.toHaveProperty("propose_score");
+    expect(callArgs.tools).not.toHaveProperty("propose_task");
+    expect(callArgs.tools).not.toHaveProperty("propose_email");
+  });
+});

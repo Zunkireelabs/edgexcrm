@@ -58,3 +58,28 @@ export const leadTriageAgent: AgentDefinition = {
 };
 
 registerAgentDefinition(leadTriageAgent);
+
+/**
+ * Daily Digest (universal, doc 03 §4) — the spine's first CRON-triggered, subject-less agent.
+ * Once a day it reads the tenant's pipeline and records a short digest for the team to read.
+ * Draft-only — propose_digest is the only "write", landing one informational row in
+ * agent_outputs (subject NULL). It cannot change any lead or send anything.
+ */
+export const dailyDigestAgent: AgentDefinition = {
+  key: "daily-digest",
+  name: "Daily Digest",
+  description: "Summarizes each day's pipeline activity into a short digest for the team to read.",
+  triggers: [{ cron: "0 2 * * *" }], // 02:00 UTC ≈ 07:45 Asia/Kathmandu; per-tenant TZ deferred
+  toolIds: ["pipeline_summary", "search_leads", "propose_digest"],
+  outputKinds: ["daily_digest"],
+  maxSteps: 6,
+  systemPrompt: () =>
+    "You are the Daily Digest agent for this CRM tenant. Once a day, summarize the current state " +
+    "of the sales pipeline for the team. Use pipeline_summary to get lead counts per stage, and " +
+    "optionally search_leads to surface a few notable recent or unassigned leads. Then call " +
+    "propose_digest exactly once with a concise, plain-language summary (a few sentences) plus " +
+    "optional short highlight bullet points. You only record a summary for humans to read — you " +
+    "cannot change any lead, assign anyone, or send anything.",
+};
+
+registerAgentDefinition(dailyDigestAgent);

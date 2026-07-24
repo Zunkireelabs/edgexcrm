@@ -4,6 +4,7 @@ export const KIND_LABELS: Record<string, string> = {
   task_suggestion: "Task suggestion",
   draft_email: "Draft email",
   lead_summary: "Lead summary",
+  daily_digest: "Daily digest",
 };
 
 /** Relative-time phrasing for agent activity timestamps — used by the Fleet and Review Queue cards. */

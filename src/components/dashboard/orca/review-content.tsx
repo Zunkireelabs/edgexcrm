@@ -66,6 +66,21 @@ function PayloadPreview({ item }: { item: AgentReviewItem }) {
       </div>
     );
   }
+  if (item.kind === "daily_digest") {
+    const p = item.payload as { summary?: string; highlights?: string[] };
+    return (
+      <div className="space-y-2">
+        <p className="text-sm text-gray-700 whitespace-pre-wrap">{p.summary}</p>
+        {p.highlights && p.highlights.length > 0 && (
+          <ul className="list-disc pl-5 space-y-0.5">
+            {p.highlights.map((h, i) => (
+              <li key={i} className="text-sm text-gray-600">{h}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    );
+  }
   // lead_summary — no editor built for this yet, render raw payload
   return (
     <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-3">

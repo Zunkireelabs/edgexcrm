@@ -98,6 +98,30 @@ describe("buildDraftTools", () => {
     expect(result).toMatchObject({ ok: true });
   });
 
+  it("propose_digest inserts exactly one agent_outputs row with kind:'daily_digest' and a NULL subject, ignoring ctx's subject", async () => {
+    const calls: Array<{ table: string; row: unknown }> = [];
+    const db = fakeDb((table, row) => calls.push({ table, row }));
+    const tools = buildDraftTools({ agentId: "agent-1", runId: "run-1", db, subjectType: "unknown", subjectId: "" });
+
+    const result = await tools.propose_digest.execute!(
+      { summary: "12 new leads today, 3 moved to qualified.", highlights: ["3 leads moved to Qualified"] },
+      { toolCallId: "tc-6", messages: [] } as never,
+    );
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0].table).toBe("agent_outputs");
+    expect(calls[0].row).toMatchObject({
+      run_id: "run-1",
+      agent_id: "agent-1",
+      kind: "daily_digest",
+      subject_type: null,
+      subject_id: null,
+      status: "proposed",
+      payload: { summary: "12 new leads today, 3 moved to qualified.", highlights: ["3 leads moved to Qualified"] },
+    });
+    expect(result).toMatchObject({ ok: true });
+  });
+
   it("throws (surfaced by the adapter as a model-visible error) when the insert fails", async () => {
     const db = fakeDb(vi.fn(), { message: "insert failed" });
     const tools = buildDraftTools({ agentId: "agent-1", runId: "run-1", db, subjectType: "lead", subjectId: "lead-1" });
