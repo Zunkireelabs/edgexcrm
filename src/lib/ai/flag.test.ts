@@ -118,6 +118,29 @@ describe("isIngestionEnabledForTenant", () => {
   });
 });
 
+describe("getToolApprovalSecret (env-only)", () => {
+  afterEach(() => {
+    delete process.env.AI_TOOL_APPROVAL_SECRET;
+  });
+
+  it("returns undefined when unset", async () => {
+    const { getToolApprovalSecret } = await import("./flag");
+    expect(getToolApprovalSecret()).toBeUndefined();
+  });
+
+  it("returns undefined when set to an empty string", async () => {
+    process.env.AI_TOOL_APPROVAL_SECRET = "";
+    const { getToolApprovalSecret } = await import("./flag");
+    expect(getToolApprovalSecret()).toBeUndefined();
+  });
+
+  it("returns the exact value when set", async () => {
+    process.env.AI_TOOL_APPROVAL_SECRET = "a".repeat(64);
+    const { getToolApprovalSecret } = await import("./flag");
+    expect(getToolApprovalSecret()).toBe("a".repeat(64));
+  });
+});
+
 describe("isAgentsEnabled (env-only)", () => {
   afterEach(() => {
     delete process.env.AI_AGENTS_ENABLED;

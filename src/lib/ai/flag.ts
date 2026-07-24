@@ -19,6 +19,18 @@ export function isWriteToolsEnabled(): boolean {
   return process.env.AI_WRITE_TOOLS_ENABLED === "true";
 }
 
+/**
+ * Secret for the AI SDK's HMAC-SHA256 signing of write-tool approval requests
+ * (experimental_toolApprovalSecret). Absent → the SDK does not sign or verify,
+ * preserving today's behavior (approvals unsigned). Must be set wherever
+ * AI_WRITE_TOOLS_ENABLED is on, else approvals are client-forgeable.
+ * Empty string is treated as unset so an accidentally-blank env can't enable
+ * signing with an empty key.
+ */
+export function getToolApprovalSecret(): string | undefined {
+  return process.env.AI_TOOL_APPROVAL_SECRET || undefined;
+}
+
 // Outreach AI-drafting Stage 2 prod-safety switch: flag off => the "Draft with
 // AI" button stays hidden and auto-AI steps fall back to template-merge at
 // fire time (draft-source:'template'), so the cadence never breaks and no
