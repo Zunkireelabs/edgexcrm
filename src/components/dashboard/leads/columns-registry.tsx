@@ -505,6 +505,29 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
+  // ── destinations (preferred study destination(s) — education_consultancy only)
+  {
+    key: "destinations",
+    label: "Destination",
+    group: "standard",
+    defaultVisible: true,
+    industries: ["education_consultancy"],
+    renderTh: () => (
+      <th key="destinations" className="px-3 py-2 text-left text-xs font-medium text-gray-600 hidden md:table-cell min-w-[140px]">
+        Destination
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="destinations" className="px-3 py-1.5 hidden md:table-cell">
+        {(lead.destinations && lead.destinations.length > 0) ? (
+          <span className="text-sm text-[#787871]">{lead.destinations.join(", ")}</span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
+      </td>
+    ),
+  },
+
   // ── form_source (which page lead came from — education_consultancy only)
   {
     key: "form_source",

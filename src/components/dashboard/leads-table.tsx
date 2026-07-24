@@ -177,6 +177,15 @@ function getInitials(firstName?: string | null, lastName?: string | null): strin
 
 const MIN_COLUMN_WIDTH = 60;
 
+// Superseded by the real `destinations` column (consolidated 2026-07-25) — these 8
+// custom_fields keys were different forms' names for the same "study destination"
+// question. Still present in old leads' custom_fields (data, not schema), but no
+// longer worth surfacing as separate pickable columns now that the real column exists.
+const LEGACY_DESTINATION_KEYS = new Set([
+  "interested_country", "countries", "study_destination", "dream_destination",
+  "preferred_study_destination", "country", "preferred_destination", "matched_destination",
+]);
+
 const TOOLBAR_BTN =
   "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
 
@@ -1084,7 +1093,9 @@ export function LeadsTable({
     const keySet = new Set<string>();
     localLeads.forEach((lead) => {
       if (lead.custom_fields) {
-        Object.keys(lead.custom_fields).forEach((k) => keySet.add(k));
+        Object.keys(lead.custom_fields)
+          .filter((k) => !LEGACY_DESTINATION_KEYS.has(k))
+          .forEach((k) => keySet.add(k));
       }
     });
     return Array.from(keySet).sort();
