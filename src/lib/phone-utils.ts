@@ -73,6 +73,17 @@ export function formatPhoneForStorage(
 }
 
 /**
+ * Normalize any stored/incoming phone string to the "+<dialcode>-<local>" format.
+ * Idempotent — already-prefixed numbers re-parse cleanly. Bare digits get the
+ * default dial code (matches PhoneInput's own default behavior).
+ */
+export function normalizePhoneForStorage(phone: string | null | undefined): string | null {
+  if (!phone) return phone ?? null;
+  const { dialCode, localNumber } = parseStoredPhone(phone);
+  return formatPhoneForStorage(dialCode, localNumber) || null;
+}
+
+/**
  * Format for tel: links — "+9779863826770"
  */
 export function formatPhoneForTel(phone: string): string {

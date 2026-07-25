@@ -21,6 +21,7 @@ import { slugify } from "../lib/validation";
 interface FormBuilderPageProps {
   formConfig: FormConfig;
   tenantSlug: string;
+  industryId?: string | null;
 }
 
 function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; branding: FormBranding; currentStep: number }) {
@@ -152,7 +153,7 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
   );
 }
 
-export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps) {
+export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuilderPageProps) {
   const router = useRouter();
   const { state, dispatch, save } = useFormBuilder(formConfig);
   const [slugEditing, setSlugEditing] = useState(false);
@@ -284,6 +285,7 @@ export function FormBuilderPage({ formConfig, tenantSlug }: FormBuilderPageProps
                   stepIndex={stepIndex}
                   totalSteps={state.steps.length}
                   dispatch={dispatch}
+                  industryId={industryId}
                 />
               ))}
             </TabsContent>
