@@ -30,7 +30,7 @@ interface PublicFormProps {
 
 export function PublicForm({ tenant, formConfig }: PublicFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
-  const [formData, setFormData] = useState<Record<string, string | boolean | number>>({});
+  const [formData, setFormData] = useState<Record<string, string | boolean | number | string[]>>({});
   const [fileData, setFileData] = useState<Record<string, File>>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -141,7 +141,12 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       }
 
       if (field.type === "checkbox") {
-        if (field.required && !value) {
+        if (field.options && field.options.length > 0) {
+          const selected = Array.isArray(value) ? value : [];
+          if (field.required && selected.length === 0) {
+            newErrors[field.name] = `${field.label} is required`;
+          }
+        } else if (field.required && !value) {
           newErrors[field.name] = `${field.label} is required`;
         }
         continue;
@@ -257,10 +262,12 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       phone: formatPhoneWithCode(formData.phone as string),
       city: (formData.city as string) || null,
       country: (formData.country as string) || null,
+      destinations: (formData.destinations as string[]) || [],
+      field_of_study: (formData.field_of_study as string) || null,
       custom_fields: Object.fromEntries(
         Object.entries(formData).filter(
           ([k]) =>
-            !["first_name", "last_name", "email", "phone", "city", "country"].includes(k) &&
+            !["first_name", "last_name", "email", "phone", "city", "country", "destinations", "field_of_study"].includes(k) &&
             !entitySelectFields.includes(k)
         )
       ),
@@ -366,10 +373,12 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         phone: formatPhoneWithCode(formData.phone as string),
         city: formData.city || null,
         country: formData.country || null,
+        destinations: (formData.destinations as string[]) || [],
+        field_of_study: (formData.field_of_study as string) || null,
         custom_fields: Object.fromEntries(
           Object.entries(formData).filter(
             ([k]) =>
-              !["first_name", "last_name", "email", "phone", "city", "country"].includes(k) &&
+              !["first_name", "last_name", "email", "phone", "city", "country", "destinations", "field_of_study"].includes(k) &&
               !entitySelectFields.includes(k)
           )
         ),
@@ -676,7 +685,42 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                     );
                   })()}
 
-                  {field.type === "checkbox" && (
+                  {field.type === "checkbox" && field.options && field.options.length > 0 && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-2">
+                      {field.options.map((opt) => {
+                        const selected = Array.isArray(formData[field.name])
+                          ? (formData[field.name] as string[])
+                          : [];
+                        const checked = selected.includes(opt.value);
+                        return (
+                          <label
+                            key={opt.value}
+                            className="flex items-center gap-2 cursor-pointer"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setFormData((d) => {
+                                  const current = Array.isArray(d[field.name])
+                                    ? (d[field.name] as string[])
+                                    : [];
+                                  const next = e.target.checked
+                                    ? [...current, opt.value]
+                                    : current.filter((v) => v !== opt.value);
+                                  return { ...d, [field.name]: next };
+                                })
+                              }
+                              className="h-4 w-4 rounded border-gray-300"
+                            />
+                            <span className="text-sm">{toTitleCase(opt.label)}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {field.type === "checkbox" && (!field.options || field.options.length === 0) && (
                     <div className="flex items-center gap-2">
                       <input
                         id={field.name}

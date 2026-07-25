@@ -31,6 +31,9 @@ interface FieldEditorProps {
   onSave: (field: FormField) => void;
 }
 
+// Reserved field names locked to real `leads` columns (see field-type-picker.tsx)
+const RESERVED_FIELD_NAMES = new Set(["destinations", "field_of_study"]);
+
 const WIDTH_OPTIONS = [
   { value: "full", label: "Full width" },
   { value: "half", label: "Half width" },
@@ -58,6 +61,7 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
   function handleLabelChange(label: string) {
     setDraft((prev) => {
       if (!prev) return prev;
+      if (RESERVED_FIELD_NAMES.has(prev.name)) return { ...prev, label };
       const autoName = toFieldName(label) || prev.name;
       return { ...prev, label, name: autoName };
     });
@@ -167,10 +171,15 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
                 <Input
                   id="field-name"
                   value={draft.name}
+                  disabled={RESERVED_FIELD_NAMES.has(draft.name)}
                   onChange={(e) => update({ name: toFieldName(e.target.value) || e.target.value })}
                   placeholder="e.g. first_name"
                 />
-                <p className="text-xs text-muted-foreground">Lowercase letters and underscores only</p>
+                <p className="text-xs text-muted-foreground">
+                  {RESERVED_FIELD_NAMES.has(draft.name)
+                    ? "Reserved — maps to the lead's Destination/Field of Study column"
+                    : "Lowercase letters and underscores only"}
+                </p>
               </div>
 
               {/* Placeholder */}

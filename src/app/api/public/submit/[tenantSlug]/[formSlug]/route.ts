@@ -423,6 +423,8 @@ export async function POST(
     phone,
     city: body.city || null,
     country: body.country || null,
+    destinations: Array.isArray(body.destinations) ? body.destinations : [],
+    field_of_study: (body.field_of_study as string | null | undefined) || null,
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},
     entity_id: body.entity_id || null,
