@@ -28,6 +28,17 @@ vi.mock("@/lib/notifications", () => ({
   createNotificationsExcept: createNotificationsExceptMock,
 }));
 
+// createTaskCore wrapped (not replaced) so the claim-collision test can
+// assert the executor is never invoked, per the 5.4c-FIXUP brief — counting
+// rows alone wouldn't distinguish "never called" from "called but rolled
+// back". Every other test gets the real implementation via mockImplementation.
+const { createTaskCoreMock } = vi.hoisted(() => ({ createTaskCoreMock: vi.fn() }));
+vi.mock("@/lib/tasks/create-task", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/tasks/create-task")>();
+  createTaskCoreMock.mockImplementation(actual.createTaskCore);
+  return { ...actual, createTaskCore: createTaskCoreMock };
+});
+
 import { buildPolicyEnforcedWriteTools } from "./write-executor";
 import { runWriteApprovalGate, type ApprovalGateStep } from "./approval-gate";
 
@@ -171,8 +182,35 @@ function fakeDb() {
         aiWriteActions.push({ id: `awa-${++awaSeq}`, ...row });
         return Promise.resolve({ error: null });
       },
+      update: (values: Record<string, unknown>) => {
+        const filters: Array<[string, unknown]> = [];
+        const chain = {
+          eq: (col: string, val: unknown) => {
+            filters.push([col, val]);
+            return chain;
+          },
+          then: (resolve: (v: unknown) => void, reject?: (e: unknown) => void) => {
+            if (crashController.crashNextFinalize) {
+              crashController.crashNextFinalize = false;
+              const err = new Error("simulated crash before finalize");
+              if (reject) reject(err);
+              else throw err;
+              return;
+            }
+            const row = aiWriteActions.find((r) => filters.every(([c, v]) => (r as never)[c] === v));
+            if (row) Object.assign(row, values);
+            resolve({ error: null });
+          },
+        };
+        return chain;
+      },
     };
   }
+
+  // Lets a test force the NEXT finalize update on ai_write_actions to reject,
+  // simulating a process crash between the write executing and its audit row
+  // being finalized (5.4c-FIXUP hazard test) — resets itself after firing once.
+  const crashController = { crashNextFinalize: false };
 
   function tasksTable() {
     return {
@@ -198,7 +236,7 @@ function fakeDb() {
       return factory();
     },
   };
-  return { db: db as never, agentOutputs, agentApprovals, agentRuns, aiWriteActions, tasks };
+  return { db: db as never, agentOutputs, agentApprovals, agentRuns, aiWriteActions, tasks, crashController };
 }
 
 /** Original (non-mutating) fake: returns a canned decision but never touches agent_approvals — used where decided_by is irrelevant (no real executor is registered for the fixture tool). */
@@ -467,5 +505,89 @@ describe("runWriteApprovalGate — create_task execution (5.4c)", () => {
     expect(agentApprovals).toHaveLength(0);
     expect(tasks).toHaveLength(0);
     expect(aiWriteActions).toHaveLength(0);
+  });
+});
+
+describe("runWriteApprovalGate — claim-then-execute hazards (5.4c-FIXUP)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveAutomationLevelMock.mockResolvedValue("agent_human");
+  });
+
+  it("crash between execute and finalize: leaves the row 'claimed' — a retry does not create a second task", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions, crashController } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    // A single memoizing step across both calls, exactly like a real Inngest
+    // retry: the create-approval/wait-approval steps already succeeded and
+    // stay cached, only the execute step (never cached — it threw) re-enters.
+    const step = fakeMemoizingStep(["approved"], agentApprovals, { decidedBy: "decider-1" });
+
+    crashController.crashNextFinalize = true;
+    await expect(runWriteApprovalGate({ step, db, runId: "run-1" })).rejects.toThrow("simulated crash before finalize");
+
+    expect(tasks).toHaveLength(1); // createTaskCore ran before the simulated crash
+    expect(aiWriteActions).toHaveLength(1);
+    expect(aiWriteActions[0].status).toBe("claimed"); // never finalized — not silently marked executed
+
+    await runWriteApprovalGate({ step, db, runId: "run-1" }); // retry
+
+    expect(tasks).toHaveLength(1); // no duplicate task
+    expect(aiWriteActions).toHaveLength(1);
+    expect(aiWriteActions[0].status).toBe("claimed"); // still stuck — surfaced for human follow-up, not silently fixed
+    expect(createTaskCoreMock).toHaveBeenCalledTimes(1); // the retry did not re-invoke the executor
+  });
+
+  it("claim collision: a pre-existing 'claimed' row blocks execution — createTaskCore is never invoked", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    // Deterministic id: this fakeDb's first-ever agent_approvals insert gets
+    // "approval-1" (approvalSeq starts at 0), which is what runWriteApprovalGate
+    // will use as ai_write_actions.tool_call_id for this run's one proposal.
+    aiWriteActions.push({
+      id: "awa-preexisting",
+      user_id: "decider-1",
+      agent_id: "agent-1",
+      run_id: "run-1",
+      tool_call_id: "approval-1",
+      tool_id: "create_task",
+      input: { title: "Follow up with lead" },
+      status: "claimed",
+      result: null,
+      error: null,
+    });
+
+    await runWriteApprovalGate({ step: fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1"), db, runId: "run-1" });
+
+    expect(createTaskCoreMock).not.toHaveBeenCalled();
+    expect(tasks).toHaveLength(0);
+    expect(aiWriteActions).toHaveLength(1); // unchanged — still the pre-existing row
+    expect(aiWriteActions[0].status).toBe("claimed");
+  });
+
+  it("stale-'failed' repair: a pre-existing 'failed' row on a succeeding retry ends 'executed' with the fresh result", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    aiWriteActions.push({
+      id: "awa-stale",
+      user_id: "decider-1",
+      agent_id: "agent-1",
+      run_id: "run-1",
+      tool_call_id: "approval-1",
+      tool_id: "create_task",
+      input: { title: "Follow up with lead" },
+      status: "failed",
+      result: null,
+      error: "stale error from a prior attempt",
+    });
+
+    await runWriteApprovalGate({ step: fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1"), db, runId: "run-1" });
+
+    expect(tasks).toHaveLength(1);
+    expect(aiWriteActions).toHaveLength(1); // repaired in place, not a second row
+    expect(aiWriteActions[0]).toMatchObject({ status: "executed", error: null });
+    expect((aiWriteActions[0].result as { title: string }).title).toBe("Follow up with lead");
   });
 });

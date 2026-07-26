@@ -60,13 +60,22 @@ interface StoredWriteAction {
  * per this slice's brief — the schema's NOT NULL user_id has no agent actor
  * to point to instead).
  *
- * Idempotency mirrors adapter.ts's interactive-write path exactly: check for
- * an existing 'executed' row first (the fast path for a forced step retry —
- * `step.run` on the caller side means this rarely re-enters at all, but a
- * fake/non-memoizing step, as in tests, will), then let the UNIQUE
- * (tenant_id, tool_call_id) constraint catch any genuine race the pre-check
- * misses. Either way, createTaskCore (and any future executor here) runs at
- * most once per approval.
+ * Claim-then-execute (5.4c-FIXUP, mig 183 adds the 'claimed' status): for
+ * customer-data writes a lost write is strictly recoverable (a human can
+ * re-approve) but a duplicate write is not (nobody can un-send it), so this
+ * is deliberately at-most-once rather than at-least-once —
+ *   1. Claim: insert a 'claimed' row first. UNIQUE (tenant_id, tool_call_id)
+ *      (mig 173) makes this insert itself the race-free ownership check.
+ *   2. On a 23505 collision, read the existing row back: 'executed' -> this
+ *      approval already ran, return without re-executing; 'claimed' -> a
+ *      prior attempt crashed between claiming and finalizing — do NOT
+ *      execute again (that risks the exact duplicate this design avoids);
+ *      instead surface it loudly for human follow-up; 'failed' -> a prior
+ *      attempt's stale failure, safe to retry — fall through and repair it.
+ *   3. Execute only after the claim is won (fresh claim or a 'failed' repair).
+ *   4. Finalize: update the claimed row to 'executed'+result or 'failed'+error.
+ * A row stuck at 'claimed' is the visible symptom of a crash mid-write —
+ * that's intentional; it surfaces instead of silently duplicating.
  */
 async function executeApprovedWrite(params: {
   db: ScopedClient;
@@ -77,16 +86,6 @@ async function executeApprovedWrite(params: {
 }): Promise<void> {
   const { db, runId, approvalId, toolId, toolInput } = params;
   const log = logger.child({ runId, approvalId, toolId });
-
-  const { data: existing } = await db
-    .from("ai_write_actions")
-    .select("status, result")
-    .eq("tool_call_id", approvalId)
-    .maybeSingle();
-  if ((existing as StoredWriteAction | null)?.status === "executed") {
-    log.info("agent write idempotent replay — already executed, skipping");
-    return;
-  }
 
   const { data: approvalRow } = await db.from("agent_approvals").select("decided_by").eq("id", approvalId).maybeSingle();
   const decidedBy = (approvalRow as { decided_by: string | null } | null)?.decided_by ?? null;
@@ -99,6 +98,47 @@ async function executeApprovedWrite(params: {
   if (!runContext) {
     log.error("could not resolve agent_runs row for this run — refusing to execute");
     return;
+  }
+
+  const { error: claimError } = await db.from("ai_write_actions").insert({
+    user_id: decidedBy,
+    agent_id: runContext.agentId,
+    run_id: runId,
+    tool_call_id: approvalId,
+    tool_id: toolId,
+    input: toolInput,
+    status: "claimed",
+  });
+
+  if (claimError) {
+    if ((claimError as { code?: string }).code !== UNIQUE_VIOLATION) {
+      log.error({ err: claimError }, "ai_write_actions claim insert failed");
+      return;
+    }
+
+    const { data: existing } = await db
+      .from("ai_write_actions")
+      .select("status, result")
+      .eq("tool_call_id", approvalId)
+      .maybeSingle();
+    const existingRow = existing as StoredWriteAction | null;
+
+    if (existingRow?.status === "executed") {
+      log.info("agent write idempotent replay — already executed, skipping");
+      return;
+    }
+    if (existingRow?.status !== "failed") {
+      // 'claimed' (a prior attempt crashed mid-write, result unknown) or any
+      // other unexpected state — at-most-once means we never execute again
+      // here; a lost write can be re-approved, a duplicate can't be undone.
+      log.error(
+        { existingStatus: existingRow?.status ?? null },
+        "ai_write_actions row already claimed and not yet finalized — refusing to execute again, needs human follow-up",
+      );
+      return;
+    }
+    // status === "failed": a prior attempt's stale failure — safe to retry.
+    // Fall through and repair it via the finalize update below.
   }
 
   const executor = APPROVAL_EXECUTORS[toolId];
@@ -120,24 +160,10 @@ async function executeApprovedWrite(params: {
     }
   }
 
-  const { error: insertError } = await db.from("ai_write_actions").insert({
-    user_id: decidedBy,
-    agent_id: runContext.agentId,
-    run_id: runId,
-    tool_call_id: approvalId,
-    tool_id: toolId,
-    input: toolInput,
-    status,
-    result,
-    error,
-  });
+  const { error: finalizeError } = await db.from("ai_write_actions").update({ status, result, error }).eq("tool_call_id", approvalId);
 
-  if (insertError) {
-    if ((insertError as { code?: string }).code === UNIQUE_VIOLATION) {
-      log.info("concurrent duplicate on ai_write_actions insert — already recorded by a racing execution");
-      return;
-    }
-    log.error({ err: insertError }, "ai_write_actions insert failed");
+  if (finalizeError) {
+    log.error({ err: finalizeError }, "ai_write_actions finalize update failed — row left at 'claimed', needs human follow-up");
     return;
   }
 
