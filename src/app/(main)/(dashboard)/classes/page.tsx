@@ -104,6 +104,18 @@ export default async function ClassesRoute() {
     is_active: boolean;
   }>;
 
+  const canMarkAttendance =
+    tenantData.role === "owner" ||
+    tenantData.role === "admin" ||
+    !!(
+      await supabase
+        .from("class_attendance_markers")
+        .select("user_id")
+        .eq("tenant_id", tenantData.tenant.id)
+        .eq("user_id", tenantData.userId)
+        .maybeSingle()
+    ).data;
+
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
       <ClassesWorkspace
@@ -111,6 +123,7 @@ export default async function ClassesRoute() {
         enrollments={enrollments}
         canManage={tenantData.permissions.canManageClasses}
         canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
+        canMarkAttendance={canMarkAttendance}
         tenantId={tenantData.tenant.id}
       />
     </div>

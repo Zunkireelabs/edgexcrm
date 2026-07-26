@@ -3,11 +3,12 @@
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, ClipboardCheck } from "lucide-react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
+import { AttendanceSheet } from "../components/attendance-sheet";
 
 interface ClassRow {
   id: string;
@@ -37,14 +38,16 @@ interface ClassesWorkspaceProps {
   enrollments: Array<Record<string, unknown>>;
   canManage: boolean;
   canEnroll: boolean;
+  canMarkAttendance: boolean;
   tenantId: string;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll }: ClassesWorkspaceProps) {
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance }: ClassesWorkspaceProps) {
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
 
   const enrollments = initialEnrollments as unknown as Enrollment[];
 
@@ -147,12 +150,20 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                   <span className="text-sm font-semibold">{selectedClass.name}</span>
                   <span className="text-xs text-muted-foreground ml-2">{roster.length} student{roster.length !== 1 ? "s" : ""}</span>
                 </div>
-                {canEnroll && (
-                  <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Enroll
-                  </Button>
-                )}
+                <div className="flex items-center gap-2">
+                  {canMarkAttendance && (
+                    <Button size="sm" variant="outline" onClick={() => setAttendanceOpen(true)}>
+                      <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                      Attendance
+                    </Button>
+                  )}
+                  {canEnroll && (
+                    <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
+                      <Plus className="h-3.5 w-3.5 mr-1" />
+                      Enroll
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {roster.length === 0 ? (
@@ -242,6 +253,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           handleRefresh();
         }}
       />
+
+      {selectedClass && (
+        <AttendanceSheet
+          open={attendanceOpen}
+          onOpenChange={setAttendanceOpen}
+          classId={selectedClass.id}
+          className={selectedClass.name}
+        />
+      )}
     </div>
   );
 }
