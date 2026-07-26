@@ -5,6 +5,8 @@ export const KIND_LABELS: Record<string, string> = {
   draft_email: "Draft email",
   lead_summary: "Lead summary",
   daily_digest: "Daily digest",
+  // Runtime-emitted (write-executor.ts), not declared by any agent definition.
+  write_action_proposal: "Proposed action",
 };
 
 /** Relative-time phrasing for agent activity timestamps — used by the Fleet and Review Queue cards. */

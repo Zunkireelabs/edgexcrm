@@ -8,6 +8,7 @@ const checkAgentDailyBudgetMock = vi.fn();
 const getRegisteredToolsMock = vi.fn();
 const toAiSdkToolsMock = vi.fn();
 const buildDraftToolsMock = vi.fn();
+const buildPolicyEnforcedWriteToolsMock = vi.fn();
 const generateTextMock = vi.fn();
 const modelMock = vi.fn();
 const startTraceMock = vi.fn();
@@ -21,6 +22,7 @@ vi.mock("@/lib/ai/agents/packs", () => ({}));
 vi.mock("@/lib/ai/tools/registry", () => ({ getRegisteredTools: getRegisteredToolsMock }));
 vi.mock("@/lib/ai/tools/adapter", () => ({ toAiSdkTools: toAiSdkToolsMock }));
 vi.mock("./draft-tools", () => ({ buildDraftTools: buildDraftToolsMock }));
+vi.mock("./write-executor", () => ({ buildPolicyEnforcedWriteTools: buildPolicyEnforcedWriteToolsMock }));
 vi.mock("ai", () => ({ generateText: generateTextMock, stepCountIs: (n: number) => n }));
 vi.mock("@/lib/ai/provider", () => ({ model: modelMock }));
 vi.mock("@/lib/ai/models", () => ({
@@ -142,6 +144,7 @@ beforeEach(() => {
   getRegisteredToolsMock.mockReturnValue([]);
   toAiSdkToolsMock.mockReturnValue({});
   buildDraftToolsMock.mockReturnValue({});
+  buildPolicyEnforcedWriteToolsMock.mockReturnValue({});
   modelMock.mockReturnValue({ modelId: "fake" });
   startTraceMock.mockReturnValue({ span: vi.fn(), end: vi.fn() });
   generateTextMock.mockResolvedValue({ usage: { inputTokens: 10, outputTokens: 20 }, steps: [{}] });
@@ -196,16 +199,75 @@ describe("runAgent — guards", () => {
     expect(runInsert?.row).toMatchObject({ status: "cancelled" });
   });
 
-  it("throws before any agent_runs row exists when the definition declares a scope:\"write\" registry tool", async () => {
-    getRegisteredToolsMock.mockReturnValue([
-      { id: "propose_score", scope: "write", description: "x", inputSchema: {}, execute: vi.fn() },
-    ]);
-    const { db, inserts } = fakeDb();
+});
+
+describe("runAgent — 5.4a: registry scope:\"write\" tools are policy-enforced, not thrown on", () => {
+  const READ_TOOL = { id: "get_lead", scope: "read", description: "x", inputSchema: {}, execute: vi.fn() };
+  const WRITE_TOOL = { id: "update_lead_stage", scope: "write", description: "x", inputSchema: {}, execute: vi.fn() };
+
+  const WRITE_DEF: AgentDefinition = {
+    ...LEAD_TRIAGE_DEF,
+    toolIds: ["get_lead", "update_lead_stage"],
+  };
+
+  it("no longer throws — a definition declaring a write-scope tool completes normally", async () => {
+    getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
+    const { db } = fakeDb();
     scopedClientMock.mockResolvedValue(db);
     const { runAgent } = await import("./runtime");
 
-    await expect(runAgent(LEAD_TRIAGE_DEF, agentAuth(), TRIGGER)).rejects.toThrow(/write-scope tool/);
-    expect(inserts).toHaveLength(0);
+    const result = await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
+
+    expect(result).toEqual({ status: "completed", runId: "run-123" });
+  });
+
+  it("routes only the read tool through the shared adapter — the write tool is excluded from toAiSdkTools", async () => {
+    getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
+
+    const passedToolset = toAiSdkToolsMock.mock.calls[0][0] as Array<{ id: string }>;
+    expect(passedToolset.map((t) => t.id)).toEqual(["get_lead"]);
+  });
+
+  it("hands the write tool (and only the write tool) to the policy-enforced wrapper, with run/agent/tenant context", async () => {
+    getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
+
+    expect(buildPolicyEnforcedWriteToolsMock).toHaveBeenCalledTimes(1);
+    const [passedWriteTools, params] = buildPolicyEnforcedWriteToolsMock.mock.calls[0];
+    expect((passedWriteTools as Array<{ id: string }>).map((t) => t.id)).toEqual(["update_lead_stage"]);
+    expect(params).toMatchObject({
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-123",
+      subjectType: "lead",
+      subjectId: "lead-1",
+    });
+  });
+
+  it("merges the policy-enforced wrapper's tools into the model's toolset", async () => {
+    getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
+    const wrappedExecute = vi.fn();
+    buildPolicyEnforcedWriteToolsMock.mockReturnValue({ update_lead_stage: { execute: wrappedExecute } });
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
+
+    const callArgs = generateTextMock.mock.calls[0][0];
+    expect(callArgs.tools.update_lead_stage).toMatchObject({ execute: wrappedExecute });
+    // The underlying registered tool's own execute() is never called directly by runAgent —
+    // only the wrapper's replacement reaches the model.
+    expect(WRITE_TOOL.execute).not.toHaveBeenCalled();
   });
 });
 

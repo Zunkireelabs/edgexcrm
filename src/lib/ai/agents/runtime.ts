@@ -14,6 +14,7 @@ import type { AgentAuthContext } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "@/lib/ai/tools/types";
 import type { IndustryId } from "@/industries/_registry";
 import { buildDraftTools } from "./draft-tools";
+import { buildPolicyEnforcedWriteTools } from "./write-executor";
 import type { AgentDefinition } from "./types";
 
 const MAX_ERROR_LENGTH = 500;
@@ -31,25 +32,16 @@ export type RunAgentResult =
   | { status: "failed"; runId: string; error: string };
 
 /**
- * Builds this run's toolset: registry read tools declared in `def.toolIds`,
+ * Builds this run's toolset: registry tools declared in `def.toolIds`,
  * filtered by the agent's industry + position permissions exactly like a
- * human's buildToolset(auth) would, EXCEPT no `AI_WRITE_TOOLS_ENABLED` escape
- * hatch — a scope:"write" registry tool must never reach an agent (doc 03
- * §3's "the only writes this phase are the draft tools"). Throwing here
- * (instead of silently filtering) turns a misconfigured AgentDefinition into
- * a loud startup-time failure rather than a silent capability leak.
+ * human's buildToolset(auth) would. Includes scope:"write" registry tools —
+ * as of 5.4a, a declared write tool is no longer a startup-time
+ * misconfiguration; it is executed through the policy-enforcing wrapper in
+ * write-executor.ts instead (see runAgent below), which converts every call
+ * to an agent_outputs draft regardless of the resolved automation level.
  */
 function buildAgentToolset(def: AgentDefinition, agentAuth: AgentAuthContext): AgentTool[] {
   const candidates = getRegisteredTools().filter((t) => def.toolIds.includes(t.id));
-
-  for (const t of candidates) {
-    if (t.scope === "write") {
-      throw new Error(
-        `Agent definition "${def.key}" declares registry write-scope tool "${t.id}" — write tools may never ` +
-          `enter a background agent's toolset (Phase 5 is draft-only).`,
-      );
-    }
-  }
 
   return candidates.filter((t) => {
     if (t.industries !== undefined) {
@@ -73,9 +65,13 @@ function buildTriggerPrompt(trigger: AgentRunTrigger): string {
 /**
  * Runs one AgentDefinition once, end to end (doc 03 §3): guards (tenant kill
  * switch, agent identity active, daily budget) -> agent_runs row -> a
- * generateText tool loop over this run's toolset (registry read tools + the
- * draft tools) -> persisted outcome. Every "write" the model can make lands
- * only in agent_outputs, via the draft tools — see draft-tools.ts.
+ * generateText tool loop over this run's toolset (registry read tools, the
+ * draft tools, and — as of 5.4a — policy-enforced registry write tools) ->
+ * persisted outcome. Every "write" the model can make lands only in
+ * agent_outputs: draft tools always did (draft-tools.ts); registry
+ * scope:"write" tools now do too, via the policy-enforcing wrapper
+ * (write-executor.ts) that converts every call to a draft regardless of the
+ * resolved automation level, until 5.4b/5.4c wire real execution.
  */
 export async function runAgent(
   def: AgentDefinition,
@@ -97,10 +93,8 @@ export async function runAgent(
     return { status: "skipped", reason: "agent identity missing or paused" };
   }
 
-  // Sync and pure — a misconfigured definition (declaring a scope:"write"
-  // registry tool) throws HERE, before any agent_runs row exists, rather
-  // than after one has already been inserted as "running" with nothing left
-  // to ever mark it completed/failed/cancelled.
+  // Sync and pure — industry/permission filtering only; no throw on
+  // scope:"write" tools since 5.4a (see buildAgentToolset above).
   const toolset = buildAgentToolset(def, agentAuth);
 
   const budget = await checkAgentDailyBudget(db, tenantId);
@@ -139,8 +133,24 @@ export async function runAgent(
     subjectType: trigger.subjectType ?? "unknown",
     subjectId: trigger.subjectId ?? "",
   });
+  // Read tools go through the shared adapter; write tools never do — that
+  // adapter's write branch (adapter.ts's executeWriteTool) asserts a real
+  // user session, which an AgentAuthContext is not. Every registry
+  // scope:"write" tool this agent declares gets its own policy-enforcing
+  // wrapper instead (write-executor.ts).
+  const readTools = toolset.filter((t) => t.scope !== "write");
+  const writeTools = toolset.filter((t) => t.scope === "write");
+  const policyEnforcedWriteTools = buildPolicyEnforcedWriteTools(writeTools, {
+    db,
+    tenantId,
+    agentId,
+    runId,
+    subjectType: trigger.subjectType,
+    subjectId: trigger.subjectId,
+  });
   const tools = {
-    ...toAiSdkTools(toolset, toolCtx),
+    ...toAiSdkTools(readTools, toolCtx),
+    ...policyEnforcedWriteTools,
     // Draft tools, like registry read tools, are gated by def.toolIds — an
     // agent only gets the draft tools it declares. (Previously every agent
     // got all draft tools.)

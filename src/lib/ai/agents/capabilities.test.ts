@@ -1,4 +1,11 @@
 import { describe, it, expect } from "vitest";
+// Deliberately NO `import "@/lib/ai/tools/packs"` here. capabilities.ts now
+// imports it itself, and that is the point: importing it from the test too
+// would mask a regression, because the real server path (queries.ts ->
+// agents/packs -> capabilities) never imports the tool packs. Verified: with
+// only agents/packs imported, getRegisteredTools() returns 0 tools. If
+// capabilities.ts ever loses its side-effect import, the writes-bucket and
+// guarantee tests below must fail — do not "fix" them by importing here.
 import { describeCapabilities } from "./capabilities";
 import type { AgentDefinition } from "./types";
 
@@ -77,5 +84,37 @@ describe("describeCapabilities", () => {
     const summary = describeCapabilities(def);
 
     expect(summary.trigger).toBe("When a new lead is created or On a schedule (0 6 * * *)");
+  });
+
+  it("a draft-only definition (no registry write-scope tool) keeps the draft-only guarantee and an empty writes bucket", () => {
+    const summary = describeCapabilities(LEAD_TRIAGE_DEF);
+
+    expect(summary.writes).toEqual([]);
+    expect(summary.guarantee).toMatch(/cannot change your crm directly/i);
+  });
+
+  it("buckets a real registry write-scope tool into `writes`, not `reads` — the 5.2c classifier bug", () => {
+    const def: AgentDefinition = {
+      ...LEAD_TRIAGE_DEF,
+      toolIds: ["get_lead", "update_lead_stage"],
+    };
+
+    const summary = describeCapabilities(def);
+
+    expect(summary.writes).toEqual(["move a lead between stages"]);
+    expect(summary.reads).toEqual(["read a lead's full profile"]);
+    expect(summary.reads).not.toContain("update lead stage");
+  });
+
+  it("derives the policy-gated guarantee (not the stale draft-only sentence) once a write-scope tool is declared", () => {
+    const def: AgentDefinition = {
+      ...LEAD_TRIAGE_DEF,
+      toolIds: ["get_lead", "update_lead_stage"],
+    };
+
+    const summary = describeCapabilities(def);
+
+    expect(summary.guarantee).not.toMatch(/cannot change your crm directly/i);
+    expect(summary.guarantee).toMatch(/approval settings/i);
   });
 });

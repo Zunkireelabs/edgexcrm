@@ -1,7 +1,16 @@
 import type { IndustryId } from "@/industries/_registry";
 
 /** agent_outputs.kind is free-text (no CHECK constraint) — this union is the app-level source of truth. */
-export type AgentOutputKind = "draft_email" | "lead_summary" | "score_suggestion" | "task_suggestion" | "daily_digest";
+export type AgentOutputKind =
+  | "draft_email"
+  | "lead_summary"
+  | "score_suggestion"
+  | "task_suggestion"
+  | "daily_digest"
+  // Emitted by the runtime, not declared in any AgentDefinition.outputKinds:
+  // write-executor.ts converts every scope:"write" tool call into one of these
+  // instead of executing it (5.4a).
+  | "write_action_proposal";
 
 export interface AgentDefinitionContext {
   tenantId: string;
