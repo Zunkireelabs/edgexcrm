@@ -2,7 +2,7 @@ import { z } from "zod";
 import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalString, optionalUuid } from "./lib/sanitize";
-import { createTaskForUser, TASK_PRIORITIES } from "@/lib/tasks/create-task";
+import { createTaskForUser, TASK_PRIORITIES, type CreateTaskInput } from "@/lib/tasks/create-task";
 
 const inputSchema = z.object({
   title: z.string().min(1).max(255).describe("The task's title. Required."),
@@ -36,6 +36,24 @@ const inputSchema = z.object({
 
 type CreateTaskToolInput = z.infer<typeof inputSchema>;
 
+/**
+ * The create_task tool's parsed (camelCase) input shape -> createTaskCore's
+ * snake_case CreateTaskInput. Shared by this tool's execute() (the
+ * interactive chat path) and the approval-gate's create_task executor
+ * (Phase 5.4c's agent_human write-approval path) so the field mapping has
+ * exactly one source of truth.
+ */
+export function mapCreateTaskToolInput(input: CreateTaskToolInput): CreateTaskInput {
+  return {
+    title: input.title,
+    description: input.description,
+    priority: input.priority,
+    due_date: input.dueDate,
+    lead_id: input.leadId,
+    assignee_id: input.assigneeId,
+  };
+}
+
 export const createTaskTool: AgentTool<CreateTaskToolInput> = {
   id: "create_task",
   description:
@@ -50,19 +68,7 @@ export const createTaskTool: AgentTool<CreateTaskToolInput> = {
     const { db, auth, runId } = ctx;
     assertUserAuth(auth);
 
-    const outcome = await createTaskForUser(
-      db,
-      auth,
-      {
-        title: input.title,
-        description: input.description,
-        priority: input.priority,
-        due_date: input.dueDate,
-        lead_id: input.leadId,
-        assignee_id: input.assigneeId,
-      },
-      { requestId: runId },
-    );
+    const outcome = await createTaskForUser(db, auth, mapCreateTaskToolInput(input), { requestId: runId });
 
     if (outcome.kind === "validation") {
       const messages = Object.entries(outcome.errors)

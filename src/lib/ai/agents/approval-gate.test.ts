@@ -12,14 +12,30 @@ vi.mock("@/lib/logger", () => ({
   logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+// createTaskCore (5.4c's create_task executor) goes through the exact same
+// audit/event/notification side effects as the interactive REST route and
+// create_task AI tool — those hit their own service client internally, not
+// the `db` passed around here, so they're mocked the same way
+// src/lib/tasks/create-task.test.ts mocks them.
+const { createAuditLogMock, emitEventMock, createNotificationsExceptMock } = vi.hoisted(() => ({
+  createAuditLogMock: vi.fn(async () => {}),
+  emitEventMock: vi.fn(async () => "event-1"),
+  createNotificationsExceptMock: vi.fn(async () => {}),
+}));
+vi.mock("@/lib/api/audit", () => ({ createAuditLog: createAuditLogMock, emitEvent: emitEventMock }));
+vi.mock("@/lib/notifications", () => ({
+  NotificationTypes: { TASK_ASSIGNED: "task.assigned" },
+  createNotificationsExcept: createNotificationsExceptMock,
+}));
+
 import { buildPolicyEnforcedWriteTools } from "./write-executor";
 import { runWriteApprovalGate, type ApprovalGateStep } from "./approval-gate";
 
 // Test-only fixture write tool — deliberately NOT added to the tools
 // registry or any AgentDefinition. No real write tool exists to gate on yet
-// (5.4c); this is the minimum shape write-executor.ts needs to produce a
-// real write_action_proposal draft so the approval gate has something
-// genuine to read back, per the 5.4b brief's testing note.
+// besides create_task; this is the minimum shape write-executor.ts needs to
+// produce a real write_action_proposal draft so the approval gate has
+// something genuine to read back, per the 5.4b brief's testing note.
 const FIXTURE_WRITE_TOOL: AgentTool = {
   id: "fixture_update_lead_stage",
   description: "test-only fixture write tool for 5.4b's approval-gate test",
@@ -28,12 +44,42 @@ const FIXTURE_WRITE_TOOL: AgentTool = {
   execute: vi.fn(async () => ({ ok: true })),
 };
 
-/** In-memory fake covering only the agent_outputs/agent_approvals query shapes write-executor.ts and approval-flow.ts actually use. */
+// A create_task fixture — write-executor.ts's draft wrapper never calls
+// AgentTool.execute() itself (it replaces it with its own draft-recording
+// execute), so only `id`/`inputSchema` matter here; the real create_task
+// tool's schema lives in src/lib/ai/tools/universal/create-task.ts and isn't
+// needed to exercise the approval-gate's create_task executor.
+const CREATE_TASK_TOOL_FIXTURE: AgentTool = {
+  id: "create_task",
+  description: "fixture standing in for the real create_task tool",
+  inputSchema: z.object({ title: z.string() }),
+  scope: "write",
+  execute: vi.fn(async () => ({ ok: true })),
+};
+
+interface FakeApprovalRow {
+  id: string;
+  run_id: string;
+  tool_id: string;
+  tool_input: unknown;
+  preview: unknown;
+  status: string;
+  expires_at: string;
+  decided_by: string | null;
+  decided_at: string | null;
+}
+
+/** In-memory fake covering the table shapes write-executor.ts, approval-flow.ts, and approval-gate.ts actually use. */
 function fakeDb() {
   const agentOutputs: Array<{ id: string; run_id: string; agent_id: string; kind: string; payload: Record<string, unknown>; status: string }> = [];
-  const agentApprovals: Array<{ id: string; run_id: string; tool_id: string; tool_input: unknown; preview: unknown; status: string; expires_at: string; decided_by: string | null; decided_at: string | null }> = [];
+  const agentApprovals: FakeApprovalRow[] = [];
+  const agentRuns: Array<{ id: string; tenant_id: string; agent_id: string }> = [{ id: "run-1", tenant_id: "tenant-1", agent_id: "agent-1" }];
+  const aiWriteActions: Array<Record<string, unknown>> = [];
+  const tasks: Array<Record<string, unknown>> = [];
   let outputSeq = 0;
   let approvalSeq = 0;
+  let awaSeq = 0;
+  let taskSeq = 0;
 
   function outputsTable() {
     return {
@@ -65,15 +111,20 @@ function fakeDb() {
 
   function approvalsTable() {
     return {
+      select: () => ({
+        eq: (col: string, val: unknown) => ({
+          maybeSingle: () => Promise.resolve({ data: agentApprovals.find((r) => (r as never)[col] === val) ?? null }),
+        }),
+      }),
       insert: (row: Record<string, unknown>) => {
-        const stored = {
+        const stored: FakeApprovalRow = {
           id: `approval-${++approvalSeq}`,
           status: "pending",
           expires_at: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
           decided_by: null,
           decided_at: null,
           ...row,
-        } as (typeof agentApprovals)[number];
+        } as FakeApprovalRow;
         agentApprovals.push(stored);
         return { select: () => ({ single: () => Promise.resolve({ data: { id: stored.id }, error: null }) }) };
       },
@@ -95,7 +146,51 @@ function fakeDb() {
     };
   }
 
-  const knownTables: Record<string, () => unknown> = { agent_outputs: outputsTable, agent_approvals: approvalsTable };
+  function agentRunsTable() {
+    return {
+      select: () => ({
+        eq: (col: string, val: unknown) => ({
+          maybeSingle: () => Promise.resolve({ data: agentRuns.find((r) => (r as never)[col] === val) ?? null }),
+        }),
+      }),
+    };
+  }
+
+  function aiWriteActionsTable() {
+    return {
+      select: () => ({
+        eq: (col: string, val: unknown) => ({
+          maybeSingle: () => Promise.resolve({ data: aiWriteActions.find((r) => (r as never)[col] === val) ?? null }),
+        }),
+      }),
+      insert: (row: Record<string, unknown>) => {
+        const dup = aiWriteActions.find((r) => r.tool_call_id === row.tool_call_id);
+        if (dup) {
+          return Promise.resolve({ error: { code: "23505", message: "duplicate key value violates unique constraint" } });
+        }
+        aiWriteActions.push({ id: `awa-${++awaSeq}`, ...row });
+        return Promise.resolve({ error: null });
+      },
+    };
+  }
+
+  function tasksTable() {
+    return {
+      insert: (row: Record<string, unknown>) => {
+        const stored = { id: `task-${++taskSeq}`, ...row };
+        tasks.push(stored);
+        return { select: () => ({ single: () => Promise.resolve({ data: stored, error: null }) }) };
+      },
+    };
+  }
+
+  const knownTables: Record<string, () => unknown> = {
+    agent_outputs: outputsTable,
+    agent_approvals: approvalsTable,
+    agent_runs: agentRunsTable,
+    ai_write_actions: aiWriteActionsTable,
+    tasks: tasksTable,
+  };
   const db = {
     from: (table: string) => {
       const factory = knownTables[table];
@@ -103,10 +198,10 @@ function fakeDb() {
       return factory();
     },
   };
-  return { db: db as never, agentOutputs, agentApprovals };
+  return { db: db as never, agentOutputs, agentApprovals, agentRuns, aiWriteActions, tasks };
 }
 
-/** Records step ids invoked and resolves waitForEvent from a canned decision queue — no real Inngest durability needed to exercise this gate's branching. */
+/** Original (non-mutating) fake: returns a canned decision but never touches agent_approvals — used where decided_by is irrelevant (no real executor is registered for the fixture tool). */
 function fakeStep(decisionQueue: Array<string | undefined>): ApprovalGateStep {
   const decisions = [...decisionQueue];
   return {
@@ -115,6 +210,83 @@ function fakeStep(decisionQueue: Array<string | undefined>): ApprovalGateStep {
       const decision = decisions.shift();
       if (decision === undefined) return null;
       return { data: { approvalId: "unused-in-fake", decision } };
+    },
+  };
+}
+
+/**
+ * Mutating fake: when it resolves a decision, it also stamps `status` +
+ * `decided_by` on the matching agent_approvals row — mirroring what the
+ * real PATCH /api/v1/agent-approvals/[id] route does before sending the
+ * decided event. executeApprovedWrite reads decided_by back off that row,
+ * so any create_task-executing test needs this, not the plain fakeStep.
+ */
+function fakeApprovalDecisionStep(
+  decisionQueue: Array<string | undefined>,
+  agentApprovals: FakeApprovalRow[],
+  decidedBy = "decider-1",
+): ApprovalGateStep {
+  const decisions = [...decisionQueue];
+  return {
+    run: async (_id, fn) => fn(),
+    waitForEvent: async (_id, opts) => {
+      const decision = decisions.shift();
+      if (decision === undefined) return null;
+      const match = /async\.data\.approvalId == "([^"]+)"/.exec(opts.if);
+      const approvalId = match?.[1] ?? "unused-in-fake";
+      const row = agentApprovals.find((r) => r.id === approvalId);
+      if (row) {
+        row.status = decision;
+        row.decided_by = decidedBy;
+      }
+      return { data: { approvalId, decision } };
+    },
+  };
+}
+
+/**
+ * Memoizing fake: `run()` caches by step id across repeated calls to
+ * runWriteApprovalGate (mirroring real Inngest step memoization), EXCEPT for
+ * step ids matching `forceRerunIdPrefix`, which always re-invoke fn() — that
+ * models "this one step is forced to retry" without the whole function
+ * replaying from scratch. `waitForEvent` is memoized the same way, so a
+ * forced retry of only the execute step reuses the same approvalId and the
+ * same already-resolved decision instead of consuming a fresh one off the
+ * queue.
+ */
+function fakeMemoizingStep(
+  decisionQueue: Array<string | undefined>,
+  agentApprovals: FakeApprovalRow[],
+  opts: { forceRerunIdPrefix?: string; decidedBy?: string } = {},
+): ApprovalGateStep {
+  const cache = new Map<string, unknown>();
+  const decisions = [...decisionQueue];
+  const decidedBy = opts.decidedBy ?? "decider-1";
+  const isForced = (id: string) => !!opts.forceRerunIdPrefix && id.startsWith(opts.forceRerunIdPrefix);
+  return {
+    run: async (id, fn) => {
+      if (isForced(id)) return fn();
+      if (cache.has(id)) return cache.get(id) as never;
+      const result = await fn();
+      cache.set(id, result);
+      return result;
+    },
+    waitForEvent: async (id, waitOpts) => {
+      if (cache.has(id)) return cache.get(id) as never;
+      const decision = decisions.shift();
+      let outcome: { data: { approvalId: string; decision: string } } | null = null;
+      if (decision !== undefined) {
+        const match = /async\.data\.approvalId == "([^"]+)"/.exec(waitOpts.if);
+        const approvalId = match?.[1] ?? "unused-in-fake";
+        const row = agentApprovals.find((r) => r.id === approvalId);
+        if (row) {
+          row.status = decision;
+          row.decided_by = decidedBy;
+        }
+        outcome = { data: { approvalId, decision } };
+      }
+      cache.set(id, outcome);
+      return outcome;
     },
   };
 }
@@ -134,6 +306,21 @@ async function draftOneAgentHumanWrite(db: ReturnType<typeof fakeDb>["db"], runI
   await tool.execute({ leadId: "lead-1" }, { toolCallId: "call-1" });
 }
 
+async function draftCreateTaskWrite(db: ReturnType<typeof fakeDb>["db"], runId: string, input: Record<string, unknown>) {
+  const toolset = buildPolicyEnforcedWriteTools([CREATE_TASK_TOOL_FIXTURE], {
+    db,
+    tenantId: "tenant-1",
+    agentId: "agent-1",
+    runId,
+    subjectType: null,
+    subjectId: null,
+  });
+  const tool = toolset.create_task as unknown as {
+    execute: (input: unknown, opts: { toolCallId: string }) => Promise<unknown>;
+  };
+  await tool.execute(input, { toolCallId: "call-1" });
+}
+
 describe("runWriteApprovalGate (end to end via write-executor's real draft path)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -151,15 +338,16 @@ describe("runWriteApprovalGate (end to end via write-executor's real draft path)
     expect(agentApprovals[0].expires_at).toBeTruthy();
   });
 
-  it("approve: takes no DB action itself — the decide route (tested separately) owns writing 'approved'", async () => {
-    const { db, agentApprovals, agentOutputs } = fakeDb();
+  it("approve without a decided_by on the row takes no DB action (defensive — the real decide route always sets one)", async () => {
+    const { db, agentApprovals, agentOutputs, aiWriteActions } = fakeDb();
     await draftOneAgentHumanWrite(db, "run-1");
 
     await runWriteApprovalGate({ step: fakeStep(["approved"]), db, runId: "run-1" });
 
     expect(agentOutputs).toHaveLength(1); // only the original draft — no execution occurred
     expect(agentApprovals).toHaveLength(1); // gate created no second approval row
-    expect(agentApprovals[0].status).toBe("pending"); // gate itself never rewrites on approve
+    expect(agentApprovals[0].status).toBe("pending"); // gate itself never rewrites agent_approvals
+    expect(aiWriteActions).toHaveLength(0); // no decided_by to attribute the write to -> refuses to execute
   });
 
   it("reject: takes no action, approval stays whatever the decide route set it to", async () => {
@@ -190,5 +378,94 @@ describe("runWriteApprovalGate (end to end via write-executor's real draft path)
     await runWriteApprovalGate({ step: fakeStep([]), db, runId: "run-1" });
 
     expect(agentApprovals).toHaveLength(0);
+  });
+});
+
+describe("runWriteApprovalGate — create_task execution (5.4c)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveAutomationLevelMock.mockResolvedValue("agent_human");
+  });
+
+  it("agent_human approved: creates exactly one task and one ai_write_actions row attributed to the approving human", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    await runWriteApprovalGate({ step: fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1"), db, runId: "run-1" });
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0]).toMatchObject({ title: "Follow up with lead", assignee_id: "decider-1", assigned_by_id: null, status: "todo" });
+
+    expect(aiWriteActions).toHaveLength(1);
+    expect(aiWriteActions[0]).toMatchObject({
+      user_id: "decider-1",
+      agent_id: "agent-1",
+      run_id: "run-1",
+      tool_id: "create_task",
+      tool_call_id: agentApprovals[0].id,
+      status: "executed",
+    });
+    expect((aiWriteActions[0].result as { title: string }).title).toBe("Follow up with lead");
+  });
+
+  it("forced retry of just the execute step creates exactly one task (idempotency via ai_write_actions' tool_call_id)", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    const step = fakeMemoizingStep(["approved"], agentApprovals, { forceRerunIdPrefix: "execute-approval-" });
+
+    await runWriteApprovalGate({ step, db, runId: "run-1" });
+    await runWriteApprovalGate({ step, db, runId: "run-1" }); // create/wait steps memoized; execute step forced to rerun
+
+    expect(tasks).toHaveLength(1);
+    expect(aiWriteActions).toHaveLength(1);
+  });
+
+  it("agent_human rejected: zero tasks, zero ai_write_actions", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    await runWriteApprovalGate({ step: fakeApprovalDecisionStep(["rejected"], agentApprovals), db, runId: "run-1" });
+
+    expect(agentApprovals[0].status).toBe("rejected");
+    expect(tasks).toHaveLength(0);
+    expect(aiWriteActions).toHaveLength(0);
+  });
+
+  it("timeout: expired, zero tasks, zero ai_write_actions", async () => {
+    const { db, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    await runWriteApprovalGate({ step: fakeApprovalDecisionStep([undefined], agentApprovals), db, runId: "run-1" });
+
+    expect(agentApprovals[0].status).toBe("expired");
+    expect(tasks).toHaveLength(0);
+    expect(aiWriteActions).toHaveLength(0);
+  });
+
+  it("human_led: still drafts only — zero approvals, zero tasks, zero ai_write_actions (DB-diff proof)", async () => {
+    resolveAutomationLevelMock.mockResolvedValue("human_led");
+    const { db, agentOutputs, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    await runWriteApprovalGate({ step: fakeStep([]), db, runId: "run-1" });
+
+    expect(agentOutputs).toHaveLength(1); // the draft itself
+    expect(agentApprovals).toHaveLength(0);
+    expect(tasks).toHaveLength(0);
+    expect(aiWriteActions).toHaveLength(0);
+  });
+
+  it("fully_automated: still drafts only — zero approvals, zero tasks, zero ai_write_actions", async () => {
+    resolveAutomationLevelMock.mockResolvedValue("fully_automated");
+    const { db, agentOutputs, agentApprovals, tasks, aiWriteActions } = fakeDb();
+    await draftCreateTaskWrite(db, "run-1", { title: "Follow up with lead" });
+
+    await runWriteApprovalGate({ step: fakeStep([]), db, runId: "run-1" });
+
+    expect(agentOutputs).toHaveLength(1);
+    expect(agentApprovals).toHaveLength(0);
+    expect(tasks).toHaveLength(0);
+    expect(aiWriteActions).toHaveLength(0);
   });
 });

@@ -5,6 +5,7 @@ import {
   buildApprovalPreview,
   createApprovalRequest,
   expireApproval,
+  loadAgentRunContext,
 } from "./approval-flow";
 
 interface FakeOutputRow {
@@ -117,5 +118,24 @@ describe("expireApproval", () => {
 describe("APPROVAL_DECIDED_EVENT", () => {
   it("is a stable, namespaced event name", () => {
     expect(APPROVAL_DECIDED_EVENT).toBe("agent/approval.decided");
+  });
+});
+
+describe("loadAgentRunContext", () => {
+  function fakeRunsDb(row: { tenant_id: string; agent_id: string } | null) {
+    const maybeSingle = () => Promise.resolve({ data: row });
+    return { from: vi.fn(() => ({ select: () => ({ eq: () => ({ maybeSingle }) }) })) } as unknown as Parameters<
+      typeof loadAgentRunContext
+    >[0];
+  }
+
+  it("resolves tenantId/agentId from the agent_runs row", async () => {
+    const db = fakeRunsDb({ tenant_id: "tenant-1", agent_id: "agent-1" });
+    expect(await loadAgentRunContext(db, "run-1")).toEqual({ tenantId: "tenant-1", agentId: "agent-1" });
+  });
+
+  it("returns null when the run row can't be found", async () => {
+    const db = fakeRunsDb(null);
+    expect(await loadAgentRunContext(db, "run-missing")).toBeNull();
   });
 });

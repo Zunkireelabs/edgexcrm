@@ -44,18 +44,35 @@ export interface CreateTaskOk {
 export type CreateTaskOutcome = CreateTaskOk | CreateTaskValidationError | CreateTaskDbError;
 
 /**
- * The core of `POST /api/v1/my-tasks` (previously inline in the route),
- * extracted so the create_task AI tool (Phase 4A) can call the exact same
- * validation/side-effects instead of reimplementing them. Kept
- * behavior-identical to the pre-extraction route — see my-tasks route
- * tests for the REST-parity gate.
+ * The minimal actor shape createTaskCore needs: which tenant to write into,
+ * and who a task lands on when the caller doesn't name an explicit assignee.
+ * A real interactive session supplies both from its AuthContext (userId
+ * doubles as the default assignee); an agent-approved write (Phase 5.4c)
+ * supplies the approving human's id as defaultAssigneeId — there is no
+ * session user to fall back to.
  */
-export async function createTaskForUser(
+export interface CreateTaskCoreActor {
+  tenantId: string;
+  defaultAssigneeId: string;
+}
+
+/**
+ * The core of `POST /api/v1/my-tasks` (previously inline in the route,
+ * previously `createTaskForUser` before the Phase 5.4c actor extraction).
+ * Takes a minimal actor shape instead of a full AuthContext so a background
+ * agent's approved write (which has no session/AuthContext) can call the
+ * exact same validation/side-effects as the interactive REST route and the
+ * create_task AI tool. Kept behavior-identical to the pre-extraction
+ * implementation — see my-tasks route tests and createTaskForUser's own
+ * tests for the parity gate.
+ */
+export async function createTaskCore(
   db: ScopedClient,
-  auth: AuthContext,
+  actor: CreateTaskCoreActor,
   input: CreateTaskInput,
   opts: { requestId?: string } = {},
 ): Promise<CreateTaskOutcome> {
+  const { tenantId, defaultAssigneeId } = actor;
   const requestId = opts.requestId ?? crypto.randomUUID();
   const body = input as Record<string, unknown>;
 
@@ -118,8 +135,8 @@ export async function createTaskForUser(
     }
   }
 
-  const assigneeId = body.assignee_id ? String(body.assignee_id) : auth.userId;
-  if (assigneeId !== auth.userId) {
+  const assigneeId = body.assignee_id ? String(body.assignee_id) : defaultAssigneeId;
+  if (assigneeId !== defaultAssigneeId) {
     const { data: member } = await db
       .from("tenant_users")
       .select("user_id")
@@ -129,7 +146,7 @@ export async function createTaskForUser(
       return { kind: "validation", errors: { assignee_id: ["Not a member of this tenant"] } };
     }
   }
-  const assignedById = assigneeId !== auth.userId ? auth.userId : null;
+  const assignedById = assigneeId !== defaultAssigneeId ? defaultAssigneeId : null;
 
   const insert = {
     title: String(body.title).trim(),
@@ -158,15 +175,15 @@ export async function createTaskForUser(
 
   await Promise.all([
     emitEvent({
-      tenantId: auth.tenantId,
+      tenantId,
       type: "task.created",
       entityType: "task",
       entityId: task.id,
       requestId,
     }),
     createAuditLog({
-      tenantId: auth.tenantId,
-      userId: auth.userId,
+      tenantId,
+      userId: defaultAssigneeId,
       action: "task.created",
       entityType: "task",
       entityId: task.id,
@@ -181,9 +198,9 @@ export async function createTaskForUser(
       : task.deal_id
         ? `/deals/${task.deal_id}`
         : "/home";
-    createNotificationsExcept(auth.userId, [
+    createNotificationsExcept(defaultAssigneeId, [
       {
-        tenantId: auth.tenantId,
+        tenantId,
         userId: assigneeId,
         type: NotificationTypes.TASK_ASSIGNED,
         title: "New task assigned",
@@ -195,4 +212,14 @@ export async function createTaskForUser(
   }
 
   return { kind: "ok", task, notified };
+}
+
+/** Thin AuthContext-shaped wrapper over createTaskCore — the interactive REST route and create_task AI tool's caller. */
+export async function createTaskForUser(
+  db: ScopedClient,
+  auth: AuthContext,
+  input: CreateTaskInput,
+  opts: { requestId?: string } = {},
+): Promise<CreateTaskOutcome> {
+  return createTaskCore(db, { tenantId: auth.tenantId, defaultAssigneeId: auth.userId }, input, opts);
 }

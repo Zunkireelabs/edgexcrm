@@ -82,3 +82,21 @@ export async function expireApproval(db: ScopedClient, approvalId: string): Prom
   const { error } = await db.from("agent_approvals").update({ status: "expired" }).eq("id", approvalId).eq("status", "pending");
   if (error) throw new Error(`Failed to expire agent_approvals row: ${error.message}`);
 }
+
+export interface AgentRunContext {
+  tenantId: string;
+  agentId: string;
+}
+
+/**
+ * 5.4c: resolves the (tenant_id, agent_id) an approved write is executed
+ * under, from the agent_runs row the approval's proposal came from. Neither
+ * agent_approvals nor its `decided` event carries agent_id directly — this
+ * is the one join that gets it, so the executor doesn't have to thread it
+ * through every step in runWriteApprovalGate.
+ */
+export async function loadAgentRunContext(db: ScopedClient, runId: string): Promise<AgentRunContext | null> {
+  const { data } = await db.from("agent_runs").select("tenant_id, agent_id").eq("id", runId).maybeSingle();
+  const row = data as { tenant_id: string; agent_id: string } | null;
+  return row ? { tenantId: row.tenant_id, agentId: row.agent_id } : null;
+}
