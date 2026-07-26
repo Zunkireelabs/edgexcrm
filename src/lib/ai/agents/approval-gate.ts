@@ -42,6 +42,9 @@ type ApprovalExecutorResult = { result: Record<string, unknown> } | { error: str
  *
  * Scope for 5.4c: create_task only. Phase 5.4c-2a added update_lead_stage —
  * the first agent-driven UPDATE to customer data (create_task is an INSERT).
+ * Phase 5.4c-2b added assign_lead — same shape as update_lead_stage minus the
+ * stage-name resolution step, since assign_lead's input already carries a
+ * resolved assigneeId (team_lookup resolves it client-side, at draft time).
  * Unlike create_task's minimal actor shape, applyLeadPatch is auth-dependent
  * throughout (industry rules, list access, branch/chain governance) — there
  * is no reduced "core" to extract safely. Instead this builds the approving
@@ -114,6 +117,56 @@ const APPROVAL_EXECUTORS: Record<string, (params: ApprovalExecutorParams) => Pro
       result: {
         leadId,
         stage: resolved.matched.name,
+        previous: undoableLeadPrevious(outcome.previousValues),
+      },
+    };
+  },
+
+  assign_lead: async ({ tenantId, defaultAssigneeId, input }) => {
+    const raw = (input ?? {}) as { leadId?: unknown; assigneeId?: unknown };
+    const leadId = typeof raw.leadId === "string" && raw.leadId.length > 0 ? raw.leadId : null;
+
+    // Double gate, part 1 (see update_lead_stage above for the rationale):
+    // refuse a hallucinated/missing leadId before any DB call.
+    try {
+      assertMandatoryRowFilter(leadId ? [{ column: "id", value: leadId }] : []);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Missing required row filter" };
+    }
+
+    // Double gate, part 2: execute as the approver's real AuthContext. Every
+    // assignment rule (ADMIN_ONLY_FIELDS + canAssignLeads, tenant-membership
+    // of the assignee, requireLeadAccess, the self-check-in and cross-branch
+    // pooled bypasses) already lives inside applyLeadPatch — this executor
+    // does not re-check any of it.
+    const auth = await buildUserAuthContext(defaultAssigneeId, tenantId);
+    if (!auth) {
+      return { error: "Could not resolve the approving user's permissions for this tenant." };
+    }
+
+    const assigneeId = typeof raw.assigneeId === "string" && raw.assigneeId.length > 0 ? raw.assigneeId : null;
+
+    const outcome = await applyLeadPatch(
+      auth,
+      leadId as string,
+      { assigned_to: assigneeId },
+      { requestId: crypto.randomUUID(), ip: null, userAgent: null },
+    );
+
+    if (outcome.kind !== "ok") return leadPatchErrorResult(outcome);
+
+    // Same honest substitute as update_lead_stage — applyLeadPatch exposes no
+    // affected-row count; its update() is itself PK-scoped + .single().
+    try {
+      assertSingleRowEffect(outcome.lead.id === leadId ? 1 : 0);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Write affected an unexpected number of rows" };
+    }
+
+    return {
+      result: {
+        leadId,
+        assignedTo: assigneeId,
         previous: undoableLeadPrevious(outcome.previousValues),
       },
     };
