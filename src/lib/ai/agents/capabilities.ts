@@ -53,7 +53,11 @@ const DRAFT_TOOL_PHRASES: Record<string, string> = {
   propose_digest: "compile the daily digest",
 };
 
-const WRITE_TOOL_PHRASES: Record<string, string> = {
+// Exported: reused by getAgentDetail (queries.ts) as the human label on each
+// row of the per-agent automation matrix (5.4d Part 5) — one source of
+// truth for "what does this write tool do" copy, shared with the capability
+// summary above.
+export const WRITE_TOOL_PHRASES: Record<string, string> = {
   update_lead_stage: "move a lead between stages",
   assign_lead: "assign a lead to a team member",
   create_task: "create a task",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "sonner";
@@ -9,14 +9,38 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import type { AgentReviewItem } from "@/lib/ai/agents/queries";
+import type { AgentReviewItem, AgentApprovalItem } from "@/lib/ai/agents/queries";
 import { KIND_LABELS, formatAgentRelativeTime } from "@/lib/ai/agents/labels";
+import {
+  describeApprovalRows,
+  collectApprovalRefs,
+  resolveRowDisplay,
+  refKey,
+  type EntityRef,
+  type ResolvedRef,
+} from "@/lib/ai/tools/universal/lib/approval-resolve";
+import { ApprovalsSection } from "@/components/dashboard/orca/approvals-section";
 
 interface ReviewContentProps {
   items: AgentReviewItem[];
+  approvals: AgentApprovalItem[];
 }
 
 const EDITABLE_KINDS = new Set(["score_suggestion", "task_suggestion", "draft_email"]);
+
+/**
+ * 5.4d Defect A fix: a write_action_proposal that reaches this queue is
+ * always the "human_led" tier (agent_human-tier ones are excluded server-side
+ * by getReviewQueue — they surface in the Approvals section instead, with a
+ * real accept path). This tier's "Accept" button previously flipped
+ * agent_outputs.status without executing anything or touching
+ * agent_approvals — a misleading consent surface. There's nothing to accept
+ * here; this is an FYI that the agent tried something it isn't authorized
+ * for.
+ */
+function isUnauthorizedWriteProposal(item: AgentReviewItem): boolean {
+  return item.kind === "write_action_proposal";
+}
 
 interface ScoreDraft {
   score: string;
@@ -34,7 +58,7 @@ interface EmailDraft {
   body: string;
 }
 
-function PayloadPreview({ item }: { item: AgentReviewItem }) {
+function PayloadPreview({ item, resolved }: { item: AgentReviewItem; resolved: Record<string, ResolvedRef> }) {
   if (item.kind === "score_suggestion") {
     const p = item.payload as { score?: number; reasoning?: string };
     return (
@@ -81,6 +105,36 @@ function PayloadPreview({ item }: { item: AgentReviewItem }) {
       </div>
     );
   }
+  if (isUnauthorizedWriteProposal(item)) {
+    // Reused describer + resolver, same as the real Approvals section, incl.
+    // real ref resolution (ReviewContent below fetches it) — never render a
+    // raw id from tool_input as if it were a label, same invariant as the
+    // Approvals section, even though nothing executes on this item.
+    const p = item.payload as { tool_id?: string; input?: unknown };
+    const rows = describeApprovalRows(p.tool_id ?? "", p.input);
+    return (
+      <div className="space-y-2">
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+          This agent isn&apos;t authorized to perform this action — it&apos;s shown for your awareness.
+        </p>
+        {rows.length > 0 && (
+          <dl className="space-y-1">
+            {rows.map((row, i) => {
+              const display = resolveRowDisplay(row, resolved);
+              return (
+                <div key={i} className="flex gap-2 text-sm">
+                  <dt className="text-gray-500 shrink-0">{row.label}:</dt>
+                  <dd className={`break-words ${display.tone === "notFound" ? "text-red-700 font-medium" : "text-gray-900"}`}>
+                    {display.text}
+                  </dd>
+                </div>
+              );
+            })}
+          </dl>
+        )}
+      </div>
+    );
+  }
   // lead_summary — no editor built for this yet, render raw payload
   return (
     <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans bg-gray-50 rounded-lg p-3">
@@ -89,7 +143,7 @@ function PayloadPreview({ item }: { item: AgentReviewItem }) {
   );
 }
 
-function Header({ count }: { count?: number }) {
+function PageHeader() {
   return (
     <div className="flex items-center gap-3">
       <div className="p-2 bg-[#eb1600] rounded-lg">
@@ -97,17 +151,24 @@ function Header({ count }: { count?: number }) {
       </div>
       <div>
         <h1 className="text-lg font-bold">Review Queue</h1>
-        <p className="text-sm text-muted-foreground">
-          {count === undefined
-            ? "Agent suggestions awaiting your decision"
-            : `${count} suggestion${count === 1 ? "" : "s"} awaiting your decision`}
-        </p>
+        <p className="text-sm text-muted-foreground">Everything waiting on a human decision</p>
       </div>
     </div>
   );
 }
 
-export function ReviewContent({ items: initialItems }: ReviewContentProps) {
+function SuggestionsHeader({ count }: { count: number }) {
+  return (
+    <div>
+      <h2 className="text-base font-bold text-gray-900">Suggestions</h2>
+      <p className="text-xs text-gray-500">
+        Drafts for you to act on — {count} suggestion{count === 1 ? "" : "s"} awaiting your decision.
+      </p>
+    </div>
+  );
+}
+
+export function ReviewContent({ items: initialItems, approvals }: ReviewContentProps) {
   const router = useRouter();
   const [items, setItems] = useState(initialItems);
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -115,6 +176,41 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
   const [scoreDraft, setScoreDraft] = useState<ScoreDraft>({ score: "", reasoning: "" });
   const [taskDraft, setTaskDraft] = useState<TaskDraft>({ title: "", description: "", dueDate: "" });
   const [emailDraft, setEmailDraft] = useState<EmailDraft>({ subject: "", body: "" });
+  const [resolved, setResolved] = useState<Record<string, ResolvedRef>>({});
+
+  // Ref resolution for the "unauthorized write proposal" rows only (Defect A
+  // fix) — the score/task/email/digest kinds never carry an EntityRef, so
+  // this is a no-op for them.
+  useEffect(() => {
+    const unique = new Map<string, EntityRef>();
+    for (const item of items) {
+      if (!isUnauthorizedWriteProposal(item)) continue;
+      const p = item.payload as { tool_id?: string; input?: unknown };
+      const rows = describeApprovalRows(p.tool_id ?? "", p.input);
+      for (const ref of collectApprovalRefs(rows)) unique.set(refKey(ref), ref);
+    }
+    const refs = [...unique.values()];
+    if (refs.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/ai/resolve-approval-refs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refs }),
+        });
+        if (!res.ok || cancelled) return;
+        const body = await res.json();
+        if (!cancelled) setResolved((prev) => ({ ...prev, ...body.data.resolved }));
+      } catch {
+        // Non-fatal — rows stay in the "Resolving…" state rather than fabricating a label.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [items]);
 
   function openEdit(item: AgentReviewItem) {
     if (item.kind === "score_suggestion") {
@@ -190,24 +286,24 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
     }
   }
 
-  if (items.length === 0) {
-    return (
-      <div className="space-y-6">
-        <Header />
-        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-          <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No suggestions waiting for review</h3>
-          <p className="text-sm text-gray-500">Agent drafts will show up here once they&apos;re proposed.</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      <Header count={items.length} />
+      <PageHeader />
+
+      <ApprovalsSection items={approvals} />
+
       <div className="space-y-4">
-        {items.map((item) => {
+        <SuggestionsHeader count={items.length} />
+
+        {items.length === 0 ? (
+          <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+            <Inbox className="w-12 h-12 text-gray-300 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">No suggestions waiting for review</h3>
+            <p className="text-sm text-gray-500">Agent drafts will show up here once they&apos;re proposed.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {items.map((item) => {
           const isPending = pendingId === item.id;
           const isEditing = editingId === item.id;
           return (
@@ -286,7 +382,7 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
                     />
                   </div>
                 ) : (
-                  <PayloadPreview item={item} />
+                  <PayloadPreview item={item} resolved={resolved} />
                 )}
               </div>
 
@@ -304,7 +400,8 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
                   <>
                     <Button size="sm" disabled={isPending} onClick={() => decide(item, "accept")}>
                       <CheckCircle2 className="w-4 h-4" />
-                      Accept
+                      {/* Defect A fix: this tier executes nothing on "accept" — never call it "Accept". decision:"accept" on the wire is unchanged (existing status vocabulary). */}
+                      {isUnauthorizedWriteProposal(item) ? "Mark handled" : "Accept"}
                     </Button>
                     {EDITABLE_KINDS.has(item.kind) && (
                       <Button size="sm" variant="outline" disabled={isPending} onClick={() => openEdit(item)}>
@@ -322,6 +419,8 @@ export function ReviewContent({ items: initialItems }: ReviewContentProps) {
             </div>
           );
         })}
+      </div>
+        )}
       </div>
     </div>
   );

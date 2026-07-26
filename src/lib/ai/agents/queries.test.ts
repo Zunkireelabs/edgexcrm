@@ -15,13 +15,26 @@ vi.mock("./registry", () => ({
 // method (select/order/eq/in) returns itself, and it resolves via `.then()`
 // (the thenable protocol `await` relies on) to a fixed per-table result —
 // good enough since these tests don't need chain-argument-sensitive filtering.
-function makeChain(result: { data: unknown }) {
+function makeChain(result: { data: unknown; count?: number }) {
   const chain: Record<string, unknown> = {};
   const self = () => chain;
   chain.select = self;
   chain.order = self;
   chain.eq = self;
   chain.in = self;
+  chain.limit = self;
+  chain.or = self;
+  // Unlike the no-op stubs above (existing tests already pass in
+  // pre-filtered data, per the comment above), `.is()` has exactly one
+  // caller in the codebase (getAgentDetail's undo_of exclusion) so it's
+  // safe to give it real filtering semantics here without touching any
+  // other test's fixtures.
+  chain.is = (column: string, value: unknown) => {
+    const data = Array.isArray(result.data)
+      ? (result.data as Array<Record<string, unknown>>).filter((row) => row[column] === value)
+      : result.data;
+    return makeChain({ ...result, data });
+  };
   chain.maybeSingle = () => Promise.resolve(result);
   chain.single = () => Promise.resolve(result);
   chain.then = (resolve: (v: unknown) => unknown, reject?: (e: unknown) => unknown) =>
@@ -29,7 +42,7 @@ function makeChain(result: { data: unknown }) {
   return chain;
 }
 
-function fakeDb(tables: Record<string, { data: unknown }>) {
+function fakeDb(tables: Record<string, { data: unknown; count?: number }>) {
   return { from: (table: string) => makeChain(tables[table] ?? { data: [] }) };
 }
 
@@ -216,6 +229,108 @@ describe("getReviewQueue", () => {
 
     expect(await getReviewQueue("tenant-1")).toEqual([]);
   });
+
+  it("excludes agent_human-tier write_action_proposal rows and includes human_led ones (Defect A, both directions)", async () => {
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_outputs: {
+          data: [
+            {
+              id: "out-agent-human",
+              agent_id: "a1",
+              kind: "write_action_proposal",
+              status: "proposed",
+              subject_type: null,
+              subject_id: null,
+              payload: { tool_id: "update_lead_stage", input: {}, automation_level: "agent_human" },
+              created_at: "2026-01-02T00:00:00Z",
+            },
+            {
+              id: "out-human-led",
+              agent_id: "a1",
+              kind: "write_action_proposal",
+              status: "proposed",
+              subject_type: null,
+              subject_id: null,
+              payload: { tool_id: "assign_lead", input: {}, automation_level: "human_led" },
+              created_at: "2026-01-01T00:00:00Z",
+            },
+          ],
+        },
+        agent_identities: { data: [{ id: "a1", display_name: "Lead Triage" }] },
+        leads: { data: [] },
+      }),
+    );
+    const { getReviewQueue } = await import("./queries");
+
+    const items = await getReviewQueue("tenant-1");
+
+    // agent_human excluded (a real agent_approvals row drives it instead);
+    // human_led kept (no approval row is ever created for it).
+    expect(items.map((i) => i.id)).toEqual(["out-human-led"]);
+  });
+});
+
+describe("getPendingApprovals", () => {
+  it("returns pending approvals enriched with agent name and the run's subject", async () => {
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_approvals: {
+          data: [
+            {
+              id: "appr-1",
+              run_id: "run-1",
+              tool_id: "update_lead_stage",
+              tool_input: { leadId: "lead-1", stageName: "Qualified" },
+              requested_at: "2026-01-02T00:00:00Z",
+              expires_at: "2026-01-04T00:00:00Z",
+            },
+          ],
+        },
+        agent_runs: { data: [{ id: "run-1", agent_id: "a1", subject_type: "lead", subject_id: "lead-1" }] },
+        agent_identities: { data: [{ id: "a1", display_name: "Lead Triage" }] },
+      }),
+    );
+    const { getPendingApprovals } = await import("./queries");
+
+    const items = await getPendingApprovals("tenant-1");
+
+    expect(items).toEqual([
+      {
+        id: "appr-1",
+        toolId: "update_lead_stage",
+        toolInput: { leadId: "lead-1", stageName: "Qualified" },
+        runId: "run-1",
+        agentId: "a1",
+        agentName: "Lead Triage",
+        subjectType: "lead",
+        subjectId: "lead-1",
+        requestedAt: "2026-01-02T00:00:00Z",
+        expiresAt: "2026-01-04T00:00:00Z",
+      },
+    ]);
+  });
+
+  it("returns [] when there are no pending approvals", async () => {
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ agent_approvals: { data: [] } }));
+    const { getPendingApprovals } = await import("./queries");
+
+    expect(await getPendingApprovals("tenant-1")).toEqual([]);
+  });
+});
+
+describe("getPendingReviewCount", () => {
+  it("sums pending suggestions and pending approvals", async () => {
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_outputs: { data: [], count: 3 },
+        agent_approvals: { data: [], count: 2 },
+      }),
+    );
+    const { getPendingReviewCount } = await import("./queries");
+
+    expect(await getPendingReviewCount("tenant-1")).toBe(5);
+  });
 });
 
 describe("getAgentCatalog", () => {
@@ -382,5 +497,66 @@ describe("getAgentDetail", () => {
     expect(detail?.capabilities).toBeNull();
     expect(detail?.positionName).toBeNull();
     expect(detail?.stats).toEqual({ tasksCompleted: 0, successRate: null, lastActive: null });
+  });
+
+  it("excludes an undo row from recentWrites (undo_of set) while still marking the undone original's `undone` flag", async () => {
+    getAgentDefinitionMock.mockReturnValue({
+      key: "lead-triage",
+      name: "Lead Triage",
+      description: "Scores leads",
+      triggers: [{ event: "crm/lead.created" }],
+      toolIds: ["get_lead", "propose_score"],
+      outputKinds: ["score_suggestion"],
+    });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_identities: {
+          data: {
+            id: "a1",
+            agent_key: "lead-triage",
+            display_name: "Lead Triage",
+            position_id: null,
+            status: "active",
+            created_at: "2026-01-01",
+          },
+        },
+        agent_runs: { data: [] },
+        agent_outputs: { data: [] },
+        tenant_users: { data: [] },
+        ai_write_actions: {
+          data: [
+            {
+              id: "w-original",
+              tool_id: "update_lead_stage",
+              input: { leadId: "lead-1" },
+              result: { stage: "Qualified", previous: { list_id: "old-list" } },
+              status: "executed",
+              user_id: "u1",
+              created_at: "2026-01-01T00:00:00Z",
+              undo_of: null,
+            },
+            {
+              id: "w-undo",
+              tool_id: "update_lead_stage",
+              input: { leadId: "lead-1", patch: {} },
+              result: { leadId: "lead-1", restored: {} },
+              status: "executed",
+              user_id: "u2",
+              created_at: "2026-01-02T00:00:00Z",
+              undo_of: "w-original",
+            },
+          ],
+        },
+      }),
+    );
+    const { getAgentDetail } = await import("./queries");
+
+    const detail = await getAgentDetail("tenant-1", "a1");
+
+    // Only the original action surfaces — the undo row itself (which would
+    // otherwise render as a second, misleadingly-badged "Agent action" entry
+    // with an Undo button that always 422s) is excluded.
+    expect(detail!.recentWrites.map((w) => w.id)).toEqual(["w-original"]);
+    expect(detail!.recentWrites[0].undone).toBe(true);
   });
 });

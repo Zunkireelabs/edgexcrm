@@ -3,6 +3,20 @@ import type { ApplyLeadPatchOutcome } from "@/lib/leads/apply-lead-patch";
 /** Fields `undo_lead_action` is allowed to restore from a captured `previousValues` snapshot. */
 export const UNDOABLE_LEAD_FIELDS = ["list_id", "assigned_to", "status", "stage_id", "pipeline_id"] as const;
 
+/**
+ * Tool ids whose executed write can be undone. Lives here (not in
+ * undo-lead-action.ts, which pulls in server-only deps — applyLeadPatch ->
+ * next/headers via auth.ts) specifically so it stays importable from a
+ * "use client" component: agent-detail-drawer.tsx's Actions-taken section
+ * (5.4d) needs this same list client-side to decide whether to render an
+ * Undo button, without dragging the whole server write-executor chain into
+ * the client bundle. undo-lead-action.ts imports it from here directly and
+ * re-exports it; the agent-writes undo route (and resolve-approval-refs)
+ * import that re-export rather than this file, so there is still exactly
+ * one list, just one indirection away.
+ */
+export const UNDOABLE_TOOL_IDS = ["update_lead_stage", "assign_lead"];
+
 type NonOkOutcome = Exclude<ApplyLeadPatchOutcome, { kind: "ok" }>;
 
 /**

@@ -398,6 +398,23 @@ function fakeDb() {
           maybeSingle: () => Promise.resolve({ data: agentRuns.find((r) => (r as never)[col] === val) ?? null }),
         }),
       }),
+      // 5.4d: runWriteApprovalGate's mark-awaiting-approval/mark-approvals-settled
+      // steps write agent_runs.status directly.
+      update: (values: Record<string, unknown>) => {
+        const filters: Array<[string, unknown]> = [];
+        const chain = {
+          eq: (col: string, val: unknown) => {
+            filters.push([col, val]);
+            return chain;
+          },
+          then: (resolve: (v: unknown) => void) => {
+            const row = agentRuns.find((r) => filters.every(([c, v]) => (r as never)[c] === v));
+            if (row) Object.assign(row, values);
+            resolve({ error: null });
+          },
+        };
+        return chain;
+      },
     };
   }
 

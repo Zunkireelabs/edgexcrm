@@ -1,10 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Bot } from "lucide-react";
+import { Bot, Undo2 } from "lucide-react";
+import { toast } from "sonner";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import type { AgentDetail } from "@/lib/ai/agents/queries";
+import { Button } from "@/components/ui/button";
+import type { AgentDetail, AgentDetailWrite } from "@/lib/ai/agents/queries";
 import { KIND_LABELS, formatAgentRelativeTime } from "@/lib/ai/agents/labels";
+import {
+  describeApprovalRows,
+  collectApprovalRefs,
+  resolveRowDisplay,
+  refKey,
+  type EntityRef,
+  type ResolvedRef,
+} from "@/lib/ai/tools/universal/lib/approval-resolve";
+import { UNDOABLE_TOOL_IDS } from "@/lib/ai/tools/universal/lib/lead-patch-result";
 
 interface AgentDetailDrawerProps {
   agentId: string | null;
@@ -12,11 +23,29 @@ interface AgentDetailDrawerProps {
   onOpenChange: (open: boolean) => void;
 }
 
+// Imperative framing, same wording precedent as approval-card.tsx's
+// APPROVAL_ACTION_LABELS — kept as its own small local map since this
+// surface (past tense: "what happened") renders independently of the
+// approval surfaces (present tense: "what will happen").
+const WRITE_ACTION_PAST_TENSE_LABELS: Record<string, string> = {
+  create_task: "Created a task",
+  update_lead_stage: "Moved a lead to another stage",
+  assign_lead: "Assigned a lead",
+};
+
+function writeActionLabel(toolId: string): string {
+  return WRITE_ACTION_PAST_TENSE_LABELS[toolId] ?? `Ran "${toolId}"`;
+}
+
 const RUN_STATUS_LABELS: Record<string, string> = {
   running: "Running",
   completed: "Completed",
   failed: "Failed",
   cancelled: "Cancelled",
+  // 5.4d: a run whose write proposals are still awaiting a human decision —
+  // see mig 184 + approval-gate.ts's mark-awaiting-approval/mark-approvals-
+  // settled steps.
+  awaiting_approval: "Awaiting approval",
 };
 
 const OUTPUT_STATUS_LABELS: Record<string, string> = {
@@ -30,6 +59,7 @@ const OUTPUT_STATUS_LABELS: Record<string, string> = {
 const RUN_STATUS_TEXT: Record<string, string> = {
   failed: "text-red-600",
   completed: "text-emerald-600",
+  awaiting_approval: "text-amber-600",
 };
 
 /**
@@ -40,6 +70,8 @@ export function AgentDetailDrawer({ agentId, open, onOpenChange }: AgentDetailDr
   const [detail, setDetail] = useState<AgentDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [resolved, setResolved] = useState<Record<string, ResolvedRef>>({});
+  const [undoingId, setUndoingId] = useState<string | null>(null);
 
   const fetchDetail = useCallback(async (id: string) => {
     setLoading(true);
@@ -61,6 +93,56 @@ export function AgentDetailDrawer({ agentId, open, onOpenChange }: AgentDetailDr
     if (!open || !agentId) return;
     fetchDetail(agentId);
   }, [open, agentId, fetchDetail]);
+
+  // Ref resolution for the "Actions taken" rows — same invariant as every
+  // other approval/write surface in this slice: never render a raw id from
+  // tool input as if it were a label.
+  useEffect(() => {
+    if (!detail || detail.recentWrites.length === 0) return;
+    const unique = new Map<string, EntityRef>();
+    for (const write of detail.recentWrites) {
+      const rows = describeApprovalRows(write.toolId, write.input);
+      for (const ref of collectApprovalRefs(rows)) unique.set(refKey(ref), ref);
+    }
+    const refs = [...unique.values()];
+    if (refs.length === 0) return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/ai/resolve-approval-refs", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refs }),
+        });
+        if (!res.ok || cancelled) return;
+        const body = await res.json();
+        if (!cancelled) setResolved((prev) => ({ ...prev, ...body.data.resolved }));
+      } catch {
+        // Non-fatal — rows stay in the "Resolving…" state rather than fabricating a label.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
+  async function undoWrite(write: AgentDetailWrite) {
+    setUndoingId(write.id);
+    try {
+      const res = await fetch(`/api/v1/agent-writes/${write.id}/undo`, { method: "POST" });
+      const body = await res.json();
+      if (!res.ok) {
+        throw new Error(body.error?.details?.undo?.[0] || body.error?.message || "Failed to undo this action");
+      }
+      toast.success("Action undone");
+      setDetail((d) => (d ? { ...d, recentWrites: d.recentWrites.map((w) => (w.id === write.id ? { ...w, undone: true } : w)) } : d));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to undo this action");
+    } finally {
+      setUndoingId(null);
+    }
+  }
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -171,6 +253,66 @@ export function AgentDetailDrawer({ agentId, open, onOpenChange }: AgentDetailDr
                         </span>
                       </li>
                     ))}
+                  </ul>
+                )}
+              </section>
+
+              <section className="space-y-2">
+                <h3 className="text-xs font-semibold uppercase text-gray-500">Actions taken</h3>
+                {detail.recentWrites.length === 0 ? (
+                  <p className="text-sm text-gray-500">No executed actions yet</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {detail.recentWrites.map((write) => {
+                      const rows = describeApprovalRows(write.toolId, write.input);
+                      const canUndo = UNDOABLE_TOOL_IDS.includes(write.toolId);
+                      return (
+                        <li key={write.id} className="rounded-lg border border-gray-200 p-3 text-sm">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-medium text-gray-900">{writeActionLabel(write.toolId)}</span>
+                            <span className="text-xs text-gray-400 whitespace-nowrap">{formatAgentRelativeTime(write.createdAt)}</span>
+                          </div>
+
+                          {rows.length > 0 && (
+                            <dl className="mt-1 flex flex-col gap-0.5">
+                              {rows.map((row, i) => {
+                                const display = resolveRowDisplay(row, resolved);
+                                return (
+                                  <div key={i} className="flex gap-1.5 text-xs">
+                                    <dt className="text-gray-500 shrink-0">{row.label}:</dt>
+                                    <dd className={display.tone === "notFound" ? "text-red-700 font-medium break-words" : "text-gray-600 break-words"}>
+                                      {display.text}
+                                    </dd>
+                                  </div>
+                                );
+                              })}
+                            </dl>
+                          )}
+
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <span className="text-xs text-gray-400">
+                              Agent action{write.approvedBy ? ` · approved by ${write.approvedBy}` : ""}
+                            </span>
+                            {canUndo &&
+                              (write.undone ? (
+                                <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                                  Undone
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={undoingId === write.id}
+                                  onClick={() => undoWrite(write)}
+                                >
+                                  <Undo2 className="w-3.5 h-3.5" />
+                                  {undoingId === write.id ? "Undoing…" : "Undo"}
+                                </Button>
+                              ))}
+                          </div>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </section>

@@ -164,8 +164,37 @@ function fakeDb() {
           maybeSingle: () => Promise.resolve({ data: agentRuns.find((r) => (r as never)[col] === val) ?? null }),
         }),
       }),
+      // 5.4d: runWriteApprovalGate's mark-awaiting-approval/mark-approvals-settled
+      // steps write agent_runs.status directly — mirrors the agentApprovals
+      // update() fake's filter-collecting-then-thenable shape below.
+      update: (values: Record<string, unknown>) => {
+        const filters: Array<[string, unknown]> = [];
+        const chain = {
+          eq: (col: string, val: unknown) => {
+            filters.push([col, val]);
+            return chain;
+          },
+          then: (resolve: (v: unknown) => void) => {
+            // 5.4d-FIXUP: lets a test force this update to report a DB error,
+            // same shape as crashController.crashNextFinalize below — proves
+            // the gate throws (surfacing the failed flip) instead of silently
+            // leaving agent_runs reading a status the update never applied.
+            if (runsUpdateController.failNextUpdate) {
+              runsUpdateController.failNextUpdate = false;
+              resolve({ error: { message: "simulated agent_runs update failure" } });
+              return;
+            }
+            const row = agentRuns.find((r) => filters.every(([c, v]) => (r as never)[c] === v));
+            if (row) Object.assign(row, values);
+            resolve({ error: null });
+          },
+        };
+        return chain;
+      },
     };
   }
+
+  const runsUpdateController = { failNextUpdate: false };
 
   function aiWriteActionsTable() {
     return {
@@ -236,7 +265,7 @@ function fakeDb() {
       return factory();
     },
   };
-  return { db: db as never, agentOutputs, agentApprovals, agentRuns, aiWriteActions, tasks, crashController };
+  return { db: db as never, agentOutputs, agentApprovals, agentRuns, aiWriteActions, tasks, crashController, runsUpdateController };
 }
 
 /** Original (non-mutating) fake: returns a canned decision but never touches agent_approvals — used where decided_by is irrelevant (no real executor is registered for the fixture tool). */
@@ -589,5 +618,80 @@ describe("runWriteApprovalGate — claim-then-execute hazards (5.4c-FIXUP)", () 
     expect(aiWriteActions).toHaveLength(1); // repaired in place, not a second row
     expect(aiWriteActions[0]).toMatchObject({ status: "executed", error: null });
     expect((aiWriteActions[0].result as { title: string }).title).toBe("Follow up with lead");
+  });
+});
+
+describe("runWriteApprovalGate — run status transitions (5.4d, mig 184)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveAutomationLevelMock.mockResolvedValue("agent_human");
+  });
+
+  it("with a queued proposal: the run goes awaiting_approval then back to completed", async () => {
+    const { db, agentApprovals, agentRuns } = fakeDb();
+    await draftOneAgentHumanWrite(db, "run-1");
+
+    const statusesSeen: string[] = [];
+    const base = fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1");
+    const step: ApprovalGateStep = {
+      ...base,
+      run: async (id, fn) => {
+        const result = await base.run(id, fn);
+        if (id === "mark-awaiting-approval" || id === "mark-approvals-settled") {
+          const run = agentRuns.find((r) => r.id === "run-1") as { status?: string } | undefined;
+          statusesSeen.push(run?.status ?? "<unset>");
+        }
+        return result;
+      },
+    };
+
+    await runWriteApprovalGate({ step, db, runId: "run-1" });
+
+    expect(statusesSeen).toEqual(["awaiting_approval", "completed"]);
+  });
+
+  it("with zero proposals: run status is never touched (no spurious update)", async () => {
+    resolveAutomationLevelMock.mockResolvedValue("human_led"); // drafts only — nothing gets queued
+    const { db, agentRuns } = fakeDb();
+    await draftOneAgentHumanWrite(db, "run-1");
+
+    await runWriteApprovalGate({ step: fakeStep([]), db, runId: "run-1" });
+
+    const run = agentRuns.find((r) => r.id === "run-1") as { status?: string } | undefined;
+    expect(run?.status).toBeUndefined();
+  });
+
+  it("mark-awaiting-approval: a Supabase error on the flip throws instead of silently leaving the run reading 'Completed'", async () => {
+    const { db, agentApprovals, runsUpdateController } = fakeDb();
+    await draftOneAgentHumanWrite(db, "run-1");
+    runsUpdateController.failNextUpdate = true;
+
+    await expect(
+      runWriteApprovalGate({ step: fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1"), db, runId: "run-1" }),
+    ).rejects.toThrow("Failed to mark agent_runs row awaiting_approval");
+  });
+
+  it("mark-approvals-settled: a Supabase error on the flip back throws instead of silently leaving the run stuck at awaiting_approval", async () => {
+    const { db, agentApprovals, agentRuns, runsUpdateController } = fakeDb();
+    await draftOneAgentHumanWrite(db, "run-1");
+
+    const step = fakeApprovalDecisionStep(["approved"], agentApprovals, "decider-1");
+    const failingStep: ApprovalGateStep = {
+      ...step,
+      run: async (id, fn) => {
+        // Only the second (settle-back-to-completed) flip fails — the first
+        // (awaiting_approval) must succeed for the run to reach the settle
+        // step at all.
+        if (id === "mark-approvals-settled") runsUpdateController.failNextUpdate = true;
+        return step.run(id, fn);
+      },
+    };
+
+    await expect(runWriteApprovalGate({ step: failingStep, db, runId: "run-1" })).rejects.toThrow(
+      "Failed to mark agent_runs row completed",
+    );
+
+    const run = agentRuns.find((r) => r.id === "run-1") as { status?: string } | undefined;
+    expect(run?.status).toBe("awaiting_approval"); // left visibly stuck, not silently reported "completed"
   });
 });

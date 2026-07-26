@@ -38,6 +38,7 @@ import {
 import type { AgentFleetItem, AgentCatalogEntry, AssignablePosition } from "@/lib/ai/agents/queries";
 import { formatAgentRelativeTime } from "@/lib/ai/agents/labels";
 import { AgentDetailDrawer } from "@/components/dashboard/orca/agent-detail-drawer";
+import { ConfigureAgentDialog } from "@/components/dashboard/orca/configure-agent-dialog";
 
 type AgentStatus = "active" | "paused";
 
@@ -79,6 +80,7 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
   const [filterStatus, setFilterStatus] = useState<AgentStatus | "all">("all");
   const [pendingToggleId, setPendingToggleId] = useState<string | null>(null);
   const [detailAgentId, setDetailAgentId] = useState<string | null>(null);
+  const [configureAgentId, setConfigureAgentId] = useState<string | null>(null);
 
   const [hireOpen, setHireOpen] = useState(false);
   const [hiring, setHiring] = useState(false);
@@ -318,9 +320,13 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                       {agent.capabilities.produces.join(", ")}
                     </p>
                   )}
-                  <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                  {/* Was hardcoded "Draft-only" on every card — false the moment an agent has any write tool at agent_human (5.4a made a declared write tool policy-gated, not structurally impossible). Driven by the same capabilities.guarantee copy the detail drawer and hire dialog already use. */}
+                  <span
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600"
+                    title={agent.capabilities.guarantee}
+                  >
                     <ShieldCheck className="w-3 h-3" />
-                    Draft-only
+                    {agent.capabilities.writes.length > 0 ? "Policy-gated writes" : "Draft-only"}
                   </span>
                 </div>
               )}
@@ -346,8 +352,11 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
                   Assigned to: <span className="font-medium text-gray-700">{agent.assignedRole}</span>
                 </span>
                 <div className="flex items-center gap-1">
-                  {/* Automation-level settings (schedule/thresholds) — 5.4, stays dead until then */}
-                  <button className="p-1.5 hover:bg-gray-100 rounded transition-colors" title="Configure">
+                  <button
+                    onClick={() => setConfigureAgentId(agent.id)}
+                    className="p-1.5 hover:bg-gray-100 rounded transition-colors"
+                    title="Configure"
+                  >
                     <Settings2 className="w-4 h-4 text-gray-400" />
                   </button>
                   <button
@@ -467,6 +476,14 @@ export function AgentsContent({ agents, catalog, positions, agentsActive }: Agen
         open={detailAgentId !== null}
         onOpenChange={(open) => {
           if (!open) setDetailAgentId(null);
+        }}
+      />
+
+      <ConfigureAgentDialog
+        agentId={configureAgentId}
+        open={configureAgentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfigureAgentId(null);
         }}
       />
     </div>

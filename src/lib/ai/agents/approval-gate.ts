@@ -350,6 +350,26 @@ export async function runWriteApprovalGate({ step, db, runId }: RunWriteApproval
     queued.push({ approvalId, toolId: proposal.toolId, toolInput: proposal.input });
   }
 
+  // 5.4d: runAgent already marked this run 'completed' before this gate ever
+  // ran (doc-04 §2) — that's dishonest for as long as a real human decision
+  // is still outstanding, so flip it to 'awaiting_approval' for the duration
+  // of the waits below and back to 'completed' once every wait resolves.
+  // Skipped entirely when nothing was queued: a run with zero write
+  // proposals must never take a spurious status round-trip. Each transition
+  // is its own memoized step (same reasoning as the per-proposal steps
+  // above) — a combined step would re-run this whole function's body,
+  // including the flip back to 'completed', on every retry. A run left
+  // stuck at 'awaiting_approval' after a crash between these two steps is
+  // intentional and visible, same philosophy as an ai_write_actions row
+  // stuck at 'claimed' (5.4c-FIXUP) — it surfaces for human follow-up
+  // instead of silently reporting a status that isn't true.
+  if (queued.length > 0) {
+    await step.run("mark-awaiting-approval", async () => {
+      const { error } = await db.from("agent_runs").update({ status: "awaiting_approval" }).eq("id", runId);
+      if (error) throw new Error(`Failed to mark agent_runs row awaiting_approval: ${error.message}`);
+    });
+  }
+
   // Waited on in parallel, not sequentially. agent_approvals.expires_at is
   // stamped `now() + 48h` at creation time (mig 181's column default) — a
   // moment after the LAST row in `queued` was created. A sequential `for`
@@ -386,4 +406,11 @@ export async function runWriteApprovalGate({ step, db, runId }: RunWriteApproval
       }
     }),
   );
+
+  if (queued.length > 0) {
+    await step.run("mark-approvals-settled", async () => {
+      const { error } = await db.from("agent_runs").update({ status: "completed" }).eq("id", runId);
+      if (error) throw new Error(`Failed to mark agent_runs row completed: ${error.message}`);
+    });
+  }
 }
