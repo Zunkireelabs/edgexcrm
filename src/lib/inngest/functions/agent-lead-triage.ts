@@ -9,6 +9,7 @@ import { buildAgentAuthContext } from "@/lib/ai/agent-auth";
 import { runAgent } from "@/lib/ai/agents/runtime";
 import "@/lib/ai/agents/packs"; // module-load registration — must run before getAgentDefinition()
 import { getAgentDefinition } from "@/lib/ai/agents/registry";
+import { runWriteApprovalGate, type ApprovalGateStep } from "@/lib/ai/agents/approval-gate";
 import { logger } from "@/lib/logger";
 
 const LEAD_TRIAGE_KEY = "lead-triage";
@@ -57,6 +58,16 @@ export const agentLeadTriage = inngest.createFunction(
         subjectId: leadId,
       });
     });
+
+    // Only a completed run can have queued agent_human write drafts to gate
+    // on — skipped/cancelled/failed runs never reach write-executor.ts.
+    if ("status" in result && result.status === "completed") {
+      const db = await scopedClientForTenant(tenantId);
+      // Inngest's real `step` structurally satisfies ApprovalGateStep but its
+      // generic `run`/`waitForEvent` return types don't unify against our
+      // narrower interface — safe to assert, not to widen the interface.
+      await runWriteApprovalGate({ step: step as unknown as ApprovalGateStep, db, runId: result.runId });
+    }
 
     return result;
   },
