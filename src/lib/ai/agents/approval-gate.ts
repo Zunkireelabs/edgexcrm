@@ -9,6 +9,11 @@ import {
 } from "./approval-flow";
 import { createTaskCore, type CreateTaskInput } from "@/lib/tasks/create-task";
 import { mapCreateTaskToolInput } from "@/lib/ai/tools/universal/create-task";
+import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
+import { resolveUpdateLeadStageTarget } from "@/lib/ai/tools/universal/update-lead-stage";
+import { leadPatchErrorResult, undoableLeadPrevious } from "@/lib/ai/tools/universal/lib/lead-patch-result";
+import { buildUserAuthContext } from "@/lib/api/auth";
+import { assertMandatoryRowFilter, assertSingleRowEffect } from "./write-executor";
 
 export const APPROVAL_WAIT_TIMEOUT = "48h";
 
@@ -31,12 +36,19 @@ type ApprovalExecutorResult = { result: Record<string, unknown> } | { error: str
 /**
  * Per-tool executors for the "approved" branch below. Deliberately a small
  * explicit map, not a lookup into the AgentTool registry — an approved write
- * must call the exact same core the interactive path uses (createTaskCore),
- * never the AgentTool.execute() wrapper, which asserts a real user session
- * (assertUserAuth) that doesn't exist here.
+ * must call the exact same core the interactive path uses (createTaskCore /
+ * applyLeadPatch), never the AgentTool.execute() wrapper, which asserts a
+ * real user session (assertUserAuth) that doesn't exist here.
  *
- * Scope for 5.4c: create_task only (see the slice brief). Adding another
- * tool here is 5.4c-2's job, not this one's.
+ * Scope for 5.4c: create_task only. Phase 5.4c-2a added update_lead_stage —
+ * the first agent-driven UPDATE to customer data (create_task is an INSERT).
+ * Unlike create_task's minimal actor shape, applyLeadPatch is auth-dependent
+ * throughout (industry rules, list access, branch/chain governance) — there
+ * is no reduced "core" to extract safely. Instead this builds the approving
+ * human's REAL AuthContext (buildUserAuthContext) and executes as them: the
+ * write can never exceed what its approver could do interactively, and
+ * there's exactly one permission implementation (auth.ts) to keep in sync
+ * with, never a parallel one.
  */
 const APPROVAL_EXECUTORS: Record<string, (params: ApprovalExecutorParams) => Promise<ApprovalExecutorResult>> = {
   create_task: async ({ db, tenantId, defaultAssigneeId, input }) => {
@@ -45,6 +57,66 @@ const APPROVAL_EXECUTORS: Record<string, (params: ApprovalExecutorParams) => Pro
     if (outcome.kind === "ok") return { result: outcome.task };
     if (outcome.kind === "validation") return { error: `Validation failed: ${JSON.stringify(outcome.errors)}` };
     return { error: "Database error while creating the task" };
+  },
+
+  update_lead_stage: async ({ db, tenantId, defaultAssigneeId, input }) => {
+    const raw = (input ?? {}) as { leadId?: unknown; stageName?: unknown; stageId?: unknown };
+    const leadId = typeof raw.leadId === "string" && raw.leadId.length > 0 ? raw.leadId : null;
+
+    // Double gate, part 1: the leadId reaching here came from the model —
+    // a model can hallucinate a UUID — so a stage update with no row
+    // identifier at all must never reach the database. This only proves a
+    // filter is PRESENT; whether it resolves to a real, accessible row is
+    // proven below by applyLeadPatch's own tenant-scoped fetch + access check.
+    try {
+      assertMandatoryRowFilter(leadId ? [{ column: "id", value: leadId }] : []);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Missing required row filter" };
+    }
+
+    // Double gate, part 2: execute as the approver's real AuthContext so
+    // applyLeadPatch's requireLeadAccess / list-access / industry checks run
+    // for real, under the exact permissions of the human who approved this.
+    const auth = await buildUserAuthContext(defaultAssigneeId, tenantId);
+    if (!auth) {
+      return { error: "Could not resolve the approving user's permissions for this tenant." };
+    }
+
+    const resolved = await resolveUpdateLeadStageTarget(db, auth, {
+      stageName: typeof raw.stageName === "string" ? raw.stageName : undefined,
+      stageId: typeof raw.stageId === "string" ? raw.stageId : undefined,
+    });
+    if ("error" in resolved) return { error: resolved.error };
+
+    const outcome = await applyLeadPatch(
+      auth,
+      leadId as string,
+      { list_id: resolved.matched.id },
+      { requestId: crypto.randomUUID(), ip: null, userAgent: null },
+    );
+
+    if (outcome.kind !== "ok") return leadPatchErrorResult(outcome);
+
+    // applyLeadPatch exposes no affected-row count — its update() is itself
+    // PK-scoped (.eq("id", leadId)) and calls .single(), which already fails
+    // the whole outcome if it matched anything other than exactly one row.
+    // Verified here via the returned row's identity instead, per the
+    // 5.4c-2a brief's noted limitation (no real count to check against).
+    try {
+      assertSingleRowEffect(outcome.lead.id === leadId ? 1 : 0);
+    } catch (e) {
+      return { error: e instanceof Error ? e.message : "Write affected an unexpected number of rows" };
+    }
+
+    // Previous list/stage value captured into the result (-> ai_write_actions.result
+    // below) so undo_lead_action (Phase 4B/5.4d) has something to restore from.
+    return {
+      result: {
+        leadId,
+        stage: resolved.matched.name,
+        previous: undoableLeadPrevious(outcome.previousValues),
+      },
+    };
   },
 };
 

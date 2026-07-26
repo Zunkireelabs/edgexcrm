@@ -3,7 +3,9 @@ import { INDUSTRIES } from "@/industries/_registry";
 import { canAccessList } from "@/lib/api/permissions";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
 import { assertUserAuth } from "@/lib/ai/agent-auth";
-import type { AgentTool, ToolContext } from "../types";
+import type { AuthContext } from "@/lib/api/auth";
+import type { ScopedClient } from "@/lib/supabase/scoped";
+import type { AgentTool } from "../types";
 import { optionalString, optionalUuid } from "./lib/sanitize";
 import { leadPatchErrorResult, undoableLeadPrevious } from "./lib/lead-patch-result";
 
@@ -34,11 +36,58 @@ interface ListRow {
   access: { mode: string; positionIds?: string[] };
 }
 
-async function accessibleLists(ctx: ToolContext): Promise<ListRow[]> {
-  const { db, auth } = ctx;
+async function accessibleLists(db: ScopedClient, auth: AuthContext): Promise<ListRow[]> {
   const { data } = await db.from("lead_lists").select("id, name, access");
   const rows = (data ?? []) as unknown as ListRow[];
   return rows.filter((r) => canAccessList(auth.permissions, r.access, auth.positionId, r.id));
+}
+
+export type ResolveUpdateLeadStageTargetInput = { stageName?: string; stageId?: string };
+export type ResolveUpdateLeadStageTargetResult = { matched: ListRow } | { error: string };
+
+/**
+ * The stageName/stageId -> target Stage resolution this tool's execute()
+ * needs, factored out so the approval-gate's update_lead_stage executor
+ * (Phase 5.4c-2a) can resolve the exact same target — under the approving
+ * human's real AuthContext, not a session's ToolContext — instead of
+ * reimplementing the stageId-wins-when-real / stageName-fallback logic.
+ */
+export async function resolveUpdateLeadStageTarget(
+  db: ScopedClient,
+  auth: AuthContext,
+  input: ResolveUpdateLeadStageTargetInput,
+): Promise<ResolveUpdateLeadStageTargetResult> {
+  if (!input.stageId && !input.stageName) {
+    return { error: "Provide either stageName or stageId to identify the target Stage." };
+  }
+
+  const accessible = await accessibleLists(db, auth);
+  let matched: ListRow | null = null;
+
+  if (input.stageId) {
+    matched = accessible.find((r) => r.id === input.stageId) ?? null;
+  }
+  // Fall back to stageName when stageId was supplied but doesn't resolve —
+  // a stageId the model didn't actually verify (e.g. invented alongside a
+  // correct stageName, observed live) must not silently defeat a stageName
+  // that does resolve. "stageId wins" only when it's real.
+  if (!matched && input.stageName) {
+    const target = input.stageName.trim().toLowerCase();
+    const exact = accessible.filter((r) => r.name.trim().toLowerCase() === target);
+    if (exact.length > 1) {
+      return { error: `Multiple Stages are named "${input.stageName}" — ask the user which one they mean.` };
+    }
+    matched = exact[0] ?? null;
+  }
+
+  if (!matched) {
+    const names = accessible.map((r) => r.name).join(", ") || "none accessible to you";
+    return {
+      error: `Stage${input.stageName ? ` "${input.stageName}"` : ""} not found or not accessible. Available stages: ${names}.`,
+    };
+  }
+
+  return { matched };
 }
 
 export const updateLeadStageTool: AgentTool<UpdateLeadStageInput> = {
@@ -54,7 +103,7 @@ export const updateLeadStageTool: AgentTool<UpdateLeadStageInput> = {
   scope: "write",
   industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
   async execute(ctx, input) {
-    const { auth, runId } = ctx;
+    const { auth, runId, db } = ctx;
     assertUserAuth(auth);
 
     // Convention: semantic constraints like "at least one of X/Y" belong here,
@@ -63,35 +112,9 @@ export const updateLeadStageTool: AgentTool<UpdateLeadStageInput> = {
     // AI_TypeValidationError -> [ZodError JSON], with the real message buried;
     // this { error } return reaches the model as clean text via the normal
     // tool-result path (see BRIEF-PHASE-4E-ID-RESOLUTION.md item 2's diagnosis).
-    if (!input.stageId && !input.stageName) {
-      return { error: "Provide either stageName or stageId to identify the target Stage." };
-    }
-
-    const accessible = await accessibleLists(ctx);
-    let matched: ListRow | null = null;
-
-    if (input.stageId) {
-      matched = accessible.find((r) => r.id === input.stageId) ?? null;
-    }
-    // Fall back to stageName when stageId was supplied but doesn't resolve —
-    // a stageId the model didn't actually verify (e.g. invented alongside a
-    // correct stageName, observed live) must not silently defeat a stageName
-    // that does resolve. "stageId wins" only when it's real.
-    if (!matched && input.stageName) {
-      const target = input.stageName.trim().toLowerCase();
-      const exact = accessible.filter((r) => r.name.trim().toLowerCase() === target);
-      if (exact.length > 1) {
-        return { error: `Multiple Stages are named "${input.stageName}" — ask the user which one they mean.` };
-      }
-      matched = exact[0] ?? null;
-    }
-
-    if (!matched) {
-      const names = accessible.map((r) => r.name).join(", ") || "none accessible to you";
-      return {
-        error: `Stage${input.stageName ? ` "${input.stageName}"` : ""} not found or not accessible. Available stages: ${names}.`,
-      };
-    }
+    const resolved = await resolveUpdateLeadStageTarget(db, auth, input);
+    if ("error" in resolved) return { error: resolved.error };
+    const { matched } = resolved;
 
     const outcome = await applyLeadPatch(
       auth,
