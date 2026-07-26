@@ -197,6 +197,12 @@ function userClient(accessToken: string): SupabaseClient {
   });
 }
 
+// Bare anon key, NO Authorization header at all — the public-form/embeddable-
+// widget path, and the only role a leaked client bundle actually grants.
+function bareAnonClient(): SupabaseClient {
+  return createClient(SUPABASE_URL, ANON_KEY);
+}
+
 async function setup(): Promise<Record<"A" | "B", Fixture>> {
   const out = {} as Record<"A" | "B", Fixture>;
   for (const key of ["A", "B"] as const) {
@@ -323,6 +329,70 @@ async function main() {
       );
     } else {
       report("Probe 4c — CONTROL: user A's result differs from service-role's (RLS is actually filtering)", true);
+    }
+  }
+
+  // Probe 5 — bare ANON role (no user JWT at all): this is the role a leaked
+  // client bundle / any published form actually grants. Migration 180 dropped
+  // the vestigial `TO anon USING (true)` policies from 001_initial_schema.sql
+  // that used to make every one of these a data leak across all tenants.
+  console.log("\n--- Probes (running as bare anon — no signed-in user, no Bearer JWT) ---\n");
+  {
+    const anonClient = bareAnonClient();
+
+    // CONTROL first, mirroring Probe 4b: prove this client is really bare
+    // anon (role claim 'anon'), not accidentally carrying a signed-in user's
+    // JWT — otherwise probes 5a-5c would false-green regardless of RLS.
+    const anonRole = decodeJwtRole(ANON_KEY);
+    report(
+      "Probe 5d — CONTROL: bare-anon client carries no user Authorization header (role='anon', not 'authenticated')",
+      anonRole === "anon",
+      `role=${anonRole}`,
+    );
+
+    // Probe 5a — bare-anon SELECT on leads returns 0 rows (was: every tenant's leads, pre-mig-180).
+    // Mig 180 REVOKEd the table grant too, so PostgREST now hard-denies with
+    // "permission denied for table leads" instead of RLS silently filtering
+    // to empty — a stronger result, and an acceptable pass here (same
+    // either-or shape as Probe 3a's cross-tenant INSERT check).
+    {
+      const { data, error } = await anonClient.from("leads").select("id,tenant_id").eq("idempotency_key", MARKER_KEY);
+      const ok = !!error || (data ?? []).length === 0;
+      report("Probe 5a — bare-anon SELECT on leads returns 0 rows", ok, error ? error.message : `rows=${(data ?? []).length}`);
+    }
+
+    // Probe 5b — bare-anon INSERT into either tenant is rejected.
+    {
+      const { data, error } = await anonClient
+        .from("leads")
+        .insert({ tenant_id: A.tenantId, pipeline_id: A.pipelineId, first_name: "bare anon should not insert" })
+        .select();
+      const ok = !!error || (data ?? []).length === 0;
+      report(
+        "Probe 5b — bare-anon INSERT into tenant A rejected",
+        ok,
+        error ? error.message : `rows=${(data ?? []).length}`,
+      );
+    }
+
+    // Probe 5c — bare-anon UPDATE of tenant A's marker lead affects 0 rows,
+    // verified unchanged via the service-role client afterward. Same
+    // permission-denied-is-a-pass shape as 5a — see comment there.
+    {
+      const { data, error } = await anonClient
+        .from("leads")
+        .update({ status: "contacted" })
+        .eq("id", A.leadId)
+        .select();
+      const ok = !!error || (data ?? []).length === 0;
+      report("Probe 5c — bare-anon UPDATE of tenant A's lead affects 0 rows", ok, error?.message);
+
+      const { data: verify } = await serviceClient.from("leads").select("status").eq("id", A.leadId).single();
+      report(
+        "Probe 5c (verify) — tenant A's lead status unchanged after bare-anon update attempt",
+        verify?.status === "new",
+        `status=${verify?.status}`,
+      );
     }
   }
 

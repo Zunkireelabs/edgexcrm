@@ -106,37 +106,47 @@ If a future feature ever adds a direct authenticated-client insert path to
 tenant-scoped `WITH CHECK` policy, and this probe would need a same-tenant
 positive-insert case added to actually distinguish the two.
 
-## Known coverage gap — the `anon` role is NOT probed
+## `anon` role coverage — closed by migration 180
 
-Every probe here runs as the **`authenticated`** role (anon key + a signed-in
-user's JWT). Nothing in this script exercises the **bare `anon`** role — the
+Every probe up through Probe 4 runs as the **`authenticated`** role (anon key
++ a signed-in user's JWT). Probe 5 covers the bare **`anon`** role — the
 public anon key with *no* user JWT, which is the role the embeddable
 widget/public form uses and which is readable from any published form's
 browser bundle.
 
-That is a real gap, not a theoretical one: `leads` carries three permissive
-`TO anon` policies from `001_initial_schema.sql` (`FOR SELECT USING (true)`,
-`FOR UPDATE USING (true) WITH CHECK (true)`, `FOR INSERT WITH CHECK (true)`)
-that no later migration drops, and `anon` holds table-level
-SELECT/INSERT/UPDATE grants. A bare-anon `GET /rest/v1/leads?select=*`
-therefore returns leads across **all** tenants. This was confirmed on the
-local stack during review of this script (1,094 rows spanning multiple
-tenants) and the identical policy set was confirmed on the stage DB.
+Until migration `180_drop_anon_leads_policies.sql`, this was a real gap, not
+a theoretical one: `leads` carried three permissive `TO anon` policies from
+`001_initial_schema.sql` (`FOR SELECT USING (true)`, `FOR UPDATE USING (true)
+WITH CHECK (true)`, `FOR INSERT WITH CHECK (true)`) that no earlier migration
+dropped, plus table-level `anon` grants. A bare-anon `GET
+/rest/v1/leads?select=*` returned leads across **all** tenants — confirmed on
+local (1,094 rows spanning multiple tenants), stage, and prod (17,943 leads)
+before the fix.
 
-Extending this probe with a bare-anon case is deliberately **not** done here,
-because the probe would fail — the gap is a data-exposure issue to be fixed
-with a migration first (tenant-scoping or removing the `TO anon`
-SELECT/UPDATE policies, keeping only the narrow INSERT path the public form
-needs). Add the bare-anon probes as the regression test in the same change
-that lands that migration.
+Migration 180 dropped all three `TO anon` policies and `REVOKE ALL ON
+public.leads FROM anon` (defense in depth, so a future policy added `TO anon`
+can't silently reopen the door without also re-granting). Probes 5a-5c below
+are the regression test that landed in the same change:
 
-## Sample output (local, 2026-07-24)
+5. **Bare-anon role** — a client built from the anon key with no
+   `Authorization` override (contrast with `userClient`, which carries a
+   signed-in user's Bearer JWT):
+   - **5a** — SELECT on `leads` returns 0 rows (now a hard "permission denied"
+     from the revoked grant, not merely an RLS-filtered empty set).
+   - **5b** — INSERT into any tenant is rejected.
+   - **5c** — UPDATE of a tenant's lead affects 0 rows, verified unchanged via
+     the service-role client afterward.
+   - **5d** — CONTROL, mirroring Probe 4b: the bare-anon client's effective
+     role decodes to `anon`, not `authenticated`, so this can't false-green by
+     accidentally carrying a signed-in user's JWT.
+
+## Sample output (local, 2026-07-26, post mig 180)
 
 ```
 Target: http://127.0.0.1:54321
 
-Fixture A: tenant=69cb39e0-... user=aee62907-... lead=68b66e30-...
-Fixture B: tenant=37d6033f-... user=cb3612fb-... lead=fa4d0363-...
+Fixture A: tenant=657a846d-... user=0f649e5d-... lead=a19ad91a-...
+Fixture B: tenant=f3028b6a-... user=505cf2d4-... lead=2f5deecc-...
 
 --- Probes (running as tenant A's user, through anon-key + JWT) ---
 
@@ -149,7 +159,15 @@ PASS — Probe 4a — CONTROL: service-role sees both tenants' markers (rows=2)
 PASS — Probe 4b — CONTROL: probe session JWT role is 'authenticated', not service_role (role=authenticated)
 PASS — Probe 4c — CONTROL: user A's result differs from service-role's (RLS is actually filtering)
 
-8 passed, 0 failed.
+--- Probes (running as bare anon — no signed-in user, no Bearer JWT) ---
+
+PASS — Probe 5d — CONTROL: bare-anon client carries no user Authorization header (role='anon', not 'authenticated') (role=anon)
+PASS — Probe 5a — bare-anon SELECT on leads returns 0 rows (permission denied for table leads)
+PASS — Probe 5b — bare-anon INSERT into tenant A rejected (permission denied for table leads)
+PASS — Probe 5c — bare-anon UPDATE of tenant A's lead affects 0 rows (permission denied for table leads)
+PASS — Probe 5c (verify) — tenant A's lead status unchanged after bare-anon update attempt (status=new)
+
+13 passed, 0 failed.
 ```
 
 ## CI integration — NOT done, tracked as a deliberate follow-up
