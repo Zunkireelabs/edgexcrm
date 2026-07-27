@@ -5,6 +5,7 @@ import { leadHref, leadDisplayName } from "@/lib/ai/tools/universal/lib/format";
 import { canViewLead } from "@/lib/ai/tools/universal/lib/lead-visibility";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 
 const inputSchema = z.object({
   // leadId is required in the tool's contract, but a NIL-uuid placeholder
@@ -49,6 +50,7 @@ export const getLeadApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
   industries: [INDUSTRIES.EDUCATION_CONSULTANCY],
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
     if (!getFeatureAccess(auth.industryId, FEATURES.APPLICATION_TRACKING)) {
       return { error: "Application tracking is not available for this tenant." };
     }

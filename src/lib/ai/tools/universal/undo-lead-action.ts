@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { applyLeadPatch } from "@/lib/leads/apply-lead-patch";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
-import { leadPatchErrorResult, UNDOABLE_LEAD_FIELDS } from "./lib/lead-patch-result";
+import { leadPatchErrorResult, UNDOABLE_LEAD_FIELDS, UNDOABLE_TOOL_IDS } from "./lib/lead-patch-result";
 
-/** Also used by the approval-card resolver (resolve-approval-refs route) to build the undo preview sentence. */
-export const UNDOABLE_TOOL_IDS = ["update_lead_stage", "assign_lead"];
+export { UNDOABLE_TOOL_IDS };
 
 // No input: execute() runs before the ai_write_actions insert, so a real row
 // id doesn't exist yet when a tool result reaches the model — there is no
@@ -35,6 +35,7 @@ export const undoLeadActionTool: AgentTool<UndoLeadActionInput> = {
   scope: "write",
   async execute(ctx) {
     const { db, auth, runId } = ctx;
+    assertUserAuth(auth);
 
     const { data } = await db
       .from("ai_write_actions")

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { createLeadNote } from "@/lib/leads/create-lead-note";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { optionalUuid } from "./lib/sanitize";
 
@@ -34,6 +35,7 @@ export const createLeadNoteTool: AgentTool<CreateLeadNoteInput> = {
   scope: "write",
   async execute(ctx, input) {
     const { auth, runId, toolCallId } = ctx;
+    assertUserAuth(auth);
 
     const outcome = await createLeadNote(
       auth,

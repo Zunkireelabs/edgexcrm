@@ -1,9 +1,14 @@
 import { z } from "zod";
-import { canAccessList, leadQueryScope, isSharedPoolList } from "@/lib/api/permissions";
+import { canAccessList, isSharedPoolList } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import type { AgentTool } from "../types";
-import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
+import {
+  resolveLeadVisibilityPlan,
+  applyLeadVisibilityPlan,
+  actorBranchId,
+  isRestrictedToSelf,
+} from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
 import { optionalFilterString, optionalString, optionalUuid } from "./lib/sanitize";
 
@@ -39,6 +44,10 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
   inputSchema,
   scope: "read",
   async execute(ctx, input) {
+    // Phase 5.1b (doc 03 §1): scoped by auth.permissions via
+    // resolveLeadVisibilityPlan/applyLeadVisibilityPlan below, which accept
+    // both a real user's AuthContext and a background agent's
+    // AgentAuthContext — no assertUserAuth gate needed on this read tool.
     const { auth, db } = ctx;
 
     let resolvedListId: string | null = null;
@@ -84,8 +93,9 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
 
     // Mirrors GET /api/v1/leads: own-scope (and shared-pool) callers cannot widen
     // to another assignee — an explicit assignedToUserId is ignored for them.
-    const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId);
-    const ignoresAssigneeFilter = scope.restrictToSelf || (!!auth.branchId && isSharedPoolList(auth.permissions, resolvedListId));
+    const branchId = actorBranchId(auth);
+    const restrictToSelf = isRestrictedToSelf(auth.permissions, branchId);
+    const ignoresAssigneeFilter = restrictToSelf || (!!branchId && isSharedPoolList(auth.permissions, resolvedListId));
     if (input.assignedToUserId && !ignoresAssigneeFilter) {
       query = query.eq("assigned_to", input.assignedToUserId);
     }

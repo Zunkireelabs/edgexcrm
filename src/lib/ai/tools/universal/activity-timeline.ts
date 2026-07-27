@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { requireLeadBranchAccess } from "@/lib/api/auth";
+import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan, getLeadMembership, isLeadCollaborator } from "./lib/lead-visibility";
 import { optionalUuid } from "./lib/sanitize";
@@ -19,6 +20,7 @@ export const activityTimelineTool: AgentTool<z.infer<typeof inputSchema>> = {
   scope: "read",
   async execute(ctx, input) {
     const { db, auth } = ctx;
+    assertUserAuth(auth);
 
     if (input.leadId) {
       const { data: lead } = await db

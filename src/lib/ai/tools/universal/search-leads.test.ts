@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { searchLeadsTool } from "./search-leads";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
+import type { AgentAuthContext } from "@/lib/ai/agent-auth";
 import type { ToolContext } from "../types";
 
 type Row = Record<string, unknown>;
@@ -128,5 +129,98 @@ describe("search_leads display id matching", () => {
       "display_id.ilike.ADM-009",
       "first_name.ilike.%Sharma%,last_name.ilike.%Sharma%,email.ilike.%Sharma%,phone.ilike.%Sharma%",
     ]);
+  });
+});
+
+function fixtureAgentAuth(overrides: Partial<AgentAuthContext> = {}): AgentAuthContext {
+  return {
+    actorType: "agent",
+    agentId: "agent-1",
+    tenantId: "tenant-1",
+    industryId: "it_agency",
+    positionId: "pos-1",
+    permissions: {
+      baseTier: "member",
+      allowedNavKeys: null,
+      pipelineAccess: "all",
+      listAccess: "all",
+      leadScope: "all",
+      sharedPoolListIds: new Set(),
+      canAssignLeads: false,
+      canEditLeads: false,
+      canManageApplications: false,
+      canManageClasses: false,
+      canManageHR: false,
+      canExport: false,
+      dashboardWidgets: null,
+    },
+    role: "agent",
+    ...overrides,
+  };
+}
+
+function makeTrackedLeadsChain(rows: Row[], inCalls: Array<[string, unknown[]]>) {
+  const chain: Record<string, unknown> = {
+    select: () => chain,
+    eq: () => chain,
+    is: () => chain,
+    not: () => chain,
+    in: (col: string, vals: unknown[]) => {
+      inCalls.push([col, vals]);
+      return chain;
+    },
+    gte: () => chain,
+    lte: () => chain,
+    or: () => chain,
+    order: () => chain,
+    limit: () => chain,
+    then: (resolve: (v: { data: Row[]; error: null; count: number }) => unknown) =>
+      Promise.resolve({ data: rows, error: null, count: rows.length }).then(resolve),
+  };
+  return chain;
+}
+
+describe("search_leads — background agent (AgentAuthContext) scoping (doc 03 §6)", () => {
+  it("Lead Triage's position (leadScope:'all', pipelineAccess:'all') reads tenant-wide — no pipeline filter applied", async () => {
+    const inCalls: Array<[string, unknown[]]> = [];
+    const db: ScopedClient = {
+      from: () => makeTrackedLeadsChain([SARAH_ROW], inCalls),
+      fromGlobal: () => {
+        throw new Error("not used in this test");
+      },
+      raw: () => {
+        throw new Error("not used in this test");
+      },
+    } as unknown as ScopedClient;
+
+    const ctx: ToolContext = { db, auth: fixtureAgentAuth(), logger: { child: () => ({}) } as unknown as ToolContext["logger"], runId: "run-1" };
+    const result = (await searchLeadsTool.execute(ctx, { limit: 20 })) as { leads: unknown[] };
+
+    expect(result.leads).toHaveLength(1);
+    expect(inCalls.some(([col]) => col === "pipeline_id")).toBe(false);
+  });
+
+  it("a pipeline-restricted agent position cannot read outside its allowed pipeline", async () => {
+    const inCalls: Array<[string, unknown[]]> = [];
+    const db: ScopedClient = {
+      from: () => makeTrackedLeadsChain([], inCalls),
+      fromGlobal: () => {
+        throw new Error("not used in this test");
+      },
+      raw: () => {
+        throw new Error("not used in this test");
+      },
+    } as unknown as ScopedClient;
+
+    const restrictedAuth = fixtureAgentAuth({
+      permissions: {
+        ...fixtureAgentAuth().permissions,
+        pipelineAccess: { ids: new Set(["pipe-a"]) },
+      },
+    });
+    const ctx: ToolContext = { db, auth: restrictedAuth, logger: { child: () => ({}) } as unknown as ToolContext["logger"], runId: "run-1" };
+    await searchLeadsTool.execute(ctx, { limit: 20 });
+
+    expect(inCalls).toContainEqual(["pipeline_id", ["pipe-a"]]);
   });
 });

@@ -6,6 +6,7 @@ const spanEndMock = vi.fn();
 const generationMock = vi.fn();
 const updateMock = vi.fn();
 const flushAsyncMock = vi.fn().mockResolvedValue(undefined);
+const scoreMock = vi.fn();
 const LangfuseCtor = vi.fn().mockImplementation(() => ({
   trace: traceMock.mockReturnValue({
     span: spanMock.mockReturnValue({ end: spanEndMock }),
@@ -13,6 +14,7 @@ const LangfuseCtor = vi.fn().mockImplementation(() => ({
     update: updateMock,
   }),
   flushAsync: flushAsyncMock,
+  score: scoreMock,
 }));
 
 vi.mock("langfuse", () => ({
@@ -32,6 +34,7 @@ describe("telemetry", () => {
     generationMock.mockClear();
     updateMock.mockClear();
     flushAsyncMock.mockClear();
+    scoreMock.mockClear();
   });
 
   afterEach(() => {
@@ -48,6 +51,17 @@ describe("telemetry", () => {
     expect(() => trace.span("chat.start")).not.toThrow();
     expect(() => trace.end({ ok: true })).not.toThrow();
     expect(traceMock).not.toHaveBeenCalled();
+    expect(flushAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it("scoreRun no-ops (no throw, no client, no score/flush) when keys are unset", async () => {
+    delete process.env.LANGFUSE_PUBLIC_KEY;
+    delete process.env.LANGFUSE_SECRET_KEY;
+
+    const { scoreRun } = await import("./telemetry");
+    expect(() => scoreRun("r1", "output_produced", 1)).not.toThrow();
+    expect(LangfuseCtor).not.toHaveBeenCalled();
+    expect(scoreMock).not.toHaveBeenCalled();
     expect(flushAsyncMock).not.toHaveBeenCalled();
   });
 
@@ -294,6 +308,24 @@ describe("telemetry", () => {
 
         expect(mask({ data: evil })).toBe("[mask error]");
       });
+    });
+
+    it("scoreRun calls score with correct args and schedules a flush when keys are set", async () => {
+      process.env.LANGFUSE_PUBLIC_KEY = "pk-test";
+      process.env.LANGFUSE_SECRET_KEY = "sk-test";
+
+      const { scoreRun } = await import("./telemetry");
+      scoreRun("r1", "review_outcome", 0.5, "decision=edited_accepted;kind=draft_email");
+
+      expect(scoreMock).toHaveBeenCalledOnce();
+      expect(scoreMock).toHaveBeenCalledWith({
+        traceId: "r1",
+        name: "review_outcome",
+        value: 0.5,
+        comment: "decision=edited_accepted;kind=draft_email",
+      });
+      // after() has no request scope in this test — falls back to direct flush.
+      expect(flushAsyncMock).toHaveBeenCalledTimes(1);
     });
   });
 });

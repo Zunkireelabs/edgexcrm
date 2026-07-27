@@ -3,11 +3,15 @@
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Users } from "lucide-react";
+import { Plus, Users, ClipboardCheck } from "lucide-react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
+import { AttendanceSheet } from "../components/attendance-sheet";
+import { AttendanceHistory } from "../components/attendance-history";
+import { AttendanceSessions } from "../components/attendance-sessions";
+import { cn } from "@/lib/utils";
 
 interface ClassRow {
   id: string;
@@ -37,14 +41,17 @@ interface ClassesWorkspaceProps {
   enrollments: Array<Record<string, unknown>>;
   canManage: boolean;
   canEnroll: boolean;
+  canMarkAttendance: boolean;
   tenantId: string;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll }: ClassesWorkspaceProps) {
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance }: ClassesWorkspaceProps) {
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
   const [enrollOpen, setEnrollOpen] = useState(false);
+  const [attendanceOpen, setAttendanceOpen] = useState(false);
+  const [detailTab, setDetailTab] = useState<"roster" | "attendance" | "sessions">("roster");
 
   const enrollments = initialEnrollments as unknown as Enrollment[];
 
@@ -135,7 +142,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         </div>
 
         {/* Right: roster */}
-        <div className="flex-1 min-h-0 border rounded-lg flex flex-col">
+        <div className="flex-1 min-h-0 min-w-0 border rounded-lg flex flex-col">
           {!selectedClass ? (
             <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
               Select a class to see the roster.
@@ -147,85 +154,131 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                   <span className="text-sm font-semibold">{selectedClass.name}</span>
                   <span className="text-xs text-muted-foreground ml-2">{roster.length} student{roster.length !== 1 ? "s" : ""}</span>
                 </div>
-                {canEnroll && (
-                  <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
-                    <Plus className="h-3.5 w-3.5 mr-1" />
-                    Enroll
-                  </Button>
-                )}
-              </div>
-
-              {roster.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                  <Users className="h-8 w-8 opacity-30" />
-                  <p className="text-sm">No students enrolled yet.</p>
-                  {canEnroll && (
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-md border p-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("roster")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                        detailTab === "roster" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      All
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("attendance")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                        detailTab === "attendance" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Attendance
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("sessions")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                        detailTab === "sessions" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Sessions
+                    </button>
+                  </div>
+                  {detailTab === "attendance" && canMarkAttendance && (
+                    <Button size="sm" variant="outline" onClick={() => setAttendanceOpen(true)}>
+                      <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
+                      Take attendance
+                    </Button>
+                  )}
+                  {detailTab === "roster" && canEnroll && (
                     <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
                       <Plus className="h-3.5 w-3.5 mr-1" />
-                      Enroll first student
+                      Enroll
                     </Button>
                   )}
                 </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-card border-b">
-                      <tr className="text-left text-xs text-muted-foreground">
-                        <th className="px-4 py-2 font-medium">Student</th>
-                        <th className="px-4 py-2 font-medium">Fee</th>
-                        <th className="px-4 py-2 font-medium">Enrolled</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                      {roster.map((enrollment) => {
-                        const lead = enrollment.leads;
-                        const name = lead
-                          ? [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email || "Unknown"
-                          : "Unknown";
-                        return (
-                          <tr key={enrollment.id} className="hover:bg-muted/30 transition-colors">
-                            <td className="px-4 py-2.5">
-                              <Link
-                                href={`/leads/${enrollment.lead_id}`}
-                                className="font-medium hover:underline text-foreground"
-                              >
-                                {name}
-                              </Link>
-                              {lead?.email && (
-                                <p className="text-xs text-muted-foreground">{lead.email}</p>
-                              )}
-                            </td>
-                            <td className="px-4 py-2.5">
-                              {enrollment.fee_paid ? (
-                                <div className="flex items-center gap-1.5">
-                                  <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
-                                    Paid
+              </div>
+
+              {detailTab === "roster" ? (
+                roster.length === 0 ? (
+                  <div className="flex-1 flex flex-col items-center justify-center gap-2 text-muted-foreground">
+                    <Users className="h-8 w-8 opacity-30" />
+                    <p className="text-sm">No students enrolled yet.</p>
+                    {canEnroll && (
+                      <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
+                        <Plus className="h-3.5 w-3.5 mr-1" />
+                        Enroll first student
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="flex-1 overflow-y-auto">
+                    <table className="w-full text-sm">
+                      <thead className="sticky top-0 bg-card border-b">
+                        <tr className="text-left text-xs text-muted-foreground">
+                          <th className="px-4 py-2 font-medium">Student</th>
+                          <th className="px-4 py-2 font-medium">Fee</th>
+                          <th className="px-4 py-2 font-medium">Enrolled</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {roster.map((enrollment) => {
+                          const lead = enrollment.leads;
+                          const name = lead
+                            ? [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email || "Unknown"
+                            : "Unknown";
+                          return (
+                            <tr key={enrollment.id} className="hover:bg-muted/30 transition-colors">
+                              <td className="px-4 py-2.5">
+                                <Link
+                                  href={`/leads/${enrollment.lead_id}`}
+                                  className="font-medium hover:underline text-foreground"
+                                >
+                                  {name}
+                                </Link>
+                                {lead?.email && (
+                                  <p className="text-xs text-muted-foreground">{lead.email}</p>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {enrollment.fee_paid ? (
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                      Paid
+                                    </Badge>
+                                    {enrollment.fee_amount != null && (
+                                      <span className="text-xs text-muted-foreground">
+                                        {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                      </span>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                                    Unpaid
                                   </Badge>
-                                  {enrollment.fee_amount != null && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <Badge variant="outline" className="text-xs text-muted-foreground">
-                                  Unpaid
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                              {new Date(enrollment.created_at).toLocaleDateString(undefined, {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5 text-xs text-muted-foreground">
+                                {new Date(enrollment.created_at).toLocaleDateString(undefined, {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )
+              ) : detailTab === "attendance" ? (
+                <AttendanceHistory classId={selectedClass.id} className={selectedClass.name} />
+              ) : (
+                <AttendanceSessions classId={selectedClass.id} className={selectedClass.name} />
               )}
             </>
           )}
@@ -242,6 +295,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           handleRefresh();
         }}
       />
+
+      {selectedClass && (
+        <AttendanceSheet
+          open={attendanceOpen}
+          onOpenChange={setAttendanceOpen}
+          classId={selectedClass.id}
+          className={selectedClass.name}
+        />
+      )}
     </div>
   );
 }

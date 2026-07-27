@@ -89,12 +89,13 @@ jobs:
           INNGEST_SIGNING_KEY: ${{ secrets.INNGEST_SIGNING_KEY }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          AI_TOOL_APPROVAL_SECRET: ${{ secrets.AI_TOOL_APPROVAL_SECRET }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 10m
-          envs: GHCR_USER,GHCR_TOKEN,OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY
+          envs: GHCR_USER,GHCR_TOKEN,OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,AI_TOOL_APPROVAL_SECRET
           script: |
             set -e
             cd /home/zunkireelabs/devprojects/lead-gen-crm-dev
@@ -114,6 +115,21 @@ jobs:
               # needs tenants.ai_enabled (mig 174), and every write is
               # approval-gated in the UI before it runs. Prod stays off.
               echo "AI_WRITE_TOOLS_ENABLED=true"
+              # HMAC-signs the AI SDK's write-tool approval parts (5.3d). Without it
+              # the SDK neither signs nor verifies, so an approval part can be forged
+              # via curl — bounded to the caller's own authority, but it is a consent-
+              # integrity gap and AI_WRITE_TOOLS_ENABLED is already true above, so this
+              # is overdue rather than pre-emptive. Prod needs its OWN distinct value.
+              echo "AI_TOOL_APPROVAL_SECRET=$AI_TOOL_APPROVAL_SECRET"
+              # Phase 5 background/autonomous agents. Triple-gated: a tenant also needs
+              # tenants.ai_enabled AND tenants.ai_agents_enabled (mig 185), and an admin
+              # must explicitly hire an agent in Orca → Fleet. Prod stays off.
+              echo "AI_AGENTS_ENABLED=true"
+              # Phase 5 slice 5.5 MCP server at /api/mcp — the one externally-reachable
+              # surface in the batch. Off => the route 404s outright. Still requires an
+              # integration-category API key AND a hired "mcp-client" agent identity, so
+              # enabling it here does not by itself expose any tenant's data. Prod stays off.
+              echo "AI_MCP_ENABLED=true"
               # Pinned explicitly rather than inferred from which API key exists —
               # this value determines which third party receives customer data, so
               # changing it is a privacy-disclosure event (ADR-001 D5).
