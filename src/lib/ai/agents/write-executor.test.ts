@@ -6,10 +6,16 @@ import type { AgentTool } from "@/lib/ai/tools/types";
 // static imports execute before any top-level `const`, so a plain
 // `const x = vi.fn()` referenced from the vi.mock factory would still be in
 // its temporal dead zone when the factory runs.
-const { resolveAutomationLevelMock } = vi.hoisted(() => ({ resolveAutomationLevelMock: vi.fn() }));
+const { resolveAutomationLevelMock, logInfoMock, logWarnMock } = vi.hoisted(() => {
+  const logInfoMock = vi.fn();
+  const logWarnMock = vi.fn();
+  return { resolveAutomationLevelMock: vi.fn(), logInfoMock, logWarnMock };
+});
 vi.mock("./policy", () => ({ resolveAutomationLevel: resolveAutomationLevelMock }));
 vi.mock("@/lib/logger", () => ({
-  logger: { child: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) },
+  // A single shared child object (not a fresh one per call) so tests can
+  // assert on info/warn calls regardless of how many times logger.child() runs.
+  logger: { child: () => ({ info: logInfoMock, warn: logWarnMock, error: vi.fn() }) },
 }));
 
 import {
@@ -19,6 +25,7 @@ import {
   isWriteRateCapExceeded,
   MAX_WRITE_ATTEMPTS_PER_RUN,
   buildPolicyEnforcedWriteTools,
+  proposeAgentWrite,
 } from "./write-executor";
 
 describe("deriveWriteIdempotencyKey", () => {
@@ -67,6 +74,19 @@ describe("isWriteRateCapExceeded", () => {
   });
 });
 
+function fakeDb(existingRow: { id: string } | null = null) {
+  const inserted: Array<{ table: string; row: unknown }> = [];
+  const contains = vi.fn(() => ({ maybeSingle: () => Promise.resolve({ data: existingRow }) }));
+  const eq = vi.fn(() => ({ contains }));
+  const select = vi.fn(() => ({ eq }));
+  const insert = vi.fn((row: unknown) => {
+    inserted.push({ table: "agent_outputs", row });
+    return Promise.resolve({ error: null });
+  });
+  const db = { from: vi.fn(() => ({ select, insert })) };
+  return { db, inserted, select, eq, contains, insert };
+}
+
 describe("buildPolicyEnforcedWriteTools", () => {
   const WRITE_TOOL: AgentTool = {
     id: "update_lead_stage",
@@ -75,19 +95,6 @@ describe("buildPolicyEnforcedWriteTools", () => {
     scope: "write",
     execute: vi.fn(async () => ({ ok: true })),
   };
-
-  function fakeDb(existingRow: { id: string } | null = null) {
-    const inserted: Array<{ table: string; row: unknown }> = [];
-    const contains = vi.fn(() => ({ maybeSingle: () => Promise.resolve({ data: existingRow }) }));
-    const eq = vi.fn(() => ({ contains }));
-    const select = vi.fn(() => ({ eq }));
-    const insert = vi.fn((row: unknown) => {
-      inserted.push({ table: "agent_outputs", row });
-      return Promise.resolve({ error: null });
-    });
-    const db = { from: vi.fn(() => ({ select, insert })) };
-    return { db, inserted, select, eq, contains, insert };
-  }
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -202,5 +209,120 @@ describe("buildPolicyEnforcedWriteTools", () => {
 
     expect(result).toMatchObject({ queued: true });
     expect(result).not.toHaveProperty("proposed");
+  });
+
+  it("6.4: strips a tool's declared agentSuppressedInputFields before the proposal is persisted", async () => {
+    const CREATE_TASK_TOOL: AgentTool = {
+      id: "create_task",
+      description: "test create_task tool",
+      inputSchema: z.object({ title: z.string(), assigneeId: z.string().optional() }),
+      scope: "write",
+      agentSuppressedInputFields: ["assigneeId"],
+      execute: vi.fn(async () => ({ ok: true })),
+    };
+    const { db, inserted } = fakeDb(null);
+    const toolset = buildPolicyEnforcedWriteTools([CREATE_TASK_TOOL], {
+      db: db as never,
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-1",
+      subjectType: "lead",
+      subjectId: "lead-1",
+    });
+    const tool = toolset.create_task as unknown as { execute: (input: unknown, opts: { toolCallId: string }) => Promise<unknown> };
+
+    await tool.execute({ title: "Call Aisha", assigneeId: "00cfb61c-348e-4370-8830-3533dbd634ec" }, { toolCallId: "call-1" });
+
+    expect(inserted).toHaveLength(1);
+    const payload = (inserted[0].row as { payload: { input: Record<string, unknown> } }).payload;
+    expect(payload.input).toEqual({ title: "Call Aisha" });
+    expect(payload.input).not.toHaveProperty("assigneeId");
+    expect(logInfoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: "call-1", field: "assigneeId" }),
+      expect.stringContaining("stripped agent-suppressed"),
+    );
+  });
+
+  it("6.4: a tool with no agentSuppressedInputFields declaration persists its input byte-identical", async () => {
+    const { db, inserted } = fakeDb(null);
+
+    await callTool(db);
+
+    const payload = (inserted[0].row as { payload: { input: unknown } }).payload;
+    expect(payload.input).toEqual({ leadId: "lead-1" });
+    expect(logInfoMock).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining("stripped"));
+  });
+});
+
+describe("proposeAgentWrite — 6.4 agentSuppressedInputFields", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    resolveAutomationLevelMock.mockResolvedValue("human_led");
+  });
+
+  it("strips a declared field from the persisted input while leaving the rest of the input intact", async () => {
+    const { db, inserted } = fakeDb(null);
+
+    const result = await proposeAgentWrite({
+      db: db as never,
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-1",
+      toolId: "create_task",
+      input: { title: "Call Aisha", priority: "high", assigneeId: "00cfb61c-348e-4370-8830-3533dbd634ec" },
+      toolCallId: "call-1",
+      subjectType: null,
+      subjectId: null,
+      attemptsSoFar: 0,
+      agentSuppressedInputFields: ["assigneeId"],
+    });
+
+    expect(result).toMatchObject({ queued: true, proposed: true });
+    const payload = (inserted[0].row as { payload: { input: Record<string, unknown> } }).payload;
+    expect(payload.input).toEqual({ title: "Call Aisha", priority: "high" });
+  });
+
+  it("leaves input byte-identical when no fields are declared for the tool", async () => {
+    const { db, inserted } = fakeDb(null);
+    const input = { leadId: "lead-1", assigneeId: "user-1" };
+
+    await proposeAgentWrite({
+      db: db as never,
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-1",
+      toolId: "assign_lead",
+      input,
+      toolCallId: "call-1",
+      subjectType: null,
+      subjectId: null,
+      attemptsSoFar: 0,
+    });
+
+    const payload = (inserted[0].row as { payload: { input: unknown } }).payload;
+    expect(payload.input).toBe(input); // same reference — no mutation, no copy
+  });
+
+  it("logs the stripped field at info level with the tool id in scope", async () => {
+    const { db } = fakeDb(null);
+
+    await proposeAgentWrite({
+      db: db as never,
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-1",
+      toolId: "create_task",
+      input: { title: "x", assigneeId: "user-1" },
+      toolCallId: "call-9",
+      subjectType: null,
+      subjectId: null,
+      attemptsSoFar: 0,
+      agentSuppressedInputFields: ["assigneeId"],
+    });
+
+    expect(logInfoMock).toHaveBeenCalledWith(
+      expect.objectContaining({ toolCallId: "call-9", field: "assigneeId" }),
+      expect.stringContaining("stripped agent-suppressed"),
+    );
   });
 });

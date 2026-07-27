@@ -53,6 +53,12 @@ beforeEach(() => {
   applyLeadPatchMock.mockReset();
 });
 
+describe("update_lead_stage — 6.4 agentSuppressedInputFields", () => {
+  it("declares no agent-suppressed fields", () => {
+    expect(updateLeadStageTool.agentSuppressedInputFields).toBeUndefined();
+  });
+});
+
 describe("update_lead_stage — input schema", () => {
   it("treats a NIL-uuid leadId as missing (required validation error)", () => {
     const result = updateLeadStageTool.inputSchema.safeParse({ leadId: NIL_UUID, stageName: "Qualified" });

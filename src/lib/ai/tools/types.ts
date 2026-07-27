@@ -29,5 +29,8 @@ export interface AgentTool<In = unknown, Out = unknown> {
   scope: "read" | "write"; // "write" tools are excluded from buildToolset() unless AI_WRITE_TOOLS_ENABLED=true (Phase 4A)
   requiredPermission?: ToolPermissionKey; // boolean grant checked against auth.permissions before inclusion
   industries?: IndustryId[]; // undefined = universal
+  /** Input fields an AGENT run may never supply — stripped before the proposal is persisted.
+   *  The interactive chat path is unaffected: a user can legitimately name an assignee. */
+  agentSuppressedInputFields?: string[];
   execute(ctx: ToolContext, input: In): Promise<Out>;
 }
