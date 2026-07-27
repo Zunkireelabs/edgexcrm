@@ -141,7 +141,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
         </div>
 
         {/* Right: roster */}
-        <div className="flex-1 min-h-0 border rounded-lg flex flex-col">
+        <div className="flex-1 min-h-0 min-w-0 border rounded-lg flex flex-col">
           {!selectedClass ? (
             <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
               Select a class to see the roster.
@@ -163,7 +163,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                         detailTab === "roster" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
                       )}
                     >
-                      Roster
+                      All
                     </button>
                     <button
                       type="button"

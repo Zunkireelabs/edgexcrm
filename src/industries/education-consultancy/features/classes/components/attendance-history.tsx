@@ -78,7 +78,7 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
   }, [students, search]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full min-w-0">
       <div className="flex items-end gap-3 p-3 border-b shrink-0">
         <div className="space-y-1">
           <Label className="text-xs text-gray-600">From</Label>
@@ -102,7 +102,7 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="flex-1 min-w-0 overflow-auto">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
