@@ -133,7 +133,7 @@ export async function runAgent(
   trace.span(`agent:${def.key}`, { trigger: trigger.event, subjectType: trigger.subjectType, subjectId: trigger.subjectId });
 
   const modelKind = def.defaultModel ?? "fast";
-  const toolCtx = { auth: agentAuth, db, logger, runId };
+  const toolCtx = { auth: agentAuth, db, logger, runId, subjectType: trigger.subjectType, subjectId: trigger.subjectId };
   const draftTools = buildDraftTools({
     agentId,
     runId,

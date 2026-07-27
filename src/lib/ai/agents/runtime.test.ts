@@ -233,6 +233,18 @@ describe("runAgent — 5.4a: registry scope:\"write\" tools are policy-enforced,
     expect(passedToolset.map((t) => t.id)).toEqual(["get_lead"]);
   });
 
+  it("passes the trigger's subjectType/subjectId into the read-tool context (6.3 self-exclusion)", async () => {
+    getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
+    const { db } = fakeDb();
+    scopedClientMock.mockResolvedValue(db);
+    const { runAgent } = await import("./runtime");
+
+    await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
+
+    const passedCtx = toAiSdkToolsMock.mock.calls[0][1] as { subjectType: string | null; subjectId: string | null };
+    expect(passedCtx).toMatchObject({ subjectType: "lead", subjectId: "lead-1" });
+  });
+
   it("hands the write tool (and only the write tool) to the policy-enforced wrapper, with run/agent/tenant context", async () => {
     getRegisteredToolsMock.mockReturnValue([READ_TOOL, WRITE_TOOL]);
     const { db } = fakeDb();
