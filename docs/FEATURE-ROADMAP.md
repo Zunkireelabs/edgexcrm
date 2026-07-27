@@ -102,6 +102,12 @@ Deferred follow-ups surfaced while planning **Lead Lists** (2026-06-20). All con
 - **Multi-membership "segments"** — optional cross-cutting buckets (e.g. "2026 scholarship applicants") layered on top of the single-membership lifecycle lists. Deliberately deferred to keep v1 simple.
 - **Migrate education `lead_type` reads → `list_id`** — Lead Lists Phase 1 mirrors `lead_type` from list moves to avoid breaking existing `lead_type==="prospect"` UI branches. Fast-follow: migrate those reads to `list_id` and retire the mirror.
 
+### AI-native track (Orca agents)
+
+- **BUG: the `daily_digest` agent's `pipeline_summary` tool has never worked** (universal) — **confirmed against source 2026-07-27 during the Phase-5 slice 5.5 review.** `dailyDigestAgent` declares `pipeline_summary` in its `toolIds` (`src/lib/ai/agents/registry.ts:73`), but `src/lib/ai/tools/universal/pipeline-summary.ts:23` calls `assertUserAuth(auth)` unconditionally, which throws for **any** `AgentAuthContext`. The throw is swallowed by the tool adapter's catch into a generic "Something went wrong running pipeline_summary" result, so it fails **silently**: the digest agent has never once read per-stage lead counts, and has been writing digests without the very numbers it exists to report. Not a security issue — fail-closed, no data leak, no wrong write.
+  - **Fix options:** (a) make `pipeline_summary` agent-safe — drop `assertUserAuth` and scope lead visibility the way `get_lead` / `search_leads` already do under agent auth (both are explicitly agent-proven); or (b) drop it from `dailyDigestAgent.toolIds` and let the digest rely on `search_leads`. **(a) is the real fix** — stage counts are the digest's entire job.
+  - **Provenance:** surfaced by 5.5's D9 tool-exposure verification, which excluded `pipeline_summary` from the `mcp-client` definition for exactly this reason. A regression guard already asserts the throw (`src/lib/ai/agents/mcp-client-exposure.test.ts`), so whichever fix is chosen must update that test. Size S.
+
 ### Other industries
 
 _(no approved features yet)_
