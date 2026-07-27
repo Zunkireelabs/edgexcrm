@@ -22,6 +22,97 @@ export interface AuthContext {
   entitlements: Entitlements;
 }
 
+/**
+ * Resolves a tenant_users membership row into a full AuthContext — the
+ * userId -> AuthContext half of authenticateRequest(), extracted so a caller
+ * with no session (Phase 5.4c-2a's approval executor: a real human approved
+ * the write, but there's no request/cookie context to authenticate) can
+ * build the exact same AuthContext an interactive request would get for that
+ * user, and execute with exactly their permissions.
+ *
+ * `tenantId` is optional so authenticateRequest() below can stay a thin,
+ * behavior-identical wrapper: omitted, this queries by user_id alone (a
+ * single-tenant-per-login assumption — `.single()` fails closed if that ever
+ * stops holding). The approval executor always passes tenantId explicitly
+ * (the agent run knows which tenant it's in; a user can belong to several).
+ *
+ * `email` is optional for the same reason: authenticateRequest() already has
+ * it from the session and passes it straight through; a session-less caller
+ * omits it and this falls back to `auth.admin.getUserById` (no auth.users
+ * row is available any other way outside a session).
+ */
+export async function buildUserAuthContext(
+  userId: string,
+  tenantId?: string,
+  email?: string,
+): Promise<AuthContext | null> {
+  // Use service client to bypass RLS for tenant lookup
+  const serviceClient = await createServiceClient();
+  let membershipQuery = serviceClient
+    .from("tenant_users")
+    .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)")
+    .eq("user_id", userId);
+  if (tenantId) membershipQuery = membershipQuery.eq("tenant_id", tenantId);
+
+  const { data: membership } = await membershipQuery.single<{
+    tenant_id: string;
+    role: string;
+    position_id: string | null;
+    branch_id: string | null;
+    tenants:
+      | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
+      | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
+      | null;
+    positions:
+      | { permissions: PositionPermissions; slug: string }
+      | { permissions: PositionPermissions; slug: string }[]
+      | null;
+  }>();
+
+  if (!membership) return null;
+
+  const tenantsEmbed = Array.isArray(membership.tenants)
+    ? membership.tenants[0] ?? null
+    : membership.tenants;
+
+  const positionEmbed = Array.isArray(membership.positions)
+    ? membership.positions[0] ?? null
+    : membership.positions;
+  const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
+  const positionSlug = positionEmbed?.slug ?? null;
+  const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
+  const resolvedBranchId = membership.branch_id ?? null;
+
+  const memberIds =
+    (permissions.leadScope === "team" || positionSlug === "lead-executive") && resolvedBranchId
+      ? await fetchBranchMemberIds(serviceClient, membership.tenant_id, resolvedBranchId)
+      : [];
+
+  let resolvedEmail = email;
+  if (resolvedEmail === undefined) {
+    const { data: userData } = await serviceClient.auth.admin.getUserById(userId);
+    resolvedEmail = userData?.user?.email || "";
+  }
+
+  return {
+    userId,
+    email: resolvedEmail,
+    tenantId: membership.tenant_id,
+    role: membership.role as UserRole,
+    industryId: tenantsEmbed?.industry_id ?? null,
+    positionId: membership.position_id ?? null,
+    positionSlug,
+    branchId: resolvedBranchId,
+    branchMemberIds: memberIds,
+    permissions,
+    plan: tenantsEmbed?.plan ?? "starter",
+    entitlements: resolveEntitlements({
+      plan: tenantsEmbed?.plan,
+      entitlement_overrides: tenantsEmbed?.entitlement_overrides,
+    }),
+  };
+}
+
 export async function authenticateRequest(): Promise<AuthContext | null> {
   try {
     const cookieStore = await cookies();
@@ -54,63 +145,7 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
 
     if (!user) return null;
 
-    // Use service client to bypass RLS for tenant lookup
-    const serviceClient = await createServiceClient();
-    const { data: membership } = await serviceClient
-      .from("tenant_users")
-      .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)")
-      .eq("user_id", user.id)
-      .single<{
-        tenant_id: string;
-        role: string;
-        position_id: string | null;
-        branch_id: string | null;
-        tenants:
-          | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
-          | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
-          | null;
-        positions:
-          | { permissions: PositionPermissions; slug: string }
-          | { permissions: PositionPermissions; slug: string }[]
-          | null;
-      }>();
-
-    if (!membership) return null;
-
-    const tenantsEmbed = Array.isArray(membership.tenants)
-      ? membership.tenants[0] ?? null
-      : membership.tenants;
-
-    const positionEmbed = Array.isArray(membership.positions)
-      ? membership.positions[0] ?? null
-      : membership.positions;
-    const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
-    const positionSlug = positionEmbed?.slug ?? null;
-    const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
-    const resolvedBranchId = membership.branch_id ?? null;
-
-    const memberIds =
-      (permissions.leadScope === "team" || positionSlug === "lead-executive") && resolvedBranchId
-        ? await fetchBranchMemberIds(serviceClient, membership.tenant_id, resolvedBranchId)
-        : [];
-
-    return {
-      userId: user.id,
-      email: user.email || "",
-      tenantId: membership.tenant_id,
-      role: membership.role as UserRole,
-      industryId: tenantsEmbed?.industry_id ?? null,
-      positionId: membership.position_id ?? null,
-      positionSlug,
-      branchId: resolvedBranchId,
-      branchMemberIds: memberIds,
-      permissions,
-      plan: tenantsEmbed?.plan ?? "starter",
-      entitlements: resolveEntitlements({
-        plan: tenantsEmbed?.plan,
-        entitlement_overrides: tenantsEmbed?.entitlement_overrides,
-      }),
-    };
+    return await buildUserAuthContext(user.id, undefined, user.email || "");
   } catch (e) {
     console.error("[authenticateRequest] unexpected error", e);
     return null;

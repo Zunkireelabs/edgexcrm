@@ -224,3 +224,16 @@ export function startTrace(meta: {
     },
   };
 }
+
+/**
+ * Attach a numeric quality score to a run's trace (trace id = runId). No-ops when Langfuse is
+ * unconfigured, exactly like startTrace. `comment` is OPERATIONAL METADATA ONLY (decision, kind,
+ * agent key) — never lead content: scores are not run through the client `mask`, so anything here
+ * leaves the process verbatim.
+ */
+export function scoreRun(runId: string, name: string, value: number, comment?: string): void {
+  const client = getClient();
+  if (!client) return;
+  client.score({ traceId: runId, name, value, comment });
+  scheduleFlush(client);
+}

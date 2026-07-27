@@ -39,6 +39,16 @@ export const EMAIL_SEND_LIMIT: RateLimitConfig = {
   windowMs: 300_000, // 5 minutes — keyed by userId (manual compose/send abuse guard)
 };
 
+// Phase 5 slice 5.5: keyed "mcp:<integrationKeyId>" — the key, not the IP, since
+// an external MCP client host has one stable identity but potentially many
+// egress IPs. MAX_WRITE_ATTEMPTS_PER_RUN (write-executor.ts) never binds for
+// MCP (one agent_runs row per tools/call — see approval-gate.ts/D7), so this
+// is the only per-caller throttle MCP actually gets.
+export const MCP_LIMIT: RateLimitConfig = {
+  maxRequests: 60,
+  windowMs: 60_000, // 1 minute
+};
+
 export async function checkRateLimit(
   key: string,
   config: RateLimitConfig
