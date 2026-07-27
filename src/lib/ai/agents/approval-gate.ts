@@ -53,7 +53,11 @@ type ApprovalExecutorResult = { result: Record<string, unknown> } | { error: str
  * there's exactly one permission implementation (auth.ts) to keep in sync
  * with, never a parallel one.
  */
-const APPROVAL_EXECUTORS: Record<string, (params: ApprovalExecutorParams) => Promise<ApprovalExecutorResult>> = {
+// Exported (read-only shape) so 5.5's MCP tool-exposure test can assert
+// D9's hard rule: a write tool is only ever exposed over MCP if it has an
+// entry here — otherwise an agent_human approval could resolve to "no
+// approval executor registered" for a caller who already clicked Approve.
+export const APPROVAL_EXECUTORS: Record<string, (params: ApprovalExecutorParams) => Promise<ApprovalExecutorResult>> = {
   create_task: async ({ db, tenantId, defaultAssigneeId, input }) => {
     const coreInput: CreateTaskInput = mapCreateTaskToolInput(input as Parameters<typeof mapCreateTaskToolInput>[0]);
     const outcome = await createTaskCore(db, { tenantId, defaultAssigneeId }, coreInput);

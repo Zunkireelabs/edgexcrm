@@ -18,6 +18,54 @@ import type { AgentTool, ToolContext } from "./types";
  * agent's toolset in the first place (asserted in agents/runtime.ts), and
  * this is the defense-in-depth backstop if that ever regresses.
  */
+/**
+ * Trace-span + logging + error-swallow scaffolding shared by both branches of
+ * a tool call (read and write) — extracted so executeReadTool (below, 5.5
+ * Part 3) and this file's write branch share exactly one implementation of
+ * "how a tool call is traced/logged/guarded", not two.
+ */
+async function withTraceAndLogging(
+  agentTool: AgentTool,
+  ctx: ToolContext,
+  input: unknown,
+  surface: string,
+  run: (log: Logger) => Promise<unknown>,
+): Promise<unknown> {
+  const log = ctx.logger.child({ tool: agentTool.id, runId: ctx.runId, scope: agentTool.scope });
+  const trace = startTrace({
+    runId: ctx.runId,
+    tenantId: ctx.auth.tenantId,
+    userId: "userId" in ctx.auth ? ctx.auth.userId : undefined,
+    industryId: ctx.auth.industryId,
+    surface,
+  });
+  trace.span(`tool:${agentTool.id}`, { input, scope: agentTool.scope });
+  log.info({ input }, "tool call started");
+  try {
+    const result = await run(log);
+    trace.end({ ok: true });
+    log.info("tool call finished");
+    return result;
+  } catch (err) {
+    log.error({ err }, "tool call failed");
+    trace.end({ ok: false });
+    return { error: `Something went wrong running "${agentTool.id}". Try a different approach or ask the user for more detail.` };
+  }
+}
+
+/**
+ * Executes one scope:"read" AgentTool with the same trace/log/error-swallow
+ * wrapping the chat/background-agent path already got inline (5.5 Part 3
+ * extraction) — exported so the MCP route (src/app/api/mcp/route.ts) calls
+ * this exact core for its read tool calls instead of reimplementing it.
+ * `surface` is Langfuse's free-text trace tag ("assistant" | "background_agent"
+ * from this file's callers, "mcp" from the MCP route) — telemetry.ts types it
+ * as a plain `string`, so no union to extend.
+ */
+export async function executeReadTool(agentTool: AgentTool, ctx: ToolContext, input: unknown, surface: string): Promise<unknown> {
+  return withTraceAndLogging(agentTool, ctx, input, surface, () => agentTool.execute(ctx, input));
+}
+
 export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
   const tools: ToolSet = {};
 
@@ -26,29 +74,13 @@ export function toAiSdkTools(toolset: AgentTool[], ctx: ToolContext): ToolSet {
       description: agentTool.description,
       inputSchema: agentTool.inputSchema,
       execute: async (input, options) => {
-        const log = ctx.logger.child({ tool: agentTool.id, runId: ctx.runId, scope: agentTool.scope });
-        const trace = startTrace({
-          runId: ctx.runId,
-          tenantId: ctx.auth.tenantId,
-          userId: "userId" in ctx.auth ? ctx.auth.userId : undefined,
-          industryId: ctx.auth.industryId,
-          surface: "actorType" in ctx.auth ? "background_agent" : "assistant",
-        });
-        trace.span(`tool:${agentTool.id}`, { input, scope: agentTool.scope });
-        log.info({ input }, "tool call started");
-        try {
-          const result =
-            agentTool.scope === "write"
-              ? await executeWriteTool(agentTool, ctx, input, options.toolCallId, log)
-              : await agentTool.execute(ctx, input);
-          trace.end({ ok: true });
-          log.info("tool call finished");
-          return result;
-        } catch (err) {
-          log.error({ err }, "tool call failed");
-          trace.end({ ok: false });
-          return { error: `Something went wrong running "${agentTool.id}". Try a different approach or ask the user for more detail.` };
+        const surface = "actorType" in ctx.auth ? "background_agent" : "assistant";
+        if (agentTool.scope === "write") {
+          return withTraceAndLogging(agentTool, ctx, input, surface, (log) =>
+            executeWriteTool(agentTool, ctx, input, options.toolCallId, log),
+          );
         }
+        return executeReadTool(agentTool, ctx, input, surface);
       },
     });
   }

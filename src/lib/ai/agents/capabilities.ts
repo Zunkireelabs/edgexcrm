@@ -113,8 +113,19 @@ export function describeCapabilities(def: AgentDefinition): AgentCapabilitySumma
     }
   }
 
+  // 5.5: the first AgentDefinition with an empty triggers[] (mcp-client) —
+  // .map().join() on [] silently produces "", which renders as a blank line
+  // in the Fleet card/detail drawer instead of crashing. Nothing else in the
+  // codebase assumes a non-empty triggers array (verified: registry.ts's
+  // getAgentDefinitionsForEvent uses .some(), which is false-safe on []), so
+  // this is the one rough edge worth a real fallback string rather than a
+  // blank UI cell.
+  const triggers = def.triggers ?? [];
+  const triggerSummary =
+    triggers.length > 0 ? triggers.map(triggerPhrase).join(" or ") : "Called directly by an external caller (no automatic trigger)";
+
   return {
-    trigger: (def.triggers ?? []).map(triggerPhrase).join(" or "),
+    trigger: triggerSummary,
     reads,
     drafts,
     writes,

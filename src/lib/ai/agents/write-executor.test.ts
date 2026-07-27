@@ -169,4 +169,38 @@ describe("buildPolicyEnforcedWriteTools", () => {
     expect(inserted).toHaveLength(MAX_WRITE_ATTEMPTS_PER_RUN);
     expect(eleventh).toMatchObject({ error: expect.stringMatching(/limit/i) });
   });
+
+  it("N parallel execute() calls in one run still respect MAX_WRITE_ATTEMPTS_PER_RUN (5.5 FIXUP Fix B regression guard)", async () => {
+    const { db, inserted } = fakeDb(null);
+    const toolset = buildPolicyEnforcedWriteTools([WRITE_TOOL], {
+      db: db as never,
+      tenantId: "tenant-1",
+      agentId: "agent-1",
+      runId: "run-1",
+      subjectType: "lead",
+      subjectId: "lead-1",
+    });
+    const tool = toolset.update_lead_stage as unknown as { execute: (input: unknown, opts: { toolCallId: string }) => Promise<unknown> };
+
+    // Simulates the AI SDK invoking several tool calls concurrently within
+    // one step — before Fix B, the attempt slot was reserved after an
+    // `await`, so concurrent calls could all read the same stale
+    // attemptsThisRun and overshoot the cap.
+    const results = await Promise.all(
+      Array.from({ length: MAX_WRITE_ATTEMPTS_PER_RUN + 5 }, (_, i) => tool.execute({ leadId: "lead-1" }, { toolCallId: `call-${i}` })),
+    );
+
+    expect(inserted).toHaveLength(MAX_WRITE_ATTEMPTS_PER_RUN);
+    const capped = results.filter((r) => r && typeof r === "object" && "error" in (r as Record<string, unknown>));
+    expect(capped).toHaveLength(5);
+  });
+
+  it("strips the internal `proposed` flag from the result returned to the AI SDK (5.5 FIXUP Fix C)", async () => {
+    const { db } = fakeDb(null);
+
+    const result = await callTool(db);
+
+    expect(result).toMatchObject({ queued: true });
+    expect(result).not.toHaveProperty("proposed");
+  });
 });

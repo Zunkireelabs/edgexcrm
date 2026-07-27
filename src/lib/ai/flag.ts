@@ -98,3 +98,13 @@ export async function isAgentsEnabledForTenant(tenantId: string): Promise<boolea
   if (!(await tenantAiEnabled(tenantId))) return false;
   return tenantAgentsEnabled(tenantId);
 }
+
+// Phase 5 slice 5.5 prod-safety switch: flag off => /api/mcp 404s outright
+// (not 403 — a dark endpoint should not confirm its own existence to an
+// unauthenticated prober) regardless of tenant config or key validity. Ships
+// dark everywhere including local until Sadin explicitly sets it — MCP is the
+// one externally-reachable door onto the agent/write-executor machinery, so
+// it gets its own top-level switch rather than riding isAgentsEnabled() alone.
+export function isMcpEnabled(): boolean {
+  return process.env.AI_MCP_ENABLED === "true";
+}

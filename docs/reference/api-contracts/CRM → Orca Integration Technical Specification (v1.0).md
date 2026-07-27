@@ -1,5 +1,12 @@
 # CRM → Orca Integration Technical Specification (v1.0)
 
+> **SUPERSEDED by the MCP server (`/api/mcp`)** — dated 2026-07-26. This document's
+> vision (API-key-authenticated, tool-schema'd, auditable external agent access to
+> CRM data) shipped as a Model Context Protocol server instead of a bespoke API —
+> see `docs/ai-native-efforts/04-PHASE-4-AUTONOMY-AND-WRITES.md` §4 for the design
+> and `docs/reference/api-contracts/EDGEX-MCP-SERVER.md` for the integrator-facing
+> spec. Retained below for historical reference only — do not implement against it.
+
 ## 1. Objective
 
 Prepare the CRM as an externally integratable, event-driven, AI-safe system so that:

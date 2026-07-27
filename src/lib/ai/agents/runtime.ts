@@ -39,8 +39,16 @@ export type RunAgentResult =
  * misconfiguration; it is executed through the policy-enforcing wrapper in
  * write-executor.ts instead (see runAgent below), which converts every call
  * to an agent_outputs draft regardless of the resolved automation level.
+ *
+ * Exported (5.5) so the MCP route (src/app/api/mcp/route.ts) reuses this
+ * exact industry/permission filter instead of a second copy — it then adds
+ * its OWN, stricter write-tool filter on top (isWriteToolsEnabled() AND the
+ * caller's key scope), which deliberately does NOT apply here: this
+ * function's write tools are always included for a background agent run,
+ * governed only by policy default-deny in write-executor.ts (D3 — see the
+ * MCP route's comment for why MCP does not inherit that asymmetry).
  */
-function buildAgentToolset(def: AgentDefinition, agentAuth: AgentAuthContext): AgentTool[] {
+export function buildAgentToolset(def: AgentDefinition, agentAuth: AgentAuthContext): AgentTool[] {
   const candidates = getRegisteredTools().filter((t) => def.toolIds.includes(t.id));
 
   return candidates.filter((t) => {

@@ -83,3 +83,52 @@ export const dailyDigestAgent: AgentDefinition = {
 };
 
 registerAgentDefinition(dailyDigestAgent);
+
+/**
+ * External MCP Client (Phase 5 slice 5.5, doc 03/04 + BRIEF-PHASE-5-5-MCP-SERVER.md
+ * D1) — the universal actor identity an external MCP client (Claude, another
+ * agent host) acts as once a tenant admin hires it via the normal Fleet path
+ * (POST /api/v1/agent-identities, agentKey:"mcp-client") and mints an
+ * integration-category API key. This is NOT a model-driven agent: `triggers`
+ * is deliberately empty (never auto-triggered by an event/cron — driven only
+ * by an inbound /api/mcp request) and `systemPrompt` is NEVER sent to any
+ * model — the caller's own model is the "brain"; this definition exists only
+ * to give that external caller a real per-tenant opt-in, a position-derived
+ * permission profile, and a row in the 5.4d Configure automation matrix, by
+ * reusing the exact same agent-identity/policy/approval machinery every other
+ * agent goes through (D1's "no new actor type" decision).
+ *
+ * toolIds per D9 (verified, not assumed — see the 5.5 brief §2 D9 and the
+ * slice's report): reads are get_lead/search_leads/team_lookup, each proven
+ * to run cleanly under an AgentAuthContext (no assertUserAuth, no auth.userId
+ * read). pipeline_summary is DELIBERATELY EXCLUDED — despite the brief's
+ * starting assumption that lead-triage/daily-digest already exercise it under
+ * agent auth, it still calls assertUserAuth(auth) (pipeline-summary.ts) and
+ * would throw for any AgentAuthContext caller; daily-digest declaring it as a
+ * toolId does not mean it has ever actually succeeded under agent auth.
+ * Writes are create_task/update_lead_stage/assign_lead — every one has an
+ * APPROVAL_EXECUTORS entry (approval-gate.ts), the hard rule this registry
+ * entry must satisfy so an agent_human approval can never resolve to "no
+ * approval executor registered". assign_lead is only viable because
+ * team_lookup (its assignee-id resolution path) passes the AgentAuthContext
+ * check; had team_lookup failed, assign_lead would have been dropped too.
+ */
+export const mcpClientAgent: AgentDefinition = {
+  key: "mcp-client",
+  name: "External MCP Client",
+  description:
+    "An external agent host (Claude, another MCP client) connected over the Model Context Protocol with an " +
+    "integration API key. Every write it proposes is queued for human review or approval exactly like any " +
+    "other agent's — it never executes a write inline.",
+  triggers: [],
+  toolIds: ["get_lead", "search_leads", "team_lookup", "create_task", "update_lead_stage", "assign_lead"],
+  outputKinds: ["write_action_proposal"],
+  // Never sent to any model — an MCP client's model is external and never
+  // calls into runAgent()/generateText(). Kept only so AgentDefinition's
+  // required shape is satisfied and so describeCapabilities() has a
+  // consistent def to summarize for the Fleet/Configure UI.
+  systemPrompt: () =>
+    "Not used — this definition is driven only by inbound MCP tool calls from an external caller, never by runAgent().",
+};
+
+registerAgentDefinition(mcpClientAgent);
