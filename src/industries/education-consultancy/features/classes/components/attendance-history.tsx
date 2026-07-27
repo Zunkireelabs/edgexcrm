@@ -100,6 +100,11 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
             />
           </div>
         </div>
+        {!loading && dates.length > 0 && (
+          <p className="text-xs text-muted-foreground whitespace-nowrap pb-2">
+            {dates.length} session{dates.length !== 1 ? "s" : ""} in range
+          </p>
+        )}
       </div>
 
       <div className="flex-1 min-w-0 overflow-auto">
