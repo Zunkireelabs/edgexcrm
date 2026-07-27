@@ -112,7 +112,9 @@ export async function GET(request: NextRequest, { params }: Props) {
       if (status === "present") present += 1;
       else if (status === "absent") absent += 1;
     }
-    const denom = present + absent;
+    // % is present / total batch sessions (not per-student marked count) — a student
+    // who joined late or has unmarked days is scored against the whole class's session
+    // count, not just the days they happen to have a record for.
     return {
       enrollment_id: e.id,
       lead_id: e.lead_id,
@@ -122,7 +124,7 @@ export async function GET(request: NextRequest, { params }: Props) {
       cells,
       present,
       absent,
-      pct: denom === 0 ? null : Math.round((present / denom) * 100),
+      pct: dates.length === 0 ? null : Math.round((present / dates.length) * 100),
     };
   });
 
