@@ -7,9 +7,13 @@ export type AgentOutputKind =
   | "score_suggestion"
   | "task_suggestion"
   | "daily_digest"
-  // Emitted by the runtime, not declared in any AgentDefinition.outputKinds:
-  // write-executor.ts converts every scope:"write" tool call into one of these
-  // instead of executing it (5.4a).
+  // Emitted by the RUNTIME rather than by a draft tool: write-executor.ts
+  // converts every scope:"write" tool call into one of these instead of
+  // executing it (5.4a). A definition that declares a write tool may therefore
+  // list this in outputKinds so its capability card says so — mcp-client (5.5)
+  // and lead-triage (6.1) both do. outputKinds is display metadata only
+  // (capabilities.ts's "Produces" line); it filters no query and gates nothing,
+  // so declaring or omitting it never changes what the runtime emits.
   | "write_action_proposal";
 
 export interface AgentDefinitionContext {
