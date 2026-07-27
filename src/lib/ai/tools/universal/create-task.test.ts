@@ -19,6 +19,12 @@ function fixtureCtx(): ToolContext {
   };
 }
 
+describe("create_task tool — 6.4 agentSuppressedInputFields", () => {
+  it("declares assigneeId as agent-suppressed — an agent run has no basis for choosing a person", () => {
+    expect(createTaskTool.agentSuppressedInputFields).toEqual(["assigneeId"]);
+  });
+});
+
 describe("create_task tool — input schema sanitize (junk-args guard)", () => {
   it("parses the NIL uuid assigneeId to undefined, not a real assignment", () => {
     const result = createTaskTool.inputSchema.parse({

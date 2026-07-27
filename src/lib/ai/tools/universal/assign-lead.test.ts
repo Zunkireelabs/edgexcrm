@@ -41,6 +41,12 @@ beforeEach(() => {
   applyLeadPatchMock.mockReset();
 });
 
+describe("assign_lead — 6.4 agentSuppressedInputFields", () => {
+  it("declares no agent-suppressed fields — assigneeId is this tool's entire purpose", () => {
+    expect(assignLeadTool.agentSuppressedInputFields).toBeUndefined();
+  });
+});
+
 describe("assign_lead — input schema", () => {
   it("requires both leadId and assigneeId", () => {
     expect(assignLeadTool.inputSchema.safeParse({}).success).toBe(false);

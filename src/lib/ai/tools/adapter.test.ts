@@ -4,6 +4,13 @@ import { toAiSdkTools, buildToolApproval, buildDeniedWriteActionRows } from "./a
 import type { AgentTool, ToolContext } from "./types";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AuthContext } from "@/lib/api/auth";
+import { createTaskTool } from "./universal/create-task";
+
+const { createTaskForUserMock } = vi.hoisted(() => ({ createTaskForUserMock: vi.fn() }));
+vi.mock("@/lib/tasks/create-task", () => ({
+  createTaskForUser: createTaskForUserMock,
+  TASK_PRIORITIES: ["low", "normal", "high", "urgent"],
+}));
 
 function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
   return {
@@ -353,6 +360,29 @@ describe("toAiSdkTools — write-tool idempotency + audit wrapper", () => {
     const result = await tools.read_fixture.execute!({}, fixtureExecOptions("tc-5"));
 
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe("toAiSdkTools — chat path must not apply agent-suppressed-field stripping (6.4b)", () => {
+  it("chat path: a user-supplied assigneeId is NEVER stripped — agent suppression must not leak into the interactive path (6.4)", async () => {
+    const assigneeId = "22222222-2222-4222-8222-222222222222";
+    createTaskForUserMock.mockResolvedValueOnce({
+      kind: "ok",
+      notified: true,
+      task: { id: "task-1", title: "Call Aisha", assignee_id: assigneeId, due_date: null, lead_id: null },
+    });
+    const { db } = fakeWriteDb({ existingRow: null });
+    const auth = fixtureAuth();
+    const tools = toAiSdkTools([createTaskTool], fixtureCtx(db, { auth }));
+
+    await tools.create_task.execute!({ title: "Call Aisha", assigneeId }, fixtureExecOptions("tc-chat-1"));
+
+    expect(createTaskForUserMock).toHaveBeenCalledWith(
+      db,
+      auth,
+      expect.objectContaining({ assignee_id: assigneeId }),
+      expect.anything(),
+    );
   });
 });
 

@@ -64,6 +64,9 @@ export const createTaskTool: AgentTool<CreateTaskToolInput> = {
     "the task was created until the tool result confirms it.",
   inputSchema,
   scope: "write",
+  // An agent run has no basis for choosing a person; the task belongs to
+  // whoever approves it (write-executor.ts strips this before persisting).
+  agentSuppressedInputFields: ["assigneeId"],
   async execute(ctx, input) {
     const { db, auth, runId } = ctx;
     assertUserAuth(auth);
