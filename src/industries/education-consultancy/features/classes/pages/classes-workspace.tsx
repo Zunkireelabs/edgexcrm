@@ -3,10 +3,20 @@
 import { useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Users, ClipboardCheck } from "lucide-react";
+import { toast } from "sonner";
+import { Plus, Users, ClipboardCheck, Pencil, Loader2 } from "lucide-react";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
 import { AttendanceSheet } from "../components/attendance-sheet";
 import { AttendanceHistory } from "../components/attendance-history";
@@ -52,6 +62,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
   const [detailTab, setDetailTab] = useState<"roster" | "attendance" | "sessions">("roster");
+  const [editFeeTarget, setEditFeeTarget] = useState<Enrollment | null>(null);
+  const [editFeePaid, setEditFeePaid] = useState(false);
+  const [editFeeAmount, setEditFeeAmount] = useState("");
+  const [editFeeSubmitting, setEditFeeSubmitting] = useState(false);
 
   const enrollments = initialEnrollments as unknown as Enrollment[];
 
@@ -76,6 +90,35 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
   const handleRefresh = useCallback(() => {
     router.refresh();
   }, [router]);
+
+  function openEditFee(enrollment: Enrollment) {
+    setEditFeeTarget(enrollment);
+    setEditFeePaid(enrollment.fee_paid);
+    setEditFeeAmount(enrollment.fee_amount != null ? String(enrollment.fee_amount) : "");
+  }
+
+  async function handleSaveFee() {
+    if (!editFeeTarget) return;
+    setEditFeeSubmitting(true);
+    try {
+      const res = await fetch(`/api/v1/class-enrollments/${editFeeTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fee_paid: editFeePaid,
+          fee_amount: editFeeAmount.trim() ? Number(editFeeAmount) : null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      toast.success("Fee updated");
+      setEditFeeTarget(null);
+      handleRefresh();
+    } catch {
+      toast.error("Failed to update fee");
+    } finally {
+      setEditFeeSubmitting(false);
+    }
+  }
 
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
@@ -244,22 +287,32 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                 )}
                               </td>
                               <td className="px-4 py-2.5">
-                                {enrollment.fee_paid ? (
-                                  <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5">
+                                  {enrollment.fee_paid ? (
                                     <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
                                       Paid
                                     </Badge>
-                                    {enrollment.fee_amount != null && (
-                                      <span className="text-xs text-muted-foreground">
-                                        {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                                      </span>
-                                    )}
-                                  </div>
-                                ) : (
-                                  <Badge variant="outline" className="text-xs text-muted-foreground">
-                                    Unpaid
-                                  </Badge>
-                                )}
+                                  ) : (
+                                    <Badge variant="outline" className="text-xs text-muted-foreground">
+                                      Unpaid
+                                    </Badge>
+                                  )}
+                                  {enrollment.fee_amount != null && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                    </span>
+                                  )}
+                                  {canEnroll && (
+                                    <button
+                                      type="button"
+                                      onClick={() => openEditFee(enrollment)}
+                                      className="text-muted-foreground hover:text-foreground transition-colors"
+                                      title="Edit fee"
+                                    >
+                                      <Pencil className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </div>
                               </td>
                               <td className="px-4 py-2.5 text-xs text-muted-foreground">
                                 {new Date(enrollment.created_at).toLocaleDateString(undefined, {
@@ -304,6 +357,62 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           className={selectedClass.name}
         />
       )}
+
+      <Dialog open={!!editFeeTarget} onOpenChange={(open) => !open && setEditFeeTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Edit fee</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Status</Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={editFeePaid ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setEditFeePaid(true)}
+                >
+                  Paid
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={!editFeePaid ? "default" : "outline"}
+                  className="flex-1"
+                  onClick={() => setEditFeePaid(false)}
+                >
+                  Unpaid
+                </Button>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs text-gray-600">Amount received</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={editFeeAmount}
+                onChange={(e) => setEditFeeAmount(e.target.value)}
+                placeholder="0.00"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to clear. Enter what&apos;s been received so far — doesn&apos;t need to match the full class fee (e.g. an advance/partial payment).
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditFeeTarget(null)} disabled={editFeeSubmitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveFee} disabled={editFeeSubmitting}>
+              {editFeeSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
