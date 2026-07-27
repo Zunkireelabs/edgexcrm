@@ -1,4 +1,4 @@
--- Migration 182: agent/run provenance on ai_write_actions — Phase 5 slice 5.4c
+-- Migration 188: agent/run provenance on ai_write_actions — Phase 5 slice 5.4c
 --
 -- 04-PHASE-4-AUTONOMY-AND-WRITES.md / Phase 5 slice 5.4c (first agent_human
 -- write tool: create_task). ai_write_actions.user_id is NOT NULL (mig 173)
@@ -33,7 +33,7 @@ ALTER TABLE public.ai_write_actions
 CREATE INDEX IF NOT EXISTS idx_ai_write_actions_tenant_agent
   ON public.ai_write_actions (tenant_id, agent_id);
 
-INSERT INTO public.schema_migrations (version) VALUES ('182_ai_write_actions_agent_provenance.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('188_ai_write_actions_agent_provenance.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

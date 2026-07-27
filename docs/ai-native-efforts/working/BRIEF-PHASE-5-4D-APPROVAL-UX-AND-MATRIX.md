@@ -12,7 +12,7 @@ This is the **first real UI of Phase 5**. Everything before it built machinery w
 1. **Local only.** Build and verify on the local Supabase stack. Do NOT push to `stage`, do NOT open/merge any PR, do NOT touch the stage or prod DB. Migrations are applied **locally only**.
 2. **STOP AT REVIEW.** When the work is done and gates are green, write your report and stop. Do not commit, do not push, do not merge. Opus reviews the real diff and re-runs every gate independently; Opus handles the commit to the feature branch.
 3. Local env, if it isn't up: `open -a OrbStack` → `supabase start` → `./scripts/migrate-apply.sh local`. Local DB `postgresql://postgres:postgres@127.0.0.1:54322/postgres`, API `127.0.0.1:54321`, login `admin@edgex.local` / `edgexdev123`.
-4. **Next free migration number is 184.** Exactly one migration in this slice. Follow `supabase/migrations/_TEMPLATE.sql` and the house header format (rationale, expected before/after row counts, rollback line, `Applied: local only`, and the **required self-record** `INSERT INTO public.schema_migrations`).
+4. **Next free migration number is 190** (renumbered from 184 during the pre-stage integration pass — stage now owns 179/180). Exactly one migration in this slice. Follow `supabase/migrations/_TEMPLATE.sql` and the house header format (rationale, expected before/after row counts, rollback line, `Applied: local only`, and the **required self-record** `INSERT INTO public.schema_migrations`).
 5. Gate baseline you must not regress: **768 tests / 79 files**, `npx eslint --max-warnings 50` → **46 warnings, 0 errors** (that exact command, no `src/` argument), `npx tsc --noEmit` → 0, `npm run build` → exit 0. New code must be **net-zero new warnings**.
 6. The `commit-msg` hook rewrites the co-author line. Irrelevant here since you are not committing.
 
@@ -24,7 +24,7 @@ Read these before writing code. Several of them already solve problems this slic
 
 | Thing | Where | Why it matters here |
 |---|---|---|
-| Approval rows | `agent_approvals` (mig 181): `run_id, tool_id, tool_input, preview, status, requested_at, decided_by, decided_at, expires_at` | The queue you are building a UI for. |
+| Approval rows | `agent_approvals` (mig 187, renumbered from 181 during the pre-stage integration pass): `run_id, tool_id, tool_input, preview, status, requested_at, decided_by, decided_at, expires_at` | The queue you are building a UI for. |
 | Decide API | `src/app/(main)/api/v1/agent-approvals/[id]/route.ts` (PATCH) | **Already complete.** Admin-only, tenant-scoped, only decides `pending`, persists then fires the Inngest event. Your UI calls this. Do not rewrite it. |
 | The waiting gate | `src/lib/ai/agents/approval-gate.ts` → `runWriteApprovalGate` | Executes on approve via `executeApprovedWrite`, claim-then-execute on `ai_write_actions`. Do not change its execution semantics. |
 | Policy resolution | `src/lib/ai/agents/policy.ts` → `resolveAutomationLevel`, `DEFAULT_AUTOMATION_LEVEL` | Default-deny. Your matrix writes the rows this reads. |
@@ -64,11 +64,11 @@ That is a misleading consent surface: an admin clicks Accept on what looks like 
 
 Do them in this order; each is independently verifiable.
 
-### Part 1 — migration 184: `awaiting_approval` run status
+### Part 1 — migration 184 (shipped as 190): `awaiting_approval` run status
 
-`supabase/migrations/184_agent_runs_awaiting_approval.sql`. Widen the `agent_runs.status` CHECK (currently `('running','completed','failed','cancelled')`, from mig 179 line 56) to include `'awaiting_approval'`.
+`supabase/migrations/190_agent_runs_awaiting_approval.sql` (renumbered from 184 during the pre-stage integration pass). Widen the `agent_runs.status` CHECK (currently `('running','completed','failed','cancelled')`, from mig 185 line 56) to include `'awaiting_approval'`.
 
-Model the header and the drop/re-add shape on **mig 183**, which does exactly this to `ai_write_actions.status`. Additive, transactional, rollback line, before/after counts (row count unchanged — widening a CHECK against 0 out-of-set rows), self-record in `schema_migrations`.
+Model the header and the drop/re-add shape on **mig 189** (renumbered from 183), which does exactly this to `ai_write_actions.status`. Additive, transactional, rollback line, before/after counts (row count unchanged — widening a CHECK against 0 out-of-set rows), self-record in `schema_migrations`.
 
 ### Part 2 — the run actually reports awaiting_approval
 
@@ -153,7 +153,7 @@ Derived from the agent's `AgentDefinition.toolIds`, filtered to registry tools w
 2. `toolId` must be a registry tool with `scope === "write"` **AND** be declared in that agent's own definition's `toolIds`. Anything else → `apiValidationError`. (Otherwise you can store a policy for a tool the agent doesn't have, or a typo silently no-ops forever.)
 3. `automationLevel` must be `'human_led'` or `'agent_human'`. **`'fully_automated'` → 422 with a plain-language message.** It has two unmet prerequisites (no human actor for the `NOT NULL ai_write_actions.user_id`; doc-04 §2's prompt-injection containment does not exist yet) and the executor fails closed on it. Refusing it at the API is the real gate.
 4. **`send_email` is pinned to `human_led`** regardless of anything else (doc-04 §2: "ships default `human_led` and stays there until a tenant explicitly opts up"). It isn't in any agent definition today; pin it anyway so it can't be loosened the moment it is added.
-5. Upsert on `(tenant_id, agent_id, tool_id)` — the UNIQUE from mig 181 — setting `automation_level`, `updated_by = auth.userId`, `updated_at = now()`. `scopedClient.upsert()` requires `tenant_id` in the `onConflict` list: `onConflict: "tenant_id,agent_id,tool_id"`.
+5. Upsert on `(tenant_id, agent_id, tool_id)` — the UNIQUE from mig 187 (renumbered from 181) — setting `automation_level`, `updated_by = auth.userId`, `updated_at = now()`. `scopedClient.upsert()` requires `tenant_id` in the `onConflict` list: `onConflict: "tenant_id,agent_id,tool_id"`.
 6. **Audit it** (doc-04 §1: "loosening is an explicit admin/owner action, audited"): `createAuditLog({ tenantId, userId: auth.userId, action: "agent_tool_policy.updated", entityType: "agent_identity", entityId: id, changes: { [toolId]: { old, new } } })`. Read the old value first so `changes` is real.
 
 **UI.** The `Settings2` "Configure" button on the fleet card is currently dead — `agents-content.tsx:349-352` has the literal comment *"Automation-level settings — 5.4, stays dead until then"*. Wire it. It opens a dialog (reuse the `Dialog` already imported in that file) that fetches `/api/v1/agent-identities/[id]` and lists one row per write tool with a 3-option `Select`:
@@ -217,7 +217,7 @@ Each row shows: what happened (a sentence, from the same describers — never a 
 - **`send_email`.** Stays out of every agent definition and pinned at `human_led`.
 - **MCP** — that's 5.5.
 - Touching `/api/v1/agents/*` (recruitment agents), `write-executor.ts`'s draft semantics, or `executeApprovedWrite`'s execution/claim semantics.
-- Any change to the anon-RLS P0 (mig 180) — already fixed in code, ships with the batch.
+- Any change to the anon-RLS P0 (mig 186, renumbered from 180) — already fixed in code, ships with the batch.
 - Replacing `overview-content.tsx`'s `MOCK_STATS`. Out of scope, however tempting.
 
 ---

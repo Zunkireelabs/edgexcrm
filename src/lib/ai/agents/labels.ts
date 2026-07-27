@@ -1,4 +1,4 @@
-/** Human labels for agent_outputs.kind (migration 179's CHECK constraint values). Shared by the Fleet, Review Queue, and Agent Detail surfaces. */
+/** Human labels for agent_outputs.kind (migration 185's CHECK constraint values). Shared by the Fleet, Review Queue, and Agent Detail surfaces. */
 export const KIND_LABELS: Record<string, string> = {
   score_suggestion: "Score suggestion",
   task_suggestion: "Task suggestion",

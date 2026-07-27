@@ -77,7 +77,7 @@ export function isAgentsEnabled(): boolean {
   return process.env.AI_AGENTS_ENABLED === "true";
 }
 
-// Migration 179: mirrors ai_enabled (mig 174) — the per-tenant grant. Agents
+// Migration 185: mirrors ai_enabled (mig 174) — the per-tenant grant. Agents
 // send data to the AI provider, so the base D5 consent gate (tenantAiEnabled)
 // still applies on top of this agent-specific switch.
 async function tenantAgentsEnabled(tenantId: string): Promise<boolean> {

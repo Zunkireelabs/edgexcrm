@@ -11,15 +11,20 @@ import type { ResolvedPermissions } from "@/lib/api/permissions";
 
 const authenticateRequestMock = vi.fn();
 const createServiceClientMock = vi.fn();
+const createClientMock = vi.fn();
 const getFeatureAccessMock = vi.fn();
 const branchMemberIdsMock = vi.fn();
-const sharedBranchLeadIdsForAssigneeMock = vi.fn();
-const unassignedCrossBranchLeadIdsMock = vi.fn();
-const collaboratorLeadIdsForUserMock = vi.fn();
 
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
 
-vi.mock("@/lib/supabase/server", () => ({ createServiceClient: createServiceClientMock }));
+// createClient() is the RLS-context client leads_visible_to_user() needs for auth.uid()
+// (migration 179, wired into own-scope in this route by stage's ea18d789). It is called
+// unconditionally at the top of GET regardless of scope, so every test needs it resolved —
+// only the own-scope tests below actually inspect what was done with it.
+vi.mock("@/lib/supabase/server", () => ({
+  createServiceClient: createServiceClientMock,
+  createClient: createClientMock,
+}));
 
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: getFeatureAccessMock }));
 
@@ -27,15 +32,18 @@ vi.mock("@/lib/logger", () => ({
   createRequestLogger: vi.fn(() => ({ info: vi.fn(), error: vi.fn() })),
 }));
 
+// route.ts's own-scope cross-branch-pool visibility used to call
+// sharedBranchLeadIdsForAssignee / unassignedCrossBranchLeadIds directly; stage's ea18d789
+// moved that logic inside leads_visible_to_user() itself (p_cross_pool_slug), so only
+// branchMemberIds (branch-scope) and syncOriginMembership (write path) are still live here.
 vi.mock("@/lib/leads/branch-membership", () => ({
   branchMemberIds: branchMemberIdsMock,
-  sharedBranchLeadIdsForAssignee: sharedBranchLeadIdsForAssigneeMock,
-  unassignedCrossBranchLeadIds: unassignedCrossBranchLeadIdsMock,
   syncOriginMembership: vi.fn(),
 }));
 
+// route.ts only calls addLeadCollaborator (write path, on lead create) — own-scope
+// visibility no longer goes through collaborator lookups here, that's the RPC's job now.
 vi.mock("@/lib/leads/collaborators", () => ({
-  collaboratorLeadIdsForUser: collaboratorLeadIdsForUserMock,
   addLeadCollaborator: vi.fn(),
 }));
 
@@ -126,53 +134,80 @@ function fakeDb(opts: { leadsCalls: Call[]; leadBranchesRows?: Array<{ lead_id: 
   };
 }
 
+type RpcCall = [name: string, params: unknown, opts: unknown];
+
+// Own-scope's RLS-context client double: records every rpc(name, params, opts) call
+// (this is where leads_visible_to_user() visibility is actually enforced — SQL-side,
+// invisible to any eq()/is() call capture on the leads table) and terminates the
+// route's chained .is(...).not(...).order(...).range(...) tail with an empty page.
+function fakeUserClient(rpcCalls: RpcCall[]) {
+  return {
+    rpc: (name: string, params: unknown, opts: unknown) => {
+      rpcCalls.push([name, params, opts]);
+      const chain: Record<string, unknown> = {
+        is: () => chain,
+        not: () => chain,
+        eq: () => chain,
+        order: () => chain,
+        range: () => Promise.resolve({ data: [], error: null, count: 0 }),
+      };
+      return chain;
+    },
+  };
+}
+
 describe("GET /api/v1/leads — counselor-scoping wiring", () => {
   beforeEach(() => {
     authenticateRequestMock.mockReset();
     createServiceClientMock.mockReset();
+    createClientMock.mockReset();
     getFeatureAccessMock.mockReset();
     branchMemberIdsMock.mockReset();
-    sharedBranchLeadIdsForAssigneeMock.mockReset();
-    unassignedCrossBranchLeadIdsMock.mockReset();
-    collaboratorLeadIdsForUserMock.mockReset();
 
     getFeatureAccessMock.mockReturnValue(false);
-    sharedBranchLeadIdsForAssigneeMock.mockResolvedValue([]);
-    unassignedCrossBranchLeadIdsMock.mockResolvedValue([]);
-    collaboratorLeadIdsForUserMock.mockResolvedValue([]);
     branchMemberIdsMock.mockResolvedValue([]);
+    // Default: resolved but unused — only own-scope tests below route a query through it.
+    createClientMock.mockResolvedValue(fakeUserClient([]));
   });
 
-  it("counselor (leadScope:'own') is self-scoped to assigned_to = their own userId", async () => {
-    const calls: Call[] = [];
+  it("counselor (leadScope:'own') is routed through the uncapped leads_visible_to_user() RPC as scope 'own', scoped to their own userId", async () => {
+    const rpcCalls: RpcCall[] = [];
     authenticateRequestMock.mockResolvedValue(
       authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }),
     );
-    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    // Own-scope never touches the plain service client's leads table — if it did, this
+    // table double would be exercised too; asserting rpcCalls below is the real proof.
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
 
     const { GET } = await import("./route");
     const res = await GET(fakeReq());
 
     expect(res.status).toBe(200);
-    expect(calls).toContainEqual(["eq", ["tenant_id", "tenant-1"]]);
-    expect(calls).toContainEqual(["is", ["deleted_at", null]]);
-    expect(calls).toContainEqual(["eq", ["assigned_to", "user-1"]]);
+    expect(rpcCalls).toEqual([
+      [
+        "leads_visible_to_user",
+        { p_tenant: "tenant-1", p_user: "user-1", p_scope: "own" },
+        { count: "exact" },
+      ],
+    ]);
   });
 
-  it("counselor cannot widen or redirect scope via ?assigned_to= — the client param is ignored, not honored", async () => {
-    const calls: Call[] = [];
+  it("counselor cannot widen or redirect scope via ?assigned_to= — the RPC is still called with the caller's own userId, not the client param", async () => {
+    const rpcCalls: RpcCall[] = [];
     authenticateRequestMock.mockResolvedValue(
       authFixture({ userId: "user-1", permissions: permissions({ leadScope: "own" }) }),
     );
-    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
 
     const { GET } = await import("./route");
     const res = await GET(fakeReq({ assigned_to: "other-user" }));
 
     expect(res.status).toBe(200);
-    expect(calls).not.toContainEqual(["eq", ["assigned_to", "other-user"]]);
-    // Still self-scoped, regardless of the attempted redirect.
-    expect(calls).toContainEqual(["eq", ["assigned_to", "user-1"]]);
+    // The RPC's p_user is the authenticated caller — "other-user" never appears anywhere.
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0][1]).toEqual({ p_tenant: "tenant-1", p_user: "user-1", p_scope: "own" });
   });
 
   it("admin/owner (leadScope:'all') is not self-restricted, and ?assigned_to= IS honored", async () => {

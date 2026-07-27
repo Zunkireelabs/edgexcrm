@@ -1,10 +1,10 @@
--- Migration 181: agent_tool_policies / agent_approvals — Phase 5.4a write-policy spine
+-- Migration 187: agent_tool_policies / agent_approvals — Phase 5.4a write-policy spine
 --
 -- AI-native Phase 5 slice 5.4a (docs/ai-native-efforts/04-PHASE-4-AUTONOMY-AND-WRITES.md
 -- §1). Schema-only: the per-(tenant, agent, tool) automation-level matrix and the
 -- approval-queue table. No app code writes to agent_tool_policies yet (no UI), and
 -- no app code reads agent_approvals yet (that lands in 5.4b) — creating both tables
--- now keeps 5.4b code-only, same rationale as mig 179's agent_outputs precedent.
+-- now keeps 5.4b code-only, same rationale as mig 185's agent_outputs precedent.
 --
 -- Default-deny is the load-bearing invariant: a (tenant, agent, tool) triple with no
 -- agent_tool_policies row resolves to 'human_led' in application code
@@ -13,7 +13,7 @@
 --
 -- Tenant isolation: tenant_id FK + RLS on both tables — SELECT via
 -- get_user_tenant_ids(), mutations via is_tenant_admin(tenant_id). Mirrors the
--- house pattern (agent_identities/agent_runs/agent_outputs, mig 179).
+-- house pattern (agent_identities/agent_runs/agent_outputs, mig 185).
 --
 -- Expected before/after row counts: agent_tool_policies 0 -> 0, agent_approvals
 -- 0 -> 0 (new tables, no seed).
@@ -87,7 +87,7 @@ CREATE POLICY "agent_approvals_delete" ON agent_approvals
   FOR DELETE USING (is_tenant_admin(tenant_id));
 
 -- REQUIRED: self-record in the ledger (mig 123).
-INSERT INTO public.schema_migrations (version) VALUES ('181_agent_tool_policies.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('187_agent_tool_policies.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

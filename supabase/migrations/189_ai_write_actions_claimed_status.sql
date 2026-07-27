@@ -1,4 +1,4 @@
--- Migration 183: 'claimed' status on ai_write_actions — claim-then-execute
+-- Migration 189: 'claimed' status on ai_write_actions — claim-then-execute
 --
 -- Phase 5 slice 5.4c-FIXUP (docs/ai-native-efforts). The approval executor
 -- (approval-gate.ts) currently checks-then-inserts around executing a write,
@@ -34,7 +34,7 @@ ALTER TABLE public.ai_write_actions DROP CONSTRAINT IF EXISTS ai_write_actions_s
 ALTER TABLE public.ai_write_actions ADD CONSTRAINT ai_write_actions_status_check
   CHECK (status IN ('claimed', 'executed', 'denied', 'failed'));
 
-INSERT INTO public.schema_migrations (version) VALUES ('183_ai_write_actions_claimed_status.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('189_ai_write_actions_claimed_status.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

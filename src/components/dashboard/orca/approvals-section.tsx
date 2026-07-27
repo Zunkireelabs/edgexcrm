@@ -33,7 +33,7 @@ function approvalActionLabel(toolId: string): string {
   return APPROVAL_ACTION_LABELS[toolId] ?? `Run "${toolId}"`;
 }
 
-/** "Expires in ~N hours" — the 48h window (agent_approvals.expires_at, mig 181) is real and an approver needs to see it before it lapses. */
+/** "Expires in ~N hours" — the 48h window (agent_approvals.expires_at, mig 187) is real and an approver needs to see it before it lapses. */
 function expiryHint(expiresAt: string): string {
   const diffMs = new Date(expiresAt).getTime() - Date.now();
   if (diffMs <= 0) return "Expiring imminently";

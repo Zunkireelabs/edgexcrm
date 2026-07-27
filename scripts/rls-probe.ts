@@ -333,7 +333,7 @@ async function main() {
   }
 
   // Probe 5 — bare ANON role (no user JWT at all): this is the role a leaked
-  // client bundle / any published form actually grants. Migration 180 dropped
+  // client bundle / any published form actually grants. Migration 186 dropped
   // the vestigial `TO anon USING (true)` policies from 001_initial_schema.sql
   // that used to make every one of these a data leak across all tenants.
   console.log("\n--- Probes (running as bare anon — no signed-in user, no Bearer JWT) ---\n");
@@ -351,7 +351,7 @@ async function main() {
     );
 
     // Probe 5a — bare-anon SELECT on leads returns 0 rows (was: every tenant's leads, pre-mig-180).
-    // Mig 180 REVOKEd the table grant too, so PostgREST now hard-denies with
+    // Mig 186 REVOKEd the table grant too, so PostgREST now hard-denies with
     // "permission denied for table leads" instead of RLS silently filtering
     // to empty — a stronger result, and an acceptable pass here (same
     // either-or shape as Probe 3a's cross-tenant INSERT check).

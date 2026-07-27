@@ -1,4 +1,4 @@
--- Migration 179: agent_identities / agent_runs / agent_outputs — Phase 5 agent spine
+-- Migration 185: agent_identities / agent_runs / agent_outputs — Phase 5 agent spine
 --
 -- AI-native Phase 5 (docs/ai-native-efforts/03-PHASE-3-BACKGROUND-AGENTS.md §1,
 -- 00-DECISIONS-ADR.md Decision 2). An agent is a first-class tenant team member:
@@ -121,7 +121,7 @@ DROP POLICY IF EXISTS "agent_outputs_delete" ON agent_outputs;
 CREATE POLICY "agent_outputs_delete" ON agent_outputs
   FOR DELETE USING (is_tenant_admin(tenant_id));
 
-INSERT INTO public.schema_migrations (version) VALUES ('179_agent_identities.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('185_agent_identities.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

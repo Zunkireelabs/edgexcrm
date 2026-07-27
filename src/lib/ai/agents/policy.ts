@@ -3,7 +3,7 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 /**
  * Per-(tenant, agent, tool) write-authorization level
  * (docs/ai-native-efforts/04-PHASE-4-AUTONOMY-AND-WRITES.md §1). Resolved
- * from `agent_tool_policies` (migration 181).
+ * from `agent_tool_policies` (migration 187).
  */
 export type AutomationLevel = "human_led" | "agent_human" | "fully_automated";
 

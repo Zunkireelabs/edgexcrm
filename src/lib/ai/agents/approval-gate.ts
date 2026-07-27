@@ -184,12 +184,12 @@ interface StoredWriteAction {
 
 /**
  * Executes one approved write-action proposal and records it on
- * ai_write_actions, keyed by the approval's own id as tool_call_id (mig 182
+ * ai_write_actions, keyed by the approval's own id as tool_call_id (mig 188
  * adds agent_id/run_id provenance columns; user_id is the approving human,
  * per this slice's brief — the schema's NOT NULL user_id has no agent actor
  * to point to instead).
  *
- * Claim-then-execute (5.4c-FIXUP, mig 183 adds the 'claimed' status): for
+ * Claim-then-execute (5.4c-FIXUP, mig 189 adds the 'claimed' status): for
  * customer-data writes a lost write is strictly recoverable (a human can
  * re-approve) but a duplicate write is not (nobody can un-send it), so this
  * is deliberately at-most-once rather than at-least-once —
@@ -375,7 +375,7 @@ export async function runWriteApprovalGate({ step, db, runId }: RunWriteApproval
   }
 
   // Waited on in parallel, not sequentially. agent_approvals.expires_at is
-  // stamped `now() + 48h` at creation time (mig 181's column default) — a
+  // stamped `now() + 48h` at creation time (mig 187's column default) — a
   // moment after the LAST row in `queued` was created. A sequential `for`
   // loop here would only start approval 2's wait once approval 1's resolves,
   // which for a real human-in-the-loop decision can take nearly the full

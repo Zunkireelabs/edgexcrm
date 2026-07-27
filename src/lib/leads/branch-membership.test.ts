@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   branchMemberIds,
-  leadIdsVisibleToAssignee,
   sharedBranchLeadIdsForAssignee,
   shouldLeadBeVisibleToAssignee,
   getLeadMembership,
@@ -86,46 +85,6 @@ describe("branchMemberIds", () => {
     expect(calls.tenant_users).toEqual([
       ["eq", ["tenant_id", "tenant-1"]],
       ["eq", ["branch_id", "branch-1"]],
-    ]);
-  });
-});
-
-describe("leadIdsVisibleToAssignee", () => {
-  it("unions lead_branches membership ids with directly-assigned leads ids", async () => {
-    const db = fakeDb({
-      lead_branches: { data: [{ lead_id: "l1" }] },
-      leads: { data: [{ id: "l2" }] },
-    });
-    const ids = await leadIdsVisibleToAssignee(db, "tenant-1", "user-1");
-    expect(new Set(ids)).toEqual(new Set(["l1", "l2"]));
-  });
-
-  it("dedupes when the same lead appears in both sources", async () => {
-    const db = fakeDb({
-      lead_branches: { data: [{ lead_id: "l1" }] },
-      leads: { data: [{ id: "l1" }] },
-    });
-    const ids = await leadIdsVisibleToAssignee(db, "tenant-1", "user-1");
-    expect(ids).toEqual(["l1"]);
-  });
-
-  it("returns an empty array when the user has no membership or assignment rows (never falls back to all leads)", async () => {
-    const db = fakeDb({ lead_branches: { data: [] }, leads: { data: [] } });
-    expect(await leadIdsVisibleToAssignee(db, "tenant-1", "user-1")).toEqual([]);
-  });
-
-  it("filters lead_branches by tenant_id+assigned_to, and leads by tenant_id+assigned_to+deleted_at", async () => {
-    const calls: Record<string, Call[]> = {};
-    const db = fakeDb({ lead_branches: { data: [] }, leads: { data: [] } }, calls);
-    await leadIdsVisibleToAssignee(db, "tenant-1", "user-1");
-    expect(calls.lead_branches).toEqual([
-      ["eq", ["tenant_id", "tenant-1"]],
-      ["eq", ["assigned_to", "user-1"]],
-    ]);
-    expect(calls.leads).toEqual([
-      ["eq", ["tenant_id", "tenant-1"]],
-      ["eq", ["assigned_to", "user-1"]],
-      ["is", ["deleted_at", null]],
     ]);
   });
 });

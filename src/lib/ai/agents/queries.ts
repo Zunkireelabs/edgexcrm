@@ -258,7 +258,7 @@ export async function getAgentFleet(tenantId: string): Promise<AgentFleetItem[]>
   ]);
 
   const runsByAgent = new Map<string, { completed: number; last: string | null }>();
-  // Only status === "completed" counts — NOT "awaiting_approval" (mig 184).
+  // Only status === "completed" counts — NOT "awaiting_approval" (mig 190).
   // A run stuck awaiting a human decision on its write proposals hasn't
   // finished yet; counting it here would claim work that may still be
   // rejected or time out. Do not "fix" this to include awaiting_approval.
@@ -479,7 +479,7 @@ export async function getPendingApprovals(tenantId: string): Promise<AgentApprov
   const items: AgentApprovalItem[] = [];
   for (const r of rows) {
     // Defensive, not expected: agent_approvals.run_id is a NOT NULL FK to
-    // agent_runs (mig 181) and both tables are fetched through the same
+    // agent_runs (mig 187) and both tables are fetched through the same
     // tenant-scoped client — a missing run row would mean a data
     // inconsistency, not a normal case. Skip rather than render a broken row.
     const run = runById.get(r.run_id);

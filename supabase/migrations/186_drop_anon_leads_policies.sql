@@ -32,7 +32,7 @@ SELECT count(*) AS anon_policies_after FROM pg_policies
   WHERE schemaname='public' AND tablename='leads' AND 'anon' = ANY(roles);
 
 -- REQUIRED: self-record in the ledger (mig 123).
-INSERT INTO public.schema_migrations (version) VALUES ('180_drop_anon_leads_policies.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('186_drop_anon_leads_policies.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

@@ -43,7 +43,7 @@ const RUN_STATUS_LABELS: Record<string, string> = {
   failed: "Failed",
   cancelled: "Cancelled",
   // 5.4d: a run whose write proposals are still awaiting a human decision —
-  // see mig 184 + approval-gate.ts's mark-awaiting-approval/mark-approvals-
+  // see mig 190 + approval-gate.ts's mark-awaiting-approval/mark-approvals-
   // settled steps.
   awaiting_approval: "Awaiting approval",
 };

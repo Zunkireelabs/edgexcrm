@@ -106,7 +106,7 @@ If a future feature ever adds a direct authenticated-client insert path to
 tenant-scoped `WITH CHECK` policy, and this probe would need a same-tenant
 positive-insert case added to actually distinguish the two.
 
-## `anon` role coverage — closed by migration 180
+## `anon` role coverage — closed by migration 186
 
 Every probe up through Probe 4 runs as the **`authenticated`** role (anon key
 + a signed-in user's JWT). Probe 5 covers the bare **`anon`** role — the
@@ -114,7 +114,7 @@ public anon key with *no* user JWT, which is the role the embeddable
 widget/public form uses and which is readable from any published form's
 browser bundle.
 
-Until migration `180_drop_anon_leads_policies.sql`, this was a real gap, not
+Until migration `186_drop_anon_leads_policies.sql`, this was a real gap, not
 a theoretical one: `leads` carried three permissive `TO anon` policies from
 `001_initial_schema.sql` (`FOR SELECT USING (true)`, `FOR UPDATE USING (true)
 WITH CHECK (true)`, `FOR INSERT WITH CHECK (true)`) that no earlier migration
@@ -123,7 +123,7 @@ dropped, plus table-level `anon` grants. A bare-anon `GET
 local (1,094 rows spanning multiple tenants), stage, and prod (17,943 leads)
 before the fix.
 
-Migration 180 dropped all three `TO anon` policies and `REVOKE ALL ON
+Migration 186 dropped all three `TO anon` policies and `REVOKE ALL ON
 public.leads FROM anon` (defense in depth, so a future policy added `TO anon`
 can't silently reopen the door without also re-granting). Probes 5a-5c below
 are the regression test that landed in the same change:
@@ -140,7 +140,7 @@ are the regression test that landed in the same change:
      role decodes to `anon`, not `authenticated`, so this can't false-green by
      accidentally carrying a signed-in user's JWT.
 
-## Sample output (local, 2026-07-26, post mig 180)
+## Sample output (local, 2026-07-26, post mig 186)
 
 ```
 Target: http://127.0.0.1:54321

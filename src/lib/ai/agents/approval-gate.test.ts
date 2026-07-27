@@ -621,7 +621,7 @@ describe("runWriteApprovalGate — claim-then-execute hazards (5.4c-FIXUP)", () 
   });
 });
 
-describe("runWriteApprovalGate — run status transitions (5.4d, mig 184)", () => {
+describe("runWriteApprovalGate — run status transitions (5.4d, mig 190)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resolveAutomationLevelMock.mockResolvedValue("agent_human");
