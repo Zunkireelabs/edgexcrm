@@ -29,6 +29,7 @@ interface LeadContact {
 interface EnrollmentRow {
   id: string;
   lead_id: string;
+  created_at: string;
   leads: LeadContact | LeadContact[] | null;
 }
 
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest, { params }: Props) {
   // All active enrollments for this class — NOT filtered to caller's assigned leads.
   const { data: enrollments, error: enrollError } = await db
     .from("class_enrollments")
-    .select("id, lead_id, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,phone)")
+    .select("id, lead_id, created_at, leads!class_enrollments_lead_id_fkey(id,first_name,last_name,email,phone)")
     .eq("class_id", id)
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
@@ -106,15 +107,23 @@ export async function GET(request: NextRequest, { params }: Props) {
   const students = enrollmentRows.map((e) => {
     const lead = leadContact(e.leads);
     const cells = byEnrollment.get(e.id) ?? {};
+
+    // % is present / total batch sessions since this student enrolled (not per-student
+    // marked count) — a session a student wasn't marked for still counts against them
+    // (marker skipped them), but sessions the batch ran BEFORE they enrolled don't. Both
+    // the numerator and denominator are scoped to this same eligible-dates window so
+    // present+absent can never exceed sessions (e.g. a re-enrollment with stray
+    // pre-enrollment attendance rows wouldn't push pct over 100%).
+    const enrolledDate = e.created_at.slice(0, 10);
+    const eligibleDates = dates.filter((d) => d >= enrolledDate);
     let present = 0;
     let absent = 0;
-    for (const status of Object.values(cells)) {
+    for (const d of eligibleDates) {
+      const status = cells[d];
       if (status === "present") present += 1;
       else if (status === "absent") absent += 1;
     }
-    // % is present / total batch sessions (not per-student marked count) — a student
-    // who joined late or has unmarked days is scored against the whole class's session
-    // count, not just the days they happen to have a record for.
+    const eligibleSessions = eligibleDates.length;
     return {
       enrollment_id: e.id,
       lead_id: e.lead_id,
@@ -124,7 +133,8 @@ export async function GET(request: NextRequest, { params }: Props) {
       cells,
       present,
       absent,
-      pct: dates.length === 0 ? null : Math.round((present / dates.length) * 100),
+      sessions: eligibleSessions,
+      pct: eligibleSessions === 0 ? null : Math.round((present / eligibleSessions) * 100),
     };
   });
 
