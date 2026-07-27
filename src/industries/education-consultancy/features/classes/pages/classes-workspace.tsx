@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
 import { AttendanceSheet } from "../components/attendance-sheet";
 import { AttendanceHistory } from "../components/attendance-history";
+import { AttendanceSessions } from "../components/attendance-sessions";
 import { cn } from "@/lib/utils";
 
 interface ClassRow {
@@ -50,7 +51,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [attendanceOpen, setAttendanceOpen] = useState(false);
-  const [detailTab, setDetailTab] = useState<"roster" | "attendance">("roster");
+  const [detailTab, setDetailTab] = useState<"roster" | "attendance" | "sessions">("roster");
 
   const enrollments = initialEnrollments as unknown as Enrollment[];
 
@@ -175,6 +176,16 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                     >
                       Attendance
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setDetailTab("sessions")}
+                      className={cn(
+                        "px-2.5 py-1 text-xs font-medium rounded-sm transition-colors",
+                        detailTab === "sessions" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      Sessions
+                    </button>
                   </div>
                   {detailTab === "attendance" && canMarkAttendance && (
                     <Button size="sm" variant="outline" onClick={() => setAttendanceOpen(true)}>
@@ -264,8 +275,10 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                     </table>
                   </div>
                 )
-              ) : (
+              ) : detailTab === "attendance" ? (
                 <AttendanceHistory classId={selectedClass.id} className={selectedClass.name} />
+              ) : (
+                <AttendanceSessions classId={selectedClass.id} className={selectedClass.name} />
               )}
             </>
           )}
