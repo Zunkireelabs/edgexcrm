@@ -13,7 +13,12 @@ vi.mock("@/lib/api/auth", async (importOriginal) => {
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 vi.mock("@/lib/ai/agents/queries", () => ({ getAgentDetail: getAgentDetailMock }));
 
-const ADMIN_AUTH = { userId: "user-1", tenantId: "tenant-1", role: "admin" } as unknown as AuthContext;
+const ADMIN_AUTH = {
+  userId: "user-1",
+  tenantId: "tenant-1",
+  role: "admin",
+  industryId: "education_consultancy",
+} as unknown as AuthContext;
 const VIEWER_AUTH = { userId: "user-2", tenantId: "tenant-1", role: "viewer" } as unknown as AuthContext;
 
 function fakeReq(body: unknown): NextRequest {
@@ -46,7 +51,7 @@ describe("GET /api/v1/agent-identities/[id]", () => {
     const res = await GET({} as NextRequest, { params });
 
     expect(res.status).toBe(404);
-    expect(getAgentDetailMock).toHaveBeenCalledWith("tenant-1", "identity-1");
+    expect(getAgentDetailMock).toHaveBeenCalledWith("tenant-1", "identity-1", "education_consultancy");
   });
 
   it("returns the agent detail shape for an admin caller", async () => {
