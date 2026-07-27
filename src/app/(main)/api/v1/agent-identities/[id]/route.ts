@@ -25,7 +25,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   if (!auth) return apiUnauthorized();
   if (!requireAdmin(auth)) return apiForbidden();
 
-  const detail = await getAgentDetail(auth.tenantId, id);
+  const detail = await getAgentDetail(auth.tenantId, id, auth.industryId);
   if (!detail) return apiNotFound("Agent");
 
   return apiSuccess(detail);

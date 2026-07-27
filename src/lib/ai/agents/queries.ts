@@ -12,6 +12,7 @@ import { getRegisteredTools } from "@/lib/ai/tools/registry";
 import { DEFAULT_AUTOMATION_LEVEL, type AutomationLevel } from "./policy";
 import { assigneeLabel } from "@/lib/ai/tools/universal/lib/approval-resolve";
 import type { ScopedClient } from "@/lib/supabase/scoped";
+import type { IndustryId } from "@/industries/_registry";
 
 export interface AgentFleetItem {
   id: string;
@@ -534,7 +535,11 @@ export async function getPendingReviewCount(tenantId: string): Promise<number> {
  * for the "what it's done" timeline. Returns null when the id isn't a hired
  * agent in this tenant (cross-tenant or unknown id).
  */
-export async function getAgentDetail(tenantId: string, agentId: string): Promise<AgentDetail | null> {
+export async function getAgentDetail(
+  tenantId: string,
+  agentId: string,
+  industryId: string | null,
+): Promise<AgentDetail | null> {
   const db = await scopedClientForTenant(tenantId);
 
   const { data: identity } = await db
@@ -549,8 +554,21 @@ export async function getAgentDetail(tenantId: string, agentId: string): Promise
   const def = getAgentDefinition(row.agent_key);
   // The registry's own scope for each tool this agent declares — a write
   // tool id no longer implies "draft-only" (5.4a), so the matrix only ever
-  // lists real scope:"write" registry tools, never draft-tool ids.
-  const writeToolIds = (def?.toolIds ?? []).filter((id) => getRegisteredTools().find((t) => t.id === id)?.scope === "write");
+  // lists real scope:"write" registry tools, never draft-tool ids. Also
+  // applies the same industry predicate buildAgentToolset (runtime.ts) uses
+  // at execution time (Phase 6 slice 6.1 Part 2) — without it the matrix
+  // offered a control for a tool the agent's own runtime toolset would never
+  // include for this tenant's industry (e.g. update_lead_stage, education-only,
+  // shown to an it_agency tenant).
+  const writeToolIds = (def?.toolIds ?? []).filter((id) => {
+    const t = getRegisteredTools().find((tool) => tool.id === id);
+    if (!t || t.scope !== "write") return false;
+    if (t.industries !== undefined) {
+      if (industryId === null) return false;
+      if (!t.industries.includes(industryId as IndustryId)) return false;
+    }
+    return true;
+  });
 
   const [{ data: position }, { data: runs }, { data: outputs }, { data: policies }, { data: writes }] = await Promise.all([
     row.position_id

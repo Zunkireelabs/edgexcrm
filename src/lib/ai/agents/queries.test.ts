@@ -369,7 +369,7 @@ describe("getAgentDetail", () => {
     scopedClientForTenantMock.mockResolvedValue(fakeDb({ agent_identities: { data: null } }));
     const { getAgentDetail } = await import("./queries");
 
-    expect(await getAgentDetail("tenant-1", "missing-agent")).toBeNull();
+    expect(await getAgentDetail("tenant-1", "missing-agent", null)).toBeNull();
   });
 
   it("rolls up lifetime stats over the full history and enriches the last-20 timeline with lead labels", async () => {
@@ -455,7 +455,7 @@ describe("getAgentDetail", () => {
     );
     const { getAgentDetail } = await import("./queries");
 
-    const detail = await getAgentDetail("tenant-1", "a1");
+    const detail = await getAgentDetail("tenant-1", "a1", "education_consultancy");
 
     expect(detail).not.toBeNull();
     expect(detail!.positionName).toBe("Sales Rep");
@@ -492,7 +492,7 @@ describe("getAgentDetail", () => {
     );
     const { getAgentDetail } = await import("./queries");
 
-    const detail = await getAgentDetail("tenant-1", "a1");
+    const detail = await getAgentDetail("tenant-1", "a1", "education_consultancy");
 
     expect(detail?.capabilities).toBeNull();
     expect(detail?.positionName).toBeNull();
@@ -551,12 +551,87 @@ describe("getAgentDetail", () => {
     );
     const { getAgentDetail } = await import("./queries");
 
-    const detail = await getAgentDetail("tenant-1", "a1");
+    const detail = await getAgentDetail("tenant-1", "a1", "education_consultancy");
 
     // Only the original action surfaces — the undo row itself (which would
     // otherwise render as a second, misleadingly-badged "Agent action" entry
     // with an Undo button that always 422s) is excluded.
     expect(detail!.recentWrites.map((w) => w.id)).toEqual(["w-original"]);
     expect(detail!.recentWrites[0].undone).toBe(true);
+  });
+
+  // Phase 6 slice 6.1 Part 2: writeToolIds must apply the same industry
+  // predicate buildAgentToolset (runtime.ts) applies at execution time —
+  // update_lead_stage is industries: [EDUCATION_CONSULTANCY]
+  // (src/lib/ai/tools/universal/update-lead-stage.ts), so an it_agency
+  // tenant's matrix must never offer a control for it.
+  it("excludes an industry-gated write tool from toolPolicies when the tenant's industry doesn't match", async () => {
+    getAgentDefinitionMock.mockReturnValue({
+      key: "mcp-client",
+      name: "External MCP Client",
+      description: "test fixture",
+      triggers: [],
+      toolIds: ["get_lead", "update_lead_stage", "create_task"],
+      outputKinds: ["write_action_proposal"],
+    });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_identities: {
+          data: {
+            id: "a1",
+            agent_key: "mcp-client",
+            display_name: "External MCP Client",
+            position_id: null,
+            status: "active",
+            created_at: "2026-01-01",
+          },
+        },
+        agent_runs: { data: [] },
+        agent_outputs: { data: [] },
+        agent_tool_policies: { data: [] },
+        ai_write_actions: { data: [] },
+      }),
+    );
+    const { getAgentDetail } = await import("./queries");
+
+    const detail = await getAgentDetail("tenant-1", "a1", "it_agency");
+
+    const toolIds = detail!.toolPolicies.map((p) => p.toolId);
+    expect(toolIds).toContain("create_task");
+    expect(toolIds).not.toContain("update_lead_stage");
+  });
+
+  it("includes an industry-gated write tool in toolPolicies when the tenant's industry matches", async () => {
+    getAgentDefinitionMock.mockReturnValue({
+      key: "mcp-client",
+      name: "External MCP Client",
+      description: "test fixture",
+      triggers: [],
+      toolIds: ["get_lead", "update_lead_stage", "create_task"],
+      outputKinds: ["write_action_proposal"],
+    });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_identities: {
+          data: {
+            id: "a1",
+            agent_key: "mcp-client",
+            display_name: "External MCP Client",
+            position_id: null,
+            status: "active",
+            created_at: "2026-01-01",
+          },
+        },
+        agent_runs: { data: [] },
+        agent_outputs: { data: [] },
+        agent_tool_policies: { data: [] },
+        ai_write_actions: { data: [] },
+      }),
+    );
+    const { getAgentDetail } = await import("./queries");
+
+    const detail = await getAgentDetail("tenant-1", "a1", "education_consultancy");
+
+    expect(detail!.toolPolicies.map((p) => p.toolId)).toContain("update_lead_stage");
   });
 });
