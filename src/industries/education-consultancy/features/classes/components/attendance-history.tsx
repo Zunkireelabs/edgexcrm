@@ -16,6 +16,7 @@ interface StudentRow {
   cells: Record<string, "present" | "absent">;
   present: number;
   absent: number;
+  sessions: number;
   pct: number | null;
 }
 
@@ -100,6 +101,11 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
             />
           </div>
         </div>
+        {!loading && dates.length > 0 && (
+          <p className="text-xs text-muted-foreground whitespace-nowrap pb-2">
+            {dates.length} session{dates.length !== 1 ? "s" : ""} in range
+          </p>
+        )}
       </div>
 
       <div className="flex-1 min-w-0 overflow-auto">
@@ -152,7 +158,16 @@ export function AttendanceHistory({ classId, className }: { classId: string; cla
                   <td className="px-3 py-2 text-center border-b">{s.present}</td>
                   <td className="px-3 py-2 text-center border-b">{s.absent}</td>
                   <td className={cn("px-3 py-2 text-center border-b font-medium", s.pct === null && "text-muted-foreground")}>
-                    {s.pct === null ? "–" : `${s.pct}%`}
+                    {s.pct === null ? (
+                      "–"
+                    ) : (
+                      <>
+                        {s.pct}%
+                        <span className="text-xs font-normal text-muted-foreground ml-1">
+                          ({s.present}/{s.sessions})
+                        </span>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
