@@ -218,6 +218,27 @@ Rollback line + before/after counts required.
   >
   > The **first** entry is the *active* domain — the one new reply addresses are minted on. All
   > entries are accepted on the way in. A single-entry list is the degenerate case and must work.
+
+- **ENVIRONMENT MARKER — required, and it must be checked before anything else.** The local part is
+  `<verb>+<env><token><checksum>` where `<env>` is a single char from `INBOUND_ENV_MARKER`
+  (`l` local · `s` stage · `p` prod). Mint with the local marker; on the way in, **if the marker is
+  not ours: return 200 and write NOTHING — no `emails` row, no dead-letter row, no warn-level log.**
+  Treat it as "addressed to a different environment," not as an error.
+
+  > **Why this is not optional.** Stage and prod share one Resend account and one inbound domain
+  > (free plan = 1 domain), so **both webhook endpoints receive every `email.received` event.** Each
+  > environment then looks up the token in its own database and misses the other's. Without a marker,
+  > stage writes a dead-letter row for every *production* email — capturing a real customer's From
+  > address, subject and `raw_event` into the stage DB. Stage lead data is **not** anonymized
+  > (CLAUDE.md), so this is a genuine prod→stage PII leak, not just noise. Prod would likewise
+  > dead-letter every stage test message.
+  >
+  > The marker check must come **before** the DB lookup and before the dead-letter path, otherwise
+  > the leak still happens via the dead-letter table. Rejecting silently is correct here: a
+  > cross-environment delivery is expected traffic, and logging it would just move the noise.
+  >
+  > Alternatives considered: a second inbound domain per environment (needs the $20/mo Pro plan for
+  > a second domain slot — rejected as unnecessary), and a second Resend account (rejected, §13).
 - `inbound_addresses WHERE token = $1 AND status = 'active'` — `token` is UNIQUE, one index probe,
   and **the row is the authorization**: it carries `tenant_id`, `thread_id`, `user_id`.
 - **Multi-tenant CC:** enqueue one independent event per matched address, each pinned to its own
@@ -235,7 +256,7 @@ Rollback line + before/after counts required.
   token lookup, then **`scopedClientForTenant(tenantId)`** (`src/lib/supabase/scoped.ts:101`) for all
   post-resolution writes, so the tenant filter is structural rather than remembered.
 - New env: `RESEND_INBOUND_WEBHOOK_SECRET`, `INBOUND_EMAIL_DOMAINS`, `INBOUND_TOKEN_SECRET`,
-  `EDGEX_INBOUND_ENABLED`. **Fail-closed on missing secret.** Add all four to `.env.example`
+  `INBOUND_ENV_MARKER` (single char `l`/`s`/`p`), `EDGEX_INBOUND_ENABLED`. **Fail-closed on missing secret.** Add all four to `.env.example`
   (which is also currently missing `INBOX_TOKEN_ENC_KEY`, `EMAIL_REPLY_SYNC_ENABLED`,
   `INTERNAL_CRON_SECRET`, `NEXTAUTH_SECRET` — add those too).
 
@@ -348,7 +369,11 @@ not just the new one. It would also require a second `RESEND_API_KEY` and client
 4. Stage VPS `/home/zunkireelabs/devprojects/lead-gen-crm-dev/.env.local` (read via
    `env_file:` in `docker-compose.yml`, so no rebuild — restart only):
    `INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com`, `INBOUND_TOKEN_SECRET` (32-byte hex,
-   **a different one for prod**), `EDGEX_INBOUND_ENABLED=true`, `RESEND_INBOUND_WEBHOOK_SECRET`.
+   **a different one for prod**), `INBOUND_ENV_MARKER=s`, `EDGEX_INBOUND_ENABLED=true`,
+   `RESEND_INBOUND_WEBHOOK_SECRET`.
+   The webhook URL points at the **stage app** (`dev-lead-crm…`) even though the mail *domain* is
+   `lead-crm…` — the domain is where mail lands, the webhook URL is which app processes it.
+   `lead-crm.zunkireelabs.com` and `edgex.zunkireelabs.com` both serve **production**.
 5. Flip `tenant_email_settings.inbound_enabled = true` for **one tenant only** for the smoke.
 
 **When the Pro plan lands**, add `inbound.edgex.zunkireelabs.com`, put it **first** in
