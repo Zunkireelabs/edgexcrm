@@ -155,12 +155,14 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          RESEND_INBOUND_WEBHOOK_SECRET: ${{ secrets.RESEND_INBOUND_WEBHOOK_SECRET }}
+          INBOUND_TOKEN_SECRET: ${{ secrets.INBOUND_TOKEN_SECRET }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 10m
-          envs: GHCR_USER,GHCR_TOKEN,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,OPENAI_API_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY
+          envs: GHCR_USER,GHCR_TOKEN,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,OPENAI_API_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,RESEND_INBOUND_WEBHOOK_SECRET,INBOUND_TOKEN_SECRET
           script: |
             set -e
             cd /home/zunkireelabs/devprojects/lead-gen-crm
@@ -191,6 +193,31 @@ jobs:
               echo "LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY"
               echo "LANGFUSE_BASE_URL=https://cloud.langfuse.com"
               echo "# --- END AI env ---"
+            } >> .env.local
+            # Native email inbound (docs/email-productionization/INBOUND-SPINE-BRIEF.md)
+            # — idempotent managed block. Shipped DARK: EDGEX_INBOUND_ENABLED=false, so
+            # no Reply-To is minted and the webhook route stays inert on prod. Flip to
+            # true only after the stage smoke passes AND these exist in the `Production`
+            # GitHub environment (they do NOT yet — they render empty until created,
+            # which is harmless while the flag is false):
+            #   RESEND_INBOUND_WEBHOOK_SECRET — from a SECOND Resend webhook endpoint
+            #     pointing at https://edgex.zunkireelabs.com/api/webhooks/email/inbound
+            #     (the free plan limits domains, not endpoints — no Pro upgrade needed)
+            #   INBOUND_TOKEN_SECRET — a DISTINCT value from stage's, never the same one
+            sed -i '/^# --- BEGIN EMAIL INBOUND env (managed by GitHub Actions) ---$/,/^# --- END EMAIL INBOUND env ---$/d' .env.local
+            {
+              echo "# --- BEGIN EMAIL INBOUND env (managed by GitHub Actions) ---"
+              # Comma-separated LIST, never a single value — a retired domain must keep
+              # resolving because its address is baked into already-sent mail forever.
+              echo "INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com"
+              # p = prod. Stage and prod share one Resend account and one inbound domain,
+              # so both webhooks see every event; each ignores the other's marker. Without
+              # this, prod would dead-letter stage's test mail and vice versa.
+              echo "INBOUND_ENV_MARKER=p"
+              echo "INBOUND_TOKEN_SECRET=$INBOUND_TOKEN_SECRET"
+              echo "RESEND_INBOUND_WEBHOOK_SECRET=$RESEND_INBOUND_WEBHOOK_SECRET"
+              echo "EDGEX_INBOUND_ENABLED=false"
+              echo "# --- END EMAIL INBOUND env ---"
             } >> .env.local
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose -f docker-compose.prod.yml pull
