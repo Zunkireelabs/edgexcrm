@@ -77,10 +77,53 @@ function makeThreadsChain(calls: Call[], resolved: { data: unknown[]; error: unk
 interface FakeDbOptions {
   ownAccountIds?: string[];
   threadsResult?: { data: unknown[]; error: unknown };
+  /** Whether shouldLeadBeVisibleToAssignee returns true. Defaults to true. */
+  leadVisible?: boolean;
 }
 
 function fakeDb(opts: FakeDbOptions, threadsCalls: Call[]) {
+  const leadVisible = opts.leadVisible ?? true;
   return {
+    raw() {
+      // Provides the raw SupabaseClient used by shouldLeadBeVisibleToAssignee.
+      // It queries both `leads` (direct assignment) and `lead_branches`
+      // (shared-in membership). We return the appropriate row or null.
+      return {
+        from(table: string) {
+          if (table === "leads") {
+            return {
+              select: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      is: () => ({
+                        maybeSingle: async () => ({
+                          data: leadVisible ? { id: "lead-1" } : null,
+                        }),
+                      }),
+                    }),
+                  }),
+                }),
+              }),
+            };
+          }
+          if (table === "lead_branches") {
+            return {
+              select: () => ({
+                eq: () => ({
+                  eq: () => ({
+                    eq: () => ({
+                      maybeSingle: async () => ({ data: null }),
+                    }),
+                  }),
+                }),
+              }),
+            };
+          }
+          throw new Error(`fakeDb.raw: unexpected table ${table}`);
+        },
+      };
+    },
     from(table: string) {
       if (table === "connected_email_accounts") {
         return {
@@ -108,8 +151,8 @@ beforeEach(() => {
   getFeatureAccessMock.mockReset().mockReturnValue(true);
 });
 
-describe("GET /api/v1/email/threads — no lead_id/contact_id no longer 422s (brief finding 5, bug 1)", () => {
-  it("unrestricted (owner) with neither param: 200, bounded broad scan instead of a validation error", async () => {
+describe("GET /api/v1/email/threads — lead_id/contact_id required", () => {
+  it("no-params request: returns 422 validation error", async () => {
     authenticateRequestMock.mockResolvedValue(authFixture({ permissions: permissions({ leadScope: "all" }) }));
     const calls: Call[] = [];
     scopedClientMock.mockResolvedValue(fakeDb({}, calls));
@@ -117,12 +160,12 @@ describe("GET /api/v1/email/threads — no lead_id/contact_id no longer 422s (br
     const { GET } = await import("./route");
     const res = await GET(fakeReq({}));
 
-    expect(res.status).toBe(200);
-    expect(calls.some((c) => c[0] === "limit" && c[1][0] === 200)).toBe(true);
-    expect(calls.some((c) => c[0] === "eq" && (c[1][0] === "lead_id" || c[1][0] === "contact_id"))).toBe(false);
+    expect(res.status).toBe(422);
+    // Must not have queried email_threads at all
+    expect(calls.some((c) => c[0] === "select")).toBe(false);
   });
 
-  it("lead_id given: filters by it and does not apply the broad-scan limit", async () => {
+  it("lead_id given (unrestricted): filters by it, no validation error", async () => {
     authenticateRequestMock.mockResolvedValue(authFixture({ permissions: permissions({ leadScope: "all" }) }));
     const calls: Call[] = [];
     scopedClientMock.mockResolvedValue(fakeDb({}, calls));
@@ -136,7 +179,56 @@ describe("GET /api/v1/email/threads — no lead_id/contact_id no longer 422s (br
   });
 });
 
-describe("GET /api/v1/email/threads — counselor scoping never excludes NULL-account threads (brief finding 5, bug 2)", () => {
+describe("GET /api/v1/email/threads — counselor lead-visibility gate (§8/§9 invariant)", () => {
+  it("own-scope user requesting a lead they CANNOT see: returns empty array, no thread bodies exposed", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ permissions: permissions({ leadScope: "own" }) }),
+    );
+    const calls: Call[] = [];
+    scopedClientMock.mockResolvedValue(fakeDb({ leadVisible: false, ownAccountIds: ["acct-1"] }, calls));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ lead_id: "lead-1" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual([]);
+    // Must not have reached email_threads at all
+    expect(calls.some((c) => c[0] === "select")).toBe(false);
+  });
+
+  it("own-scope user requesting a lead they CAN see: NULL-account inbound thread IS returned", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ permissions: permissions({ leadScope: "own" }) }),
+    );
+    const calls: Call[] = [];
+    const nullAccountThread = {
+      id: "thread-inbound",
+      connected_email_account_id: null,
+      lead_id: "lead-1",
+      emails: [{ body_html: "<p>hello</p>" }],
+    };
+    scopedClientMock.mockResolvedValue(
+      fakeDb(
+        { leadVisible: true, ownAccountIds: ["acct-1"], threadsResult: { data: [nullAccountThread], error: null } },
+        calls,
+      ),
+    );
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ lead_id: "lead-1" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].connected_email_account_id).toBeNull();
+    // OR filter must include null arm so inbound-only threads are not dropped
+    const orCall = calls.find((c) => c[0] === "or");
+    expect(orCall?.[1][0]).toContain("connected_email_account_id.is.null");
+  });
+});
+
+describe("GET /api/v1/email/threads — counselor scoping never excludes NULL-account threads (§9 step 5)", () => {
   it("counselor with own accounts: uses OR(in-list, is-null) instead of a bare .in() that would hide inbound-only threads", async () => {
     authenticateRequestMock.mockResolvedValue(authFixture({ permissions: permissions({ leadScope: "own" }) }));
     const calls: Call[] = [];
