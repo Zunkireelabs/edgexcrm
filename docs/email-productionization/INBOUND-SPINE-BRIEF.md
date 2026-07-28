@@ -77,7 +77,7 @@ lead and EdgeX never sees it. The Phase-2 `bcc+` dropbox closes this.
 | # | Decision | Why |
 |---|---|---|
 | 1 | **Inbound lands in `email_threads`/`emails`, NOT the Unified Inbox's `messages`** | `messages` has no subject, no HTML body, no from/to/cc arrays, no `rfc_message_id`/`in_reply_to`/`references`. Worse, `conversations` is `UNIQUE (channel_id, external_contact_id)` = one conversation per *person*, but one lead routinely has several concurrent subject threads. Threading fidelity can't be recovered once flattened. Unified Inbox gets a read-only projection in Phase 5. |
-| 2 | **EdgeX-owned inbound domain** `inbound.edgex.zunkireelabs.com` | One MX record we control, works day one, zero tenant DNS. Per-tenant white-label is a Phase 4 upgrade on the same spine. |
+| 2 | **EdgeX-owned inbound domain, supplied as a LIST** (`INBOUND_EMAIL_DOMAINS`) | One MX record we control, works day one, zero tenant DNS. **Starts on `lead-crm.zunkireelabs.com`** — Resend's free plan allows one domain, and that domain already exists, is verified, has an "Enable Receiving" toggle, and currently has **no MX** (verified 2026-07-28), so enabling it is additive and costs $0. Moves to `inbound.edgex.zunkireelabs.com` when the Pro plan lands. **The list is what makes that move non-breaking** — see §8. Per-tenant white-label is a Phase 4 upgrade on the same spine. |
 | 3 | **Stored random tokens + checksum, NOT HMAC-derived tokens** | An HMAC-derived address is baked into every email already sitting in leads' mailboxes forever — rotating the secret breaks every historical reply address, and one leaked address can't be revoked without killing all of them. A stored 144-bit random token is individually revocable, carries `tenant_id` on the row, and survives rotation. The 6-char checksum suffix is only a cheap pre-DB reject for probing traffic. |
 | 4 | **Single-address `Reply-To`** + `receiving.forward(passthrough)` to the rep | Multi-address `Reply-To` is honored inconsistently (Outlook takes the first, some clients ignore it) — replies would reach EdgeX at random. |
 | 5 | **Nothing is ever silently dropped** | Every path ends in an `emails` row or an `inbound_email_dead_letter` row. Closes the `poll/lib.ts:177` gap. Lead auto-create from unknown senders is Phase 2 and opt-in. |
@@ -201,9 +201,23 @@ Rollback line + before/after counts required.
 
 - **Tenant comes from the recipient token and nothing else.** Never `From:`, never a header, never
   the body — SMTP `MAIL FROM`/`From:` are attacker-controlled.
-- Candidates = `to ∪ cc ∪ bcc`. Lowercase, strip display name, require
-  `domain === INBOUND_EMAIL_DOMAIN` **exactly** (not `endsWith` —
-  `inbound.edgex.zunkireelabs.com.evil.com` must not match). Checksum-reject before touching the DB.
+- Candidates = `to ∪ cc ∪ bcc`. Lowercase, strip display name, require the domain to be an
+  **exact, case-insensitive match against one of the entries in `INBOUND_EMAIL_DOMAINS`** (a
+  comma-separated list — see below). Never `endsWith`:
+  `inbound.edgex.zunkireelabs.com.evil.com` must not match. Checksum-reject before touching the DB.
+
+  > **`INBOUND_EMAIL_DOMAINS` is a LIST, not a single domain — this is load-bearing.** The reply
+  > address is baked into every email we have ever sent, permanently. We will migrate inbound
+  > domains at least once (Resend free tier allows one domain, so this starts on
+  > `lead-crm.zunkireelabs.com` and moves to `inbound.edgex.zunkireelabs.com` when the Pro plan
+  > lands). A singular env var would silently break every historical reply address at that moment.
+  > Accepting a list costs two lines now. **Same principle as choosing stored tokens over
+  > HMAC-derived ones (§2.3): anything baked into an already-sent email must survive our future
+  > changes.** Parse: split on comma, trim, lowercase, drop empties. Mail to a retired domain keeps
+  > resolving as long as its MX still points at Resend and it stays in the list.
+  >
+  > The **first** entry is the *active* domain — the one new reply addresses are minted on. All
+  > entries are accepted on the way in. A single-entry list is the degenerate case and must work.
 - `inbound_addresses WHERE token = $1 AND status = 'active'` — `token` is UNIQUE, one index probe,
   and **the row is the authorization**: it carries `tenant_id`, `thread_id`, `user_id`.
 - **Multi-tenant CC:** enqueue one independent event per matched address, each pinned to its own
@@ -220,7 +234,7 @@ Rollback line + before/after counts required.
 - `scopedClient(auth)` does not apply — there is no `AuthContext`. Use `createServiceClient()` for the
   token lookup, then **`scopedClientForTenant(tenantId)`** (`src/lib/supabase/scoped.ts:101`) for all
   post-resolution writes, so the tenant filter is structural rather than remembered.
-- New env: `RESEND_INBOUND_WEBHOOK_SECRET`, `INBOUND_EMAIL_DOMAIN`, `INBOUND_TOKEN_SECRET`,
+- New env: `RESEND_INBOUND_WEBHOOK_SECRET`, `INBOUND_EMAIL_DOMAINS`, `INBOUND_TOKEN_SECRET`,
   `EDGEX_INBOUND_ENABLED`. **Fail-closed on missing secret.** Add all four to `.env.example`
   (which is also currently missing `INBOX_TOKEN_ENC_KEY`, `EMAIL_REPLY_SYNC_ENABLED`,
   `INTERNAL_CRON_SECRET`, `NEXTAUTH_SECRET` — add those too).
@@ -230,7 +244,7 @@ Rollback line + before/after counts required.
 1. **Loop/auto guard FIRST, before any write.** Dead-letter (`auto_submitted`) if:
    `Auto-Submitted` ≠ `no`; `Precedence ∈ {bulk, auto_reply, list}`; `X-Autoreply`/`X-Autorespond`
    present; `List-Id` present; or `From` normalizes to `PLATFORM_EMAIL_ADDRESS`, any
-   `@INBOUND_EMAIL_DOMAIN` address, or any tenant's `from_address`.
+   address on **any** `INBOUND_EMAIL_DOMAINS` entry, or any tenant's `from_address`.
 2. **`verb === 'reply'` with a `thread_id`** → that thread, full stop. Assert
    `thread.tenant_id === event.tenant_id` (defense in depth). This is the authoritative path.
 3. **`In-Reply-To`** → `emails.rfc_message_id = $1 AND tenant_id = $tenant` → `thread_id`.
@@ -304,15 +318,42 @@ repeatable local tests.
 
 Not a code task, but end-to-end verification is blocked until it's done:
 
-1. Add MX for `inbound.edgex.zunkireelabs.com` per Resend's inbound setup. **Use a subdomain** —
-   the apex MX must stay untouched so company Workspace mail is unaffected. Verify apex MX unchanged
-   after the edit.
-2. Enable receiving on that domain in the Resend dashboard; register the webhook endpoint
-   (`https://dev-lead-crm.zunkireelabs.com/api/webhooks/email/inbound` for stage) and capture the
-   signing secret → `RESEND_INBOUND_WEBHOOK_SECRET`.
-3. Set `INBOUND_EMAIL_DOMAIN`, `INBOUND_TOKEN_SECRET` (32-byte hex), `EDGEX_INBOUND_ENABLED=true`
-   on stage.
-4. Flip `tenant_email_settings.inbound_enabled = true` for **one tenant only** for the smoke.
+Not a code task, but end-to-end verification is blocked until it's done.
+
+**Plan chosen 2026-07-28: use the domain we already own, on the free tier.** Resend's free plan
+allows one domain and `lead-crm.zunkireelabs.com` is already it — verified, sending-enabled, and
+its **"Enable Receiving" toggle is off with no MX record on the subdomain** (both verified by `dig`).
+Sending and receiving are independent toggles on the same domain, so no second domain and no Pro
+plan is needed to ship Phase 1. Resend also offers a zero-DNS fallback address
+(`<anything>@<slug>.resend.app`) — fine for a first smoke, but not for mail that reaches real
+leads: an unfamiliar `.resend.app` reply address reads as a phishing artifact.
+
+**Do NOT open a second Resend account to dodge the one-domain limit.** Multiple free accounts used
+to circumvent plan limits risk suspension, and that account carries **production** email (invites,
+lead-assigned, consent, autoresponders, stage rules) — the downside is losing the working feature,
+not just the new one. It would also require a second `RESEND_API_KEY` and client, since
+`getResendClient()` reads exactly one.
+
+1. Resend → Domains → `lead-crm.zunkireelabs.com` → toggle **Enable Receiving** on; copy the MX
+   record it emits.
+2. Hostinger (`ns1/ns2.dns-parking.com`) → DNS for `zunkireelabs.com` → add MX with
+   **Name = `lead-crm`** (Hostinger appends the zone). 🚨 The apex MX is
+   `1 SMTP.GOOGLE.com` = Google Workspace for the whole company. If the Name field is left as `@`,
+   every company mailbox stops receiving mail. Confirm with
+   `dig +short MX zunkireelabs.com` afterwards — it must still read `1 SMTP.GOOGLE.com.`
+3. Resend → Webhooks → add endpoint `https://dev-lead-crm.zunkireelabs.com/api/webhooks/email/inbound`,
+   event `email.received`; capture the signing secret → `RESEND_INBOUND_WEBHOOK_SECRET`.
+   (Safe to create before the code deploys — deliveries 404 and retry; Resend stores the mail either
+   way and `receiving.list()` can replay real payloads into local tests.)
+4. Stage VPS `/home/zunkireelabs/devprojects/lead-gen-crm-dev/.env.local` (read via
+   `env_file:` in `docker-compose.yml`, so no rebuild — restart only):
+   `INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com`, `INBOUND_TOKEN_SECRET` (32-byte hex,
+   **a different one for prod**), `EDGEX_INBOUND_ENABLED=true`, `RESEND_INBOUND_WEBHOOK_SECRET`.
+5. Flip `tenant_email_settings.inbound_enabled = true` for **one tenant only** for the smoke.
+
+**When the Pro plan lands**, add `inbound.edgex.zunkireelabs.com`, put it **first** in
+`INBOUND_EMAIL_DOMAINS`, and keep `lead-crm.zunkireelabs.com` in the list with its MX intact —
+new addresses mint on the new domain, every historical reply address keeps resolving.
 
 ## 14. Stage smoke (after merge + deploy)
 
