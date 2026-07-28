@@ -1,12 +1,6 @@
 import { authenticateRequest } from "@/lib/api/auth";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
-import {
-  apiUnauthorized,
-  apiForbidden,
-  apiSuccess,
-  apiInternalError,
-  apiValidationError,
-} from "@/lib/api/response";
+import { apiUnauthorized, apiForbidden, apiSuccess, apiInternalError } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -19,9 +13,6 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const leadId = url.searchParams.get("lead_id");
   const contactId = url.searchParams.get("contact_id");
-  if (!leadId && !contactId) {
-    return apiValidationError({ query: ["lead_id or contact_id required"] });
-  }
 
   const db = await scopedClient(auth);
 
@@ -33,9 +24,6 @@ export async function GET(request: Request) {
       .select("id")
       .eq("user_id", auth.userId);
     ownAccountIds = ((ownAccounts ?? []) as unknown as { id: string }[]).map((a) => a.id);
-    if (ownAccountIds.length === 0) {
-      return apiSuccess([]);
-    }
   }
 
   // Return threads with embedded messages (PostgREST embed via FK emails.thread_id → email_threads.id)
@@ -48,9 +36,24 @@ export async function GET(request: Request) {
 
   if (leadId) query = query.eq("lead_id", leadId);
   if (contactId) query = query.eq("contact_id", contactId);
+  // Neither param: list broadly instead of 422ing (still scoped below). An
+  // inbound-only thread that never resolved to a lead/contact (brief §9 step
+  // 5: zero/multiple identity matches -> lead_id = NULL) has no other query
+  // shape that could ever surface it — bounded since this is a wider scan.
+  if (!leadId && !contactId) query = query.limit(200);
 
   if (ownAccountIds !== null) {
-    query = query.in("connected_email_account_id", ownAccountIds);
+    // Counselor scoping must never exclude NULL-account (inbound-only)
+    // threads — those aren't tied to any connected Gmail account at all, so
+    // filtering by connected_email_account_id alone would hide them even
+    // when the thread's lead IS one the counselor can see (brief finding 5).
+    // An empty allow-list also can't use `.in(...)` — an empty array there
+    // matches zero rows outright (the same footgun tracked elsewhere in this
+    // codebase for allow-list filters) — fall back to NULL-only in that case.
+    query =
+      ownAccountIds.length > 0
+        ? query.or(`connected_email_account_id.in.(${ownAccountIds.join(",")}),connected_email_account_id.is.null`)
+        : query.is("connected_email_account_id", null);
   }
 
   const { data, error } = await query;
