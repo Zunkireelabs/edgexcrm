@@ -23,7 +23,7 @@ export interface EmailThreadRow {
   connected_email_account_id: string | null;
 }
 
-const THREAD_COLUMNS =
+export const THREAD_COLUMNS =
   "id, message_count, tenant_id, lead_id, contact_id, gmail_thread_id, connected_email_account_id";
 
 export interface MatchThreadParams {

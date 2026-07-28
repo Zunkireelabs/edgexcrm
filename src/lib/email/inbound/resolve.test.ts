@@ -40,7 +40,8 @@ import { resolveInboundRecipients } from "./resolve";
 
 beforeEach(() => {
   process.env.INBOUND_TOKEN_SECRET = "a".repeat(64);
-  process.env.INBOUND_EMAIL_DOMAIN = DOMAIN;
+  process.env.INBOUND_EMAIL_DOMAINS = DOMAIN;
+  process.env.INBOUND_ENV_MARKER = "l";
   dbRows = [];
   rateLimitMock.mockReset();
   rateLimitMock.mockResolvedValue({ allowed: true, remaining: 1, limit: 1, resetAt: 0, retryAfterSeconds: 0 });
@@ -147,5 +148,40 @@ describe("resolveInboundRecipients", () => {
 
     expect(result.matches).toEqual([]);
     expect(result.hadCandidateButNoMatch).toBe(true);
+  });
+
+  it("cross-environment delivery (right domain, sibling env marker): silently ignored, never hadCandidateButNoMatch", async () => {
+    process.env.INBOUND_ENV_MARKER = "s"; // mint as stage
+    const mintedOnStage = mintToken("reply");
+    dbRows = [
+      { id: "addr-1", tenant_id: "tenant-a", kind: "thread", verb: "reply", token: mintedOnStage.token, thread_id: "thread-1", user_id: null, status: "active" },
+    ];
+
+    process.env.INBOUND_ENV_MARKER = "p"; // now resolve as prod — this env's webhook received stage's mail
+    const result = await resolveInboundRecipients({ to: [mintedOnStage.address], cc: [], bcc: [] });
+
+    // Not just zero matches — hadCandidateButNoMatch must stay false so the
+    // caller never writes a dead-letter row (brief §8: PII leak prevention).
+    expect(result).toEqual({ matches: [], hadCandidateButNoMatch: false });
+  });
+
+  it("resolves a candidate addressed to a non-first entry of a multi-domain INBOUND_EMAIL_DOMAINS list", async () => {
+    const OTHER_DOMAIN = "lead-crm.zunkireelabs.com";
+    process.env.INBOUND_EMAIL_DOMAINS = `${OTHER_DOMAIN},${DOMAIN}`;
+
+    const minted = mintToken("reply"); // mints on OTHER_DOMAIN (first/active entry)
+    expect(minted.address.endsWith(`@${OTHER_DOMAIN}`)).toBe(true);
+
+    // A historical reply address on the retired-but-still-listed DOMAIN must still resolve.
+    const historicalAddress = `${minted.localPart}@${DOMAIN}`;
+    dbRows = [
+      { id: "addr-1", tenant_id: "tenant-a", kind: "thread", verb: "reply", token: minted.token, thread_id: "thread-1", user_id: null, status: "active" },
+    ];
+
+    const result = await resolveInboundRecipients({ to: [historicalAddress], cc: [], bcc: [] });
+
+    expect(result.matches).toEqual([
+      { id: "addr-1", tenantId: "tenant-a", kind: "thread", verb: "reply", token: minted.token, threadId: "thread-1", userId: null },
+    ]);
   });
 });
