@@ -4,72 +4,9 @@ import { logger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
 import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
 import { listHistory, getMessage, createOAuth2Client, refreshAccessTokenIfNeeded } from "@/industries/_shared/features/email/lib/gmail-client";
-import type { ParsedMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import type { ConnectedEmailAccount } from "@/types/database";
-
-interface EmailThread {
-  id: string;
-  message_count: number;
-  tenant_id: string;
-  lead_id: string | null;
-  contact_id: string | null;
-  gmail_thread_id: string;
-  connected_email_account_id: string;
-}
-
-async function matchInboundToThread(
-  supabase: SupabaseClient,
-  account: ConnectedEmailAccount,
-  parsed: ParsedMessage,
-): Promise<EmailThread | null> {
-  // Primary: match by Gmail threadId (exact for Gmail-to-Gmail)
-  const { data: byThreadId } = await supabase
-    .from("email_threads")
-    .select("id, message_count, tenant_id, lead_id, contact_id, gmail_thread_id, connected_email_account_id")
-    .eq("connected_email_account_id", account.id)
-    .eq("gmail_thread_id", parsed.gmail_thread_id)
-    .maybeSingle();
-  if (byThreadId) return byThreadId as EmailThread;
-
-  // Fallback 1: RFC In-Reply-To header (vendor-independent)
-  if (parsed.in_reply_to) {
-    const { data: parentEmail } = await supabase
-      .from("emails")
-      .select("thread_id")
-      .eq("rfc_message_id", parsed.in_reply_to)
-      .eq("connected_email_account_id", account.id)
-      .maybeSingle();
-    if (parentEmail) {
-      const { data: thread } = await supabase
-        .from("email_threads")
-        .select("id, message_count, tenant_id, lead_id, contact_id, gmail_thread_id, connected_email_account_id")
-        .eq("id", parentEmail.thread_id)
-        .maybeSingle();
-      if (thread) return thread as EmailThread;
-    }
-  }
-
-  // Fallback 2: References chain (most recent first — last item is most specific)
-  for (const refId of [...parsed.references].reverse()) {
-    const { data: parentEmail } = await supabase
-      .from("emails")
-      .select("thread_id")
-      .eq("rfc_message_id", refId)
-      .eq("connected_email_account_id", account.id)
-      .maybeSingle();
-    if (parentEmail) {
-      const { data: thread } = await supabase
-        .from("email_threads")
-        .select("id, message_count, tenant_id, lead_id, contact_id, gmail_thread_id, connected_email_account_id")
-        .eq("id", parentEmail.thread_id)
-        .maybeSingle();
-      if (thread) return thread as EmailThread;
-    }
-  }
-
-  return null;
-}
+import { matchInboundToThread } from "@/lib/email/inbound/match-thread";
 
 export async function pollOneAccount(
   supabase: SupabaseClient,
@@ -173,7 +110,13 @@ export async function pollOneAccount(
         // Skip messages we sent — Gmail's history surfaces our outbound as messageAdded too
         if (parsed.from_email.toLowerCase() === account.email.toLowerCase()) continue;
 
-        const thread = await matchInboundToThread(supabase, account, parsed);
+        const thread = await matchInboundToThread(supabase, {
+          tenantId: account.tenant_id,
+          accountId: account.id,
+          gmailThreadId: parsed.gmail_thread_id,
+          inReplyTo: parsed.in_reply_to,
+          references: parsed.references,
+        });
         if (!thread) continue; // orphan — silently drop
 
         // Persist inbound email row

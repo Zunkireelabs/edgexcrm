@@ -39,6 +39,14 @@ export const EMAIL_SEND_LIMIT: RateLimitConfig = {
   windowMs: 300_000, // 5 minutes — keyed by userId (manual compose/send abuse guard)
 };
 
+// Inbound email spine (brief §8): keyed "inbound_addr:<token>" — bounds the blast
+// radius of a leaked reply-token address (a lead forwards your email onward).
+// Per-token, not per-tenant/IP, since the token itself is the thing being probed.
+export const INBOUND_TOKEN_LIMIT: RateLimitConfig = {
+  maxRequests: 30,
+  windowMs: 60_000, // 1 minute
+};
+
 // Phase 5 slice 5.5: keyed "mcp:<integrationKeyId>" — the key, not the IP, since
 // an external MCP client host has one stable identity but potentially many
 // egress IPs. MAX_WRITE_ATTEMPTS_PER_RUN (write-executor.ts) never binds for
