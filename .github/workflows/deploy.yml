@@ -227,7 +227,20 @@ jobs:
             sleep 10
             for i in $(seq 1 18); do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' leads-crm 2>/dev/null || echo "unknown")
-              if [ "$STATUS" = "healthy" ]; then echo "Container is healthy!"; exit 0; fi
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Container is healthy!"
+                # Inngest sync — see the matching block in deploy-staging.yml. A new
+                # function, or a changed cron/event trigger, stays unregistered (and its
+                # cron never fires) until the serve endpoint is PUT to.
+                # docs/reference/03-INNGEST-BACKGROUND-JOBS.md § "Deploy & sync" had this
+                # as a manual step; it was missed on stage for ops-email-inbound-process
+                # and would have been missed identically here.
+                # Idempotent, and non-fatal so a sync hiccup cannot misreport a good deploy.
+                curl -fsS -X PUT https://edgex.zunkireelabs.com/api/inngest \
+                  && echo "Inngest sync OK" \
+                  || echo "::warning::Inngest sync FAILED — run: curl -X PUT https://edgex.zunkireelabs.com/api/inngest"
+                exit 0
+              fi
               echo "Attempt $i/18: Status is $STATUS, waiting..."
               sleep 10
             done
