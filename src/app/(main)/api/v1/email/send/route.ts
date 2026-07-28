@@ -22,6 +22,7 @@ import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import { mintToken } from "@/lib/email/inbound/tokens";
+import { sanitizeHeaderName } from "@/lib/email/header-name";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
@@ -194,7 +195,7 @@ export async function POST(request: Request) {
   // this feature existed. Outbound send must never regress because inbound
   // infra is misconfigured, so wiring failures are logged and swallowed
   // here rather than failing the whole request.
-  let replyTo: string | undefined;
+  let replyTo: string | { name: string; address: string } | undefined;
   let provisionalThreadId: string | null = null; // only set if THIS request created it
   let mintedAddressId: string | null = null;
 
@@ -202,8 +203,8 @@ export async function POST(request: Request) {
     try {
       const { data: settings } = await db
         .from("tenant_email_settings")
-        .select("inbound_enabled")
-        .maybeSingle<{ inbound_enabled: boolean }>();
+        .select("inbound_enabled, from_name")
+        .maybeSingle<{ inbound_enabled: boolean; from_name: string | null }>();
 
       if (settings?.inbound_enabled) {
         let targetThreadId = thread?.id ?? null;
@@ -247,7 +248,26 @@ export async function POST(request: Request) {
         }
 
         mintedAddressId = addrRow.id;
-        replyTo = minted.address;
+
+        // A brand-name lookup failing must never undo the token/thread that
+        // were just minted above — degrade to the bare address on any error
+        // instead of letting it fall into the outer catch's full rollback.
+        let tenantName: string | null = null;
+        try {
+          if (!settings.from_name) {
+            const { data: tenantRow } = await db
+              .raw()
+              .from("tenants")
+              .select("name")
+              .eq("id", auth.tenantId)
+              .maybeSingle<{ name: string }>();
+            tenantName = tenantRow?.name ?? null;
+          }
+        } catch (nameErr) {
+          logger.warn({ nameErr }, "Tenant brand-name lookup failed — using bare Reply-To address");
+        }
+        const brand = sanitizeHeaderName(settings.from_name || tenantName || "");
+        replyTo = brand ? { name: brand, address: minted.address } : minted.address;
       }
     } catch (err) {
       logger.error(
