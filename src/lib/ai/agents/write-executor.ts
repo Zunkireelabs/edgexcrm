@@ -1,4 +1,5 @@
 import { tool, type ToolSet } from "ai";
+import type { Logger } from "pino";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { AgentTool } from "@/lib/ai/tools/types";
 import { logger } from "@/lib/logger";
@@ -73,6 +74,39 @@ export interface ProposeAgentWriteParams {
   subjectId: string | null;
   /** Write attempts already drafted earlier in this same run — 0 for MCP (D5: one agent_runs row per tools/call, so this never accumulates there). */
   attemptsSoFar: number;
+  /** AgentTool.agentSuppressedInputFields for this tool — stripped from `input` before it's persisted. */
+  agentSuppressedInputFields?: string[];
+}
+
+/**
+ * Removes agent-suppressed fields (e.g. create_task's assigneeId — see
+ * BRIEF-6-4-AGENT-SUPPRESSED-INPUT-FIELDS.md) from a write proposal's input
+ * before it's persisted. A prompt-only fix ("never pass assigneeId") made
+ * the model invent one MORE often, not less — negated instructions raise a
+ * field's salience instead of suppressing it. Structural removal is the only
+ * thing that can't be talked past. Returns `input` unchanged (same
+ * reference) when there's nothing to strip, so an undeclared tool's payload
+ * is byte-identical to what it received.
+ */
+function stripAgentSuppressedFields(
+  input: unknown,
+  fields: string[] | undefined,
+  log: Logger,
+  toolCallId: string,
+): unknown {
+  if (!fields || fields.length === 0) return input;
+  if (typeof input !== "object" || input === null) return input;
+
+  const record = input as Record<string, unknown>;
+  let sanitized: Record<string, unknown> | null = null;
+  for (const field of fields) {
+    if (field in record) {
+      sanitized ??= { ...record };
+      delete sanitized[field];
+      log.info({ toolCallId, field }, "stripped agent-suppressed input field before persisting write proposal");
+    }
+  }
+  return sanitized ?? input;
 }
 
 export type ProposeAgentWriteResult =
@@ -97,7 +131,8 @@ export type ProposeAgentWriteResult =
  * the background-agent closure that accumulates it across a run's tool loop).
  */
 export async function proposeAgentWrite(params: ProposeAgentWriteParams): Promise<ProposeAgentWriteResult> {
-  const { db, tenantId, agentId, runId, toolId, input, toolCallId, subjectType, subjectId, attemptsSoFar } = params;
+  const { db, tenantId, agentId, runId, toolId, input, toolCallId, subjectType, subjectId, attemptsSoFar, agentSuppressedInputFields } =
+    params;
   const idempotencyKey = deriveWriteIdempotencyKey(runId, toolCallId);
   const log = logger.child({ tool: toolId, runId, agentId, tenantId });
 
@@ -118,6 +153,7 @@ export async function proposeAgentWrite(params: ProposeAgentWriteParams): Promis
   }
 
   const level: AutomationLevel = await resolveAutomationLevel({ db, tenantId, agentId, toolId });
+  const sanitizedInput = stripAgentSuppressedFields(input, agentSuppressedInputFields, log, toolCallId);
 
   const { error } = await db.from("agent_outputs").insert({
     run_id: runId,
@@ -125,7 +161,7 @@ export async function proposeAgentWrite(params: ProposeAgentWriteParams): Promis
     kind: "write_action_proposal",
     subject_type: subjectType,
     subject_id: subjectId,
-    payload: { tool_id: toolId, input, idempotency_key: idempotencyKey, automation_level: level },
+    payload: { tool_id: toolId, input: sanitizedInput, idempotency_key: idempotencyKey, automation_level: level },
     status: "proposed",
   });
   if (error) throw new Error(`Failed to record write-action proposal: ${error.message}`);
@@ -187,6 +223,7 @@ export function buildPolicyEnforcedWriteTools(writeTools: AgentTool[], params: P
           subjectType,
           subjectId,
           attemptsSoFar: attemptsThisRun - 1,
+          agentSuppressedInputFields: agentTool.agentSuppressedInputFields,
         });
         if (!("proposed" in result) || !result.proposed) attemptsThisRun--; // release on replay / cap / error
         // `proposed` is internal bookkeeping for this wrapper — never send it to the model.

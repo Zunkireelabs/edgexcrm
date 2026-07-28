@@ -5,6 +5,15 @@ import { Plus, Loader2, MoreHorizontal, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +45,9 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
+  const [markPaidTarget, setMarkPaidTarget] = useState<Enrollment | null>(null);
+  const [feeAmountInput, setFeeAmountInput] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   const fetchEnrollments = useCallback(async () => {
     try {
@@ -54,17 +66,45 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
   }, [fetchEnrollments]);
 
   async function handleToggleFeePaid(enrollment: Enrollment) {
+    if (!enrollment.fee_paid) {
+      // Marking paid — collect the amount instead of PATCHing blind.
+      setFeeAmountInput(enrollment.fee_amount != null ? String(enrollment.fee_amount) : (enrollment.classes?.default_fee != null ? String(enrollment.classes.default_fee) : ""));
+      setMarkPaidTarget(enrollment);
+      return;
+    }
     try {
       const res = await fetch(`/api/v1/class-enrollments/${enrollment.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fee_paid: !enrollment.fee_paid }),
+        body: JSON.stringify({ fee_paid: false }),
       });
       if (!res.ok) throw new Error("Failed to update");
-      toast.success(enrollment.fee_paid ? "Marked unpaid" : "Marked paid");
+      toast.success("Marked unpaid");
       fetchEnrollments();
     } catch {
       toast.error("Failed to update enrollment");
+    }
+  }
+
+  async function handleConfirmMarkPaid() {
+    if (!markPaidTarget) return;
+    setSubmitting(true);
+    try {
+      const body: Record<string, unknown> = { fee_paid: true };
+      if (feeAmountInput.trim()) body.fee_amount = Number(feeAmountInput);
+      const res = await fetch(`/api/v1/class-enrollments/${markPaidTarget.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      toast.success("Marked paid");
+      setMarkPaidTarget(null);
+      fetchEnrollments();
+    } catch {
+      toast.error("Failed to update enrollment");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -182,6 +222,35 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
           fetchEnrollments();
         }}
       />
+
+      <Dialog open={!!markPaidTarget} onOpenChange={(open) => !open && setMarkPaidTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mark as paid</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-1.5 py-2">
+            <Label className="text-xs text-gray-600">Amount</Label>
+            <Input
+              type="number"
+              min="0"
+              step="0.01"
+              value={feeAmountInput}
+              onChange={(e) => setFeeAmountInput(e.target.value)}
+              placeholder="0.00"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarkPaidTarget(null)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmMarkPaid} disabled={submitting}>
+              {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Mark paid
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

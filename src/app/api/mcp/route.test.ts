@@ -470,6 +470,21 @@ describe("POST /api/mcp — behavior", () => {
     expect(runsUpdated[0]).toMatchObject({ status: "failed" });
   });
 
+  it("write call: a model-supplied assigneeId is stripped from the persisted proposal (agentSuppressedInputFields threaded through to proposeAgentWrite, 6.4b)", async () => {
+    resolveAutomationLevelMock.mockResolvedValue("human_led");
+    const proposals: Record<string, unknown>[] = [];
+    scopedClientForTenantMock.mockImplementation(async () => fakeDb({ leadRow: LEAD_ROW, agentOutputsInsert: (row) => proposals.push(row) }));
+
+    const assigneeId = "22222222-2222-4222-8222-222222222222";
+    const res = await POST(mcpRequest(toolsCallBody("create_task", { title: "Follow up", assigneeId })));
+    const body = await res.json();
+
+    expect(body.result.isError).toBeUndefined();
+    expect(proposals).toHaveLength(1);
+    const payload = proposals[0].payload as { input: Record<string, unknown> };
+    expect(payload.input).not.toHaveProperty("assigneeId");
+  });
+
   it("invalid tool input: JSON-RPC error (isError:true), no agent_runs row created at all", async () => {
     const runsInserted: Record<string, unknown>[] = [];
     scopedClientForTenantMock.mockImplementation(async () => fakeDb({ leadRow: LEAD_ROW, agentRunsInsert: (row) => runsInserted.push(row) }));

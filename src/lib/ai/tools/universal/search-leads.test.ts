@@ -7,7 +7,7 @@ import type { ToolContext } from "../types";
 
 type Row = Record<string, unknown>;
 
-function makeLeadsChain(rows: Row[], orCalls: string[]) {
+function makeLeadsChain(rows: Row[], orCalls: string[], neqCalls: Array<[string, unknown]> = []) {
   const chain: Record<string, unknown> = {
     select: () => chain,
     eq: () => chain,
@@ -16,21 +16,31 @@ function makeLeadsChain(rows: Row[], orCalls: string[]) {
     in: () => chain,
     gte: () => chain,
     lte: () => chain,
+    neq: (col: string, val: unknown) => {
+      neqCalls.push([col, val]);
+      return chain;
+    },
     or: (expr: string) => {
       orCalls.push(expr);
       return chain;
     },
     order: () => chain,
     limit: () => chain,
-    then: (resolve: (v: { data: Row[]; error: null; count: number }) => unknown) =>
-      Promise.resolve({ data: rows, error: null, count: rows.length }).then(resolve),
+    then: (resolve: (v: { data: Row[]; error: null; count: number }) => unknown) => {
+      // Mirrors a real PostgREST count: rows already reflect every filter
+      // chained above (including neq), so the count doesn't need separate
+      // bookkeeping — it's derived from the same filtered set.
+      const excludedId = neqCalls.find(([col]) => col === "id")?.[1];
+      const filtered = excludedId != null ? rows.filter((r) => r.id !== excludedId) : rows;
+      return Promise.resolve({ data: filtered, error: null, count: filtered.length }).then(resolve);
+    },
   };
   return chain;
 }
 
-function fakeDb(rows: Row[], orCalls: string[]): ScopedClient {
+function fakeDb(rows: Row[], orCalls: string[], neqCalls: Array<[string, unknown]> = []): ScopedClient {
   return {
-    from: () => makeLeadsChain(rows, orCalls),
+    from: () => makeLeadsChain(rows, orCalls, neqCalls),
     fromGlobal: () => {
       throw new Error("not used in this test");
     },
@@ -58,8 +68,14 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
   };
 }
 
-function fixtureCtx(db: ScopedClient): ToolContext {
-  return { db, auth: fixtureAuth(), logger: { child: () => ({}) } as unknown as ToolContext["logger"], runId: "run-1" };
+function fixtureCtx(db: ScopedClient, overrides: Partial<ToolContext> = {}): ToolContext {
+  return {
+    db,
+    auth: fixtureAuth(),
+    logger: { child: () => ({}) } as unknown as ToolContext["logger"],
+    runId: "run-1",
+    ...overrides,
+  };
 }
 
 const SARAH_ROW = { id: "lead-1", first_name: "Sarah", last_name: "Chen" };
@@ -129,6 +145,66 @@ describe("search_leads display id matching", () => {
       "display_id.ilike.ADM-009",
       "first_name.ilike.%Sharma%,last_name.ilike.%Sharma%,email.ilike.%Sharma%,phone.ilike.%Sharma%",
     ]);
+  });
+});
+
+describe("search_leads — subject self-exclusion (6.3)", () => {
+  it("excludes the run's own subject lead from results and from the count when subjectType is 'lead'", async () => {
+    const orCalls: string[] = [];
+    const neqCalls: Array<[string, unknown]> = [];
+    const OTHER_ROW = { id: "lead-2", first_name: "Priya", last_name: "Rao" };
+    const db = fakeDb([SARAH_ROW, OTHER_ROW], orCalls, neqCalls);
+    const ctx = fixtureCtx(db, { subjectType: "lead", subjectId: "lead-1" });
+
+    const result = (await searchLeadsTool.execute(ctx, { limit: 20 })) as { total: number; leads: Array<{ id: string }> };
+
+    expect(neqCalls).toEqual([["id", "lead-1"]]);
+    expect(result.leads.map((l) => l.id)).toEqual(["lead-2"]);
+    expect(result.total).toBe(1);
+  });
+
+  it("emits no neq filter on the interactive chat path (no subject)", async () => {
+    const orCalls: string[] = [];
+    const neqCalls: Array<[string, unknown]> = [];
+    const db = fakeDb([SARAH_ROW], orCalls, neqCalls);
+    const ctx = fixtureCtx(db);
+
+    await searchLeadsTool.execute(ctx, { limit: 20 });
+
+    expect(neqCalls).toEqual([]);
+  });
+
+  it("emits no neq filter for a non-lead subject type", async () => {
+    const orCalls: string[] = [];
+    const neqCalls: Array<[string, unknown]> = [];
+    const db = fakeDb([SARAH_ROW], orCalls, neqCalls);
+    const ctx = fixtureCtx(db, { subjectType: "deal", subjectId: "deal-1" });
+
+    await searchLeadsTool.execute(ctx, { limit: 20 });
+
+    expect(neqCalls).toEqual([]);
+  });
+
+  it("emits no neq filter when subjectId is an empty string", async () => {
+    const orCalls: string[] = [];
+    const neqCalls: Array<[string, unknown]> = [];
+    const db = fakeDb([SARAH_ROW], orCalls, neqCalls);
+    const ctx = fixtureCtx(db, { subjectType: "lead", subjectId: "" });
+
+    await searchLeadsTool.execute(ctx, { limit: 20 });
+
+    expect(neqCalls).toEqual([]);
+  });
+
+  it("emits no neq filter when subjectId is null", async () => {
+    const orCalls: string[] = [];
+    const neqCalls: Array<[string, unknown]> = [];
+    const db = fakeDb([SARAH_ROW], orCalls, neqCalls);
+    const ctx = fixtureCtx(db, { subjectType: "lead", subjectId: null });
+
+    await searchLeadsTool.execute(ctx, { limit: 20 });
+
+    expect(neqCalls).toEqual([]);
   });
 });
 

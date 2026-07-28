@@ -13,6 +13,8 @@ export interface ToolContext {
   runId: string; // correlates audit rows + telemetry trace
   conversationId?: string; // ai_conversations.id, when known — recorded on ai_write_actions rows (mig 173)
   toolCallId?: string; // set only for scope:"write" tools (Phase 4C) — the SDK's per-call id, known at execute time unlike ai_write_actions.id
+  subjectType?: string | null; // the run's trigger subject (e.g. "lead") — absent on the interactive chat + MCP paths, which have no subject
+  subjectId?: string | null; // the run's trigger subject id — comes from the trigger, never model input (same "no spoofing" rule as draft-tools.ts)
 }
 
 /** Boolean grant keys of ResolvedPermissions ("canManageHR", "canExport", ...). */
@@ -27,5 +29,8 @@ export interface AgentTool<In = unknown, Out = unknown> {
   scope: "read" | "write"; // "write" tools are excluded from buildToolset() unless AI_WRITE_TOOLS_ENABLED=true (Phase 4A)
   requiredPermission?: ToolPermissionKey; // boolean grant checked against auth.permissions before inclusion
   industries?: IndustryId[]; // undefined = universal
+  /** Input fields an AGENT run may never supply — stripped before the proposal is persisted.
+   *  The interactive chat path is unaffected: a user can legitimately name an assignee. */
+  agentSuppressedInputFields?: string[];
   execute(ctx: ToolContext, input: In): Promise<Out>;
 }

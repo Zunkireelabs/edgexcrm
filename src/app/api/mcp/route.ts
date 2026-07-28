@@ -207,6 +207,7 @@ export async function POST(request: Request): Promise<Response> {
                   // Always 0: D5 gives every tools/call its own fresh run, so
                   // the per-run write-attempt counter never accumulates here.
                   attemptsSoFar: 0,
+                  agentSuppressedInputFields: agentTool.agentSuppressedInputFields,
                 });
 
                 if ("error" in proposeResult) {

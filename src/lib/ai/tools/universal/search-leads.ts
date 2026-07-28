@@ -40,6 +40,8 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
   description:
     "Search the tenant's leads by name/email/phone, stage, list, assignee, or creation date range. " +
     "Results are automatically scoped to what the current user can see (own leads / branch / all). " +
+    "During a Lead Triage run, results exclude the lead currently being triaged — a matching name/email/phone " +
+    "in the results is always a genuinely different lead, never the one you're triaging. " +
     "Use this before answering any question about specific leads or counts of leads matching a filter.",
   inputSchema,
   scope: "read",
@@ -81,6 +83,15 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
       .is("deleted_at", null)
       .is("converted_at", null)
       .not("tags", "cs", '{"other"}');
+
+    // The run's own subject never belongs in its own search results — the
+    // model must never be trusted to exclude itself (same principle as
+    // draft-tools.ts's subject-id handling: it comes from the trigger, not
+    // model input). Only applies to an agent run triaging a lead; the
+    // interactive chat and MCP paths have no subject and are unaffected.
+    if (ctx.subjectType === "lead" && ctx.subjectId) {
+      query = query.neq("id", ctx.subjectId);
+    }
 
     if (resolvedListId) {
       query = query.eq("list_id", resolvedListId);
