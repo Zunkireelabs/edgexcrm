@@ -275,9 +275,12 @@ npm run dev          # Dev server (localhost:3000)
 npm run build        # Production build — always run before pushing
 npm run lint         # ESLint (next/core-web-vitals + typescript)
 npm run start        # Start production server
+npm run test         # vitest run — unit/integration test suite
 ```
 
-No test runner is configured. Path alias: `@/*` maps to `./src/*`.
+Vitest is configured (`vitest.config.ts`, `src/**/*.test.ts`) — a full unit/integration suite exists
+(950+ tests as of 2026-07-28). `npm run test` runs it; CI (`Test`) is a required blocking check on
+`main`+`stage` (see `docs/dev-collab/DEV-WORKFLOW-AND-DEPLOYMENT.md`). Path alias: `@/*` maps to `./src/*`.
 
 ---
 

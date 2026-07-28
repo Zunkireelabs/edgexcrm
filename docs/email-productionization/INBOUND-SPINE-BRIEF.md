@@ -394,6 +394,7 @@ confirm all four:
 - [ ] `191_inbound_email_spine.sql` written (**NOT applied**), RLS correct, partial unique recreated.
 - [ ] Token codec is stored-random + checksum (not HMAC-derived), with hostile-input tests.
 - [ ] Tenant resolution reads **only** the recipient token; exact-domain match; cross-tenant negative test passes.
+- [ ] `INBOUND_ENV_MARKER` checked before the DB lookup and before the dead-letter path; a cross-environment address (right domain, sibling marker) is a silent 200 no-op — zero `events` rows, zero `inbound_email_dead_letter` rows — proven end to end through the real webhook route, not just at the tokens.ts/resolve.ts unit level.
 - [ ] Every inbound path terminates in an `emails` row or a dead-letter row — nothing silently dropped.
 - [ ] Loop guard runs before any write.
 - [ ] `send/route.ts` inverted with a provisional-thread-cleanup-on-failure test; flag-off path behaves exactly as today.
