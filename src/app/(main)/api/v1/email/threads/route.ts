@@ -33,6 +33,18 @@ export async function GET(request: Request) {
     if (!visible) return apiSuccess([]);
   }
 
+  // Same gate for the contact_id path (it_agency contacts, not leads) — without this,
+  // a self-restricted user could request another user's contact and still get its
+  // threads back via the own-account/NULL-account filter below.
+  if (shouldRestrictToSelf(auth.permissions) && contactId) {
+    const { data: contact } = (await db
+      .from("contacts")
+      .select("assigned_to")
+      .eq("id", contactId)
+      .maybeSingle()) as { data: { assigned_to: string | null } | null };
+    if (!contact || contact.assigned_to !== auth.userId) return apiSuccess([]);
+  }
+
   // Return threads with embedded messages (PostgREST embed via FK emails.thread_id → email_threads.id)
   let query = db
     .from("email_threads")
