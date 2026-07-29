@@ -5,6 +5,7 @@ import { heartbeat } from "@/lib/inngest/functions/heartbeat";
 import { remindersScan } from "@/lib/inngest/functions/reminders";
 import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
+import { emailInboundProcess } from "@/lib/inngest/functions/email-inbound-process";
 import { displayIdBackfillSweep } from "@/lib/inngest/functions/display-id-backfill-sweep";
 import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 import { agentFollowUpDrafter } from "@/lib/inngest/functions/agent-follow-up-drafter";
@@ -19,6 +20,7 @@ export const { GET, POST, PUT } = serve({
     remindersScan,
     inboxProcess,
     emailPoll,
+    emailInboundProcess,
     displayIdBackfillSweep,
     agentLeadTriage,
     agentFollowUpDrafter,

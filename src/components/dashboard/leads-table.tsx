@@ -77,6 +77,7 @@ import { loadColumnPrefs, saveColumnPrefs, clearColumnPrefs } from "@/lib/leads/
 import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/stage-assignee-positions";
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
+import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -181,10 +182,7 @@ const MIN_COLUMN_WIDTH = 60;
 // custom_fields keys were different forms' names for the same "study destination"
 // question. Still present in old leads' custom_fields (data, not schema), but no
 // longer worth surfacing as separate pickable columns now that the real column exists.
-const LEGACY_DESTINATION_KEYS = new Set([
-  "interested_country", "countries", "study_destination", "dream_destination",
-  "preferred_study_destination", "country", "preferred_destination", "matched_destination",
-]);
+const LEGACY_DESTINATION_KEYS = new Set<string>(DESTINATION_SYNONYM_KEYS);
 
 const TOOLBAR_BTN =
   "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";

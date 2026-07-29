@@ -177,6 +177,7 @@ export async function sendMessage(
     threadId?: string;    // Phase 3: threads the sent message in Gmail
     inReplyTo?: string;  // Phase 3: sets In-Reply-To header
     references?: string[]; // Phase 3: sets References header
+    replyTo?: string; // Inbound spine: routes replies to EdgeX instead of Gmail (brief intro)
   },
 ): Promise<{
   gmail_message_id: string;
@@ -201,6 +202,7 @@ export async function sendMessage(
     // Phase 3: RFC threading headers
     inReplyTo: args.inReplyTo,
     references: args.references?.join(" "),
+    replyTo: args.replyTo,
   });
 
   const raw = await mail.compile().build();

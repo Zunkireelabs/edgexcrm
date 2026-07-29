@@ -37,6 +37,7 @@ import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
+import { extractDestinationsFromCustomFields } from "@/lib/leads/destination-normalize";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -251,6 +252,16 @@ export async function POST(
     }
   }
 
+  // Resolve destinations: prefer an explicit `destinations` array field, else fall back to
+  // whatever synonym key this form's destination question actually used (education_consultancy
+  // only — see docs/DESTINATION-COLUMN-DISPLAY-FIX-BRIEF.md for why this fallback exists).
+  const explicitDestinations = Array.isArray(body.destinations) ? (body.destinations as string[]) : [];
+  const resolvedDestinations = explicitDestinations.length > 0
+    ? explicitDestinations
+    : tenant.industry_id === "education_consultancy"
+      ? extractDestinationsFromCustomFields(body.custom_fields as Record<string, unknown> | undefined)
+      : [];
+
   // ── 10. Dedup: resolve identity ──
   const normalizedEmail = normalizeEmail(body.email as string | undefined);
   const normalizedPhone = normalizePhone(phone);
@@ -299,6 +310,7 @@ export async function POST(
       entity_id: (body.entity_id as string) || null,
       custom_fields: (body.custom_fields as Record<string, unknown>) ?? {},
       file_urls: (body.file_urls as Record<string, unknown>) ?? {},
+      destinations: resolvedDestinations,
       tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
     });
     if (Object.keys(patch).length > 0) {
@@ -423,7 +435,7 @@ export async function POST(
     phone,
     city: body.city || null,
     country: body.country || null,
-    destinations: Array.isArray(body.destinations) ? body.destinations : [],
+    destinations: resolvedDestinations,
     field_of_study: (body.field_of_study as string | null | undefined) || null,
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},

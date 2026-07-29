@@ -90,12 +90,14 @@ jobs:
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
           AI_TOOL_APPROVAL_SECRET: ${{ secrets.AI_TOOL_APPROVAL_SECRET }}
+          RESEND_INBOUND_WEBHOOK_SECRET: ${{ secrets.RESEND_INBOUND_WEBHOOK_SECRET }}
+          INBOUND_TOKEN_SECRET: ${{ secrets.INBOUND_TOKEN_SECRET }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           command_timeout: 10m
-          envs: GHCR_USER,GHCR_TOKEN,OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,AI_TOOL_APPROVAL_SECRET
+          envs: GHCR_USER,GHCR_TOKEN,OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,AI_TOOL_APPROVAL_SECRET,RESEND_INBOUND_WEBHOOK_SECRET,INBOUND_TOKEN_SECRET
           script: |
             set -e
             cd /home/zunkireelabs/devprojects/lead-gen-crm-dev
@@ -141,6 +143,33 @@ jobs:
               echo "LANGFUSE_BASE_URL=https://cloud.langfuse.com"
               echo "# --- END AI env ---"
             } >> .env.local
+            # Native email inbound (docs/email-productionization/INBOUND-SPINE-BRIEF.md)
+            # — idempotent managed block, same pattern as the AI block above.
+            sed -i '/^# --- BEGIN EMAIL INBOUND env (managed by GitHub Actions) ---$/,/^# --- END EMAIL INBOUND env ---$/d' .env.local
+            {
+              echo "# --- BEGIN EMAIL INBOUND env (managed by GitHub Actions) ---"
+              # Comma-separated LIST, never a single value. The reply address is baked
+              # into every email we have ever sent, so a retired domain must keep
+              # resolving. First entry = the active domain new addresses mint on.
+              # Free Resend plan allows 1 domain; add inbound.edgex.zunkireelabs.com
+              # FIRST (keeping lead-crm in the list) when the Pro plan lands.
+              echo "INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com"
+              # Stage and prod share one Resend account + one inbound domain, so BOTH
+              # webhooks receive every email.received. Each env processes only its own
+              # marker and silently ignores the other's — without this, stage would
+              # dead-letter production mail and capture real customer PII. Prod = p.
+              echo "INBOUND_ENV_MARKER=s"
+              # Signs the address checksum. Prod needs its OWN distinct value.
+              echo "INBOUND_TOKEN_SECRET=$INBOUND_TOKEN_SECRET"
+              # Svix signing secret for the Resend email.received webhook. The route
+              # fail-closes with 403 if unset.
+              echo "RESEND_INBOUND_WEBHOOK_SECRET=$RESEND_INBOUND_WEBHOOK_SECRET"
+              # Still per-tenant gated: a tenant also needs
+              # tenant_email_settings.inbound_enabled (mig 191), default false, so
+              # enabling here opts in no one. Prod stays off until the stage smoke passes.
+              echo "EDGEX_INBOUND_ENABLED=true"
+              echo "# --- END EMAIL INBOUND env ---"
+            } >> .env.local
             echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
             docker compose pull
             docker compose up -d
@@ -149,7 +178,24 @@ jobs:
             sleep 10
             for i in $(seq 1 18); do
               STATUS=$(docker inspect --format='{{.State.Health.Status}}' leads-crm-dev 2>/dev/null || echo "unknown")
-              if [ "$STATUS" = "healthy" ]; then echo "Container is healthy!"; exit 0; fi
+              if [ "$STATUS" = "healthy" ]; then
+                echo "Container is healthy!"
+                # Inngest sync. A NEW function — or a changed cron/event trigger — is not
+                # registered with Inngest Cloud until the serve endpoint is PUT to, so it
+                # ships DORMANT and its cron never fires. Function *body* changes don't
+                # need this; registration changes do.
+                # docs/reference/03-INNGEST-BACKGROUND-JOBS.md § "Deploy & sync" documents
+                # it as a MANUAL step — which is exactly why it got skipped:
+                # ops-email-inbound-process shipped unregistered on 2026-07-28 and inbound
+                # email only moved when drained by hand. Automated so it cannot recur.
+                # Idempotent — returns {"modified":false} when nothing changed.
+                # Non-fatal: the deploy already succeeded and the container is healthy;
+                # failing here would misreport a good deploy. Warns loudly instead.
+                curl -fsS -X PUT https://dev-lead-crm.zunkireelabs.com/api/inngest \
+                  && echo "Inngest sync OK" \
+                  || echo "::warning::Inngest sync FAILED — run: curl -X PUT https://dev-lead-crm.zunkireelabs.com/api/inngest"
+                exit 0
+              fi
               echo "Attempt $i/18: Status is $STATUS, waiting..."
               sleep 10
             done

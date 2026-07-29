@@ -15,16 +15,42 @@ import {
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { checkRateLimit, EMAIL_SEND_LIMIT } from "@/lib/api/rate-limit";
-import { scopedClient } from "@/lib/supabase/scoped";
+import { scopedClient, type ScopedClient } from "@/lib/supabase/scoped";
 import { validate, required, maxLength, isUUID } from "@/lib/api/validation";
 import { emitEvent } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
+import { mintToken } from "@/lib/email/inbound/tokens";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
   return Array.isArray(val) && val.every((v) => typeof v === "string");
+}
+
+/**
+ * Best-effort rollback of whatever the inbound-spine pre-send wiring managed
+ * to create before a failure (either wiring itself failing, or the Gmail
+ * send failing). `email_threads.id -> inbound_addresses.thread_id` is
+ * ON DELETE CASCADE (migration 191), so deleting a provisional thread also
+ * removes its just-minted token; the explicit address delete only matters
+ * when the thread pre-existed (reply case) and just the token needs undoing.
+ * Never throws — a cleanup failure must not mask the original error.
+ */
+async function cleanupProvisionalInboundArtifacts(
+  db: ScopedClient,
+  ids: { mintedAddressId: string | null; provisionalThreadId: string | null },
+): Promise<void> {
+  try {
+    if (ids.mintedAddressId) {
+      await db.from("inbound_addresses").delete().eq("id", ids.mintedAddressId);
+    }
+    if (ids.provisionalThreadId) {
+      await db.from("email_threads").delete().eq("id", ids.provisionalThreadId);
+    }
+  } catch (cleanupErr) {
+    logger.warn({ cleanupErr }, "Failed to clean up provisional inbound-spine artifacts (non-fatal)");
+  }
 }
 
 export async function POST(request: Request) {
@@ -159,6 +185,82 @@ export async function POST(request: Request) {
   const replyInReplyTo = body.reply_context?.in_reply_to ?? undefined;
   const replyReferences: string[] = body.reply_context?.references ?? [];
 
+  // Inbound spine (brief §3 finding 3, §6): resolve/create the thread and
+  // mint a reply-to token BEFORE sending, so the Reply-To header can point
+  // back at it — this is the ordering inversion the brief calls the riskiest
+  // change in the phase. Gated on EDGEX_INBOUND_ENABLED && the tenant's
+  // inbound_enabled; when off (or if wiring it up errors for any reason)
+  // replyTo stays undefined and everything below behaves exactly as before
+  // this feature existed. Outbound send must never regress because inbound
+  // infra is misconfigured, so wiring failures are logged and swallowed
+  // here rather than failing the whole request.
+  let replyTo: string | undefined;
+  let provisionalThreadId: string | null = null; // only set if THIS request created it
+  let mintedAddressId: string | null = null;
+
+  if (process.env.EDGEX_INBOUND_ENABLED === "true") {
+    try {
+      const { data: settings } = await db
+        .from("tenant_email_settings")
+        .select("inbound_enabled")
+        .maybeSingle<{ inbound_enabled: boolean }>();
+
+      if (settings?.inbound_enabled) {
+        let targetThreadId = thread?.id ?? null;
+
+        if (!targetThreadId) {
+          const { data: newThread, error: threadErr } = await db
+            .from("email_threads")
+            .insert({
+              connected_email_account_id: account.id,
+              gmail_thread_id: null,
+              lead_id: effectiveLeadId,
+              contact_id: effectiveContactId,
+              subject,
+              last_message_at: new Date().toISOString(),
+              message_count: 0,
+            })
+            .select("id")
+            .single<{ id: string }>();
+          if (threadErr || !newThread) {
+            throw new Error(`provisional email_threads insert failed: ${threadErr?.message}`);
+          }
+          targetThreadId = newThread.id;
+          provisionalThreadId = newThread.id;
+        }
+
+        const minted = mintToken("reply");
+        const { data: addrRow, error: addrErr } = await db
+          .from("inbound_addresses")
+          .insert({
+            kind: "thread",
+            verb: "reply",
+            token: minted.token,
+            thread_id: targetThreadId,
+            user_id: null,
+            status: "active",
+          })
+          .select("id")
+          .single<{ id: string }>();
+        if (addrErr || !addrRow) {
+          throw new Error(`inbound_addresses insert failed: ${addrErr?.message}`);
+        }
+
+        mintedAddressId = addrRow.id;
+        replyTo = minted.address;
+      }
+    } catch (err) {
+      logger.error(
+        { err, from_account_id: account.id },
+        "Inbound-spine pre-send wiring failed — sending without Reply-To",
+      );
+      await cleanupProvisionalInboundArtifacts(db, { mintedAddressId, provisionalThreadId });
+      replyTo = undefined;
+      mintedAddressId = null;
+      provisionalThreadId = null;
+    }
+  }
+
   // Send via Gmail
   let result: Awaited<ReturnType<typeof sendMessage>>;
   try {
@@ -173,9 +275,14 @@ export async function POST(request: Request) {
       threadId: thread?.gmail_thread_id,
       inReplyTo: replyInReplyTo,
       references: replyReferences.length > 0 ? replyReferences : undefined,
+      replyTo,
     });
   } catch (err) {
     logger.error({ err, from_account_id: account.id }, "Gmail send failed");
+    // Nothing was durably delivered — undo whatever pre-send wiring created
+    // (provisional thread and/or its reply-to token) so a failed send never
+    // leaves a phantom thread or a live token for a message that never went out.
+    await cleanupProvisionalInboundArtifacts(db, { mintedAddressId, provisionalThreadId });
     return apiServiceUnavailable(
       "Failed to send via Gmail. Check inbox connection in Settings.",
     );
@@ -189,7 +296,9 @@ export async function POST(request: Request) {
     void persistRefreshedToken(db.raw(), account.id, result.refreshed_credentials);
   }
 
-  // Persist thread: reuse for reply, create new for fresh compose
+  // Persist thread: reuse for reply, patch the provisional thread created
+  // above (inbound spine, gate ON), or create new for fresh compose (gate OFF
+  // — original post-send ordering, unchanged).
   let threadId: string;
   if (thread) {
     threadId = thread.id;
@@ -201,6 +310,17 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", thread.id);
+  } else if (provisionalThreadId) {
+    threadId = provisionalThreadId;
+    await db
+      .from("email_threads")
+      .update({
+        gmail_thread_id: result.gmail_thread_id,
+        message_count: 1,
+        last_message_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", provisionalThreadId);
   } else {
     const { data: newThread, error: threadErr } = await db
       .from("email_threads")
