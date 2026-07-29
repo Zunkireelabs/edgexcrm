@@ -1458,7 +1458,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                         {noteContent && (
                           <>
                             <div className="text-[10px] text-muted-foreground">Notes</div>
-                            <div className="text-xs truncate text-muted-foreground">{noteContent}</div>
+                            <div className="text-xs truncate text-muted-foreground" title={noteContent}>{noteContent}</div>
                           </>
                         )}
                       </div>
