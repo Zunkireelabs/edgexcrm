@@ -15,6 +15,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
+import { createAuditLog } from "@/lib/api/audit";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -76,17 +77,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ? `[CHECK-IN] Visited on ${dateStr} at ${timeStr} — ${reason}`
     : `[CHECK-IN] Visited on ${dateStr} at ${timeStr}`;
 
-  const { error } = await supabase.from("lead_notes").insert({
-    lead_id: id,
-    user_id: auth.userId,
-    user_email: auth.email || "unknown",
-    content,
-    meet_with_id: meetWithId,
-  });
+  const { data: checkInNote, error } = await supabase
+    .from("lead_notes")
+    .insert({
+      lead_id: id,
+      user_id: auth.userId,
+      user_email: auth.email || "unknown",
+      content,
+      meet_with_id: meetWithId,
+    })
+    .select("id")
+    .single();
 
   if (error) {
     return apiServiceUnavailable("Failed to log check-in");
   }
+
+  // Surface this note in the lead's Activity tab — same audit action createLeadNote()
+  // fires, so ActivityTab renders it consistently regardless of which path wrote the note.
+  await createAuditLog({
+    tenantId: auth.tenantId,
+    userId: auth.userId,
+    action: "lead.note_added",
+    entityType: "lead",
+    entityId: id,
+    changes: { note_id: { old: null, new: checkInNote?.id ?? null } },
+  });
 
   const isEducation = auth.industryId === "education_consultancy";
 

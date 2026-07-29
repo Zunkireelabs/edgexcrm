@@ -220,6 +220,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
   const [meetWithId, setMeetWithId] = useState<string>("");
   const [assignToId, setAssignToId] = useState<string>("");
   const [moveToStage, setMoveToStage] = useState<string>("");
+  const [existingLeadNotes, setExistingLeadNotes] = useState<string>("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<LeadResult[]>([]);
@@ -391,6 +392,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     setLeadDetails(null);
     setAssignToId("");
     setMoveToStage("");
+    setExistingLeadNotes("");
   };
 
   const handleCheckIn = async (leadId: string) => {
@@ -406,6 +408,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
           meet_with_id: meetWithId || null,
           assign_to_id: assignToId || null,
           move_to_stage: moveToStage || null,
+          reason: existingLeadNotes.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -421,6 +424,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       setMeetWithId("");
       setAssignToId("");
       setMoveToStage("");
+      setExistingLeadNotes("");
       setCheckingIn(null);
     } catch {
       toast.error("Failed to check in");
@@ -1649,6 +1653,19 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            {/* Visit note — logged on this check-in and shown in the lead's Activity */}
+            <div className="mb-4">
+              <Label htmlFor="existing-lead-notes" className="text-xs">Notes</Label>
+              <Textarea
+                id="existing-lead-notes"
+                value={existingLeadNotes}
+                onChange={(e) => setExistingLeadNotes(e.target.value)}
+                placeholder="Add any notes about this visit..."
+                className="mt-1.5 resize-none"
+                rows={3}
+              />
             </div>
 
             {/* Check-in button */}

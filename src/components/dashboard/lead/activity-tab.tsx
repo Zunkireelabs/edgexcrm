@@ -256,7 +256,7 @@ function getActivityDisplay(
     return {
       icon: <FileText className="h-4 w-4" />,
       color: "bg-indigo-100 text-indigo-600",
-      description: `Note ${action}`,
+      description: action === "lead.note_added" ? "Note added" : `Note ${action}`,
     };
   }
 
