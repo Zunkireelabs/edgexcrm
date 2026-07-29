@@ -47,6 +47,14 @@ export const INBOUND_TOKEN_LIMIT: RateLimitConfig = {
   windowMs: 60_000, // 1 minute
 };
 
+// BCC dropbox (brief §6): keyed "bcc_regenerate:<userId>" — regenerating
+// revokes the rep's old address (breaks anything already BCC'd to it), so
+// this bounds accidental/malicious thrash rather than routine use.
+export const BCC_REGENERATE_LIMIT: RateLimitConfig = {
+  maxRequests: 5,
+  windowMs: 300_000, // 5 minutes
+};
+
 // Phase 5 slice 5.5: keyed "mcp:<integrationKeyId>" — the key, not the IP, since
 // an external MCP client host has one stable identity but potentially many
 // egress IPs. MAX_WRITE_ATTEMPTS_PER_RUN (write-executor.ts) never binds for

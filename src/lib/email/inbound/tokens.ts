@@ -95,6 +95,24 @@ export function mintToken(verb: InboundVerb = "reply"): MintedInboundAddress {
   return { token, checksum, localPart, address: `${localPart}@${domain}` };
 }
 
+/**
+ * Reconstructs the full mailable address for an already-minted token — the
+ * read-path counterpart to mintToken(). Used by GET/POST bcc-address to
+ * return a rep's existing dropbox address without minting a new one; the
+ * checksum is deterministic (HMAC of the stored token), so nothing besides
+ * the token itself needs to be persisted. Uses the CURRENT active domain
+ * (index 0) — fine today (one inbound domain, brief §2), but a future
+ * multi-domain rotation would need the mint-time domain snapshotted
+ * somewhere to reconstruct historically-accurate addresses.
+ */
+export function buildInboundAddress(verb: InboundVerb, token: string): string {
+  const secret = getTokenSecret();
+  const domain = getInboundDomains()[0];
+  const marker = getEnvMarker();
+  const checksum = computeChecksum(token, secret);
+  return `${verb}+${marker}${token}${checksum}@${domain}`;
+}
+
 /** Verifies a candidate (token, checksum) pair against the current INBOUND_TOKEN_SECRET. */
 export function verifyChecksum(token: string, checksum: string): boolean {
   let secret: string;
