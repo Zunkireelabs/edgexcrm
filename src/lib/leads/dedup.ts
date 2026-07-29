@@ -113,6 +113,7 @@ export interface IncomingLeadFields {
   custom_fields?: Record<string, unknown>;
   file_urls?: Record<string, unknown>;
   tags?: string[];
+  destinations?: string[];
 }
 
 // Returns only the keys that would actually change — empty object = no update needed.
@@ -165,6 +166,15 @@ export function applyCanonicalUpdate(
   // tags: fill-empty (single category, never union — see note above)
   if (incoming.tags && incoming.tags.length > 0 && (!existing.tags || existing.tags.length === 0)) {
     patch.tags = incoming.tags;
+  }
+
+  // destinations: fill-empty — same reasoning as tags, existing value wins if already set
+  if (
+    incoming.destinations &&
+    incoming.destinations.length > 0 &&
+    (!existing.destinations || existing.destinations.length === 0)
+  ) {
+    patch.destinations = incoming.destinations;
   }
 
   return patch;
