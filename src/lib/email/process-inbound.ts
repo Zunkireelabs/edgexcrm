@@ -24,6 +24,7 @@ import { matchInboundToThread, THREAD_COLUMNS, type EmailThreadRow } from "./inb
 import { getReceivingEmail, forwardReceivingEmail } from "./inbound/resend-client";
 import { PLATFORM_EMAIL_ADDRESS } from "./index";
 import { getInboundDomains, type InboundVerb } from "./inbound/tokens";
+import { processBccDropbox } from "./inbound/bcc-route";
 
 interface InboundEnvelope {
   to: string[];
@@ -106,7 +107,7 @@ export async function processInboundEmailEvents(limit = 50): Promise<ProcessResu
 
 // ── RFC822 helpers (headers come back already-parsed key/value from Resend) ──
 
-function getHeader(headers: Record<string, string> | null, name: string): string | undefined {
+export function getHeader(headers: Record<string, string> | null, name: string): string | undefined {
   if (!headers) return undefined;
   const lower = name.toLowerCase();
   for (const [k, v] of Object.entries(headers)) {
@@ -115,18 +116,18 @@ function getHeader(headers: Record<string, string> | null, name: string): string
   return undefined;
 }
 
-function parseAddress(raw: string): { email: string; name: string | null } {
+export function parseAddress(raw: string): { email: string; name: string | null } {
   const match = raw.match(/^"?([^"<>]+?)"?\s*<([^>]+)>$/);
   if (match) return { name: match[1].trim() || null, email: match[2].trim().toLowerCase() };
   return { name: null, email: raw.trim().toLowerCase() };
 }
 
-function extractReferences(raw: string | undefined): string[] {
+export function extractReferences(raw: string | undefined): string[] {
   if (!raw) return [];
   return raw.match(/<[^>]+>/g) ?? [];
 }
 
-function stripSubjectPrefixes(subject: string): string {
+export function stripSubjectPrefixes(subject: string): string {
   let s = subject.trim();
   let prev: string;
   do {
@@ -149,7 +150,7 @@ function parseSenderVerdict(headers: Record<string, string> | null): Record<stri
   return Object.keys(verdict).length > 0 ? verdict : null;
 }
 
-async function writeDeadLetter(params: {
+export async function writeDeadLetter(params: {
   tenantId: string | null;
   providerMessageId: string | null;
   fromAddress: string | null;
@@ -187,6 +188,16 @@ async function processOneEvent(evt: EventRow): Promise<void> {
   const receiving = await getReceivingEmail(p.resend_email_id);
   const { email: fromEmail, name: fromName } = parseAddress(receiving.from);
   const headers = receiving.headers;
+
+  // Dropbox mail (verb='bcc') is a structurally different flow — the rep is
+  // the author, not a lead replying — so it never touches the reply-path
+  // loop/auto guard or thread-authoritative logic below. It has its own
+  // sender-authenticity guard instead (bcc-route.ts §5 step 2). The reply
+  // path from here down is otherwise untouched.
+  if (p.verb === "bcc") {
+    await processBccDropbox({ tenantId: p.tenant_id, resendEmailId: p.resend_email_id, userId: p.user_id }, db, receiving, headers);
+    return;
+  }
 
   // ── 1. Loop/auto guard FIRST, before any write ──────────────────────────
   const autoSubmittedHeader = getHeader(headers, "Auto-Submitted");
