@@ -137,16 +137,30 @@ export function stripSubjectPrefixes(subject: string): string {
   return s;
 }
 
-function parseSenderVerdict(headers: Record<string, string> | null): Record<string, string> | null {
-  const authResults = getHeader(headers, "Authentication-Results");
-  if (!authResults) return null;
+export function parseSenderVerdict(headers: Record<string, string> | null): Record<string, string> | null {
   const verdict: Record<string, string> = {};
-  const spf = authResults.match(/\bspf=(\w+)/i);
-  const dkim = authResults.match(/\bdkim=(\w+)/i);
-  const dmarc = authResults.match(/\bdmarc=(\w+)/i);
-  if (spf) verdict.spf = spf[1].toLowerCase();
-  if (dkim) verdict.dkim = dkim[1].toLowerCase();
-  if (dmarc) verdict.dmarc = dmarc[1].toLowerCase();
+
+  const authResults = getHeader(headers, "Authentication-Results");
+  if (authResults) {
+    const spf = authResults.match(/\bspf=(\w+)/i);
+    const dkim = authResults.match(/\bdkim=(\w+)/i);
+    const dmarc = authResults.match(/\bdmarc=(\w+)/i);
+    if (spf) verdict.spf = spf[1].toLowerCase();
+    if (dkim) verdict.dkim = dkim[1].toLowerCase();
+    if (dmarc) verdict.dmarc = dmarc[1].toLowerCase();
+  }
+
+  // Resend inbound may not carry Authentication-Results at all — these SES
+  // headers (brief §2 fact 4) are the fallback/supplemental signal.
+  const spamVerdict = getHeader(headers, "x-ses-spam-verdict");
+  const virusVerdict = getHeader(headers, "x-ses-virus-verdict");
+  const spfVerdict = getHeader(headers, "x-ses-spf-verdict");
+  const dkimVerdict = getHeader(headers, "x-ses-dkim-verdict");
+  if (spamVerdict) verdict.spam = spamVerdict.toLowerCase();
+  if (virusVerdict) verdict.virus = virusVerdict.toLowerCase();
+  if (spfVerdict) verdict.spf_ses = spfVerdict.toLowerCase();
+  if (dkimVerdict) verdict.dkim_ses = dkimVerdict.toLowerCase();
+
   return Object.keys(verdict).length > 0 ? verdict : null;
 }
 

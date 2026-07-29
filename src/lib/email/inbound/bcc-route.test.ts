@@ -43,6 +43,9 @@ function makeQueryBuilder(
     select() {
       return builder;
     },
+    limit() {
+      return builder;
+    },
     maybeSingle: async () => {
       const { data, error } = computeResult();
       const arr = Array.isArray(data) ? data : [data];
@@ -261,6 +264,49 @@ describe("processBccDropbox — happy path (brief §5 steps 6-7)", () => {
       received_at: null,
       sent_at: "Tue, 28 Jul 2026 09:00:00 +0000",
     });
+  });
+});
+
+describe("processBccDropbox — sender_verdict persistence (review follow-up fix 1)", () => {
+  it("persists sender_verdict from SES + Authentication-Results headers, not null", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "message-id": "<msg-2@mail.gmail.com>",
+      "x-ses-spam-verdict": "PASS",
+      "x-ses-virus-verdict": "PASS",
+      "authentication-results": "mx.example.com; spf=pass smtp.mailfrom=rep@example.com; dkim=pass; dmarc=pass",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].sender_verdict).toEqual({
+      spf: "pass",
+      dkim: "pass",
+      dmarc: "pass",
+      spam: "pass",
+      virus: "pass",
+    });
+  });
+});
+
+describe("processBccDropbox — dropbox token stripped from persisted to/cc (review follow-up fix 2)", () => {
+  it("excludes the dropbox address from to_emails/cc_emails while keeping the real lead address", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "bcc+s0abcdef123456checksum@inbound.edgex.zunkireelabs.com, lead@example.com",
+      cc: "bcc+s0abcdef123456checksum@inbound.edgex.zunkireelabs.com, other-lead@example.com",
+      "message-id": "<msg-3@mail.gmail.com>",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].to_emails).toEqual(["lead@example.com"]);
+    expect(scopedTables.emails[0].cc_emails).toEqual(["other-lead@example.com"]);
   });
 });
 

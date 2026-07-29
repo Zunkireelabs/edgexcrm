@@ -14,7 +14,14 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 import { normalizeEmail, resolveLeadIdentity } from "@/lib/leads/dedup";
 import { matchInboundToThread, THREAD_COLUMNS, type EmailThreadRow } from "./match-thread";
 import { getInboundDomains } from "./tokens";
-import { getHeader, parseAddress, extractReferences, stripSubjectPrefixes, writeDeadLetter } from "../process-inbound";
+import {
+  getHeader,
+  parseAddress,
+  extractReferences,
+  stripSubjectPrefixes,
+  writeDeadLetter,
+  parseSenderVerdict,
+} from "../process-inbound";
 
 export interface BccDropboxParams {
   tenantId: string;
@@ -96,7 +103,13 @@ export async function processBccDropbox(
 
   const toAddresses = toRaw.map(parseAddress);
   const ccAddresses = ccRaw.map(parseAddress);
-  const candidateRecipients = [...toAddresses, ...ccAddresses].filter((a) => !isOwnDomain(a.email));
+  // Filtered here (not just at match time) so the own-domain dropbox token
+  // never lands in the persisted to_emails/cc_emails either — otherwise a
+  // client that puts it in To:/Cc: instead of Bcc: publishes the rep's
+  // addressing secret to every teammate who can see the thread.
+  const toRecipients = toAddresses.filter((a) => !isOwnDomain(a.email));
+  const ccRecipients = ccAddresses.filter((a) => !isOwnDomain(a.email));
+  const candidateRecipients = [...toRecipients, ...ccRecipients];
 
   // ── 4. Lead match — first match in header order, deterministic ──────────
   // Lead auto-create is a later, opt-in slice — no match here is a dead-letter,
@@ -134,6 +147,7 @@ export async function processBccDropbox(
       .from("emails")
       .select("id")
       .eq("rfc_message_id", messageId)
+      .limit(1)
       .maybeSingle<{ id: string }>();
     if (existing) return; // not an error, not a dead-letter — no second row
   }
@@ -184,8 +198,8 @@ export async function processBccDropbox(
       inbound_route: "bcc",
       from_email: fromParsed.email,
       from_name: fromParsed.name,
-      to_emails: toAddresses.map((a) => a.email),
-      cc_emails: ccAddresses.map((a) => a.email),
+      to_emails: toRecipients.map((a) => a.email),
+      cc_emails: ccRecipients.map((a) => a.email),
       bcc_emails: [],
       subject: receiving.subject,
       body_html: receiving.html,
@@ -198,6 +212,7 @@ export async function processBccDropbox(
       sent_at: sentAt,
       sender_user_id: p.userId,
       attachments: receiving.attachments ?? [],
+      sender_verdict: parseSenderVerdict(headers),
     })
     .select("id")
     .single<{ id: string }>();
