@@ -601,4 +601,86 @@ describe("POST /api/v1/email/send — Bcc persistence filters own inbound-domain
       "bcc+sabc123@inbound.edgex.zunkireelabs.com",
     ]);
   });
+
+  it("strips a 'Name <addr>' own-domain address (the shape pasted from a mail client)", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "Sadin Shrestha <bcc+sabc123@inbound.edgex.zunkireelabs.com>"],
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Send still gets the full, unparsed list.
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.bcc).toEqual([
+      "teammate@example.com",
+      "Sadin Shrestha <bcc+sabc123@inbound.edgex.zunkireelabs.com>",
+    ]);
+
+    // Persisted bcc_emails still drops the own-domain address despite the "Name <addr>" wrapper.
+    expect(state.insertedEmails).toHaveLength(1);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["teammate@example.com"]);
+  });
+
+  it("strips an angle-bracket-only own-domain address", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["<bcc+sabc123@inbound.edgex.zunkireelabs.com>"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([]);
+  });
+
+  it("strips a own-domain address surrounded by stray whitespace and mixed case", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["  bcc+sabc123@INBOUND.EDGEX.zunkireelabs.com  "],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([]);
+  });
+
+  it("keeps an address with no '@' at all — fail-open, can't prove it's ours", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["garbage"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["garbage"]);
+  });
 });

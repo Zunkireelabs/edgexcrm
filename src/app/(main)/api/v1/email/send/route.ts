@@ -45,8 +45,14 @@ function filterOwnDomainsForPersistence(bcc: string[]): string[] {
     return bcc;
   }
   return bcc.filter((addr) => {
-    const domain = addr.split("@")[1]?.toLowerCase();
-    return !domain || !domains.includes(domain);
+    // Addresses arrive unvalidated and may be "Name <addr>" (the shape you get
+    // pasting from a mail client) — parse the same way parseInboundAddress does,
+    // or the trailing ">" defeats the domain match and the token gets persisted.
+    const angle = addr.match(/<([^>]+)>/);
+    const email = (angle ? angle[1] : addr).trim().toLowerCase();
+    const at = email.lastIndexOf("@");
+    const domain = at === -1 ? "" : email.slice(at + 1);
+    return domain === "" || !domains.includes(domain);
   });
 }
 

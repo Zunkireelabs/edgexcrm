@@ -159,6 +159,83 @@ deviation from this spec with reasoning.
 Branch `fix/composer-bcc-delivery` off the latest `origin/stage`. PR against `stage`,
 **unmerged**, with the hard gate stated in the PR body.
 
+---
+
+# FIX-UP ROUND 1 (added 2026-07-30 after Opus review of PR #327)
+
+**Change 1 (`keepBcc`) reviewed clean** — verified independently: `tsc` 0, eslint 0,
+1017/1017 tests, CI 8/8, and 3 of the 4 new Bcc tests confirmed failing against pre-fix
+code. Nothing to redo there.
+
+**Change 2 does not close the leak it was written to close.** One more commit on the
+**same branch** (`fix/composer-bcc-delivery`) and the **same PR (#327)** — do NOT open a
+new PR, and do NOT merge (the hard gate above is still unresolved).
+
+## The gap
+
+`filterOwnDomainsForPersistence` extracts the domain with `addr.split("@")[1]`, which
+keeps whatever trails the address. Measured against `domains = ["lead-crm.zunkireelabs.com"]`:
+
+| Input | Today |
+|---|---|
+| `bcc+stoken@lead-crm.zunkireelabs.com` | stripped ✅ |
+| `Sadin Shrestha <bcc+stoken@lead-crm.zunkireelabs.com>` | **persisted** ❌ |
+| `<bcc+stoken@lead-crm.zunkireelabs.com>` | **persisted** ❌ |
+| `"  bcc+stoken@LEAD-CRM.zunkireelabs.com  "` | **persisted** ❌ |
+
+Casing is handled; the trailing `>` and stray whitespace defeat the match. Neither
+`parseEmails` in `compose-email-dialog.tsx:112` (splits on `,`, trims, nothing else) nor
+the route (`isStringArray` only) unwraps or validates, so `Name <addr>` — what you get
+pasting an address out of any mail client — reaches the filter intact.
+
+This matters *because* change 1 ships in the same PR: the leak is dormant today only
+because nothing is transmitted. After merge, a rep who pastes their dropbox in the
+natural form both delivers to it **and** publishes their per-user addressing secret to
+every teammate who can read that thread's `bcc_emails`.
+
+## The fix
+
+Normalize before extracting, reusing the idiom already in `parseInboundAddress`
+(`src/lib/email/inbound/tokens.ts:160-171`) — unwrap `<…>`, trim, lowercase, then
+`lastIndexOf("@")` (never `split("@")[1]`, which mis-parses `a@b@c`):
+
+```ts
+  return bcc.filter((addr) => {
+    // Addresses arrive unvalidated and may be "Name <addr>" (the shape you get
+    // pasting from a mail client) — parse the same way parseInboundAddress does,
+    // or the trailing ">" defeats the domain match and the token gets persisted.
+    const angle = addr.match(/<([^>]+)>/);
+    const email = (angle ? angle[1] : addr).trim().toLowerCase();
+    const at = email.lastIndexOf("@");
+    const domain = at === -1 ? "" : email.slice(at + 1);
+    return domain === "" || !domains.includes(domain);
+  });
+```
+
+Keep the existing semantics exactly: **send** the full list, **persist** filtered; an
+address with no parseable domain is kept (we can't prove it's ours); `getInboundDomains()`
+throwing still falls back to persisting unfiltered.
+
+## Tests
+
+Extend the two existing cases in `src/app/(main)/api/v1/email/send/route.test.ts:558` and
+`:583` — do not rewrite them. Add to the persistence test, or add a sibling:
+
+1. `bcc: ["teammate@example.com", "Sadin Shrestha <bcc+sabc123@inbound.edgex.zunkireelabs.com>"]`
+   → `sendArgs.bcc` has **both** (send unchanged), persisted `bcc_emails` is
+   `["teammate@example.com"]` only. **Must fail before your change** — verify and paste it.
+2. Angle-bracket-only form `<bcc+sabc123@inbound.edgex.zunkireelabs.com>` → stripped.
+3. Leading/trailing whitespace around a bare own-domain address → stripped.
+4. An address with no `@` at all (e.g. `"garbage"`) → **kept** (fail-open, unprovable).
+
+## Gates + report
+
+Same four gates, full output pasted. State explicitly that test 1 fails pre-change, with
+the failing output. Then: `git commit` onto `fix/composer-bcc-delivery` and push — the
+existing PR #327 updates itself. **Do not merge**, and do not touch anything else in the
+working tree (there are unrelated uncommitted `.claude/skills/` changes present that are
+NOT yours — leave them alone and do not stage them).
+
 ## What this unblocks
 
 Smoke T4 (EdgeX-sent-copy dedup) — still an open unknown: whether Gmail preserves the
