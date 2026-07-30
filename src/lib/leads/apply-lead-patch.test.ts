@@ -538,3 +538,49 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome.lead.status).toBe("new");
   });
 });
+
+describe("applyLeadPatch — Lead Source lock (owner/admin only)", () => {
+  const SOURCE_DB = {
+    leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null },
+  };
+
+  it.each([
+    ["intake_source", "google"],
+    ["intake_medium", "cpc"],
+    ["intake_account", "acct-9"],
+    ["intake_campaign", "spring-2026"],
+  ])("counselor with lead access is forbidden from setting %s", async (field, value) => {
+    await setFakeDb(SOURCE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { [field]: value }, OPTS);
+    expect(outcome).toEqual({ kind: "forbidden", message: "Only an owner or admin can edit the lead source." });
+  });
+
+  it("owner can edit intake_source", async () => {
+    await setFakeDb(SOURCE_DB);
+    const auth = fixtureAuth({ role: "owner", permissions: { baseTier: "owner", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { intake_source: "referral" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.intake_source).toBe("referral");
+  });
+
+  it("admin can edit intake_campaign", async () => {
+    await setFakeDb(SOURCE_DB);
+    const auth = fixtureAuth({ role: "admin", permissions: { baseTier: "admin", leadScope: "all" } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { intake_campaign: "fall-2026" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.intake_campaign).toBe("fall-2026");
+  });
+
+  it("non-admin patching an allowed non-source field on an assigned lead still succeeds (regression)", async () => {
+    await setFakeDb(SOURCE_DB);
+    const auth = fixtureAuth({ permissions: { leadScope: "own", canEditLeads: true } as ResolvedPermissions });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { city: "Kathmandu" }, OPTS);
+    expect(outcome.kind).toBe("ok");
+    if (outcome.kind === "ok") expect(outcome.lead.city).toBe("Kathmandu");
+  });
+});
