@@ -2,19 +2,13 @@ import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiForbidden, apiSuccess, apiServiceUnavailable } from "@/lib/api/response";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { createHmac } from "crypto";
+import { isOAuthStateSecretConfigured, signState } from "@/lib/email/oauth-state";
 
 const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 
 function getRedirectUri() {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001";
   return `${appUrl}/api/v1/email/inboxes/callback`;
-}
-
-function signState(userId: string): string {
-  const secret = process.env.NEXTAUTH_SECRET || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const sig = createHmac("sha256", secret).update(userId).digest("hex").slice(0, 16);
-  return `${userId}.${sig}`;
 }
 
 export async function POST(request: Request) {
@@ -25,6 +19,10 @@ export async function POST(request: Request) {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   if (!clientId) {
     return apiServiceUnavailable("Google OAuth not configured. Set GOOGLE_CLIENT_ID in environment.");
+  }
+
+  if (!isOAuthStateSecretConfigured()) {
+    return apiServiceUnavailable("OAuth state signing not configured. Set NEXTAUTH_SECRET in environment.");
   }
 
   const state = signState(auth.userId);

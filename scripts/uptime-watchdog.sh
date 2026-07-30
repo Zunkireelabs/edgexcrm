@@ -132,7 +132,11 @@ send_email() {
     "$(printf '%s' "$subject" | sed 's/"/\\"/g')" \
     "$body_escaped")
 
-  http_code=$(curl -s -o /tmp/watchdog-resend-response.$$ -w '%{http_code}' \
+  # mktemp, not a $$-suffixed fixed name — a PID-based path is predictable and
+  # (on a shared box) guessable/pre-creatable by another user.
+  response_file="$(mktemp "${TMPDIR:-/tmp}/watchdog-resend-response.XXXXXX")"
+
+  http_code=$(curl -s -o "$response_file" -w '%{http_code}' \
     --max-time "$TIMEOUT" \
     -X POST 'https://api.resend.com/emails' \
     -H "Authorization: Bearer ${RESEND_API_KEY}" \
@@ -141,13 +145,13 @@ send_email() {
   [ -z "$http_code" ] && http_code="000"
 
   if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-    log "ALERT DELIVERY FAILED: Resend send failed (HTTP $http_code): $(cat /tmp/watchdog-resend-response.$$ 2>/dev/null) — nobody was notified of the outage above."
-    rm -f /tmp/watchdog-resend-response.$$
+    log "ALERT DELIVERY FAILED: Resend send failed (HTTP $http_code): $(cat "$response_file" 2>/dev/null) — nobody was notified of the outage above."
+    rm -f "$response_file"
     return 1
   fi
 
   log "alert email sent to: ${recipients[*]} (HTTP $http_code)"
-  rm -f /tmp/watchdog-resend-response.$$
+  rm -f "$response_file"
   return 0
 }
 
@@ -182,6 +186,12 @@ Time (UTC): $now"
     else
       log "OK: $url (HTTP $http_code)"
     fi
+    # State resets to "0 0" here regardless of whether the recovery-notice send
+    # above succeeded — deliberate (PROD-HARDENING BRIEF §3.3), do not "fix"
+    # this later. http_code is already 200 here, so the target really is back;
+    # a stuck "still down" state is worse than a missed all-clear email. The
+    # down-alert path (below, in the failure branch) is the one that matters
+    # for actually notifying someone, and it does retry on the next run.
     echo "0 0" > "$state_file"
     return 0
   fi

@@ -194,6 +194,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
    - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
    - **`02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` — target architecture for the AI-native knowledge layer (Orca-ready KB): storage seam → ingestion → pgvector retrieval → agent tools, with tool picks + privacy stance + "when to switch tools" thresholds. Read before building any KB/RAG/Orca-retrieval work; Phase 1/2/3 build briefs reference it.**
    - **`03-INNGEST-BACKGROUND-JOBS.md` — background/scheduled work runbook: Inngest architecture, environments, function inventory, free-tier budget. Read before adding or changing any scheduled/background job.**
+   - **`04-PROD-RESILIENCE.md` — ops runbook for keeping a wedged container from becoming a silent multi-hour outage: the bare-Traefik-404 signature, autoheal, and what's actually live for detection (UptimeRobot) vs. available-but-not-installed (`scripts/uptime-watchdog.sh`). Read before touching prod resilience/ops.**
    - `05-GRAPHIFY-CODE-GRAPH.md` — the code knowledge graph: setup, querying, limitations, refresh. Read if graph queries look wrong or you need to rebuild.
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
@@ -531,7 +532,7 @@ This overrides the "prod only at promotion" default: prod changes are allowed mi
 always gated behind an explicit, per-action approval — not run unsupervised.
 
 ### Server
-- **Two boxes — don't confuse them.** (1) The **dev box** is where Claude Code sessions run (`/home/sadin/edgeXcrm`, host `vmi3118921`, `173.249.9.91`) — Sadin's Mac alias `vps` points HERE. (2) The **Zunkiree Labs VPS** (`root@94.136.189.213`) hosts the deployed stage + prod apps and is **NOT reachable from the dev box** (no key) — changes reach it via the GitHub Actions deploy pipelines, and only Sadin can shell into it.
+- **Two boxes — don't confuse them.** (1) The **dev box** is where Claude Code sessions run (`/home/sadin/edgeXcrm`, host `vmi3118921`, `173.249.9.91`). (2) The **Zunkiree Labs VPS** (`root@94.136.189.213`) hosts the deployed stage + prod apps — **Sadin's Mac alias `vps` points HERE, at the Zunkiree VPS, not the dev box** (confirmed 2026-07-30; this was previously documented backwards and cost real debugging time). The Zunkiree VPS is **NOT reachable from the dev box** (no key) — changes reach it via the GitHub Actions deploy pipelines, and only Sadin can shell into it (via `ssh vps`).
 - The rest of this section describes the **Zunkiree VPS** (the deploy target):
 - IP: `94.136.189.213`
 - Domain: `lead-crm.zunkireelabs.com`
