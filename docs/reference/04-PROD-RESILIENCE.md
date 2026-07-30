@@ -63,9 +63,12 @@ alert if a target fails twice in a row, with a matching recovery notice once it 
 monitor that runs on the box it's monitoring is not a monitor — if that box goes fully dark, so
 does the alert.
 
-Config is entirely env-driven (`WATCHDOG_TARGETS`, `WATCHDOG_ALERT_TO`, `RESEND_API_KEY`,
-`WATCHDOG_STATE_DIR`) — nothing is hardcoded, and it refuses to run without an explicit
-`WATCHDOG_ALERT_TO`. See the script's header comment for the full behavior spec (2-failure
+Config is entirely env-driven (`WATCHDOG_TARGETS`, `WATCHDOG_ALERT_TO`, `WATCHDOG_ALERT_FROM`,
+`RESEND_API_KEY`, `WATCHDOG_STATE_DIR`) — nothing is hardcoded, and it refuses to run without an
+explicit `WATCHDOG_ALERT_TO`. `WATCHDOG_ALERT_FROM` defaults to `noreply@lead-crm.zunkireelabs.com`
+— the same Resend-verified domain the app itself sends from (`PLATFORM_EMAIL_ADDRESS`,
+`src/lib/email/index.ts:19-20`) — since an unverified From domain gets the send rejected by Resend,
+which would silently defeat the alert. See the script's header comment for the full behavior spec (2-failure
 threshold, alert-once-per-outage, recovery notice, always exits 0 so cron doesn't spam).
 
 ## Memory: swap is not a safety net here

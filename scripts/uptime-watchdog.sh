@@ -20,6 +20,12 @@
 #                        (see brief §1.3 — do not use any address found elsewhere).
 #   RESEND_API_KEY       alert transport (same provider the app already uses).
 #                        Required unless --dry-run / WATCHDOG_DRY_RUN=1.
+#   WATCHDOG_ALERT_FROM  From address for alert emails. Default: "EdgeX Watchdog
+#                        <noreply@lead-crm.zunkireelabs.com>" — that domain is
+#                        what the app itself sends from (PLATFORM_EMAIL_ADDRESS,
+#                        src/lib/email/index.ts:19-20), so it's already
+#                        Resend-verified. Do not point this at an unverified
+#                        domain — Resend will reject the send.
 #   WATCHDOG_STATE_DIR   default /var/lib/edgex-watchdog — per-target failure
 #                        count + alert-sent flag, so repeat cron runs know
 #                        whether an outage is new, ongoing, or just recovered.
@@ -43,6 +49,7 @@ done
 WATCHDOG_TARGETS="${WATCHDOG_TARGETS:-https://edgex.zunkireelabs.com/login https://dev-lead-crm.zunkireelabs.com/login}"
 STATE_DIR="${WATCHDOG_STATE_DIR:-/var/lib/edgex-watchdog}"
 TIMEOUT="${WATCHDOG_TIMEOUT:-10}"
+ALERT_FROM="${WATCHDOG_ALERT_FROM:-EdgeX Watchdog <noreply@lead-crm.zunkireelabs.com>}"
 
 log() {
   echo "$(date -u +%FT%TZ) $*"
@@ -77,10 +84,18 @@ send_email() {
     return 0
   fi
 
-  payload=$(printf '{"from":"EdgeX Watchdog <alerts@zunkireelabs.com>","to":["%s"],"subject":"%s","text":"%s"}' \
+  # Newline-to-\n escaping uses bash parameter expansion, not sed — the classic
+  # `sed ':a;N;$!ba;s/\n/\\n/g'` line-join idiom is GNU-sed-only and errors out
+  # on BSD sed (unused-label), which would corrupt the payload on any host that
+  # isn't GNU. Parameter expansion works identically on any bash.
+  body_escaped="${body//\"/\\\"}"
+  body_escaped="${body_escaped//$'\n'/\\n}"
+
+  payload=$(printf '{"from":"%s","to":["%s"],"subject":"%s","text":"%s"}' \
+    "$(printf '%s' "$ALERT_FROM" | sed 's/"/\\"/g')" \
     "$WATCHDOG_ALERT_TO" \
     "$(printf '%s' "$subject" | sed 's/"/\\"/g')" \
-    "$(printf '%s' "$body" | sed 's/"/\\"/g' | sed ':a;N;$!ba;s/\n/\\n/g')")
+    "$body_escaped")
 
   http_code=$(curl -s -o /tmp/watchdog-resend-response.$$ -w '%{http_code}' \
     --max-time "$TIMEOUT" \
@@ -88,9 +103,10 @@ send_email() {
     -H "Authorization: Bearer ${RESEND_API_KEY}" \
     -H 'Content-Type: application/json' \
     -d "$payload")
+  [ -z "$http_code" ] && http_code="000"
 
   if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
-    log "WARN: Resend send failed (HTTP $http_code): $(cat /tmp/watchdog-resend-response.$$ 2>/dev/null)"
+    log "ALERT DELIVERY FAILED: Resend send failed (HTTP $http_code): $(cat /tmp/watchdog-resend-response.$$ 2>/dev/null) — nobody was notified of the outage above."
   else
     log "alert email sent to $WATCHDOG_ALERT_TO (HTTP $http_code)"
   fi

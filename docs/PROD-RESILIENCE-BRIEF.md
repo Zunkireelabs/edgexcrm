@@ -194,7 +194,11 @@ unbounded on a disk already at 82%.
 **2.4 — Install the watchdog on the DEV box (`173.249.9.91`), NOT the Zunkiree VPS.** It must be
 on independent hardware. Copy `scripts/uptime-watchdog.sh`, `chmod +x`, create the env file with
 `WATCHDOG_ALERT_TO` + `RESEND_API_KEY` (mode `600`), run once with `--dry-run` and confirm output,
-then add cron every 2 min. Confirm the state dir is writable.
+then **run once for real (no `--dry-run`) against `WATCHDOG_ALERT_TO` and confirm the mail actually
+arrives in the inbox** — a dry-run only proves the script's logic, not that Resend accepts the
+payload or that delivery isn't blocked (spam filter, wrong `WATCHDOG_ALERT_FROM` domain, revoked
+key). Record the observed Resend HTTP status in the report. Only add the cron (every 2 min) after
+that real send is confirmed delivered. Confirm the state dir is writable.
 
 ---
 
