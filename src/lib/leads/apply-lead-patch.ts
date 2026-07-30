@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { validate, isPhoneForCountry } from "@/lib/api/validation";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
-import { requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
+import { requireAdmin, requireLeadAccess, resolvePositionSlug, type AuthContext } from "@/lib/api/auth";
 import { getLeadMembership, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { canAccessPipeline, canAccessList } from "@/lib/api/permissions";
@@ -249,6 +249,19 @@ export async function applyLeadPatch(
     for (const field of blockedFields) {
       if (body[field] !== undefined) {
         return { kind: "forbidden" };
+      }
+    }
+  }
+
+  // Lead Source (attribution) fields are owner/admin-only. The UI already hides
+  // the edit button for everyone else (key-info-section.tsx LeadSourcePanel);
+  // this closes the direct-API path so a counselor/collaborator with lead access
+  // can't rewrite a lead's source (e.g. steal/blank a ref-code attribution).
+  const SOURCE_FIELDS = ["intake_source", "intake_medium", "intake_account", "intake_campaign"] as const;
+  if (!requireAdmin(auth)) {
+    for (const field of SOURCE_FIELDS) {
+      if (body[field] !== undefined) {
+        return { kind: "forbidden", message: "Only an owner or admin can edit the lead source." };
       }
     }
   }
