@@ -3,13 +3,18 @@ services:
     image: ghcr.io/zunkireelabs/edgexcrm:prod
     container_name: leads-crm
     restart: unless-stopped
+    mem_limit: 2g
+    memswap_limit: 2g          # == mem_limit ⇒ swap DISABLED for this container
     env_file:
       - .env.local
+    environment:
+      - NODE_OPTIONS=--max-old-space-size=1536
     networks:
       - hosting
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=hosting"
+      - "autoheal=true"
 
       # HTTPS
       - "traefik.http.routers.leads-crm-secure.entrypoints=websecure"
