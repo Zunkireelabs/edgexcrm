@@ -873,6 +873,19 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
   };
   const sourceLabel = SOURCE_LABELS[submission.created_via];
 
+  const rawPayload = submission.raw_payload as Record<string, unknown> | null | undefined;
+  const asString = (val: unknown): string | undefined =>
+    typeof val === "string" && val.trim() !== "" ? val : undefined;
+
+  const sourceRows: { label: string; value: string }[] = [
+    { label: "Source Category", value: submission.intake_source ?? "" },
+    { label: "Source Channel", value: submission.intake_medium ?? "" },
+    { label: "Source Page / Account", value: asString(rawPayload?.intake_account) ?? "" },
+    { label: "Campaign", value: submission.intake_campaign ?? "" },
+    { label: "Ref Code", value: asString(rawPayload?.ref_code) ?? "" },
+  ].filter((row) => row.value !== "");
+  const hasSourceRows = sourceRows.length > 0;
+
   return (
     <div className="space-y-2 text-xs">
       <div className="flex items-center gap-2">
@@ -887,6 +900,18 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
           </Badge>
         )}
       </div>
+
+      {hasSourceRows && (
+        <div className="space-y-1 mt-1">
+          <span className="text-muted-foreground">Lead Source:</span>
+          {sourceRows.map((row) => (
+            <div key={row.label} className="flex gap-2 text-muted-foreground">
+              <span className="capitalize shrink-0">{row.label}:</span>
+              <span className="text-foreground truncate">{row.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {hasCustomFields && (
         <div className="space-y-1 mt-1">
@@ -915,7 +940,7 @@ function SubmissionDetail({ submission }: { submission: LeadSubmission }) {
         </div>
       )}
 
-      {!hasCustomFields && !hasFiles && (
+      {!hasCustomFields && !hasFiles && !hasSourceRows && (
         <p className="text-muted-foreground">No field data recorded.</p>
       )}
     </div>
