@@ -78,3 +78,60 @@ describe("sendMessage — replyTo (inbound spine)", () => {
     expect(raw).toContain(`Reply-To: ${replyTo}`);
   });
 });
+
+describe("sendMessage — Bcc delivery (keepBcc)", () => {
+  it("keeps the Bcc header in the built raw MIME when bcc is passed", async () => {
+    await sendMessage(ACCOUNT, {
+      from: "rep@zunkireelabs.com",
+      to: ["lead@example.com"],
+      subject: "Hello",
+      bodyHtml: "<p>Hi</p>",
+      bcc: ["someone@example.com"],
+    });
+
+    const raw = decodeRaw(sendMock.mock.calls[0][0].requestBody.raw);
+    expect(raw).toMatch(/^Bcc: someone@example\.com/im);
+  });
+
+  it("omits the Bcc header when no bcc is passed", async () => {
+    await sendMessage(ACCOUNT, {
+      from: "rep@zunkireelabs.com",
+      to: ["lead@example.com"],
+      subject: "Hello",
+      bodyHtml: "<p>Hi</p>",
+    });
+
+    const raw = decodeRaw(sendMock.mock.calls[0][0].requestBody.raw);
+    expect(raw).not.toMatch(/^Bcc:/im);
+  });
+
+  it("joins multiple bcc addresses, all present in the Bcc header", async () => {
+    await sendMessage(ACCOUNT, {
+      from: "rep@zunkireelabs.com",
+      to: ["lead@example.com"],
+      subject: "Hello",
+      bodyHtml: "<p>Hi</p>",
+      bcc: ["one@example.com", "two@example.com"],
+    });
+
+    const raw = decodeRaw(sendMock.mock.calls[0][0].requestBody.raw);
+    expect(raw).toMatch(/^Bcc: one@example\.com, two@example\.com/im);
+  });
+
+  it("does not perturb the Reply-To header when both are set", async () => {
+    const replyTo = "reply+labcdef123456@inbound.edgex.zunkireelabs.com";
+
+    await sendMessage(ACCOUNT, {
+      from: "rep@zunkireelabs.com",
+      to: ["lead@example.com"],
+      subject: "Hello",
+      bodyHtml: "<p>Hi</p>",
+      bcc: ["someone@example.com"],
+      replyTo,
+    });
+
+    const raw = decodeRaw(sendMock.mock.calls[0][0].requestBody.raw);
+    expect(raw).toMatch(/^Bcc: someone@example\.com/im);
+    expect(raw).toContain(`Reply-To: ${replyTo}`);
+  });
+});
