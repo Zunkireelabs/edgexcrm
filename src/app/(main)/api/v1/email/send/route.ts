@@ -22,6 +22,7 @@ import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
 import { mintToken } from "@/lib/email/inbound/tokens";
+import { resolveReplyToLabel } from "@/lib/email/reply-to-label";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
@@ -247,7 +248,13 @@ export async function POST(request: Request) {
         }
 
         mintedAddressId = addrRow.id;
-        replyTo = minted.address;
+
+        const label = await resolveReplyToLabel(db, {
+          accountDisplayName: account.display_name,
+          userId: auth.userId,
+          tenantId: auth.tenantId,
+        });
+        replyTo = label ? `"${label}" <${minted.address}>` : minted.address;
       }
     } catch (err) {
       logger.error(

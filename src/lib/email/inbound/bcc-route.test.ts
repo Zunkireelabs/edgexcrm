@@ -199,6 +199,87 @@ describe("processBccDropbox — sender-authenticity guard (brief §5 step 2)", (
   });
 });
 
+describe("processBccDropbox — sender-authenticity guard accepts connected mailboxes (SLICE-A-GUARD-REPLYTO-FIX-BRIEF §1)", () => {
+  it("1. From = login email, no connected accounts → accepted (existing behavior holds)", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "rep@example.com" } } });
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: '"Rep Person" <rep@example.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("rep@example.com");
+  });
+
+  it("2. From = a connected account email that differs from the login email → accepted (regression test — must fail before the fix)", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "user-1", email: "shrestha.sadin007@gmail.com" },
+    ];
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: '"Sadin" <shrestha.sadin007@gmail.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("shrestha.sadin007@gmail.com");
+  });
+
+  it("3. From = a connected account belonging to a DIFFERENT user_id → dead-letter", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "some-other-user", email: "shrestha.sadin007@gmail.com" },
+    ];
+    const headers = { from: '"Not Sadin" <shrestha.sadin007@gmail.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter).toHaveLength(1);
+    expect(serviceTables.inbound_email_dead_letter[0].reason).toBe("bcc_sender_mismatch");
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("4. p.userId === null → dead-letter, zero emails writes", async () => {
+    const headers = { from: '"Rep" <rep@example.com>', to: "lead@example.com" };
+
+    await processBccDropbox({ ...BASE_PARAMS, userId: null }, makeDb(), BASE_RECEIVING, headers);
+
+    expect(getUserByIdMock).not.toHaveBeenCalled();
+    expect(serviceTables.inbound_email_dead_letter).toHaveLength(1);
+    expect(serviceTables.inbound_email_dead_letter[0].reason).toBe("bcc_sender_mismatch");
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("5. Case/whitespace variation on From (\"  SADIN@Zunkireelabs.COM  \") → accepted", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: "  SADIN@Zunkireelabs.COM  ", to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("sadin@zunkireelabs.com");
+  });
+
+  it("logs only the allowed-sender COUNT in the dead-letter rawEvent, never the addresses themselves", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "user-1", email: "shrestha.sadin007@gmail.com" },
+    ];
+    const headers = { from: '"Nope" <attacker@evil.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    const deadLetter = serviceTables.inbound_email_dead_letter[0];
+    expect(deadLetter.raw_event.allowed_sender_count).toBe(2); // login + 1 connected account
+    expect(JSON.stringify(deadLetter.raw_event)).not.toContain("sadin@zunkireelabs.com");
+    expect(JSON.stringify(deadLetter.raw_event)).not.toContain("shrestha.sadin007@gmail.com");
+  });
+});
+
 describe("processBccDropbox — own-domain filter (brief §5 step 3)", () => {
   it("never lead-matches a dropbox address that appears in To/Cc", async () => {
     const headers = {
