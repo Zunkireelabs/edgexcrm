@@ -127,6 +127,7 @@ vi.mock("@/lib/leads/dedup", async (importOriginal) => {
 });
 
 import { processBccDropbox, type BccDropboxParams } from "./bcc-route";
+import { mintToken } from "./tokens";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 
 // Fake ScopedClient — only from()/raw() are ever called by processBccDropbox;
@@ -161,6 +162,8 @@ const BASE_PARAMS: BccDropboxParams = {
 
 beforeEach(() => {
   process.env.INBOUND_EMAIL_DOMAINS = "inbound.edgex.zunkireelabs.com";
+  process.env.INBOUND_TOKEN_SECRET = "a".repeat(64);
+  process.env.INBOUND_ENV_MARKER = "l";
   serviceTables = {};
   scopedTables = {};
   getUserByIdMock = vi.fn(async (id: string) => {
@@ -388,6 +391,99 @@ describe("processBccDropbox — dropbox token stripped from persisted to/cc (rev
     expect(scopedTables.emails).toHaveLength(1);
     expect(scopedTables.emails[0].to_emails).toEqual(["lead@example.com"]);
     expect(scopedTables.emails[0].cc_emails).toEqual(["other-lead@example.com"]);
+  });
+});
+
+describe("processBccDropbox — reply-token dedup (BCC-DEDUP-FIX-BRIEF — primary signal)", () => {
+  it("1. Reply-To carries a token that exists in inbound_addresses → skip: zero emails inserts, zero dead-letters", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+      "message-id": "<CAOOo9VNrtM=sQdf84eTBP-bCwaN2K3C41Y2=WKSouOAnnuUY_A@mail.gmail.com>",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+    expect(scopedTables.email_threads ?? []).toHaveLength(0);
+  });
+
+  it("2. Reply-To carries a well-formed but unknown token → proceeds and inserts", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply"); // valid shape/checksum, but no matching inbound_addresses row
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+  });
+
+  it('3. Reply-To in "Name" <reply+…> display-name form → still skipped (proves parseInboundAddress reuse)', async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": `"Zunkiree Labs" <${minted.address}>`,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("4. Revoked token → still skipped (match on existence, not status='active')", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "revoked" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("a bcc-verb token in Reply-To does NOT skip — only verb === 'reply' does", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("bcc");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+  });
+
+  it("no Reply-To, or an unparseable one, falls through without dead-lettering (happy path unaffected)", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": "not-a-valid-token@somewhere-else.com",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
   });
 });
 
