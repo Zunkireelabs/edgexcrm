@@ -6,6 +6,7 @@ import { EmailSenderCard } from "@/components/dashboard/settings/email-sender-ca
 import { ChannelsCard } from "@/components/dashboard/settings/channels-card";
 import { EmailRulesManager } from "@/components/dashboard/settings/email-rules-manager";
 import { InboxConnector } from "@/industries/_shared/features/email/components/inbox-connector";
+import { BccAddressPanel } from "@/industries/_shared/features/email/components/bcc-address-panel";
 import { useSettingsModal } from "@/contexts/settings-modal-context";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -30,6 +31,7 @@ export function CommunicationsPanel() {
           <Suspense>
             <InboxConnector />
           </Suspense>
+          <BccAddressPanel />
         </PanelSection>
       )}
     </PanelContent>

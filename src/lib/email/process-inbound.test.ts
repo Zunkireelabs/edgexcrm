@@ -155,6 +155,16 @@ const upsertThreadNotificationMock = vi.fn(async (params: ThreadNotificationPara
   void params;
 });
 
+interface BccDropboxCallArgs {
+  tenantId: string;
+  resendEmailId: string;
+  userId: string | null;
+}
+const processBccDropboxMock = vi.fn(async (params: BccDropboxCallArgs, ...rest: unknown[]): Promise<void> => {
+  void params;
+  void rest;
+});
+
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: vi.fn(async () => makeClient(serviceTables, forceInsertErrors)),
 }));
@@ -192,6 +202,13 @@ vi.mock("@/lib/api/audit", () => ({
 vi.mock("@/lib/notifications", () => ({
   upsertThreadNotification: (params: ThreadNotificationParams) => upsertThreadNotificationMock(params),
   NotificationTypes: { EMAIL_RECEIVED: "email.received" },
+}));
+
+// This test file's job is the DISPATCH branch only (verb='bcc' -> delegate,
+// full stop) — the dropbox algorithm itself is unit-tested in isolation in
+// ./inbound/bcc-route.test.ts against its own harness.
+vi.mock("./inbound/bcc-route", () => ({
+  processBccDropbox: (params: BccDropboxCallArgs, ...rest: unknown[]) => processBccDropboxMock(params, ...rest),
 }));
 
 import { processInboundEmailEvents } from "./process-inbound";
@@ -236,6 +253,7 @@ beforeEach(() => {
   resolveLeadIdentityMock.mockReset().mockResolvedValue({ match: "none", existingLead: null, phoneMatchLeadIds: [] });
   emitEventMock.mockReset().mockResolvedValue("event-id");
   upsertThreadNotificationMock.mockReset().mockResolvedValue(undefined);
+  processBccDropboxMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("processInboundEmailEvents — happy path (verb=reply, thread_id, authoritative)", () => {
@@ -374,7 +392,7 @@ describe("processInboundEmailEvents — new-thread creation", () => {
     });
 
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "bcc", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     const result = await processInboundEmailEvents();
@@ -394,7 +412,7 @@ describe("processInboundEmailEvents — new-thread creation", () => {
   it("leaves lead_id null when resolveLeadIdentity finds no single match", async () => {
     resolveLeadIdentityMock.mockResolvedValue({ match: "none", existingLead: null, phoneMatchLeadIds: ["lead-1", "lead-2"] });
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "bcc", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     await processInboundEmailEvents();
@@ -416,7 +434,7 @@ describe("processInboundEmailEvents — tenant-scoped fallback matcher", () => {
     });
 
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "bcc", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     await processInboundEmailEvents();
@@ -446,5 +464,52 @@ describe("processInboundEmailEvents — cross-tenant defense-in-depth", () => {
     expect(serviceTables.events[0].status).toBe("pending"); // attempts=1, retried, not silently dropped
     expect(serviceTables.events[0].attempts).toBe(1);
     expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+});
+
+describe("processInboundEmailEvents — verb='bcc' dispatch (BCC-DROPBOX-BRIEF §5)", () => {
+  it("delegates to processBccDropbox and never touches the reply-path guard/thread logic", async () => {
+    getReceivingEmailMock.mockResolvedValue({
+      ...BASE_RECEIVING,
+      to: ["bcc+s000markerxxxxxxchecksum@inbound.edgex.zunkireelabs.com"],
+      headers: { "Message-ID": "<original@mail.gmail.com>" },
+    });
+
+    serviceTables.events = [
+      makeEvent({
+        resend_email_id: "resend-1",
+        tenant_id: "tenant-a",
+        inbound_address_id: "addr-1",
+        kind: "user",
+        verb: "bcc",
+        thread_id: null,
+        user_id: "user-9",
+        envelope: { to: ["bcc+s000markerxxxxxxchecksum@inbound.edgex.zunkireelabs.com"], cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+      }),
+    ];
+
+    const result = await processInboundEmailEvents();
+
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+
+    expect(processBccDropboxMock).toHaveBeenCalledTimes(1);
+    expect(processBccDropboxMock.mock.calls[0][0]).toEqual({
+      tenantId: "tenant-a",
+      resendEmailId: "resend-1",
+      userId: "user-9",
+    });
+
+    // The reply-path machinery below the dispatch branch must never run for a
+    // bcc event — this is what proves the branch is a full stop, not a
+    // fallthrough.
+    expect(matchInboundToThreadMock).not.toHaveBeenCalled();
+    expect(resolveLeadIdentityMock).not.toHaveBeenCalled();
+    expect(emitEventMock).not.toHaveBeenCalled();
+    expect(forwardReceivingEmailMock).not.toHaveBeenCalled();
+    expect(upsertThreadNotificationMock).not.toHaveBeenCalled();
+    expect(scopedTables.email_threads ?? []).toHaveLength(0);
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+
+    expect(serviceTables.events[0].status).toBe("completed");
   });
 });

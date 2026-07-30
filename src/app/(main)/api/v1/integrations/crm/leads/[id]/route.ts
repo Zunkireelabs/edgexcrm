@@ -28,9 +28,6 @@ const UPDATABLE_FIELDS = [
   "country",
   "custom_fields",
   "file_urls",
-  "intake_source",
-  "intake_medium",
-  "intake_campaign",
   "preferred_contact_method",
 ] as const;
 
