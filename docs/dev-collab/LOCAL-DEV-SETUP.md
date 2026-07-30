@@ -15,6 +15,9 @@
 | **Node 22+** | the app | `brew install node` (or nvm) |
 | **Supabase CLI** | spins up / manages the local stack | `brew install supabase/tap/supabase` |
 | **psql** (PostgreSQL client) | apply/inspect migrations locally | `brew install libpq` then add to PATH, or `brew install postgresql@17` |
+| **graphify** | code knowledge graph — lets Claude answer "what calls this / how do these connect" without reading files, cutting 20–50k tokens per question down to a few hundred | `curl -LsSf https://astral.sh/uv/install.sh \| sh` then `uv tool install "graphifyy[mcp]"` |
+
+> **The `[mcp]` extra is mandatory.** `uv tool install graphifyy` without it installs fine, but the MCP server dies at startup with `ModuleNotFoundError: No module named 'mcp'`, which surfaces in Claude Code as the unhelpful `Failed to reconnect to graphify: -32000`. Fix with `uv tool install "graphifyy[mcp]" --force`. Also make sure `~/.local/bin` is on your `PATH`.
 
 Verify:
 ```bash
@@ -22,6 +25,7 @@ docker version --format '{{.Server.Version}}'   # OrbStack running?
 supabase --version                              # >= 2.x
 node --version                                  # >= 22
 psql --version
+graphify --version                              # >= 0.9
 ```
 
 ---
@@ -41,7 +45,19 @@ supabase start
 
 # 3. Create the local login user + link it to the seeded tenant (idempotent).
 ./scripts/local-db-setup.sh
+
+# 4. Build the code knowledge graph (AST-only — 0 tokens, $0, no API key).
+#    The graph itself is gitignored (~12 MB), so cloning does NOT give you one —
+#    every dev builds it locally. Safe to re-run any time.
+./scripts/graphify-setup.sh
 ```
+
+After step 4, **restart Claude Code** inside the repo, then confirm both halves are live:
+
+- `/mcp` → `graphify` shows as **connected** (gives Claude the graph query tools)
+- `/hooks` → two graphify `PreToolUse` hooks are active (`Bash`, and `Read|Glob`). These come from the repo's shared `.claude/settings.json`, so you may get a trust prompt the first time — approve it.
+
+The hooks are what actually save tokens: they tell Claude to query the graph before grepping or opening source files. Without them the graph just sits there unused. They fail open — if you skip this setup entirely nothing breaks, you simply get no savings. Full guide, including known limitations: [`docs/reference/05-GRAPHIFY-CODE-GRAPH.md`](../reference/05-GRAPHIFY-CODE-GRAPH.md).
 
 `supabase start` prints your local URLs and keys (also available anytime via `supabase status`):
 
@@ -96,11 +112,17 @@ git fetch origin && git switch -c feature/<name> origin/stage   # (or rebase you
 supabase start                     # ensure the stack is up
 scripts/migrate-apply.sh local     # add --dry-run first to preview what would apply
 
-# 3. Work
+# 3. Refresh the code graph so Claude isn't reasoning about last week's code.
+#    Incremental and cached — usually seconds. Nothing rebuilds it automatically.
+./scripts/graphify-setup.sh
+
+# 4. Work
 npm run dev
 ```
 
-That's the loop: **`git pull` → `migrate-apply.sh local` → `npm run dev`.** You are applying the *exact same migration files* that will run on stage and prod — so if it applies clean locally, you've genuinely de-risked it.
+That's the loop: **`git pull` → `migrate-apply.sh local` → `graphify-setup.sh` → `npm run dev`.** You are applying the *exact same migration files* that will run on stage and prod — so if it applies clean locally, you've genuinely de-risked it.
+
+> ⚠️ **Never run `graphify update` in this repo.** It writes to `src/graphify-out/` while `.mcp.json` reads the root `graphify-out/` — no error is raised, the graph just silently goes stale forever. Always refresh with `./scripts/graphify-setup.sh`. Likewise never run `graphify claude install` — it overwrites `.claude/settings.json` with a machine-specific path and replaces the CLAUDE.md guidance with advice recommending that broken command.
 
 > **When to refresh the baseline instead:** `migrate-apply.sh local` covers the normal case (new migration files). Do a full **baseline refresh** (§5) only occasionally — e.g. after a large batch of history landed, if your local drifted, or someone changed the schema on stage *out-of-band* (not via a migration file, which shouldn't happen but does). Baseline refresh = "resnapshot stage's whole schema"; `migrate-apply.sh local` = "apply the new deltas."
 
