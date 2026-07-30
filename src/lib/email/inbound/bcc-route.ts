@@ -13,7 +13,7 @@ import type { GetReceivingEmailResponseSuccess } from "resend";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import { normalizeEmail, resolveLeadIdentity } from "@/lib/leads/dedup";
 import { matchInboundToThread, THREAD_COLUMNS, type EmailThreadRow } from "./match-thread";
-import { getInboundDomains } from "./tokens";
+import { getInboundDomains, parseInboundAddress } from "./tokens";
 import {
   getHeader,
   parseAddress,
@@ -167,6 +167,31 @@ export async function processBccDropbox(
   }
 
   // ── 5. Skip an EdgeX-sent copy — the rep BCC'd a message EdgeX itself sent ─
+  //
+  // Primary signal: our own Reply-To token. Gmail REWRITES the Message-ID we
+  // stamp at gmail-client.ts:188 (proven on stage 2026-07-30 — the delivered
+  // copy carried <...@mail.gmail.com>, the emails row stored
+  // <...@edgex-crm.com>), so rfc_message_id equality can never match for a
+  // Gmail-sent message. The reply token can only have been minted by us.
+  const replyToHeader = getHeader(headers, "reply-to");
+  if (replyToHeader) {
+    const parsed = parseInboundAddress(replyToHeader);
+    if (parsed?.verb === "reply") {
+      // Match on token existence regardless of status — a REVOKED token still
+      // proves we authored the message, and revocation must not resurrect the
+      // duplicate this guard exists to prevent. scopedClient scopes to tenant.
+      const { data: ours } = await db
+        .from("inbound_addresses")
+        .select("id")
+        .eq("token", parsed.token)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+      if (ours) return; // our own send — not an error, not a dead-letter
+    }
+  }
+
+  // Fallback: Message-ID equality. Still correct for any sender that preserves
+  // the ID we stamped, and for sends made with inbound disabled (no token).
   const messageId = getHeader(headers, "message-id") ?? null;
   if (messageId) {
     const { data: existing } = await db
