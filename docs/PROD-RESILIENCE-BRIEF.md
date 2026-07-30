@@ -275,12 +275,35 @@ that real send is confirmed delivered. Confirm the state dir is writable.
 - [ ] `memory.events` shows `oom_kill 0` after 30 min. Any OOM kills ⇒ cap too low; report before promoting.
 
 **Autoheal proof (on stage — this is the whole point of the change):**
-- [ ] With autoheal running, force the container unhealthy *while leaving the process alive*:
-      `docker exec leads-crm-dev sh -c 'kill -STOP 1'` — wait ~90s — confirm `RestartCount`
-      incremented and `/login` is 200 again. This reproduces the incident's exact signature
-      (hung but running). **Record the observed recovery time.** Target: ~1 min vs the 1h45m
-      that actually happened. Any method that makes the healthcheck fail while the process
-      survives is equivalent.
+
+> ⚠️ **Two corrections, both learned the hard way on 2026-07-30 — read before running this.**
+>
+> 1. **`docker exec … sh -c 'kill -STOP 1'` DOES NOT WORK.** Linux discards signals sent to PID 1
+>    *from inside its own PID namespace* unless PID 1 has a handler installed, and SIGSTOP can
+>    never have one. The kill is a silent no-op: the process keeps serving, the healthcheck keeps
+>    passing, and the test looks like **autoheal is broken** when nothing is wrong. Signal from
+>    the **host** instead, where the protection does not apply.
+> 2. **`RestartCount` does NOT increment.** It only counts restarts triggered by the *restart
+>    policy*; autoheal issues an explicit `docker restart`, which does not bump it. A gate that
+>    waits for `RestartCount` to rise will report failure on a perfectly working system.
+
+- [ ] With autoheal running, freeze the process from the host — alive but not executing, which is
+      the incident's exact signature:
+      ```bash
+      HP=$(docker inspect leads-crm-dev --format '{{.State.Pid}}')
+      kill -STOP $HP
+      grep ^State /proc/$HP/status      # MUST read "T (stopped)" — else the freeze did not take
+      ```
+- [ ] Confirm recovery by these three signals (**not** `RestartCount`):
+      - `docker logs autoheal` contains `found to be unhealthy - Restarting container now`
+      - `docker inspect leads-crm-dev --format '{{.State.Pid}}'` differs from `$HP`
+      - health goes `healthy → unhealthy → starting → healthy`, and `/login` returns 200
+- [ ] **Record the observed recovery time.** Measured 2026-07-30 on stage: **~2m30s** end to end
+      (~2m of it is the healthcheck's own `interval 30s × retries 3` before it declares unhealthy;
+      autoheal itself adds ~15s). Compare against the **1h45m** the real incident ran dark. If you
+      want faster recovery, tighten the healthcheck — not autoheal.
+- [ ] Safety net: if it has not recovered after ~5 min, `kill -CONT $HP` to unfreeze, then
+      investigate before touching prod.
 
 **Watchdog proof:**
 - [ ] Point `WATCHDOG_TARGETS` at a URL you can break (or an unroutable host), confirm: no alert
@@ -313,7 +336,8 @@ that real send is confirmed delivered. Confirm the state dir is writable.
 - Diff summary + PR link (base must be `stage`).
 - All Phase 1 local gate results.
 - The stage verification table, **including measured `memory.current` after 30 min** and the
-  **observed autoheal recovery time** from the `kill -STOP 1` test.
+  **observed autoheal recovery time** from the host-side SIGSTOP test (§4 — note the two
+  corrections there; the in-container `kill -STOP 1` and the `RestartCount` check are both wrong).
 - Watchdog proof output (the alert/suppress/recover sequence).
 - Which doc you chose for §1.5 and why.
 - Anything that contradicted this brief — particularly if stage memory lands near its 1 GB cap,
