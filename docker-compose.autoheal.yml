@@ -8,7 +8,16 @@ name: autoheal
 
 services:
   autoheal:
-    image: willfarrell/autoheal:latest
+    # Pinned by digest, not `:latest` — this container mounts the Docker socket and
+    # can restart ANY container on a box hosting ~57 others incl. other clients'
+    # production, so a mutable tag is a real supply-chain surface (PROD-HARDENING
+    # BRIEF §3.1). Digest below is willfarrell/autoheal:latest as of 2026-07-30,
+    # read from the Docker Hub API (multi-arch manifest-list digest) — confirm it
+    # matches the box's actual running image with:
+    #   docker inspect autoheal --format '{{index .RepoDigests 0}}'
+    # To update deliberately: pick the new tag, confirm it on the VPS, record the
+    # date + who approved it in this comment, then bump the digest below.
+    image: willfarrell/autoheal@sha256:d98a2df2602512b4bee8eb8ea5a74fa2fdd7473759aef0090477be47376d490a
     container_name: autoheal
     restart: always
     environment:

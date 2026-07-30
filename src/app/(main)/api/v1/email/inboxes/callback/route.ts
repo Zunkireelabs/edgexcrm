@@ -4,9 +4,9 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
-import { createHmac } from "crypto";
 import { getUserInfoEmail } from "@/industries/_shared/features/email/lib/gmail-client";
 import { encryptAccountToken } from "@/industries/_shared/features/email/lib/token-crypto";
+import { verifyState } from "@/lib/email/oauth-state";
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 
@@ -18,16 +18,6 @@ function getRedirectUri() {
 function getSettingsUrl(params?: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3001";
   return `${appUrl}/settings${params ? `?${params}` : ""}#connected-inboxes`;
-}
-
-function verifyState(state: string, userId: string): boolean {
-  const parts = state.split(".");
-  if (parts.length !== 2) return false;
-  const [embeddedUserId, sig] = parts;
-  if (embeddedUserId !== userId) return false;
-  const secret = process.env.NEXTAUTH_SECRET || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-  const expected = createHmac("sha256", secret).update(userId).digest("hex").slice(0, 16);
-  return sig === expected;
 }
 
 export async function GET(request: NextRequest) {
