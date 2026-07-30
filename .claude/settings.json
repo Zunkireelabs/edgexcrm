@@ -1,0 +1,25 @@
+{
+  "_comment": "Shared Claude Code settings for edgeXcrm. Per-developer overrides belong in .claude/settings.local.json (gitignored). The PreToolUse hooks below make Claude consult the graphify code graph before grepping or reading source files — see docs/reference/05-GRAPHIFY-CODE-GRAPH.md. They fail open (always exit 0) and print nothing when graphify-out/graph.json is absent, so they are harmless for a dev who has not run scripts/graphify-setup.sh. The command is intentionally bare 'graphify' (resolved via PATH) rather than the absolute path that 'graphify claude install' writes, so this file is portable across machines, and it is guarded by 'command -v' so devs who have not installed graphify get silence instead of a hook error on every read. Do not run 'graphify claude install' — it overwrites both this file (with a machine-specific path) and the customised CLAUDE.md section.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v graphify >/dev/null 2>&1 && graphify hook-guard search || true"
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "command -v graphify >/dev/null 2>&1 && graphify hook-guard read || true"
+          }
+        ]
+      }
+    ]
+  }
+}

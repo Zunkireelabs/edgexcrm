@@ -1,0 +1,9 @@
+{
+  "_comment": "Template for .mcp.json (which is gitignored — it holds per-developer connection strings). ./scripts/graphify-setup.sh writes this entry for you and merges it into any existing .mcp.json, so you normally do not need to copy this file by hand. Both values are intentionally portable: 'graphify-mcp' resolves via PATH, and the graph path is relative to the repo root (Claude Code launches MCP servers with cwd = repo root). See docs/reference/05-GRAPHIFY-CODE-GRAPH.md.",
+  "mcpServers": {
+    "graphify": {
+      "command": "graphify-mcp",
+      "args": ["graphify-out/graph.json"]
+    }
+  }
+}
