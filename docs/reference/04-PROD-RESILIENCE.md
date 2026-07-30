@@ -70,23 +70,36 @@ tighten the healthcheck, not autoheal.**
 
 See the brief §4 for the full gate.
 
-## Uptime watchdog — detection, not recovery
+## Detection — UptimeRobot is what's actually live (as of 2026-07-30)
 
-Autoheal fixes recovery once a problem is *detected* by Docker's own healthcheck. It does nothing
-if the whole box is down, Traefik itself is wedged, or Docker's healthcheck subsystem is the thing
-that's broken. `scripts/uptime-watchdog.sh` is the independent check: it curls the public URLs
-from **outside** the Zunkiree VPS (installed on the separate dev box, `173.249.9.91`) and emails an
-alert if a target fails twice in a row, with a matching recovery notice once it comes back. A
-monitor that runs on the box it's monitoring is not a monitor — if that box goes fully dark, so
-does the alert.
+**UptimeRobot is the live detection layer.** Keyword monitor on
+`https://edgex.zunkireelabs.com/login`, keyword `EdgeX`, 5-minute interval, alerting
+sadin@/anish@/hardik@zunkireelabs.com — **alert delivery tested end-to-end and confirmed by all
+three recipients.**
 
-Config is entirely env-driven (`WATCHDOG_TARGETS`, `WATCHDOG_ALERT_TO`, `WATCHDOG_ALERT_FROM`,
-`RESEND_API_KEY`, `WATCHDOG_STATE_DIR`) — nothing is hardcoded, and it refuses to run without an
+**Why keyword, not a plain HTTP-up check:** the login page is client-rendered, so the string
+"Sign in" never appears in the raw HTML UptimeRobot fetches — a keyword monitor looking for that
+text would report DOWN permanently, from the moment it's created. `EdgeX` comes from the
+server-rendered `<title>` and is present in the initial HTML response, so it actually works. This
+is a trap someone will re-hit if the monitor is ever recreated — write the keyword down, don't
+re-derive it.
+
+**Why an external SaaS over `scripts/uptime-watchdog.sh` (our own script):** the watchdog sends
+alerts via **Resend — our own infrastructure**. If Resend is down, the API key rotates, or the
+sender domain de-verifies, the watchdog's alert fails silently, at exactly the moment a monitor of
+last resort most needs to still work. A monitor must not share fate with what it monitors, so a
+free third-party SaaS with its own alerting path is the primary layer.
+
+`scripts/uptime-watchdog.sh` is **available but not installed anywhere** — it is merged to the repo
+and kept as an optional second layer, not currently running on any box (dev box, VPS, or otherwise).
+If it's ever installed, the install path and config are in `docs/PROD-RESILIENCE-BRIEF.md` §2.4;
+config is entirely env-driven (`WATCHDOG_TARGETS`, `WATCHDOG_ALERT_TO`, `WATCHDOG_ALERT_FROM`,
+`RESEND_API_KEY`, `WATCHDOG_STATE_DIR`) — nothing hardcoded, and it refuses to run without an
 explicit `WATCHDOG_ALERT_TO`. `WATCHDOG_ALERT_FROM` defaults to `noreply@lead-crm.zunkireelabs.com`
 — the same Resend-verified domain the app itself sends from (`PLATFORM_EMAIL_ADDRESS`,
 `src/lib/email/index.ts:19-20`) — since an unverified From domain gets the send rejected by Resend,
-which would silently defeat the alert. See the script's header comment for the full behavior spec (2-failure
-threshold, alert-once-per-outage, recovery notice, always exits 0 so cron doesn't spam).
+which would silently defeat the alert. See the script's header comment for the full behavior spec
+(2-failure threshold, alert-once-per-outage, recovery notice, always exits 0 so cron doesn't spam).
 
 ## Memory: swap is not a safety net here
 
