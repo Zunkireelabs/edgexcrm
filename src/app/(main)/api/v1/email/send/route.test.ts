@@ -553,3 +553,52 @@ describe("POST /api/v1/email/send — Reply-To display name (SLICE-A-GUARD-REPLY
     expect(state.insertedAddresses).toHaveLength(0);
   });
 });
+
+describe("POST /api/v1/email/send — Bcc persistence filters own inbound-domain addresses (BCC delivery fix change 2)", () => {
+  it("sends the full bcc list but persists only non-inbound-domain addresses", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"],
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Send still gets the full list — the rep asked for both recipients.
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.bcc).toEqual(["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"]);
+
+    // Persisted bcc_emails drops our own inbound-domain dropbox address.
+    expect(state.insertedEmails).toHaveLength(1);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["teammate@example.com"]);
+  });
+
+  it("INBOUND_EMAIL_DOMAINS unset: send still succeeds and persists the bcc list unfiltered", async () => {
+    delete process.env.INBOUND_EMAIL_DOMAINS;
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([
+      "teammate@example.com",
+      "bcc+sabc123@inbound.edgex.zunkireelabs.com",
+    ]);
+  });
+});

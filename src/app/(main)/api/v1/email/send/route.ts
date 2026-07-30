@@ -21,12 +21,33 @@ import { emitEvent } from "@/lib/api/audit";
 import { logger } from "@/lib/logger";
 import { sendMessage } from "@/industries/_shared/features/email/lib/gmail-client";
 import { decryptAccountTokens, persistRefreshedToken } from "@/industries/_shared/features/email/lib/token-crypto";
-import { mintToken } from "@/lib/email/inbound/tokens";
+import { mintToken, getInboundDomains } from "@/lib/email/inbound/tokens";
 import { resolveReplyToLabel } from "@/lib/email/reply-to-label";
 import type { ConnectedEmailAccount } from "@/types/database";
 
 function isStringArray(val: unknown): val is string[] {
   return Array.isArray(val) && val.every((v) => typeof v === "string");
+}
+
+/**
+ * Drops our own inbound-domain addresses (reply/bcc dropbox tokens) from the
+ * bcc list before it's persisted to emails.bcc_emails — any teammate who can
+ * see the thread can read that column, and a dropbox address is a per-user
+ * addressing secret. The full list still gets SENT; only persistence is
+ * filtered. getInboundDomains() throws when INBOUND_EMAIL_DOMAINS is unset —
+ * that must not break a send, so fall back to persisting the list unfiltered.
+ */
+function filterOwnDomainsForPersistence(bcc: string[]): string[] {
+  let domains: string[];
+  try {
+    domains = getInboundDomains();
+  } catch {
+    return bcc;
+  }
+  return bcc.filter((addr) => {
+    const domain = addr.split("@")[1]?.toLowerCase();
+    return !domain || !domains.includes(domain);
+  });
 }
 
 /**
@@ -360,7 +381,7 @@ export async function POST(request: Request) {
       from_name: account.display_name,
       to_emails: body.to,
       cc_emails: isStringArray(body.cc) ? body.cc : [],
-      bcc_emails: isStringArray(body.bcc) ? body.bcc : [],
+      bcc_emails: filterOwnDomainsForPersistence(isStringArray(body.bcc) ? body.bcc : []),
       subject,
       body_html: bodyHtml,
       body_text: null,
