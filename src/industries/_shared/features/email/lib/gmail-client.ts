@@ -177,7 +177,7 @@ export async function sendMessage(
     threadId?: string;    // Phase 3: threads the sent message in Gmail
     inReplyTo?: string;  // Phase 3: sets In-Reply-To header
     references?: string[]; // Phase 3: sets References header
-    replyTo?: string; // Inbound spine: routes replies to EdgeX instead of Gmail (brief intro)
+    replyTo?: string | { name: string; address: string }; // Inbound spine: routes replies to EdgeX instead of Gmail (brief intro)
   },
 ): Promise<{
   gmail_message_id: string;
@@ -191,7 +191,7 @@ export async function sendMessage(
   const refreshed = await refreshAccessTokenIfNeeded(account);
 
   const mail = new MailComposer({
-    from: args.fromName ? `"${args.fromName}" <${args.from}>` : args.from,
+    from: args.fromName ? { name: args.fromName, address: args.from } : args.from,
     to: args.to.join(", "),
     cc: args.cc?.join(", "),
     bcc: args.bcc?.join(", "),

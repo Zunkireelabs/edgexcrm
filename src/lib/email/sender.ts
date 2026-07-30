@@ -1,12 +1,9 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { EMAIL_FROM, PLATFORM_EMAIL_ADDRESS } from "./index";
+import { sanitizeHeaderName as sanitizeName } from "./header-name";
 
 export type ResolvedSender = { from: string; replyTo?: string };
 
-// Strip anything that could break the RFC 5322 header (CR/LF/angle brackets).
-function sanitizeName(name: string): string {
-  return name.replace(/[\r\n<>]/g, "").trim().slice(0, 120);
-}
 function isValidEmail(addr: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(addr);
 }
