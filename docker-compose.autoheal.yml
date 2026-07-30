@@ -1,3 +1,11 @@
+# Pinned project name — DO NOT REMOVE.
+# Compose otherwise derives the project from the directory it is run in. Launched from either app
+# directory that puts autoheal in the SAME project as leads-crm / leads-crm-dev, and a later
+# `docker compose -f docker-compose.autoheal.yml down --remove-orphans` there would then delete
+# the app container as an "orphan". Hit on 2026-07-30; pinning the name makes isolation a property
+# of this file rather than of remembering to pass `-p autoheal`.
+name: autoheal
+
 services:
   autoheal:
     image: willfarrell/autoheal:latest

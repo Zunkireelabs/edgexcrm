@@ -46,12 +46,29 @@ correct, it just wasn't wired to anything that acts on it.
 - Mounts `/var/run/docker.sock`. That's inherent to how any container-restarting watcher works,
   not a shortcut taken here — worth knowing before treating the container as routine.
 
-**Recovery time target:** with autoheal running, a healthcheck-failing-but-alive container should
-be back in **about a minute** (interval 15s + start period 60s + Docker's own restart), not the
-1h45m the actual incident took. The acceptance test for this is forcing the exact failure
-signature — process alive, healthcheck failing — via `docker exec <container> sh -c 'kill -STOP
-1'`, which freezes the process without killing it. See the brief §4 for the full verification
-gate and how to read the result.
+**Measured recovery time: ~2m30s** (verified on stage 2026-07-30), against the **1h45m** the real
+incident ran dark. Most of that is the healthcheck itself — `interval 30s × retries 3` before it
+declares the container unhealthy — with autoheal adding only ~15s on top. **To recover faster,
+tighten the healthcheck, not autoheal.**
+
+**How to reproduce the failure (two traps — both cost real time on 2026-07-30):**
+
+- ❌ **`docker exec <container> sh -c 'kill -STOP 1'` is a silent no-op.** Linux discards signals
+  sent to PID 1 *from inside its own PID namespace* unless PID 1 has a handler, and SIGSTOP can
+  never have one. The process keeps serving, the healthcheck keeps passing, and it looks like
+  autoheal is broken when nothing is wrong.
+- ✅ **Signal from the host instead**, where that protection doesn't apply:
+  ```bash
+  HP=$(docker inspect leads-crm-dev --format '{{.State.Pid}}')
+  kill -STOP $HP
+  grep ^State /proc/$HP/status      # MUST read "T (stopped)"
+  ```
+- ❌ **Don't verify via `RestartCount`** — it only counts *restart-policy* restarts, and autoheal
+  issues an explicit `docker restart`, which doesn't bump it. It stays `0` on a working system.
+- ✅ **Verify via:** `docker logs autoheal` showing `found to be unhealthy - Restarting container
+  now`, a changed `{{.State.Pid}}`, and health going `unhealthy → starting → healthy`.
+
+See the brief §4 for the full gate.
 
 ## Uptime watchdog — detection, not recovery
 
