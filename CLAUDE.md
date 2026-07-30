@@ -194,6 +194,7 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
    - **`01-ARCHITECTURE-INDUSTRY-MODULES.md` — how the codebase is organized around industry modules. Required reading for any new dev (or Claude session) before touching `src/industries/` or building an industry-scoped feature.**
    - **`02-ARCHITECTURE-AI-KNOWLEDGE-LAYER.md` — target architecture for the AI-native knowledge layer (Orca-ready KB): storage seam → ingestion → pgvector retrieval → agent tools, with tool picks + privacy stance + "when to switch tools" thresholds. Read before building any KB/RAG/Orca-retrieval work; Phase 1/2/3 build briefs reference it.**
    - **`03-INNGEST-BACKGROUND-JOBS.md` — background/scheduled work runbook: Inngest architecture, environments, function inventory, free-tier budget. Read before adding or changing any scheduled/background job.**
+   - `05-GRAPHIFY-CODE-GRAPH.md` — the code knowledge graph: setup, querying, limitations, refresh. Read if graph queries look wrong or you need to rebuild.
    - `api-contracts/` — integration API specs.
    - `PRICING.md` — live product pricing reference.
    Read for context; don't edit per-task.
@@ -206,6 +207,35 @@ Multi-tenant lead generation CRM SaaS (Zunkiree Labs). White-label system where 
 - `FEATURE-CATALOG.md` = features that exist in code today.
 
 When a piece of work ships, append to SESSION-LOG, update FEATURE-CATALOG, move ROADMAP entry to "shipped" then prune, and `git mv` any associated brief into `docs/archive/<series>/`. Top-level `docs/` should only contain the four living docs above plus any in-flight `<CONTEXT>-BRIEF.md`.
+
+---
+
+## Code graph first — orient before you grep
+
+This repo has a knowledge graph of `src/` at `graphify-out/` (~5,855 nodes / ~26,280 edges, built by AST parsing — 0 tokens to build). **Use it to orient yourself before grepping or opening source files.** Answering "how does X work here?" by grep + file reads costs 20–50k tokens; the same answer from the graph costs a few hundred.
+
+**Order of operations for any "where / what calls / how does this connect" question:**
+
+1. **Query the graph first** — MCP tools `mcp__graphify__get_node`, `get_neighbors`, `shortest_path`, `god_nodes`, `get_community`. From the terminal: `graphify explain "<symbol>"`, `graphify path "<A>" "<B>"`.
+2. **Then read only the files the graph pointed at.** Reading source to *modify or debug specific lines* is always fine — the rule is about avoiding exploratory reads.
+
+This applies to subagents too — include it in any subagent prompt that involves code exploration.
+
+**Three things that will otherwise waste your time:**
+
+- **Search for symbols, not concepts.** `query "authentication"` returns *"No matching nodes found"* — nodes are identifiers (`authenticateRequest`, `ScopedClient`). This is the #1 reason people wrongly conclude the graph is broken.
+- **God nodes return noise.** `apiSuccess` (724 edges), `authenticateRequest` (706), `ScopedClient` (617) truncate with "…and N more". Prefer `shortest_path` / `get_neighbors` over broad queries on these.
+- **Community labels are meaningless** (`Community 0…160`) and renumber on every rebuild. Don't cite them; node- and path-level answers are unaffected.
+
+**Refresh** (after pulling, or a big refactor) — takes seconds, costs nothing:
+
+```bash
+./scripts/graphify-setup.sh
+```
+
+⚠️ **Never run `graphify update` in this repo** — it writes to `src/graphify-out/` while `.mcp.json` reads the root `graphify-out/`, so the graph silently goes stale with no error. **Never run `graphify claude install`** — it overwrites `.claude/settings.json` and replaces this section with generic advice containing that wrong command.
+
+`graphify-out/` and `.mcp.json` are gitignored, so **each dev runs the setup script once themselves**. Full guide, including install prerequisites and the mandatory `[mcp]` extra: `docs/reference/05-GRAPHIFY-CODE-GRAPH.md`.
 
 ---
 
