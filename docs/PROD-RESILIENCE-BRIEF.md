@@ -137,6 +137,32 @@ Create **`scripts/uptime-watchdog.sh`**. Requirements:
 Include a `--dry-run` (or `WATCHDOG_DRY_RUN=1`) mode that prints what it *would* send instead of
 calling Resend, so it can be tested without generating mail.
 
+### 1.3a Multiple alert recipients (added 2026-07-30 — fix before merge)
+
+`WATCHDOG_ALERT_TO` now carries **three** addresses (see Phase 3.1). The script must accept a
+comma- and/or space-separated list and serialize it as a proper JSON array:
+
+```json
+"to":["sadin@zunkireelabs.com","anish@zunkireelabs.com","hardik@zunkireelabs.com"]
+```
+
+Requirements:
+- Split on commas and/or whitespace; trim each entry; skip empties (a trailing comma must not
+  produce an `""` recipient).
+- Still fail loudly if the list is empty after parsing.
+- The `[dry-run]` line and the success log should show the parsed recipient list, so a
+  mis-parsed value is visible *before* a real outage rather than during one.
+- One address must remain valid input — do not require commas.
+
+**Why this is a correctness bug, not a nice-to-have:** the previous form substituted the raw
+variable into `"to":["%s"]`, so three addresses became a single malformed recipient, Resend
+returns 422, and the only trace is an `ALERT DELIVERY FAILED` line in cron mail. The watchdog
+would look installed and healthy while being incapable of delivering a single alert.
+
+**Verification gate:** dry-run with all three addresses → shows three parsed recipients; with one
+address → shows one; with a trailing comma → still three, no empty entry. Then a real send
+(§2.4) that all three confirm arriving.
+
 ### 1.4 Do NOT touch the Dockerfile builder line
 
 Leave `ENV NODE_OPTIONS="--max-old-space-size=6144"` on line 18 alone. It is correct **for the
@@ -204,8 +230,14 @@ that real send is confirmed delivered. Confirm the state dir is writable.
 
 ## PHASE 3 — Sadin-only (cannot be delegated)
 
-1. **Supply `WATCHDOG_ALERT_TO`** (and confirm which `RESEND_API_KEY` to use). Sonnet must not
-   guess this.
+1. **`WATCHDOG_ALERT_TO` — SUPPLIED 2026-07-30 by Sadin. Three recipients:**
+   `sadin@zunkireelabs.com,anish@zunkireelabs.com,hardik@zunkireelabs.com`
+   Still owed from Sadin: confirm which `RESEND_API_KEY` the dev box should use.
+
+   > ⚠️ **Three recipients means the script must serialize a JSON *array*.** As originally written
+   > it emitted `"to":["%s"]` with the raw variable substituted, so a comma-separated value became
+   > **one malformed address** and Resend 422s — a delivery failure that only ever shows up in cron
+   > mail nobody reads. See §1.3a; this must be fixed and proven before the watchdog is installed.
 2. **Belt-and-braces external monitor** — UptimeRobot or BetterStack free tier on
    `https://edgex.zunkireelabs.com/login`. Requires an account, so it can't be scripted. The
    self-hosted watchdog covers the same need, but a third-party monitor survives *our* whole

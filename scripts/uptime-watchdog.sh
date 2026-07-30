@@ -71,13 +71,38 @@ if [ ! -w "$STATE_DIR" ]; then
   exit 0
 fi
 
+parse_recipients() {
+  # WATCHDOG_ALERT_TO may hold multiple addresses separated by commas and/or
+  # whitespace. Split on both, trim each entry, and drop empties (a trailing
+  # or doubled comma must not produce a "" recipient — Resend 422s on that).
+  local raw="$1" tok
+  local IFS=$' \t\n,'
+  local -a out=()
+  for tok in $raw; do
+    [ -n "$tok" ] && out+=("$tok")
+  done
+  # ${out[@]} on an empty array is an unbound-variable error under `set -u` on
+  # bash 3.2 (the ${out[@]+...} guard is the portable way around it).
+  printf '%s\n' ${out[@]+"${out[@]}"}
+}
+
 send_email() {
   # send_email <subject> <body>
   subject="$1"
   body="$2"
 
+  recipients=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && recipients+=("$line")
+  done < <(parse_recipients "$WATCHDOG_ALERT_TO")
+
+  if [ "${#recipients[@]}" -eq 0 ]; then
+    log "FATAL: WATCHDOG_ALERT_TO parsed to zero recipients (raw: '$WATCHDOG_ALERT_TO'). Not sending."
+    return 1
+  fi
+
   if $DRY_RUN; then
-    log "[dry-run] would send email to $WATCHDOG_ALERT_TO"
+    log "[dry-run] would send email to: ${recipients[*]}"
     log "[dry-run] subject: $subject"
     log "[dry-run] body:"
     printf '%s\n' "$body" | sed 's/^/[dry-run]   /'
@@ -91,9 +116,19 @@ send_email() {
   body_escaped="${body//\"/\\\"}"
   body_escaped="${body_escaped//$'\n'/\\n}"
 
-  payload=$(printf '{"from":"%s","to":["%s"],"subject":"%s","text":"%s"}' \
+  to_json=""
+  for r in "${recipients[@]}"; do
+    r_escaped="$(printf '%s' "$r" | sed 's/"/\\"/g')"
+    if [ -z "$to_json" ]; then
+      to_json="\"$r_escaped\""
+    else
+      to_json="$to_json,\"$r_escaped\""
+    fi
+  done
+
+  payload=$(printf '{"from":"%s","to":[%s],"subject":"%s","text":"%s"}' \
     "$(printf '%s' "$ALERT_FROM" | sed 's/"/\\"/g')" \
-    "$WATCHDOG_ALERT_TO" \
+    "$to_json" \
     "$(printf '%s' "$subject" | sed 's/"/\\"/g')" \
     "$body_escaped")
 
@@ -107,10 +142,13 @@ send_email() {
 
   if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
     log "ALERT DELIVERY FAILED: Resend send failed (HTTP $http_code): $(cat /tmp/watchdog-resend-response.$$ 2>/dev/null) — nobody was notified of the outage above."
-  else
-    log "alert email sent to $WATCHDOG_ALERT_TO (HTTP $http_code)"
+    rm -f /tmp/watchdog-resend-response.$$
+    return 1
   fi
+
+  log "alert email sent to: ${recipients[*]} (HTTP $http_code)"
   rm -f /tmp/watchdog-resend-response.$$
+  return 0
 }
 
 state_file_for() {
@@ -152,13 +190,16 @@ Time (UTC): $now"
   log "FAIL #$fail_count: $url (HTTP $http_code)"
 
   if [ "$fail_count" -ge 2 ] && [ "$alerted" != "1" ]; then
-    send_email \
+    if send_email \
       "[EdgeX Watchdog] DOWN: $url" \
       "Target: $url
 Status: HTTP $http_code
 Consecutive failures: $fail_count
-Time (UTC): $now"
-    alerted=1
+Time (UTC): $now"; then
+      alerted=1
+    else
+      log "alert send failed for $url — will retry on next check (alerted stays 0)"
+    fi
   elif [ "$fail_count" -ge 2 ]; then
     log "suppressing duplicate alert for $url (already alerted this outage)"
   fi
