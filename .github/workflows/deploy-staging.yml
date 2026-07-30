@@ -112,11 +112,17 @@ jobs:
             # hand-added line as a follow-up (harmless duplicate until then).
             # Prod and stage MUST use different values.
             sed -i '/^# --- BEGIN AUTH env (managed by GitHub Actions) ---$/,/^# --- END AUTH env ---$/d' .env.local
-            {
-              echo "# --- BEGIN AUTH env (managed by GitHub Actions) ---"
-              echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET"
-              echo "# --- END AUTH env ---"
-            } >> .env.local
+            # Guard: if the GH secret isn't set yet, skip writing the block rather
+            # than emitting a blank `NEXTAUTH_SECRET=` — that would override the
+            # hand-added line (last assignment wins) and blank out the working
+            # secret, 503-ing Gmail inbox connect on a currently-working box.
+            if [ -n "$NEXTAUTH_SECRET" ]; then
+              {
+                echo "# --- BEGIN AUTH env (managed by GitHub Actions) ---"
+                echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET"
+                echo "# --- END AUTH env ---"
+              } >> .env.local
+            fi
             # Render the AI env block from GitHub environment secrets (idempotent:
             # replaces the previous managed block, never touches the rest of the file).
             sed -i '/^# --- BEGIN AI env (managed by GitHub Actions) ---$/,/^# --- END AI env ---$/d' .env.local

@@ -185,11 +185,17 @@ jobs:
             # hand-added line as a follow-up (harmless duplicate until then).
             # Prod and stage MUST use different values.
             sed -i '/^# --- BEGIN AUTH env (managed by GitHub Actions) ---$/,/^# --- END AUTH env ---$/d' .env.local
-            {
-              echo "# --- BEGIN AUTH env (managed by GitHub Actions) ---"
-              echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET"
-              echo "# --- END AUTH env ---"
-            } >> .env.local
+            # Guard: if the GH secret isn't set yet, skip writing the block rather
+            # than emitting a blank `NEXTAUTH_SECRET=` — that would override the
+            # hand-added line (last assignment wins) and blank out the working
+            # secret, 503-ing Gmail inbox connect on a currently-working box.
+            if [ -n "$NEXTAUTH_SECRET" ]; then
+              {
+                echo "# --- BEGIN AUTH env (managed by GitHub Actions) ---"
+                echo "NEXTAUTH_SECRET=$NEXTAUTH_SECRET"
+                echo "# --- END AUTH env ---"
+              } >> .env.local
+            fi
             # AI env — idempotent managed block. SCOPED to outreach AI-drafting only
             # (ADR-001 D5 sign-off docs/ai-native-efforts/working/D5-SIGNOFF-OUTREACH.md,
             # 2026-07-23). Deliberately sets ONLY AI_OUTREACH_DRAFT_ENABLED — the
