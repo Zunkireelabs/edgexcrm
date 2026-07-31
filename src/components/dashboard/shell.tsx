@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Tenant, Branch } from "@/types/database";
-import type { User } from "@supabase/supabase-js";
+import type { CachedUser } from "@/lib/supabase/server";
 import {
   Sheet,
   SheetContent,
@@ -226,7 +226,7 @@ interface FormSummary {
 }
 
 interface DashboardShellProps {
-  user: User;
+  user: CachedUser;
   tenant: Tenant;
   role: string;
   positionName?: string | null;

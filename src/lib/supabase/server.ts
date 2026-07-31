@@ -28,16 +28,28 @@ export async function createClient() {
   );
 }
 
-// getUser() is a ~1s network round-trip to Supabase (JWT verification isn't local until
-// asymmetric signing keys are enabled — see docs perf brief). React's cache() dedupes
-// this to one call per server render pass, so a layout + page that both need the
-// session share a single round-trip instead of paying it once each.
-export const getCachedUser = cache(async () => {
+export type CachedUser = {
+  id: string;
+  email: string | undefined;
+  user_metadata: Record<string, unknown> | undefined;
+};
+
+// getClaims() verifies the JWT locally (WebCrypto against the project's cached JWKS) instead
+// of getUser()'s network round-trip to Supabase. It only falls back to a network call itself
+// when the token is HS256-signed, has no kid, or WebCrypto is unavailable — see docs perf
+// brief. React's cache() dedupes this to one call per server render pass, so a layout + page
+// that both need the session share a single verification instead of paying it once each.
+export const getCachedUser = cache(async (): Promise<CachedUser | null> => {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  return user;
+  const { data, error } = await supabase.auth.getClaims();
+  if (error || !data) return null;
+
+  const { claims } = data;
+  return {
+    id: claims.sub,
+    email: claims.email,
+    user_metadata: claims.user_metadata,
+  };
 });
 
 export async function createServiceClient() {
