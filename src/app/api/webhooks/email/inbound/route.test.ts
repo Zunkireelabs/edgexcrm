@@ -97,6 +97,7 @@ function signedRequest(body: unknown, opts?: { badSig?: boolean; omitHeaders?: b
 beforeEach(() => {
   process.env.RESEND_API_KEY = "re_test_dummy";
   process.env.RESEND_INBOUND_WEBHOOK_SECRET = WEBHOOK_SECRET;
+  process.env.INBOUND_EMAIL_DOMAINS = "lead-crm.zunkireelabs.com";
   insertedEvents = [];
   insertedDeadLetters = [];
   forceDeadLetterError = null;
@@ -208,6 +209,44 @@ describe("POST /api/webhooks/email/inbound — tenant resolution + enqueue (brie
 
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ received: true });
+  });
+
+  it("Stage 1: addressed to noreply@<inbound domain> writes exactly one dead-letter (inbound_unroutable_platform_address) and no event", async () => {
+    resolveInboundRecipientsMock.mockResolvedValue({ matches: [], hadCandidateButNoMatch: false });
+    const event = {
+      ...RECEIVED_EVENT,
+      data: { ...RECEIVED_EVENT.data, to: ["noreply@lead-crm.zunkireelabs.com"] },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const req = signedRequest(event) as any;
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ received: true });
+    expect(insertedEvents).toHaveLength(0);
+    expect(insertedDeadLetters).toHaveLength(1);
+    expect(insertedDeadLetters[0]).toMatchObject({
+      tenant_id: null,
+      provider_message_id: "resend-inbound-1",
+      reason: "inbound_unroutable_platform_address",
+    });
+  });
+
+  it("Stage 1: addressed to randomjunk@<inbound domain> writes neither a dead-letter nor an event", async () => {
+    resolveInboundRecipientsMock.mockResolvedValue({ matches: [], hadCandidateButNoMatch: false });
+    const event = {
+      ...RECEIVED_EVENT,
+      data: { ...RECEIVED_EVENT.data, to: ["randomjunk@lead-crm.zunkireelabs.com"] },
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const req = signedRequest(event) as any;
+    const res = await POST(req);
+
+    expect(res.status).toBe(200);
+    expect(insertedEvents).toHaveLength(0);
+    expect(insertedDeadLetters).toHaveLength(0);
   });
 
   it("response body is IDENTICAL ({received:true}) whether matched or not — no token-enumeration oracle", async () => {

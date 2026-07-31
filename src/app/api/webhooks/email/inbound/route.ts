@@ -14,11 +14,39 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { WebhookEventPayload } from "resend";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getResendClient } from "@/lib/email";
+import { getResendClient, PLATFORM_EMAIL_ADDRESS } from "@/lib/email";
 import { resolveInboundRecipients } from "@/lib/email/inbound/resolve";
+import { getInboundDomains } from "@/lib/email/inbound/tokens";
 import { logger } from "@/lib/logger";
 
 const ACK = { received: true } as const;
+
+const PLATFORM_LOCAL_PART = PLATFORM_EMAIL_ADDRESS.split("@")[0];
+
+/**
+ * True when any envelope recipient is exactly the platform address's
+ * local-part (`noreply`) on one of our own inbound domains — e.g. the
+ * passthrough-forward `from:` (REPLYABLE-FORWARD-BRIEF.md Stage 1). This
+ * never matches a `verb+token` candidate (no "+"), so it's independent of
+ * `hadCandidateButNoMatch` and must be checked separately.
+ */
+function isAddressedToPlatform(addresses: string[]): boolean {
+  let domains: string[];
+  try {
+    domains = getInboundDomains();
+  } catch {
+    return false;
+  }
+  return addresses.some((raw) => {
+    const angle = raw.match(/<([^>]+)>/);
+    const email = (angle ? angle[1] : raw).trim().toLowerCase();
+    const at = email.lastIndexOf("@");
+    if (at === -1) return false;
+    const localPart = email.slice(0, at);
+    const domain = email.slice(at + 1);
+    return localPart === PLATFORM_LOCAL_PART && domains.includes(domain);
+  });
+}
 
 export async function POST(request: NextRequest) {
   // svix signs the exact bytes — read before any parsing.
@@ -90,19 +118,45 @@ export async function POST(request: NextRequest) {
   // rate-limited) — resolveInboundRecipients() already excludes cross-
   // environment and cross-domain junk from this bucket (brief §8), so this
   // never captures a sibling environment's mail.
-  if (result.matches.length === 0 && result.hadCandidateButNoMatch) {
-    const { error } = await supabase.from("inbound_email_dead_letter").insert({
-      tenant_id: null,
-      provider_message_id: resendEmailId,
-      from_address: from,
-      to_addresses: to,
-      subject,
-      reason: "no_token",
-      raw_event: event as unknown as Record<string, unknown>,
-    });
-    // provider_message_id is UNIQUE — a redelivered event is a no-op, not an error.
-    if (error && error.code !== "23505") {
-      logger.error({ err: error }, "email inbound webhook: failed to write dead-letter");
+  if (result.matches.length === 0) {
+    if (result.hadCandidateButNoMatch) {
+      const { error } = await supabase.from("inbound_email_dead_letter").insert({
+        tenant_id: null,
+        provider_message_id: resendEmailId,
+        from_address: from,
+        to_addresses: to,
+        subject,
+        reason: "no_token",
+        raw_event: event as unknown as Record<string, unknown>,
+      });
+      // provider_message_id is UNIQUE — a redelivered event is a no-op, not an error.
+      if (error && error.code !== "23505") {
+        logger.error({ err: error }, "email inbound webhook: failed to write dead-letter");
+      }
+    } else if (isAddressedToPlatform([...to, ...cc, ...bcc])) {
+      // Deliberately narrow (REPLYABLE-FORWARD-BRIEF.md Stage 1): only the
+      // known platform address, low-volume and always a real user action
+      // we'd otherwise lose (e.g. a rep hitting Reply on a passthrough
+      // forward, which Gmail addresses back to `from:` — noreply@). Do NOT
+      // widen this to every unmatched recipient — junk addressed to the
+      // domain would flood the table.
+      //
+      // This does not weaken the anti-enumeration property below: the HTTP
+      // response stays byte-for-byte identical ({received:true}) whether or
+      // not a token matched; only internal logging changes here. Do not
+      // "restore" silence on this branch.
+      const { error } = await supabase.from("inbound_email_dead_letter").insert({
+        tenant_id: null,
+        provider_message_id: resendEmailId,
+        from_address: from,
+        to_addresses: to,
+        subject,
+        reason: "inbound_unroutable_platform_address",
+        raw_event: event as unknown as Record<string, unknown>,
+      });
+      if (error && error.code !== "23505") {
+        logger.error({ err: error }, "email inbound webhook: failed to write dead-letter");
+      }
     }
   }
 
