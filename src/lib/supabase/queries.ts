@@ -25,17 +25,15 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug)")
+    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug), tenants(*)")
     .eq("user_id", user.id)
     .single();
 
   if (!membership) return null;
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("*")
-    .eq("id", membership.tenant_id)
-    .single();
+  const tenant = Array.isArray(membership.tenants)
+    ? membership.tenants[0] ?? null
+    : membership.tenants;
 
   if (!tenant) return null;
 

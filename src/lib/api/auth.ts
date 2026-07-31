@@ -132,20 +132,23 @@ export async function authenticateRequest(): Promise<AuthContext | null> {
               );
             } catch {
               // Called from a read-only context (e.g. Server Component); safe to ignore —
-              // middleware has already refreshed the session and written the new tokens.
+              // this Route Handler's own getClaims()/getUser() call below already
+              // refreshes/rotates the session cookie when the token is stale (middleware
+              // skips /api/* since #335, so this is the only place it happens for API routes).
             }
           },
         },
       }
     );
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    // getClaims() verifies the JWT locally instead of getUser()'s network round-trip —
+    // see docs/PERF-ROUNDTRIP-BRIEF.md. Falls back to a network call itself only for
+    // HS256-signed tokens, no kid, or no WebCrypto.
+    const { data, error } = await supabase.auth.getClaims();
 
-    if (!user) return null;
+    if (error || !data) return null;
 
-    return await buildUserAuthContext(user.id, undefined, user.email || "");
+    return await buildUserAuthContext(data.claims.sub, undefined, data.claims.email || "");
   } catch (e) {
     console.error("[authenticateRequest] unexpected error", e);
     return null;
