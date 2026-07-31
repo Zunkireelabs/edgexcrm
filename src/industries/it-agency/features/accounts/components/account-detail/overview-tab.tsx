@@ -118,6 +118,7 @@ export function OverviewTab({
                   <div className="min-w-0">
                     <Link
                       href={`/contacts/${c.id}`}
+                      prefetch={false}
                       className="text-sm font-medium hover:underline block truncate"
                       style={{ color: "#0f0f10" }}
                     >
@@ -147,6 +148,7 @@ export function OverviewTab({
                 <li key={lead.id} className="flex items-center justify-between gap-2">
                   <Link
                     href={`/leads/${lead.id}`}
+                    prefetch={false}
                     className="text-sm font-medium hover:underline truncate"
                     style={{ color: "#0f0f10" }}
                   >

@@ -1,15 +1,12 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/server";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 
 // Single decision point for where an authenticated user lands. All post-auth
 // redirects (login, register, OAuth callback, middleware) funnel through "/"
 // so the industry-aware landing choice lives in one place.
 export default async function Home() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   // Not signed in → login. (Only unauthenticated users reach this branch, so no
   // /login ⇄ / redirect loop with the middleware.)

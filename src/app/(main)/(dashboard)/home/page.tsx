@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { createServiceClient, getCachedUser } from "@/lib/supabase/server";
 import {
   getCurrentUserTenant,
   getLeads,
@@ -16,10 +16,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 
 export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) redirect("/login");
 
   const tenantData = await getCurrentUserTenant();

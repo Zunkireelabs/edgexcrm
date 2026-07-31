@@ -59,6 +59,7 @@ export default async function LeadsOrganisePage() {
           <Link
             key={list.id}
             href={`/leads-organise/${list.slug}`}
+            prefetch={false}
             className="block border border-gray-200 rounded-lg p-4 bg-white hover:border-gray-300 hover:shadow-sm transition-all"
           >
             <div className="flex items-center justify-between">

@@ -89,6 +89,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
         <div className="flex-1 min-w-0">
           <Link
             href={`/projects/${project.id}`}
+            prefetch={false}
             className="text-sm font-semibold hover:text-primary transition-colors line-clamp-1 block"
             onPointerDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
@@ -110,7 +111,7 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-44">
             <DropdownMenuItem asChild>
-              <Link href={`/projects/${project.id}`}>
+              <Link href={`/projects/${project.id}`} prefetch={false}>
                 <ExternalLink className="mr-2 h-3.5 w-3.5" />
                 View Details
               </Link>

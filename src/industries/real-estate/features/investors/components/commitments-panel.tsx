@@ -119,6 +119,7 @@ export function CommitmentsPanel({ leadId, canManage }: { leadId: string; canMan
               <Link
                 key={c.id}
                 href={`/offerings/${c.offering_id}`}
+                prefetch={false}
                 className="block border rounded-lg p-2.5 hover:border-primary/40 transition-colors"
               >
                 <div className="flex items-center justify-between gap-2">

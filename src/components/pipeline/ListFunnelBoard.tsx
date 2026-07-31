@@ -21,6 +21,7 @@ function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string
   return (
     <Link
       href={`/leads/${lead.id}`}
+      prefetch={false}
       className="block bg-card border rounded-lg p-3 hover:border-primary/40 hover:shadow-sm transition-colors"
     >
       <p className="text-sm font-medium truncate">{name}</p>

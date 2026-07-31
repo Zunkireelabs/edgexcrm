@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { cache } from "react";
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -26,6 +27,18 @@ export async function createClient() {
     }
   );
 }
+
+// getUser() is a ~1s network round-trip to Supabase (JWT verification isn't local until
+// asymmetric signing keys are enabled — see docs perf brief). React's cache() dedupes
+// this to one call per server render pass, so a layout + page that both need the
+// session share a single round-trip instead of paying it once each.
+export const getCachedUser = cache(async () => {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  return user;
+});
 
 export async function createServiceClient() {
   const { createClient } = await import("@supabase/supabase-js");

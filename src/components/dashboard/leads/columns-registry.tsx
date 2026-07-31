@@ -161,6 +161,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
             )}
             <Link
               href={`/leads/${lead.id}`}
+              prefetch={false}
               className="flex-1 block min-w-0 text-sm font-medium text-[#0f0f10] hover:underline"
             >
               <TruncatedText

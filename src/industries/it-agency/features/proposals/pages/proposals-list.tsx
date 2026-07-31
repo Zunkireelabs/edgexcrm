@@ -93,14 +93,14 @@ export function ProposalsListPage({ role }: ProposalsListPageProps) {
               {proposals.map((p) => (
                 <tr key={p.id} className="hover:bg-muted/10 transition-colors">
                   <td className="px-4 py-3">
-                    <Link href={`/proposals/${p.id}`} className="font-medium hover:text-primary transition-colors">
+                    <Link href={`/proposals/${p.id}`} prefetch={false} className="font-medium hover:text-primary transition-colors">
                       {p.proposal_number}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">{p.title}</td>
                   <td className="px-4 py-3">
                     {p.deals ? (
-                      <Link href={`/deals/${p.deals.id}`} className="text-muted-foreground hover:text-primary transition-colors">
+                      <Link href={`/deals/${p.deals.id}`} prefetch={false} className="text-muted-foreground hover:text-primary transition-colors">
                         {p.deals.name}
                       </Link>
                     ) : "—"}

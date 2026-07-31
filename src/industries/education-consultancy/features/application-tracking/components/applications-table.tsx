@@ -81,7 +81,7 @@ export function ApplicationsTable({
                 onClick={() => router.push(`/applications/${app.id}`)}
               >
                 <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                  <Link href={`/leads/${leadId}`} className="font-medium hover:text-primary transition-colors">
+                  <Link href={`/leads/${leadId}`} prefetch={false} className="font-medium hover:text-primary transition-colors">
                     {getStudentName(app)}
                   </Link>
                 </td>

@@ -51,6 +51,7 @@ function ApplicationBody({
   return (
     <Link
       href={`/applications/${app.id}?from=lead&leadId=${leadId}`}
+      prefetch={false}
       className="block flex-1 min-w-0"
     >
       <p className="text-sm font-medium">{app.university_name}</p>

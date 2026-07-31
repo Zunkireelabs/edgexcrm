@@ -329,6 +329,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                       <td className="px-3 py-1.5">
                         <Link
                           href={`/contacts/${contact.id}`}
+                          prefetch={false}
                           className="text-sm font-medium text-[#0f0f10] hover:underline"
                         >
                           {fullName(contact)}
@@ -336,7 +337,7 @@ export function ContactsListPage({ role }: ContactsListPageProps) {
                       </td>
                       <td className="px-3 py-1.5 text-sm font-normal text-[#787871]">
                         {contact.accounts ? (
-                          <Link href={`/accounts/${contact.accounts.id}`} className="hover:underline">
+                          <Link href={`/accounts/${contact.accounts.id}`} prefetch={false} className="hover:underline">
                             {contact.accounts.name}
                           </Link>
                         ) : (
