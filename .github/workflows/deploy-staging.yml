@@ -106,7 +106,13 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 10m
+          # 10m was not enough: on 2026-07-31 three consecutive stage deploys died at
+          # ~604-607s mid `docker pull` from GHCR (20.97MB -> 30.41MB of a 30.92MB layer
+          # across retries). It only succeeded on the third attempt, because each retry
+          # resumed from a warmer layer cache until the remainder fit inside 10m. The
+          # pull is simply slower than the window on this box; retry-until-cached is not
+          # a deploy strategy. Raised to 25m so a cold pull completes in one attempt.
+          command_timeout: 25m
           envs: GHCR_USER,GHCR_TOKEN,OPENAI_API_KEY,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,AI_TOOL_APPROVAL_SECRET,RESEND_INBOUND_WEBHOOK_SECRET,INBOUND_TOKEN_SECRET,NEXTAUTH_SECRET
           script: |
             set -e
