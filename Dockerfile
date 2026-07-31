@@ -12,12 +12,34 @@ ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_APP_URL
 
+# Sentry. NEXT_PUBLIC_* are inlined into the bundles at BUILD time (they are not
+# read from .env.local at runtime), so they must arrive as build args or the
+# deployed image reports to nothing. SENTRY_ORG/PROJECT are only used by the
+# source-map uploader and are not secrets.
+ARG NEXT_PUBLIC_SENTRY_DSN
+ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
+ARG NEXT_PUBLIC_SENTRY_RELEASE
+ARG SENTRY_ORG
+ARG SENTRY_PROJECT
+
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
+ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
+ENV NEXT_PUBLIC_SENTRY_RELEASE=$NEXT_PUBLIC_SENTRY_RELEASE
+ENV SENTRY_ORG=$SENTRY_ORG
+ENV SENTRY_PROJECT=$SENTRY_PROJECT
 ENV NODE_OPTIONS="--max-old-space-size=6144"
 
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+# SENTRY_AUTH_TOKEN is a real credential, so it rides a BuildKit secret mount
+# rather than an ARG — an ARG would be baked into the image layer metadata and
+# shipped to the registry with every push. Absent token => build still succeeds,
+# it just skips source-map upload.
+RUN --mount=type=cache,target=/app/.next/cache \
+    --mount=type=secret,id=sentry_auth_token \
+    SENTRY_AUTH_TOKEN="$(cat /run/secrets/sentry_auth_token 2>/dev/null || true)" \
+    npm run build
 
 # Production
 FROM base AS runner
