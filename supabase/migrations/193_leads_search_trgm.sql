@@ -18,8 +18,10 @@
 -- (see that script's own header comment — deliberate, so each file's own
 -- BEGIN/COMMIT isn't broken by an outer transaction). That means a file with no
 -- BEGIN/COMMIT of its own runs its statements autocommitted, exactly what
--- CONCURRENTLY requires. Every statement here is independently idempotent
--- (IF NOT EXISTS / ON CONFLICT), so partial application on a retry is safe.
+-- CONCURRENTLY requires. Every statement here is IF NOT EXISTS / ON CONFLICT —
+-- but that only covers a statement that never started or fully succeeded; a
+-- CONCURRENTLY build that fails partway through needs the manual check below,
+-- see "Retry is NOT unconditionally safe".
 --
 -- Verified on stage: pg_trgm is NOT installed and leads has no trigram indexes —
 -- server-side ILIKE '%term%' search (GET /api/v1/leads?search=) seq-scans the
@@ -28,6 +30,22 @@
 -- email, phone. One GIN index per column (not one combined index) matches how the
 -- query is shaped — an OR of four independent ILIKE clauses — so Postgres can
 -- BitmapOr across the four indexes instead of needing one wide multi-column index.
+--
+-- ── Retry is NOT unconditionally safe ──
+-- CREATE INDEX CONCURRENTLY can fail partway through (e.g. lock timeout, killed
+-- session) and leave an INVALID index behind. Postgres does NOT drop it
+-- automatically, and `IF NOT EXISTS` sees the (invalid) name already exists and
+-- silently skips it on every future retry — the index is then permanently absent
+-- from query plans with no error ever surfaced. IF NOT EXISTS only makes each
+-- individual statement idempotent when it succeeds or never started; it does not
+-- make a failed-partway-through CONCURRENTLY build safe to just re-run as-is.
+--
+-- MANDATORY verification after running this file (on whichever DB it was just
+-- applied to):
+--   SELECT indexrelid::regclass FROM pg_index WHERE NOT indisvalid;
+-- If any of the four idx_leads_search_trgm_* names appear, that index is invalid —
+-- DROP INDEX CONCURRENTLY IF EXISTS <name>; then re-run its CREATE INDEX
+-- CONCURRENTLY statement above before considering this migration applied.
 
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 

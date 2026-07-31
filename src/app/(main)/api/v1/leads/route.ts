@@ -60,9 +60,15 @@ const CORS_HEADERS = {
 };
 
 // List-view column projection — every Lead column the table can render, EXCEPT
-// custom_fields and file_urls (JSONB blobs pulled on every row by `select("*")`,
-// the dominant cost in the 34MB/16,898-row payload). The single-lead detail path
-// (GET /api/v1/leads/[id]) keeps `select("*")`; only this list endpoint narrows.
+// file_urls (a JSONB blob the table never reads — the dominant remaining cost in
+// the old `select("*")` payload). custom_fields IS included: the table reads it
+// live at render time (leads-table.tsx `cf:` columns) and the column picker's
+// "available custom fields" list is derived from whatever page is loaded — SSR
+// page 1 already has it, so an API page without it would blank out/vanish custom
+// columns on every page past 1. At pageSize<=100 the per-page JSONB cost is
+// negligible; the 34MB figure was a 16,898-row artifact of loading everything at
+// once, not of this one column. The single-lead detail path (GET
+// /api/v1/leads/[id]) keeps `select("*")`; only this list endpoint narrows.
 // A SINGLE string-literal token (backslash line continuation, not `+` concatenation
 // or array.join()) — supabase-js's select() type inference parses the literal type of
 // its argument to build the result row type; `+`/`.join()` both widen to plain
@@ -77,7 +83,7 @@ ai_score,ai_priority,ai_score_updated_at,\
 normalized_email,merged_into,\
 company_name,designation,prospect_industry,owner_id,salutation,company_email,\
 branch_id,list_id,destinations,field_of_study,degree_level,\
-nationality,intake_account,\
+nationality,intake_account,custom_fields,\
 pre_app_fee_status,pre_app_fee_amount,pre_app_fee_notes,\
 see_gpa,see_institution,see_passed_year,\
 plus_two_gpa,plus_two_institution,plus_two_passed_year,\
@@ -99,6 +105,10 @@ const SORT_COLUMNS: Record<string, string[]> = {
   first_name: ["first_name", "last_name"],
   email: ["email"],
 };
+
+// Only UUID-shaped tokens are ever interpolated into a raw `.or()` filter string
+// (the `assignees` filter below) — anything else is dropped rather than trusted.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function withCors(response: NextResponse): NextResponse {
   for (const [key, value] of Object.entries(CORS_HEADERS)) {
@@ -143,6 +153,26 @@ export async function GET(request: NextRequest) {
   // (page=1, or any filter/search/sort edit) and reuse the total client-side while
   // paging within that same filter set; count=0 skips the recompute.
   const wantCount = searchParams.get("count") !== "0";
+
+  // Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
+  // prospect industry) — applied server-side against the FULL matching set, not just
+  // the loaded page. All values below are passed through supabase-js's parameterized
+  // filter methods (.eq/.in/.contains/.gte), never string-interpolated into a raw
+  // filter, except `assignees` — its UUID-validated ids are interpolated into an
+  // `.or()` string below because that's the only way to express "unassigned OR in
+  // this list"; validation happens right before that interpolation.
+  const formFilter = searchParams.get("form");
+  const tagFilter = searchParams.get("tag");
+  const createdFilter = searchParams.get("created"); // today | week | month
+  const industryFilter = searchParams.get("industry"); // prospect_industry value, or "__none__"
+  const sourceFilter = (searchParams.get("source") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const assigneesTokens = (searchParams.get("assignees") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  // Collaborator filter is user ids only (never leaked into a raw string — see below),
+  // so no UUID validation needed for injection-safety; malformed ids just match nothing.
+  const collaboratorIds = (searchParams.get("collaborators") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
 
   // Sort — allow-listed against SORT_COLUMNS, never interpolated. id is always the
   // final tiebreaker so a paginated sort never reshuffles rows between pages.
@@ -241,9 +271,26 @@ export async function GET(request: NextRequest) {
   // predicate also matches unassigned leads whose branch_id matches, which this endpoint
   // never surfaced before; same reasoning as Decision D2 for getLeadsForPipeline).
   const countOpts = wantCount ? { count: "exact" as const } : {};
+  // Collaborator filter needs an inner-join embed to filter on lead_collaborators.user_id
+  // rather than resolving matching lead ids client-side first — a popular collaborator can
+  // hold 1000+ historical leads (four Admizz interns hold 1,272-1,319), and bridging that
+  // through a caller-built `.in("id", [...])` array is exactly the undici 16KB-URL pattern
+  // that caused the 300-id visibility bug (non-negotiable #1). PostgREST compiles a filter
+  // on an embedded to-many resource to an EXISTS-style semi-join, so it does not duplicate
+  // parent rows the way a literal SQL INNER JOIN would — confirmed against this repo's other
+  // paginated+counted `!inner` filters (e.g. badge-counts route.ts). RETURNS SETOF leads on
+  // leads_visible_to_user() (migration 179) means the embed works over the RPC path too.
+  // Widened to `string` (not the LEADS_LIST_COLUMNS literal type) — the join-embed
+  // branch isn't a shape select()'s compile-time parser recognizes, which otherwise
+  // collapses inference to `ParserError` (see the LEADS_LIST_COLUMNS comment above).
+  // The `data as Lead[]` / `Record<string, unknown>` casts below already carry the
+  // real typing, same as every other dynamically-shaped query in this route.
+  const selectColumns: string = collaboratorIds.length > 0
+    ? `${LEADS_LIST_COLUMNS},lead_collaborators!inner(user_id)`
+    : LEADS_LIST_COLUMNS;
   let query = (!useSharedPool && scope.restrictToSelf && scope.userId)
-    ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(LEADS_LIST_COLUMNS)
-    : supabase.from("leads").select(LEADS_LIST_COLUMNS, countOpts).eq("tenant_id", auth.tenantId);
+    ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(selectColumns)
+    : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
 
   query = onlyDeleted ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
 
@@ -324,6 +371,52 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
+  // prospect industry) — composed with every filter above via AND, same as status/
+  // search. These used to be applied client-side over whichever page happened to be
+  // loaded, which silently narrowed a "300 matching leads" filter down to "2, because
+  // that's all that fit on this page" (LEADS-SERVER-PAGINATION-BRIEF review). ──
+  if (formFilter && formFilter !== "all") {
+    query = query.eq("form_config_id", formFilter);
+  }
+
+  if (assigneesTokens.length > 0) {
+    const wantsUnassigned = assigneesTokens.includes("unassigned");
+    const ids = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
+    if (wantsUnassigned && ids.length > 0) {
+      query = query.or(`assigned_to.is.null,assigned_to.in.(${ids.join(",")})`);
+    } else if (wantsUnassigned) {
+      query = query.is("assigned_to", null);
+    } else if (ids.length > 0) {
+      query = query.in("assigned_to", ids);
+    }
+  }
+
+  if (collaboratorIds.length > 0) {
+    query = query.in("lead_collaborators.user_id", collaboratorIds);
+  }
+
+  if (sourceFilter.length > 0) {
+    query = query.in("intake_source", sourceFilter);
+  }
+
+  if (tagFilter && tagFilter !== "all") {
+    query = query.contains("tags", [tagFilter]);
+  }
+
+  if (industryFilter && industryFilter !== "all") {
+    query = industryFilter === "__none__"
+      ? query.is("prospect_industry", null)
+      : query.eq("prospect_industry", industryFilter);
+  }
+
+  if (createdFilter && createdFilter !== "all") {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const windowMs: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
+    const ms = windowMs[createdFilter];
+    if (ms) query = query.gte("created_at", new Date(Date.now() - ms).toISOString());
+  }
+
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -349,7 +442,18 @@ export async function GET(request: NextRequest) {
   const total = wantCount ? (count ?? 0) : -1;
   log.info({ total, page, pageSize, wantCount }, "Leads fetched");
 
-  return apiPaginated(data as Lead[], {
+  // Strip the lead_collaborators embed — it only existed to filter (see selectColumns
+  // above), it is not part of the Lead shape the client expects. `data`'s inferred type
+  // is the widened-string fallback (see selectColumns above), hence the `unknown` hop.
+  const responseData = collaboratorIds.length > 0
+    ? (data as unknown as Array<Record<string, unknown>>).map((row) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { lead_collaborators, ...rest } = row;
+        return rest;
+      })
+    : data;
+
+  return apiPaginated(responseData as unknown as Lead[], {
     page,
     pageSize,
     total,

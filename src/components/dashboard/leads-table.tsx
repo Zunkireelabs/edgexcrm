@@ -447,13 +447,14 @@ export function LeadsTable({
 
   // ── Server-paginated data fetch (LEADS-SERVER-PAGINATION-BRIEF) ──────────────
   // Replaces "load all 16,898 rows, filter/sort/paginate client-side". Fires on any
-  // PRIMARY-axis change (status, debounced search, sort, page, page size). List/funnel
-  // navigation is a real Next.js nav (page.tsx re-renders with fresh `leads`/`initialTotal`
-  // props, picked up by the prop-sync effect above) — not this effect's job. The secondary
-  // toolbar filters (form/counselor/collaborator/source/tag/created/prospect industry)
-  // stay client-side over whichever page is loaded — a deliberate, documented scope
-  // boundary (see PR description), not an oversight: the API's list/funnel/status/search/
-  // sort parity was the brief's explicit, tested gap list; these seven were not in it.
+  // filter-axis change (status, debounced search, sort, the seven secondary toolbar
+  // filters, page, page size). List/funnel navigation is a real Next.js nav (page.tsx
+  // re-renders with fresh `leads`/`initialTotal` props, picked up by the prop-sync
+  // effect above) — not this effect's job. The secondary toolbar filters (form/
+  // counselor/collaborator/source/tag/created/prospect industry) are sent as query
+  // params and applied server-side (route.ts) — they used to run client-side over
+  // whichever page happened to be loaded, which silently narrowed a "300 matching"
+  // filter down to "2, because that's all that fit on this page"; fixed per review.
   const isFirstFetchRef = useRef(true);
   const prevSignatureRef = useRef("");
   const needsCountRef = useRef(false);
@@ -472,15 +473,27 @@ export function LeadsTable({
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeListSlug) params.set("list", activeListSlug);
       else if (activeFunnelKey) params.set("funnel", activeFunnelKey);
+      if (formFilter !== "all") params.set("form", formFilter);
+      if (counselorFilter.length > 0) params.set("assignees", counselorFilter.join(","));
+      if (collaboratorFilter.length > 0) params.set("collaborators", collaboratorFilter.join(","));
+      if (sourceFilter.length > 0) params.set("source", sourceFilter.join(","));
+      if (tagFilter !== "all") params.set("tag", tagFilter);
+      if (createdFilter !== "all") params.set("created", createdFilter);
+      if (prospectIndustryFilter !== "all") params.set("industry", prospectIndustryFilter);
       return params;
     },
-    [sortField, sortDirection, statusFilter, debouncedSearch, activeListSlug, activeFunnelKey],
+    [
+      sortField, sortDirection, statusFilter, debouncedSearch, activeListSlug, activeFunnelKey,
+      formFilter, counselorFilter, collaboratorFilter, sourceFilter, tagFilter, createdFilter,
+      prospectIndustryFilter,
+    ],
   );
 
   // Everything that should reset to page 1 and force a fresh exact count (§3) when it
   // changes. itemsPerPage is included — a page-size change reshapes every page boundary.
   const fetchSignature = JSON.stringify([
     activeListSlug, activeFunnelKey, statusFilter, debouncedSearch, sortField, sortDirection, itemsPerPage,
+    formFilter, counselorFilter, collaboratorFilter, sourceFilter, tagFilter, createdFilter, prospectIndustryFilter,
   ]);
 
   useEffect(() => {
@@ -553,10 +566,10 @@ export function LeadsTable({
   const hasMultipleForms = formEntries.length > 1;
 
   // Get unique sources from leads (staging: split on " | "; /leads: exact string)
-  // NOTE: scoped to localLeads (the current server page), not every source tenant-wide —
-  // `leads` (the prop) is frozen at whatever page mounted the component and would go
-  // stale the moment a client fetch replaces localLeads, which is worse. This is the
-  // same page-scoping tradeoff as the other secondary toolbar filters (see PR description).
+  // NOTE: the option LIST is scoped to localLeads (the current server page) — a source
+  // that only appears past page 1 won't show up as a pickable option until that page
+  // loads. This is a facet-list approximation only; the actual filtering (below) is
+  // applied server-side against the full matching set, not just this page.
   const sources = useMemo(() => {
     const s = new Set<string>();
     localLeads.forEach((l) => {
@@ -678,16 +691,12 @@ export function LeadsTable({
     return m;
   }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
 
-  // Secondary toolbar filters ONLY (form/counselor/collaborator/source/tag/created/
-  // prospect industry) — status, search, and sort are now applied server-side (the
-  // fetch effect above) and localLeads already IS one page of server-sorted,
-  // server-filtered rows. This intentionally does NOT re-derive status/search/sort:
-  // doing so here would silently re-scope them to "this page only", exactly the bug
-  // class the brief's non-negotiable #4 forbids for search. These seven filters are
-  // a documented exception (see PR description) — they still operate page-scoped.
-  // Shared with exportCSV() below, which re-applies it to a server-paginated fetch of
-  // every primary-matching row (not just localLeads) so export keeps its pre-PR
-  // "export everything matching" behavior despite these filters staying page-scoped.
+  // Secondary toolbar filters (form/counselor/collaborator/source/tag/created/
+  // prospect industry). serverPaginated mode sends these as query params (buildFetchParams
+  // above) and the API applies them — localLeads already IS a fully server-filtered page,
+  // so this predicate is NOT re-applied there (see `filtered` below). It's still needed
+  // for the two legacy (non-serverPaginated) consumers — Contacts, leads-organise — which
+  // keep their pre-PR "load everything, filter client-side" behavior unchanged.
   const matchesSecondaryFilters = useCallback((lead: Lead): boolean => {
     const matchesForm =
       formFilter === "all" || lead.form_config_id === formFilter;
@@ -736,12 +745,13 @@ export function LeadsTable({
     return matchesForm && matchesCounselor && matchesSource && matchesCollaborator && matchesTag && matchesCreated && matchesProspectIndustry;
   }, [formFilter, counselorFilter, sourceFilter, collaboratorFilter, leadCollaborators, isStagingView, tagFilter, createdFilter, prospectIndustryFilter]);
 
-  // serverPaginated: localLeads is already one server-filtered/sorted page — only the
-  // secondary filters apply here. Legacy mode (Contacts, leads-organise): unchanged
-  // pre-PR behavior — status/search/sort are still client-side over the FULL `leads`
+  // serverPaginated: localLeads is already one page, fully filtered/sorted server-side
+  // (status, search, sort, AND all seven secondary toolbar filters) — nothing left to
+  // apply here. Legacy mode (Contacts, leads-organise): unchanged pre-PR behavior —
+  // status/search/sort/secondary filters are all still client-side over the FULL `leads`
   // prop (not localLeads), preserving exact prior semantics for those two consumers.
   const filtered = useMemo(() => {
-    if (serverPaginated) return localLeads.filter(matchesSecondaryFilters);
+    if (serverPaginated) return localLeads;
 
     let result = leads.filter((lead) => {
       const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
@@ -794,15 +804,6 @@ export function LeadsTable({
   // Legacy mode has no server total — `filtered.length` (post status/search, pre-slice)
   // already is that world's ground truth for "N leads match".
   const effectiveTotal = serverPaginated ? total : filtered.length;
-
-  const anySecondaryFilterActive =
-    formFilter !== "all" ||
-    counselorFilter.length > 0 ||
-    sourceFilter.length > 0 ||
-    collaboratorFilter.length > 0 ||
-    tagFilter !== "all" ||
-    createdFilter !== "all" ||
-    prospectIndustryFilter !== "all";
 
   const clearFilters = () => {
     setSearch("");
@@ -896,20 +897,20 @@ export function LeadsTable({
   // Legacy mode: `filtered` already holds every matching row (unchanged pre-PR
   // behavior), so .every() over it is exact. serverPaginated mode: "every matching
   // lead is selected" means "selectedIds reached the server total" instead (localLeads
-  // no longer holds every matching row) — only meaningful with no secondary
-  // (page-scoped) filter narrowing the set further.
+  // no longer holds every matching row).
   const allResultsSelected = serverPaginated
-    ? !anySecondaryFilterActive && total > 0 && selectedIds.size >= total
+    ? total > 0 && selectedIds.size >= total
     : filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
 
-  // serverPaginated only: resolves the FULL set of ids matching the current primary
-  // filters (list/funnel/status/search/sort) via paginated GET calls — never a single
-  // giant id array or client-held "everything" (non-negotiable #1). Legacy mode's
-  // "select all" is the plain synchronous `filtered` set (see the banner button below);
-  // it never calls this. Bulk mutation calls then chunk the resulting selection into
-  // <=100-id batches (existing API cap).
+  // serverPaginated only: resolves the FULL set of ids matching every active filter
+  // (list/funnel/status/search/sort AND the seven secondary toolbar filters, all sent
+  // via buildFetchParams) via paginated GET calls — never a single giant id array or
+  // client-held "everything" (non-negotiable #1). Legacy mode's "select all" is the
+  // plain synchronous `filtered` set (see the banner button below); it never calls
+  // this. Bulk mutation calls then chunk the resulting selection into <=100-id
+  // batches (existing API cap).
   async function selectAllMatching() {
-    if (!serverPaginated || anySecondaryFilterActive || total <= 0) return;
+    if (!serverPaginated || total <= 0) return;
     setTableLoading(true);
     try {
       const collected: string[] = [];
@@ -1227,10 +1228,10 @@ export function LeadsTable({
     }
   }
 
-  // Fetches every row matching the current PRIMARY filters (list/funnel/status/search/
-  // sort) via paginated GET calls — not from `filtered`/localLeads, which is only one
-  // page now. Keeps export's pre-PR "export everything matching" behavior; the
-  // secondary (page-scoped) toolbar filters are re-applied client-side afterward.
+  // Fetches every row matching every active filter (list/funnel/status/search/sort AND
+  // the seven secondary toolbar filters, all sent via buildFetchParams and applied
+  // server-side) via paginated GET calls — not from `filtered`/localLeads, which is only
+  // one page now. Keeps export's pre-PR "export everything matching" behavior.
   async function exportCSV() {
     // Legacy mode: `filtered` already holds every matching row (unchanged pre-PR
     // behavior) — export it directly, synchronously, exactly as before.
@@ -1251,7 +1252,7 @@ export function LeadsTable({
           collected.push(...(body.data as Lead[]));
           if (body.data.length < PAGE_SIZE || (total > 0 && collected.length >= total)) break;
         }
-        exportLeads = collected.filter(matchesSecondaryFilters);
+        exportLeads = collected;
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Failed to export leads");
         setTableLoading(false);
@@ -1781,11 +1782,10 @@ export function LeadsTable({
       <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
-          {/* Lead count — server total for the primary filter set; secondary (page-scoped)
-              toolbar filters additionally narrow what's actually shown below. */}
+          {/* Lead count — server total for every active filter, including the seven
+              secondary toolbar filters (all server-side; see buildFetchParams). */}
           <div className="text-sm font-medium text-muted-foreground shrink-0">
             {effectiveTotal} Lead{effectiveTotal !== 1 ? "s" : ""}
-            {serverPaginated && anySecondaryFilterActive && ` (${filtered.length} shown)`}
           </div>
 
           {/* Search — debounced 300ms, hits GET /api/v1/leads server-side (not a client
@@ -2051,10 +2051,9 @@ export function LeadsTable({
 
       {/* Select-all-results banner: shown when the current page is fully selected but more
           matching leads exist. The escalation to "all N" resolves ids via
-          selectAllMatching()'s paginated fetch (never a client-held id array), and is
-          hidden while a secondary (page-scoped) filter is active — there is no server
-          predicate for those filters, so "select all" can't safely promise correctness
-          under them (see PR description). */}
+          selectAllMatching()'s paginated fetch (never a client-held id array) — safe
+          under any combination of filters, since every toolbar filter (including the
+          seven secondary ones) is sent server-side via buildFetchParams. */}
       {allSelected && effectiveTotal > paginatedLeads.length && (
         <div className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
           {allResultsSelected ? (
@@ -2067,8 +2066,6 @@ export function LeadsTable({
                 Clear selection
               </button>
             </>
-          ) : serverPaginated && anySecondaryFilterActive ? (
-            <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected. Clear the extra filters above to select across pages.</span>
           ) : (
             <>
               <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected.</span>
@@ -2185,7 +2182,6 @@ export function LeadsTable({
         <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
           <span className="text-xs text-gray-500">
             Showing {effectiveTotal === 0 ? 0 : startIndex + 1}-{endIndex} of {effectiveTotal}
-            {serverPaginated && anySecondaryFilterActive && ` (${filtered.length} shown)`}
           </span>
           <div className="flex items-center gap-4">
             {/* Per page dropdown */}
