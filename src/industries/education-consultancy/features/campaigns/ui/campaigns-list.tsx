@@ -68,7 +68,7 @@ export function CampaignsList() {
       {campaigns.map((c) => {
         const badge = STATUS_BADGE[c.status] ?? STATUS_BADGE.draft;
         return (
-          <Link key={c.id} href={`/campaigns/${c.id}`} className="block">
+          <Link key={c.id} href={`/campaigns/${c.id}`} prefetch={false} className="block">
             <Card className="hover:shadow-md transition-shadow cursor-pointer h-full">
               <CardContent className="p-5 flex flex-col gap-3">
                 <div className="flex items-start justify-between gap-2">

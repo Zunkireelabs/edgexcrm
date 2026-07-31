@@ -33,6 +33,7 @@ export function OpenLeadsCard({ leads, openLeadsCount, accountId }: OpenLeadsCar
           <li key={lead.id} className="flex items-center justify-between gap-2">
             <Link
               href={`/leads/${lead.id}`}
+              prefetch={false}
               className="text-sm font-medium hover:underline truncate"
               style={{ color: "#0f0f10" }}
             >

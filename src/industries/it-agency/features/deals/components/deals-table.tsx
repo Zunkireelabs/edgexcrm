@@ -54,20 +54,20 @@ export function DealsTable({ deals, stages }: DealsTableProps) {
             return (
               <tr key={deal.id} className="hover:bg-muted/10 transition-colors">
                 <td className="px-4 py-3">
-                  <Link href={`/deals/${deal.id}`} className="font-medium hover:text-primary transition-colors">
+                  <Link href={`/deals/${deal.id}`} prefetch={false} className="font-medium hover:text-primary transition-colors">
                     {deal.name}
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {account ? (
-                    <Link href={`/accounts/${account.id}`} className="hover:text-primary transition-colors">
+                    <Link href={`/accounts/${account.id}`} prefetch={false} className="hover:text-primary transition-colors">
                       {account.name}
                     </Link>
                   ) : "—"}
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
                   {contact ? (
-                    <Link href={`/contacts/${contact.id}`} className="hover:text-primary transition-colors">
+                    <Link href={`/contacts/${contact.id}`} prefetch={false} className="hover:text-primary transition-colors">
                       {contact.first_name} {contact.last_name}
                     </Link>
                   ) : "—"}

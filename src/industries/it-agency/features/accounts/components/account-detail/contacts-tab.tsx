@@ -66,6 +66,7 @@ export function ContactsTab({ contacts, isAdmin, onCreateContact }: ContactsTabP
               <div className="flex-1 min-w-0">
                 <Link
                   href={`/contacts/${c.id}`}
+                  prefetch={false}
                   className="text-sm font-medium hover:underline block truncate"
                   style={{ color: "#0f0f10" }}
                 >

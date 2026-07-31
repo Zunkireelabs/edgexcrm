@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from "./server";
+import { createClient, createServiceClient, getCachedUser } from "./server";
 import { scopedClientForTenant } from "./scoped";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
@@ -20,9 +20,7 @@ export async function getCurrentUserTenant(): Promise<{
   branchId: string | null;
 } | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
   const { data: membership } = await supabase

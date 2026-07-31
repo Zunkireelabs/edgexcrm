@@ -97,6 +97,7 @@ export function LinkedProjectsCard({
                     <div className="min-w-0">
                       <Link
                         href={`/projects/${proj.id}`}
+                        prefetch={false}
                         className="text-sm font-medium hover:underline truncate block"
                       >
                         {proj.name}

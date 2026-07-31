@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import { getCurrentUserTenant, getFormConfigsForTenant, getBranches, getLeadListsByTenant, getLeadListCounts } from "@/lib/supabase/queries";
-import { createClient } from "@/lib/supabase/server";
+import { getCachedUser } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/dashboard/shell";
 import { AIAssistantProvider } from "@/contexts/ai-assistant-context";
 import { SettingsModalProvider } from "@/contexts/settings-modal-context";
@@ -19,10 +19,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
 
   if (!user) redirect("/login");
 

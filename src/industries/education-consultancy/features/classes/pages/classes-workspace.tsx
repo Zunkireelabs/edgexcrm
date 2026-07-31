@@ -278,6 +278,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                               <td className="px-4 py-2.5">
                                 <Link
                                   href={`/leads/${enrollment.lead_id}`}
+                                  prefetch={false}
                                   className="font-medium hover:underline text-foreground"
                                 >
                                   {name}

@@ -179,7 +179,7 @@ export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSecti
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <Link href={`/contacts/${c.id}`} className="text-sm font-medium hover:underline">
+                          <Link href={`/contacts/${c.id}`} prefetch={false} className="text-sm font-medium hover:underline">
                             {fullName}
                           </Link>
                           {c.status === "inactive" && (

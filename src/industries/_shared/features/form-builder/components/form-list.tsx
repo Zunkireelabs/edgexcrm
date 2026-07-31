@@ -169,7 +169,7 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
                       {/* Action buttons */}
                       <div className="flex items-center gap-2 flex-wrap">
                         <Button size="sm" asChild>
-                          <Link href={`/forms/${form.id}`}>
+                          <Link href={`/forms/${form.id}`} prefetch={false}>
                             <Pencil className="h-3.5 w-3.5 mr-1.5" />
                             Edit Form
                           </Link>

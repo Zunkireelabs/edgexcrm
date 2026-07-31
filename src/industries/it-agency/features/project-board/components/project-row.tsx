@@ -72,6 +72,7 @@ export function ProjectRow({ project, team, onProjectUpdated }: ProjectRowProps)
       <td className="py-2.5 px-3">
         <Link
           href={`/projects/${project.id}`}
+          prefetch={false}
           className="text-sm font-medium text-[#0f0f10] hover:underline"
         >
           {project.name}

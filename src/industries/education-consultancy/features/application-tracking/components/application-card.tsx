@@ -68,6 +68,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail }: Applica
         {/* Student name → /leads/[id]; stopPropagation keeps card click from also navigating */}
         <Link
           href={`/leads/${leadId}`}
+          prefetch={false}
           onClick={(e) => e.stopPropagation()}
           className="text-sm font-semibold text-foreground hover:text-primary line-clamp-1 leading-snug flex-1"
         >

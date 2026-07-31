@@ -42,6 +42,7 @@ export function InboxSnapshotCard({ snapshot }: InboxSnapshotCardProps) {
               <Link
                 key={c.id}
                 href={`/inbox?conversation=${c.id}`}
+                prefetch={false}
                 className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors"
               >
                 <span

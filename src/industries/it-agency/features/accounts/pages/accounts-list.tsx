@@ -327,6 +327,7 @@ export function AccountsListPage({ role }: AccountsListPageProps) {
                         <td className="px-3 py-1.5">
                           <Link
                             href={`/accounts/${account.id}`}
+                            prefetch={false}
                             className="text-sm font-medium text-[#0f0f10] hover:underline"
                           >
                             {account.name}

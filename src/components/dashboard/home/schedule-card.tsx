@@ -102,6 +102,7 @@ function ActivityRow({
       {leadName && activity.lead_id && (
         <Link
           href={`/leads/${activity.lead_id}`}
+          prefetch={false}
           className="text-xs text-blue-600 hover:underline shrink-0"
         >
           {leadName}

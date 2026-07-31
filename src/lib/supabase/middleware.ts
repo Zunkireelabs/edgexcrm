@@ -2,6 +2,15 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
+  // API routes authenticate themselves via authenticateRequest() (src/lib/api/auth.ts),
+  // which runs inside the Route Handler and can rotate cookies there. Middleware's
+  // getUser() call here would be a second, redundant network round-trip whose result
+  // is never used for /api/* (isPublicRoute already exempts it from the redirect checks
+  // below) — skip it before the Supabase client is even created.
+  if (request.nextUrl.pathname.startsWith("/api/")) {
+    return NextResponse.next({ request });
+  }
+
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(

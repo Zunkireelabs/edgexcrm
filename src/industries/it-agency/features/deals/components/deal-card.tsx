@@ -57,6 +57,7 @@ export function DealCard({ deal, disabled }: DealCardProps) {
     >
       <Link
         href={`/deals/${deal.id}`}
+        prefetch={false}
         onClick={(e) => e.stopPropagation()}
         className="block text-sm font-semibold text-foreground hover:text-primary line-clamp-2 leading-snug"
       >

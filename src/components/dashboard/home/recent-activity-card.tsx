@@ -41,7 +41,7 @@ export function RecentActivityCard({ notifications }: RecentActivityCardProps) {
               );
 
               return n.link ? (
-                <Link key={n.id} href={n.link}>
+                <Link key={n.id} href={n.link} prefetch={false}>
                   {content}
                 </Link>
               ) : (

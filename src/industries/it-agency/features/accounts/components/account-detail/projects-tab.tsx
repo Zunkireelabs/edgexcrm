@@ -73,6 +73,7 @@ export function ProjectsTab({ projects, isAdmin, onCreateProject }: ProjectsTabP
             <Link
               key={project.id}
               href={`/projects/${project.id}`}
+              prefetch={false}
               className="flex items-center gap-3 p-3 border border-border rounded-lg hover:bg-muted/40 transition-colors group"
             >
               <div className="flex-1 min-w-0">
