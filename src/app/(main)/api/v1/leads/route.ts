@@ -59,6 +59,47 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
+// List-view column projection — every Lead column the table can render, EXCEPT
+// custom_fields and file_urls (JSONB blobs pulled on every row by `select("*")`,
+// the dominant cost in the 34MB/16,898-row payload). The single-lead detail path
+// (GET /api/v1/leads/[id]) keeps `select("*")`; only this list endpoint narrows.
+// A SINGLE string-literal token (backslash line continuation, not `+` concatenation
+// or array.join()) — supabase-js's select() type inference parses the literal type of
+// its argument to build the result row type; `+`/`.join()` both widen to plain
+// `string`, which collapses that inference to `GenericStringError` under tsc.
+const LEADS_LIST_COLUMNS = "id,tenant_id,pipeline_id,session_id,step,is_final,status,\
+first_name,last_name,email,phone,city,country,\
+stage_id,assigned_to,entity_id,\
+intake_source,intake_medium,intake_campaign,ref_code,form_source,\
+preferred_contact_method,tags,lead_type,display_id,account_id,\
+form_config_id,deleted_at,converted_at,converted_contact_id,idempotency_key,\
+ai_score,ai_priority,ai_score_updated_at,\
+normalized_email,merged_into,\
+company_name,designation,prospect_industry,owner_id,salutation,company_email,\
+branch_id,list_id,destinations,field_of_study,degree_level,\
+nationality,intake_account,\
+pre_app_fee_status,pre_app_fee_amount,pre_app_fee_notes,\
+see_gpa,see_institution,see_passed_year,\
+plus_two_gpa,plus_two_institution,plus_two_passed_year,\
+bachelor_gpa,bachelor_institution,bachelor_passed_year,\
+masters_gpa,masters_institution,masters_passed_year,\
+ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
+archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
+last_activity_at,created_at,updated_at";
+
+// Sort allow-list — never interpolate a client-supplied column name into the query.
+// Only "created_at" is covered by an index (idx_leads_tenant_created_active); the
+// others page-table already offered client-side and are kept for parity, at the
+// cost of an in-memory sort node over the tenant's active row set (bounded by
+// tenant size, not full-table — see PR report for measured cost).
+const SORT_COLUMNS: Record<string, string[]> = {
+  created_at: ["created_at"],
+  last_activity_at: ["last_activity_at"],
+  updated_at: ["updated_at"],
+  first_name: ["first_name", "last_name"],
+  email: ["email"],
+};
+
 function withCors(response: NextResponse): NextResponse {
   for (const [key, value] of Object.entries(CORS_HEADERS)) {
     response.headers.set(key, value);
@@ -96,21 +137,50 @@ export async function GET(request: NextRequest) {
   let assignedTo = searchParams.get("assigned_to");
   const includeConverted = searchParams.get("include_converted") === "1";
   const listSlug = searchParams.get("list");
+  const funnelKey = searchParams.get("funnel");
+  // Count is exact but costly (measured 432ms on prod's 16,898-row Admizz tenant — a
+  // seq scan forced by the tags filter). Callers fetch it once per filter-set change
+  // (page=1, or any filter/search/sort edit) and reuse the total client-side while
+  // paging within that same filter set; count=0 skips the recompute.
+  const wantCount = searchParams.get("count") !== "0";
+
+  // Sort — allow-listed against SORT_COLUMNS, never interpolated. id is always the
+  // final tiebreaker so a paginated sort never reshuffles rows between pages.
+  const sortKey = searchParams.get("sort") || "created_at";
+  const sortColumns = SORT_COLUMNS[sortKey];
+  if (!sortColumns) {
+    return apiValidationError({ sort: [`Unknown sort key "${sortKey}"`] });
+  }
+  const orderParam = searchParams.get("order");
+  if (orderParam !== null && orderParam !== "asc" && orderParam !== "desc") {
+    return apiValidationError({ order: ['order must be "asc" or "desc"'] });
+  }
+  const sortAscending = orderParam === "asc";
 
   const supabase = await createServiceClient();
   const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const isAdminOrOwner = auth.role === "owner" || auth.role === "admin";
 
-  // Resolve ?list=slug for lead-lists feature
+  // Resolve ?list=slug / ?funnel=key for lead-lists feature. Mirrors the page's own
+  // resolution (src/app/(main)/(dashboard)/leads/page.tsx) exactly, including the
+  // "delete" slug's special recycle-bin meaning and the is_staging admin/owner gate —
+  // this endpoint must reach the identical row set the page would render for the
+  // same URL, not a parallel/divergent implementation.
   let resolvedListId: string | null = null;
-  let archiveListIds: string[] = [];
+  let funnelListIds: string[] = [];
+  let excludeListIds: string[] = [];
+  let onlyDeleted = false;
   if (getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
     const { data: lists } = await supabase
       .from("lead_lists")
-      .select("id, slug, is_archive, access")
+      .select("id, slug, is_archive, is_staging, funnel_key, access")
       .eq("tenant_id", auth.tenantId);
 
     if (lists) {
-      archiveListIds = lists.filter((l) => l.is_archive).map((l) => l.id);
+      // Master view (no list/funnel) excludes both archive AND staging lists — the
+      // page's `excludeIds` (page.tsx) filters on `is_archive || is_staging`; the old
+      // version of this route only excluded is_archive, a real parity gap.
+      excludeListIds = lists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
 
       if (listSlug) {
         const targetList = lists.find((l) => l.slug === listSlug);
@@ -118,6 +188,9 @@ export async function GET(request: NextRequest) {
           log.info({ listSlug }, "List not found");
           return apiForbidden();
         }
+        // Staging lists (e.g. New Leads) are admin/owner only — direct URL/param
+        // bypass must 403 the same way the page 404s (page.tsx: `notFound()`).
+        if (targetList.is_staging && !isAdminOrOwner) return apiForbidden();
         const accessible = canAccessList(
           auth.permissions,
           targetList.access as { mode: string; positionIds?: string[] },
@@ -125,7 +198,29 @@ export async function GET(request: NextRequest) {
           targetList.id,
         );
         if (!accessible) return apiForbidden();
-        resolvedListId = targetList.id;
+        // The recycle bin is a real lead_lists row (slug "delete") whose access/staging
+        // gates above still apply — but instead of filtering to its list_id, it flips
+        // the query to the soft-deleted set and skips every other list filter (a
+        // deleted lead's old list_id is irrelevant; the bin spans all lists).
+        if (targetList.slug === "delete") {
+          onlyDeleted = true;
+        } else {
+          resolvedListId = targetList.id;
+        }
+      } else if (funnelKey) {
+        // it_agency funnel workspace: all of the funnel's stage-lists at once,
+        // access-filtered exactly like the page's activeFunnelLists.
+        funnelListIds = lists
+          .filter((l) => l.funnel_key === funnelKey)
+          .filter((l) =>
+            canAccessList(
+              auth.permissions,
+              l.access as { mode: string; positionIds?: string[] },
+              auth.positionId,
+              l.id,
+            ),
+          )
+          .map((l) => l.id);
       }
     }
   }
@@ -145,11 +240,12 @@ export async function GET(request: NextRequest) {
   // clause rather than adopting leads_visible_to_user()'s wider branch predicate (that
   // predicate also matches unassigned leads whose branch_id matches, which this endpoint
   // never surfaced before; same reasoning as Decision D2 for getLeadsForPipeline).
+  const countOpts = wantCount ? { count: "exact" as const } : {};
   let query = (!useSharedPool && scope.restrictToSelf && scope.userId)
-    ? visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact" })
-    : supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", auth.tenantId);
+    ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(LEADS_LIST_COLUMNS)
+    : supabase.from("leads").select(LEADS_LIST_COLUMNS, countOpts).eq("tenant_id", auth.tenantId);
 
-  query = query.is("deleted_at", null);
+  query = onlyDeleted ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
 
   if (!includeConverted) {
     query = query.is("converted_at", null);
@@ -158,12 +254,18 @@ export async function GET(request: NextRequest) {
   // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
   query = query.not("tags", "cs", '{"other"}');
 
-  // Apply list filter
-  if (resolvedListId) {
-    query = query.eq("list_id", resolvedListId);
-  } else if (archiveListIds.length > 0) {
-    // Master view: exclude leads in archive lists
-    query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
+  // Apply list/funnel filters — skipped entirely for the recycle bin (onlyDeleted spans
+  // every list; a deleted lead's old list_id is not a filter axis there), mirroring
+  // getLeads's applyFilters (src/lib/supabase/queries.ts).
+  if (!onlyDeleted) {
+    if (resolvedListId) {
+      query = query.eq("list_id", resolvedListId);
+    } else if (funnelListIds.length > 0) {
+      query = query.in("list_id", funnelListIds);
+    } else if (excludeListIds.length > 0) {
+      // Master view: exclude leads in archive/staging lists
+      query = query.or(`list_id.is.null,list_id.not.in.(${excludeListIds.join(",")})`);
+    }
   }
 
   if (useSharedPool) {
@@ -225,23 +327,33 @@ export async function GET(request: NextRequest) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const { data, error, count } = await query
-    .order("last_activity_at", { ascending: false })
-    .range(from, to);
+  // created_at DESC, id DESC is index-ordered (idx_leads_tenant_created_active) — no
+  // sort node, no page drift. Non-default sort keys still get id DESC as the final
+  // tiebreaker so ties never reshuffle rows between pages.
+  for (const col of sortColumns) {
+    query = query.order(col, { ascending: sortAscending });
+  }
+  query = query.order("id", { ascending: false });
+
+  const { data, error, count } = await query.range(from, to);
 
   if (error) {
     log.error({ err: error }, "Failed to fetch leads");
     return apiServiceUnavailable("Failed to fetch leads");
   }
 
-  const total = count || 0;
-  log.info({ total, page, pageSize }, "Leads fetched");
+  // -1 sentinel: count was skipped (?count=0, §3 — exact count is ~432ms on Admizz's
+  // 16,898 rows). The caller must have a cached total from a prior count=1 response
+  // for the same filter set before it ever sends count=0; apiPaginated cannot enforce
+  // that contract, only signal "not computed" instead of silently lying with 0.
+  const total = wantCount ? (count ?? 0) : -1;
+  log.info({ total, page, pageSize, wantCount }, "Leads fetched");
 
   return apiPaginated(data as Lead[], {
     page,
     pageSize,
     total,
-    totalPages: Math.ceil(total / pageSize),
+    totalPages: total === -1 ? -1 : Math.ceil(total / pageSize),
   });
 }
 

@@ -104,13 +104,13 @@ function makeLeadsChain(calls: Call[]) {
       return chain;
     };
   const chain: Record<string, unknown> = {
-    select: () => chain,
+    select: record("select"),
     eq: record("eq"),
     is: record("is"),
     or: record("or"),
     in: record("in"),
     not: record("not"),
-    order: () => chain,
+    order: record("order"),
     range: () => Promise.resolve({ data: [], error: null, count: 0 }),
   };
   return chain;
@@ -145,6 +145,7 @@ function fakeUserClient(rpcCalls: RpcCall[]) {
     rpc: (name: string, params: unknown, opts: unknown) => {
       rpcCalls.push([name, params, opts]);
       const chain: Record<string, unknown> = {
+        select: () => chain,
         is: () => chain,
         not: () => chain,
         eq: () => chain,
@@ -255,5 +256,169 @@ describe("GET /api/v1/leads — counselor-scoping wiring", () => {
 
     expect(res.status).toBe(403);
     expect(createServiceClientMock).not.toHaveBeenCalled();
+  });
+});
+
+// --- LEADS-SERVER-PAGINATION-BRIEF: sort allow-list, count=0, list/funnel/recycle-bin ---
+
+function fakeDbWithLists(opts: {
+  leadsCalls: Call[];
+  lists: Array<{
+    id: string;
+    slug: string;
+    is_archive?: boolean;
+    is_staging?: boolean;
+    funnel_key?: string | null;
+    access?: { mode: string; positionIds?: string[] };
+  }>;
+}) {
+  return {
+    from: (table: string) => {
+      if (table === "leads") return makeLeadsChain(opts.leadsCalls);
+      if (table === "lead_lists") {
+        return {
+          select: () => ({
+            eq: () =>
+              Promise.resolve({
+                data: opts.lists.map((l) => ({
+                  id: l.id,
+                  slug: l.slug,
+                  is_archive: l.is_archive ?? false,
+                  is_staging: l.is_staging ?? false,
+                  funnel_key: l.funnel_key ?? null,
+                  access: l.access ?? { mode: "all" },
+                })),
+              }),
+          }),
+        };
+      }
+      if (table === "lead_branches") {
+        return { select: () => ({ eq: () => ({ eq: () => Promise.resolve({ data: [] }) }) }) };
+      }
+      throw new Error(`unexpected table ${table}`);
+    },
+  };
+}
+
+describe("GET /api/v1/leads — sort/count/list/funnel/recycle-bin (LEADS-SERVER-PAGINATION-BRIEF)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    branchMemberIdsMock.mockResolvedValue([]);
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }),
+    );
+  });
+
+  it("rejects an unknown sort key with 422 instead of interpolating it into the query", async () => {
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ sort: "custom_fields->x" }));
+    expect(res.status).toBe(422);
+  });
+
+  it("rejects an invalid order value with 422", async () => {
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ order: "sideways" }));
+    expect(res.status).toBe(422);
+  });
+
+  it("defaults to created_at DESC with id DESC as the final tiebreaker (index-ordered, stable across pages)", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq());
+    expect(res.status).toBe(200);
+    const orderCalls = calls.filter(([m]) => m === "order");
+    expect(orderCalls).toEqual([
+      ["order", ["created_at", { ascending: false }]],
+      ["order", ["id", { ascending: false }]],
+    ]);
+  });
+
+  it("?count=0 skips the exact count and returns the -1 sentinel, never a false 0", async () => {
+    getFeatureAccessMock.mockReturnValue(false);
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ count: "0" }));
+    const body = await res.json();
+    expect(body.meta.total).toBe(-1);
+    expect(body.meta.totalPages).toBe(-1);
+  });
+
+  it("?list=delete resolves to the recycle bin: deleted_at flips to NOT NULL, list_id filter is skipped entirely", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(true);
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({ leadsCalls: calls, lists: [{ id: "list-delete", slug: "delete", is_staging: true }] }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ list: "delete" }));
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["not", ["deleted_at", "is", null]]);
+    expect(calls.some(([m, a]) => m === "is" && a[0] === "deleted_at")).toBe(false);
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "list_id")).toBe(false);
+  });
+
+  it("?funnel=<key> resolves to .in(list_id, [...]) over every accessible stage-list sharing that funnel_key", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(true);
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({
+        leadsCalls: calls,
+        lists: [
+          { id: "l1", slug: "new", funnel_key: "lead_processing" },
+          { id: "l2", slug: "contacted", funnel_key: "lead_processing" },
+          { id: "l3", slug: "won", funnel_key: "sales_leads" },
+        ],
+      }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ funnel: "lead_processing" }));
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["in", ["list_id", ["l1", "l2"]]]);
+  });
+
+  it("master view (no list/funnel) excludes BOTH archive and staging lists, not just archive", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(true);
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({
+        leadsCalls: calls,
+        lists: [
+          { id: "l1", slug: "archived-list", is_archive: true },
+          { id: "l2", slug: "staging-list", is_staging: true },
+          { id: "l3", slug: "normal-list" },
+        ],
+      }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq());
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["or", ["list_id.is.null,list_id.not.in.(l1,l2)"]]);
+  });
+
+  it("a staging list is 403 for a non-admin/owner even under an otherwise-open access mode", async () => {
+    getFeatureAccessMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "user-1", role: "counselor", permissions: permissions({ leadScope: "own" }) }),
+    );
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({
+        leadsCalls: [],
+        lists: [{ id: "l1", slug: "staging-qc", is_staging: true, access: { mode: "all" } }],
+      }),
+    );
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ list: "staging-qc" }));
+    expect(res.status).toBe(403);
   });
 });

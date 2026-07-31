@@ -82,6 +82,15 @@ import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
 
+// UI sort field -> GET /api/v1/leads `sort` param (route.ts SORT_COLUMNS allow-list).
+const SORT_FIELD_TO_API: Record<SortField, string> = {
+  activity: "last_activity_at",
+  created: "created_at",
+  updated: "updated_at",
+  name: "first_name",
+  email: "email",
+};
+
 interface TeamMember {
   user_id: string;
   email: string;
@@ -91,7 +100,20 @@ interface TeamMember {
 }
 
 interface LeadsTableProps {
+  /** Full lead set (legacy mode) OR first page only (serverPaginated mode) — see
+   *  `serverPaginated` below. */
   leads: Lead[];
+  /** Opts into server-side pagination/search/sort/status (LEADS-SERVER-PAGINATION-BRIEF):
+   *  `leads` becomes just the first page, subsequent pages/search/sort/status are fetched
+   *  from GET /api/v1/leads, and `initialTotal` becomes required. Defaults to false so
+   *  the other two LeadsTable consumers (Contacts, leads-organise — out of scope for that
+   *  brief, has its own separate one) keep their exact pre-existing "load everything,
+   *  filter/sort/paginate client-side" behavior unchanged. */
+  serverPaginated?: boolean;
+  /** Required when serverPaginated. Exact count of leads matching the initial (unfiltered-
+   *  by-toolbar) view, from the same server query that produced `leads`. Seeds pagination
+   *  before the first client fetch. */
+  initialTotal?: number;
   memberMap?: Record<string, string>;
   memberNames?: Record<string, string>;
   /** lead_id -> collaborator user_ids (assignee + anyone ever assigned). Powers the Collaborators filter. */
@@ -240,6 +262,8 @@ function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNo
 
 export function LeadsTable({
   leads,
+  serverPaginated = false,
+  initialTotal,
   memberMap = {},
   memberNames = {},
   leadCollaborators = {},
@@ -288,20 +312,41 @@ export function LeadsTable({
 }: LeadsTableProps) {
   const router = useRouter();
   const showTags = industryId === "education_consultancy" && !hideTagFilter;
+  const CHUNK_SIZE = 100;
   const [localLeads, setLocalLeads] = useState(leads);
-  // Re-sync when the server sends a new lead set — list switch (?list=…),
-  // branch switch (router.refresh), etc. Without this the table shows stale
-  // rows until a manual page reload.
+  // Total matching the CURRENT primary filter set (list/funnel/status/search/sort),
+  // from the server's exact count — not localLeads.length, which is just one page.
+  // Legacy (non-serverPaginated) mode never reads this state; effectiveTotal below
+  // uses filtered.length instead, since `leads` there already holds everything.
+  const [total, setTotal] = useState(initialTotal ?? leads.length);
+  const [tableLoading, setTableLoading] = useState(false);
+  // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
+  // switch, router.refresh() after a bulk action) — the page's own SSR query already
+  // did the work; this is a prop sync, not a client fetch.
   useEffect(() => {
     setLocalLeads(leads);
-  }, [leads]);
+    setTotal(initialTotal ?? leads.length);
+  }, [leads, initialTotal]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
   // Reset status filter when switching lists so a stale status doesn't hide all rows.
   useEffect(() => {
     setStatusFilter("all");
   }, [activeListSlug, activeFunnelKey]);
+
+  // Debounce search 300ms and let the fetch effect below cancel any in-flight request
+  // on a newer keystroke — otherwise every keystroke would fire its own server query
+  // against up to ~17k rows (LEADS-SERVER-PAGINATION-BRIEF non-negotiable #4).
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    };
+  }, [search]);
 
   const [formFilter, setFormFilter] = useState<string>("all");
   const [counselorFilter, setCounselorFilter] = useState<string[]>([]);
@@ -400,6 +445,94 @@ export function LeadsTable({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(25);
 
+  // ── Server-paginated data fetch (LEADS-SERVER-PAGINATION-BRIEF) ──────────────
+  // Replaces "load all 16,898 rows, filter/sort/paginate client-side". Fires on any
+  // PRIMARY-axis change (status, debounced search, sort, page, page size). List/funnel
+  // navigation is a real Next.js nav (page.tsx re-renders with fresh `leads`/`initialTotal`
+  // props, picked up by the prop-sync effect above) — not this effect's job. The secondary
+  // toolbar filters (form/counselor/collaborator/source/tag/created/prospect industry)
+  // stay client-side over whichever page is loaded — a deliberate, documented scope
+  // boundary (see PR description), not an oversight: the API's list/funnel/status/search/
+  // sort parity was the brief's explicit, tested gap list; these seven were not in it.
+  const isFirstFetchRef = useRef(true);
+  const prevSignatureRef = useRef("");
+  const needsCountRef = useRef(false);
+  const fetchAbortRef = useRef<AbortController | null>(null);
+
+  const buildFetchParams = useCallback(
+    (page: number, pageSize: number, wantCount: boolean): URLSearchParams => {
+      const params = new URLSearchParams();
+      params.set("page", String(page));
+      params.set("pageSize", String(pageSize));
+      params.set("count", wantCount ? "1" : "0");
+      const apiSort = SORT_FIELD_TO_API[sortField];
+      if (apiSort !== "created_at") params.set("sort", apiSort);
+      if (sortDirection === "asc") params.set("order", "asc");
+      if (statusFilter !== "all") params.set("status", statusFilter);
+      if (debouncedSearch) params.set("search", debouncedSearch);
+      if (activeListSlug) params.set("list", activeListSlug);
+      else if (activeFunnelKey) params.set("funnel", activeFunnelKey);
+      return params;
+    },
+    [sortField, sortDirection, statusFilter, debouncedSearch, activeListSlug, activeFunnelKey],
+  );
+
+  // Everything that should reset to page 1 and force a fresh exact count (§3) when it
+  // changes. itemsPerPage is included — a page-size change reshapes every page boundary.
+  const fetchSignature = JSON.stringify([
+    activeListSlug, activeFunnelKey, statusFilter, debouncedSearch, sortField, sortDirection, itemsPerPage,
+  ]);
+
+  useEffect(() => {
+    if (!serverPaginated) return; // legacy consumers (Contacts, leads-organise) never fetch here
+
+    if (isFirstFetchRef.current) {
+      // Page 1 is already SSR-seeded via the `leads`/`initialTotal` props — skip the
+      // redundant fetch on mount.
+      isFirstFetchRef.current = false;
+      prevSignatureRef.current = fetchSignature;
+      return;
+    }
+
+    const signatureChanged = fetchSignature !== prevSignatureRef.current;
+    if (signatureChanged) {
+      prevSignatureRef.current = fetchSignature;
+      needsCountRef.current = true;
+      if (currentPage !== 1) {
+        setCurrentPage(1); // re-triggers this effect at page 1 with needsCountRef still true
+        return;
+      }
+    }
+
+    fetchAbortRef.current?.abort();
+    const controller = new AbortController();
+    fetchAbortRef.current = controller;
+
+    const wantCount = needsCountRef.current;
+    const params = buildFetchParams(currentPage, itemsPerPage, wantCount);
+    setTableLoading(true);
+    fetch(`/api/v1/leads?${params.toString()}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((body: { data?: Lead[]; meta?: { total: number }; error?: { message?: string } }) => {
+        if (controller.signal.aborted) return;
+        if (!body.data) throw new Error(body.error?.message || "Failed to load leads");
+        setLocalLeads(body.data);
+        if (wantCount && body.meta) {
+          setTotal(body.meta.total);
+          needsCountRef.current = false;
+        }
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        toast.error(err instanceof Error ? err.message : "Failed to load leads");
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setTableLoading(false);
+      });
+
+    return () => controller.abort();
+  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams]);
+
   const { counts } = useBadgeCounts();
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
 
@@ -420,9 +553,13 @@ export function LeadsTable({
   const hasMultipleForms = formEntries.length > 1;
 
   // Get unique sources from leads (staging: split on " | "; /leads: exact string)
+  // NOTE: scoped to localLeads (the current server page), not every source tenant-wide —
+  // `leads` (the prop) is frozen at whatever page mounted the component and would go
+  // stale the moment a client fetch replaces localLeads, which is worse. This is the
+  // same page-scoping tradeoff as the other secondary toolbar filters (see PR description).
   const sources = useMemo(() => {
     const s = new Set<string>();
-    leads.forEach((l) => {
+    localLeads.forEach((l) => {
       if (!l.intake_source) return;
       if (isStagingView) {
         l.intake_source.split(" | ").forEach((part) => { const t = part.trim(); if (t) s.add(t); });
@@ -431,7 +568,7 @@ export function LeadsTable({
       }
     });
     return Array.from(s).sort();
-  }, [leads, isStagingView]);
+  }, [localLeads, isStagingView]);
 
   // Per-source counts — cross-filtered: reflects all active filters except source itself
   const sourceCounts = useMemo(() => {
@@ -541,55 +678,73 @@ export function LeadsTable({
     return m;
   }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
 
-  const filtered = useMemo(() => {
-    const now = Date.now();
+  // Secondary toolbar filters ONLY (form/counselor/collaborator/source/tag/created/
+  // prospect industry) — status, search, and sort are now applied server-side (the
+  // fetch effect above) and localLeads already IS one page of server-sorted,
+  // server-filtered rows. This intentionally does NOT re-derive status/search/sort:
+  // doing so here would silently re-scope them to "this page only", exactly the bug
+  // class the brief's non-negotiable #4 forbids for search. These seven filters are
+  // a documented exception (see PR description) — they still operate page-scoped.
+  // Shared with exportCSV() below, which re-applies it to a server-paginated fetch of
+  // every primary-matching row (not just localLeads) so export keeps its pre-PR
+  // "export everything matching" behavior despite these filters staying page-scoped.
+  const matchesSecondaryFilters = useCallback((lead: Lead): boolean => {
+    const matchesForm =
+      formFilter === "all" || lead.form_config_id === formFilter;
+    const matchesCounselor =
+      counselorFilter.length === 0 ||
+      (counselorFilter.includes("unassigned") && !lead.assigned_to) ||
+      (!!lead.assigned_to && counselorFilter.includes(lead.assigned_to));
+    const matchesSource =
+      sourceFilter.length === 0 ||
+      (isStagingView
+        ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
+        : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
 
-    let result = localLeads.filter((lead) => {
-      const matchesStatus =
-        statusFilter === "all" || lead.status === statusFilter;
-      const matchesForm =
-        formFilter === "all" || lead.form_config_id === formFilter;
-      const matchesCounselor =
-        counselorFilter.length === 0 ||
-        (counselorFilter.includes("unassigned") && !lead.assigned_to) ||
-        (!!lead.assigned_to && counselorFilter.includes(lead.assigned_to));
-      const matchesSource =
-        sourceFilter.length === 0 ||
-        (isStagingView
-          ? (lead.intake_source?.split(" | ").map((p) => p.trim()).some((p) => sourceFilter.includes(p)) ?? false)
-          : (lead.intake_source ? sourceFilter.includes(lead.intake_source) : false));
+    const matchesCollaborator =
+      collaboratorFilter.length === 0 ||
+      (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
 
-      const matchesCollaborator =
-        collaboratorFilter.length === 0 ||
-        (leadCollaborators[lead.id]?.some((userId) => collaboratorFilter.includes(userId)) ?? false);
+    const matchesTag =
+      tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
 
-      const matchesTag =
-        tagFilter === "all" || (lead.tags && lead.tags.includes(tagFilter));
+    const matchesProspectIndustry =
+      prospectIndustryFilter === "all" ||
+      (prospectIndustryFilter === "__none__"
+        ? !lead.prospect_industry
+        : lead.prospect_industry === prospectIndustryFilter);
 
-      const matchesProspectIndustry =
-        prospectIndustryFilter === "all" ||
-        (prospectIndustryFilter === "__none__"
-          ? !lead.prospect_industry
-          : lead.prospect_industry === prospectIndustryFilter);
-
-      // Created date filter
-      let matchesCreated = true;
-      if (createdFilter !== "all") {
-        const createdAt = new Date(lead.created_at).getTime();
-        const dayMs = 24 * 60 * 60 * 1000;
-        switch (createdFilter) {
-          case "today":
-            matchesCreated = now - createdAt < dayMs;
-            break;
-          case "week":
-            matchesCreated = now - createdAt < 7 * dayMs;
-            break;
-          case "month":
-            matchesCreated = now - createdAt < 30 * dayMs;
-            break;
-        }
+    // Created date filter
+    let matchesCreated = true;
+    if (createdFilter !== "all") {
+      const createdAt = new Date(lead.created_at).getTime();
+      const now = Date.now();
+      const dayMs = 24 * 60 * 60 * 1000;
+      switch (createdFilter) {
+        case "today":
+          matchesCreated = now - createdAt < dayMs;
+          break;
+        case "week":
+          matchesCreated = now - createdAt < 7 * dayMs;
+          break;
+        case "month":
+          matchesCreated = now - createdAt < 30 * dayMs;
+          break;
       }
+    }
 
+    return matchesForm && matchesCounselor && matchesSource && matchesCollaborator && matchesTag && matchesCreated && matchesProspectIndustry;
+  }, [formFilter, counselorFilter, sourceFilter, collaboratorFilter, leadCollaborators, isStagingView, tagFilter, createdFilter, prospectIndustryFilter]);
+
+  // serverPaginated: localLeads is already one server-filtered/sorted page — only the
+  // secondary filters apply here. Legacy mode (Contacts, leads-organise): unchanged
+  // pre-PR behavior — status/search/sort are still client-side over the FULL `leads`
+  // prop (not localLeads), preserving exact prior semantics for those two consumers.
+  const filtered = useMemo(() => {
+    if (serverPaginated) return localLeads.filter(matchesSecondaryFilters);
+
+    let result = leads.filter((lead) => {
+      const matchesStatus = statusFilter === "all" || lead.status === statusFilter;
       const searchLower = search.toLowerCase();
       const assignedEmail = lead.assigned_to ? memberMap[lead.assigned_to] || "" : "";
       const matchesSearch =
@@ -600,10 +755,9 @@ export function LeadsTable({
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
-      return matchesStatus && matchesSearch && matchesForm && matchesCounselor && matchesSource && matchesCollaborator && matchesTag && matchesCreated && matchesProspectIndustry;
+      return matchesStatus && matchesSearch && matchesSecondaryFilters(lead);
     });
 
-    // Apply sorting
     result = [...result].sort((a, b) => {
       let comparison = 0;
       switch (sortField) {
@@ -635,7 +789,20 @@ export function LeadsTable({
     });
 
     return result;
-  }, [localLeads, search, statusFilter, formFilter, counselorFilter, sourceFilter, collaboratorFilter, leadCollaborators, isStagingView, tagFilter, createdFilter, prospectIndustryFilter, sortField, sortDirection, memberMap]);
+  }, [serverPaginated, localLeads, leads, matchesSecondaryFilters, statusFilter, search, memberMap, sortField, sortDirection]);
+
+  // Legacy mode has no server total — `filtered.length` (post status/search, pre-slice)
+  // already is that world's ground truth for "N leads match".
+  const effectiveTotal = serverPaginated ? total : filtered.length;
+
+  const anySecondaryFilterActive =
+    formFilter !== "all" ||
+    counselorFilter.length > 0 ||
+    sourceFilter.length > 0 ||
+    collaboratorFilter.length > 0 ||
+    tagFilter !== "all" ||
+    createdFilter !== "all" ||
+    prospectIndustryFilter !== "all";
 
   const clearFilters = () => {
     setSearch("");
@@ -679,22 +846,26 @@ export function LeadsTable({
     return "Selected leads have mixed assignees — choosing a member reassigns all of them.";
   }, [isStagingView, selectedIds, localLeads, memberMap, memberNames]);
 
-  // Pagination calculations
-  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  // serverPaginated: `filtered` (secondary-filtered localLeads) already IS the current
+  // page — no client-side slice. Legacy mode: `filtered` is the full matching set
+  // (status/search/sort/secondary all applied above, unsliced) and still needs the
+  // old .slice() pagination.
+  const totalPages = effectiveTotal > 0 ? Math.ceil(effectiveTotal / itemsPerPage) : 1;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, filtered.length);
-  const paginatedLeads = useMemo(() => {
-    return filtered.slice(startIndex, endIndex);
-  }, [filtered, startIndex, endIndex]);
+  const endIndex = Math.min(startIndex + itemsPerPage, effectiveTotal);
+  const paginatedLeads = useMemo(
+    () => (serverPaginated ? filtered : filtered.slice(startIndex, endIndex)),
+    [serverPaginated, filtered, startIndex, endIndex],
+  );
 
-  // Reset to page 1 when filters change
+  // Legacy mode only: server mode's page-1 reset lives in the fetch effect's signature
+  // check above; nothing else would reset a stale page here now that filtered.length
+  // can shrink out from under a selected page (e.g. narrowing a secondary filter).
   useEffect(() => {
-    if (currentPage > totalPages && totalPages > 0) {
+    if (!serverPaginated && currentPage > totalPages && totalPages > 0) {
       setCurrentPage(1);
     }
-  }, [currentPage, totalPages]);
-
-  const filteredIds = useMemo(() => new Set(paginatedLeads.map((l) => l.id)), [paginatedLeads]);
+  }, [serverPaginated, currentPage, totalPages]);
 
   const statusFilterOptions = useMemo(() => {
     const activeList = leadLists.find((l) => l.slug === activeListSlug);
@@ -722,7 +893,43 @@ export function LeadsTable({
   const selectedCount = selectedIds.size;
   const allSelected = paginatedLeads.length > 0 && paginatedLeads.every((l) => selectedIds.has(l.id));
   const someSelected = paginatedLeads.some((l) => selectedIds.has(l.id)) && !allSelected;
-  const allResultsSelected = filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+  // Legacy mode: `filtered` already holds every matching row (unchanged pre-PR
+  // behavior), so .every() over it is exact. serverPaginated mode: "every matching
+  // lead is selected" means "selectedIds reached the server total" instead (localLeads
+  // no longer holds every matching row) — only meaningful with no secondary
+  // (page-scoped) filter narrowing the set further.
+  const allResultsSelected = serverPaginated
+    ? !anySecondaryFilterActive && total > 0 && selectedIds.size >= total
+    : filtered.length > 0 && filtered.every((l) => selectedIds.has(l.id));
+
+  // serverPaginated only: resolves the FULL set of ids matching the current primary
+  // filters (list/funnel/status/search/sort) via paginated GET calls — never a single
+  // giant id array or client-held "everything" (non-negotiable #1). Legacy mode's
+  // "select all" is the plain synchronous `filtered` set (see the banner button below);
+  // it never calls this. Bulk mutation calls then chunk the resulting selection into
+  // <=100-id batches (existing API cap).
+  async function selectAllMatching() {
+    if (!serverPaginated || anySecondaryFilterActive || total <= 0) return;
+    setTableLoading(true);
+    try {
+      const collected: string[] = [];
+      const PAGE_SIZE = 100;
+      const SAFETY_MAX_PAGES = 500; // 50,000 rows of headroom — well past any real tenant today
+      for (let page = 1; page <= SAFETY_MAX_PAGES; page++) {
+        const params = buildFetchParams(page, PAGE_SIZE, false);
+        const res = await fetch(`/api/v1/leads?${params.toString()}`);
+        const body = await res.json();
+        if (!res.ok || !body.data) throw new Error(body.error?.message || "Failed to select all matching leads");
+        collected.push(...(body.data as Lead[]).map((l) => l.id));
+        if (body.data.length < PAGE_SIZE || collected.length >= total) break;
+      }
+      setSelectedIds(new Set(collected));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to select all matching leads");
+    } finally {
+      setTableLoading(false);
+    }
+  }
 
   // Auto-route list based on assignee's position (fires for any view when positionSlugMap available).
   // Uses allLeadLists (all pipeline lists) so position-restricted lists are still reachable for routing.
@@ -762,8 +969,14 @@ export function LeadsTable({
     });
   }
 
+  // selectedIds is trusted directly (no re-filter against the loaded page) — it is
+  // only ever populated by real toggles against rows that were on-screen, or by
+  // selectAllMatching()'s server-paginated fetch above, both always-valid sources.
+  // (The old `filteredIds`-based re-filter silently dropped any selected id not on
+  // the CURRENT page, which under "select all N" bulk-deleted/assigned only the
+  // visible page instead of the full selection — fixed as part of this refactor.)
   async function handleBulkDelete() {
-    const idsToDelete = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    const idsToDelete = Array.from(selectedIds);
 
     if (idsToDelete.length === 0) {
       toast.error("No leads selected");
@@ -772,19 +985,22 @@ export function LeadsTable({
 
     setIsDeleting(true);
     try {
-      const response = await fetch("/api/v1/leads/bulk", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ids: idsToDelete }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to delete leads");
+      let deleted = 0;
+      for (let i = 0; i < idsToDelete.length; i += CHUNK_SIZE) {
+        const chunk = idsToDelete.slice(i, i + CHUNK_SIZE);
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ids: chunk }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to delete leads");
+        }
+        deleted += data.data.deleted as number;
       }
 
-      toast.success(`Deleted ${data.data.deleted} lead${data.data.deleted !== 1 ? "s" : ""}`);
+      toast.success(`Deleted ${deleted} lead${deleted !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       setDeleteDialogOpen(false);
       router.refresh();
@@ -796,7 +1012,7 @@ export function LeadsTable({
   }
 
   async function handleBulkAssign() {
-    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    const idsToAssign = Array.from(selectedIds);
 
     if (idsToAssign.length === 0) {
       toast.error("No leads selected");
@@ -805,24 +1021,27 @@ export function LeadsTable({
 
     setIsAssigning(true);
     try {
-      const response = await fetch("/api/v1/leads/bulk", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ids: idsToAssign,
-          assigned_to: assignTo === "unassign" ? null : assignTo,
-          ...(assignAutoListId ? { list_id: assignAutoListId } : {}),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to assign leads");
+      let updated = 0;
+      for (let i = 0; i < idsToAssign.length; i += CHUNK_SIZE) {
+        const chunk = idsToAssign.slice(i, i + CHUNK_SIZE);
+        const response = await fetch("/api/v1/leads/bulk", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: chunk,
+            assigned_to: assignTo === "unassign" ? null : assignTo,
+            ...(assignAutoListId ? { list_id: assignAutoListId } : {}),
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to assign leads");
+        }
+        updated += data.data.updated as number;
       }
 
       const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
-      toast.success(`${action} ${data.data.updated} lead${data.data.updated !== 1 ? "s" : ""}`);
+      toast.success(`${action} ${updated} lead${updated !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       setAssignDialogOpen(false);
       setAssignTo("");
@@ -835,28 +1054,32 @@ export function LeadsTable({
   }
 
   async function handleBulkAssignBranch() {
-    const idsToAssign = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    const idsToAssign = Array.from(selectedIds);
     if (idsToAssign.length === 0) {
       toast.error("No leads selected");
       return;
     }
     setIsAssigningBranch(true);
     try {
-      const response = await fetch("/api/v1/leads/bulk/share", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ids: idsToAssign,
-          branch_ids: [assignToBranch],
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.error?.message || "Failed to share leads");
+      let shared = 0;
+      for (let i = 0; i < idsToAssign.length; i += CHUNK_SIZE) {
+        const chunk = idsToAssign.slice(i, i + CHUNK_SIZE);
+        const response = await fetch("/api/v1/leads/bulk/share", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ids: chunk,
+            branch_ids: [assignToBranch],
+          }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.error?.message || "Failed to share leads");
+        }
+        shared += data.data.shared as number;
       }
-      const count = data.data.shared as number;
       const branchName = branches.find((b) => b.id === assignToBranch)?.name ?? "branch";
-      toast.success(`Shared ${count} lead${count !== 1 ? "s" : ""} to ${branchName}`);
+      toast.success(`Shared ${shared} lead${shared !== 1 ? "s" : ""} to ${branchName}`);
       setSelectedIds(new Set());
       setBranchAssignDialogOpen(false);
       setAssignToBranch("");
@@ -876,34 +1099,36 @@ export function LeadsTable({
   const graduateTargetList = leadLists.find((l) => l.funnel_key === "sales_leads" && l.slug === "new-prospect") ?? null;
   const canGraduate = industryId === "it_agency" && activeListSlug === "fit-qualified" && !!graduateTargetList;
 
-  const CHUNK_SIZE = 100;
-
   // Restore from the recycle bin (Delete view → clears deleted_at) or un-archive
   // (Archived view → moves back into the intake/Pre-qualified list).
   async function restoreLeads(ids: string[]) {
-    const validIds = ids.filter((id) => filteredIds.has(id));
-    if (validIds.length === 0) return;
+    if (ids.length === 0) return;
     try {
-      let res: Response;
-      if (viewMode === "archived") {
-        if (!intakeListId) {
-          toast.error("No list to restore into");
-          return;
+      let restored = 0;
+      for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+        const chunk = ids.slice(i, i + CHUNK_SIZE);
+        let res: Response;
+        if (viewMode === "archived") {
+          if (!intakeListId) {
+            toast.error("No list to restore into");
+            return;
+          }
+          res = await fetch("/api/v1/leads/bulk", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: chunk, list_id: intakeListId }),
+          });
+        } else {
+          res = await fetch("/api/v1/leads/bulk/restore", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ids: chunk }),
+          });
         }
-        res = await fetch("/api/v1/leads/bulk", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: validIds, list_id: intakeListId }),
-        });
-      } else {
-        res = await fetch("/api/v1/leads/bulk/restore", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ids: validIds }),
-        });
+        if (!res.ok) throw new Error("restore failed");
+        restored += chunk.length;
       }
-      if (!res.ok) throw new Error("restore failed");
-      toast.success(`Restored ${validIds.length} lead${validIds.length !== 1 ? "s" : ""}`);
+      toast.success(`Restored ${restored} lead${restored !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       router.refresh();
     } catch {
@@ -912,7 +1137,7 @@ export function LeadsTable({
   }
 
   async function handleBulkMove() {
-    const idsToMove = Array.from(selectedIds).filter((id) => filteredIds.has(id));
+    const idsToMove = Array.from(selectedIds);
     if (idsToMove.length === 0) {
       toast.error("No leads selected");
       return;
@@ -1002,10 +1227,42 @@ export function LeadsTable({
     }
   }
 
-  function exportCSV() {
+  // Fetches every row matching the current PRIMARY filters (list/funnel/status/search/
+  // sort) via paginated GET calls — not from `filtered`/localLeads, which is only one
+  // page now. Keeps export's pre-PR "export everything matching" behavior; the
+  // secondary (page-scoped) toolbar filters are re-applied client-side afterward.
+  async function exportCSV() {
+    // Legacy mode: `filtered` already holds every matching row (unchanged pre-PR
+    // behavior) — export it directly, synchronously, exactly as before.
+    let exportLeads: Lead[];
+    if (!serverPaginated) {
+      exportLeads = filtered;
+    } else {
+      setTableLoading(true);
+      try {
+        const collected: Lead[] = [];
+        const PAGE_SIZE = 100;
+        const SAFETY_MAX_PAGES = 500;
+        for (let page = 1; page <= SAFETY_MAX_PAGES; page++) {
+          const params = buildFetchParams(page, PAGE_SIZE, false);
+          const res = await fetch(`/api/v1/leads?${params.toString()}`);
+          const body = await res.json();
+          if (!res.ok || !body.data) throw new Error(body.error?.message || "Failed to export leads");
+          collected.push(...(body.data as Lead[]));
+          if (body.data.length < PAGE_SIZE || (total > 0 && collected.length >= total)) break;
+        }
+        exportLeads = collected.filter(matchesSecondaryFilters);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to export leads");
+        setTableLoading(false);
+        return;
+      }
+      setTableLoading(false);
+    }
+
     const exportCols = visibleColumns.filter((c) => c.key !== "actions");
     const headers = exportCols.map((c) => c.label);
-    const rows = filtered.map((lead) =>
+    const rows = exportLeads.map((lead) =>
       exportCols.map((col): string => {
         switch (col.key) {
           case "name":
@@ -1344,7 +1601,6 @@ export function LeadsTable({
             value: sourceFilter,
             onChange: (val: string[]) => {
               setSourceFilter(val);
-              setCurrentPage(1);
             },
             options: sources.map((s) => ({
               value: s,
@@ -1364,7 +1620,6 @@ export function LeadsTable({
             value: counselorFilter,
             onChange: (val: string[]) => {
               setCounselorFilter(val);
-              setCurrentPage(1);
             },
             options: allowedAssigneePositions
               ? [
@@ -1410,7 +1665,6 @@ export function LeadsTable({
             value: collaboratorFilter,
             onChange: (val: string[]) => {
               setCollaboratorFilter(val);
-              setCurrentPage(1);
             },
             options: counselors
               .filter(([userId]) =>
@@ -1434,7 +1688,6 @@ export function LeadsTable({
             value: tagFilter,
             onChange: (val: string) => {
               setTagFilter(val);
-              setCurrentPage(1);
             },
             options: [
               { value: "all", label: "All Tags", description: "Show all leads" },
@@ -1452,7 +1705,6 @@ export function LeadsTable({
             value: prospectIndustryFilter,
             onChange: (val: string) => {
               setProspectIndustryFilter(val);
-              setCurrentPage(1);
             },
             options: [
               { value: "all", label: "All Industries", description: "Show all leads" },
@@ -1474,7 +1726,6 @@ export function LeadsTable({
       value: createdFilter,
       onChange: (val: string) => {
         setCreatedFilter(val);
-        setCurrentPage(1);
       },
       options: [
         { value: "all", label: "Any time", description: "All time periods" },
@@ -1502,7 +1753,6 @@ export function LeadsTable({
             value: formFilter,
             onChange: (val: string) => {
               setFormFilter(val);
-              setCurrentPage(1);
             },
             options: [
               { value: "all", label: "All Forms", description: "Show leads from all forms" },
@@ -1531,12 +1781,15 @@ export function LeadsTable({
       <div className="shrink-0">
         {/* Top Row: Search + Actions */}
         <div className="flex flex-wrap items-center gap-3 p-3">
-          {/* Lead count */}
+          {/* Lead count — server total for the primary filter set; secondary (page-scoped)
+              toolbar filters additionally narrow what's actually shown below. */}
           <div className="text-sm font-medium text-muted-foreground shrink-0">
-            {filtered.length} Leads
+            {effectiveTotal} Lead{effectiveTotal !== 1 ? "s" : ""}
+            {serverPaginated && anySecondaryFilterActive && ` (${filtered.length} shown)`}
           </div>
 
-          {/* Search */}
+          {/* Search — debounced 300ms, hits GET /api/v1/leads server-side (not a client
+              array filter): searches every matching lead, not just the loaded page. */}
           <div className="relative w-60">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
             <input
@@ -1546,6 +1799,9 @@ export function LeadsTable({
               onChange={(e) => setSearch(e.target.value)}
               className="w-full h-7 pl-7 pr-3 rounded-[8px] border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
             />
+            {tableLoading && (
+              <span className="absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 animate-spin rounded-full border-2 border-gray-300 border-t-gray-500" />
+            )}
           </div>
 
           {/* Edit columns — placed right after the search bar */}
@@ -1793,12 +2049,17 @@ export function LeadsTable({
         </div>
       </div>
 
-      {/* Select-all-results banner: shown when current page is fully selected but more leads exist */}
-      {allSelected && filtered.length > paginatedLeads.length && (
+      {/* Select-all-results banner: shown when the current page is fully selected but more
+          matching leads exist. The escalation to "all N" resolves ids via
+          selectAllMatching()'s paginated fetch (never a client-held id array), and is
+          hidden while a secondary (page-scoped) filter is active — there is no server
+          predicate for those filters, so "select all" can't safely promise correctness
+          under them (see PR description). */}
+      {allSelected && effectiveTotal > paginatedLeads.length && (
         <div className="shrink-0 flex items-center justify-center gap-2 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-700">
           {allResultsSelected ? (
             <>
-              <span>All <strong>{filtered.length}</strong> leads are selected.</span>
+              <span>All <strong>{effectiveTotal}</strong> leads are selected.</span>
               <button
                 onClick={() => setSelectedIds(new Set())}
                 className="underline font-medium hover:text-blue-900"
@@ -1806,14 +2067,16 @@ export function LeadsTable({
                 Clear selection
               </button>
             </>
+          ) : serverPaginated && anySecondaryFilterActive ? (
+            <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected. Clear the extra filters above to select across pages.</span>
           ) : (
             <>
               <span>All <strong>{paginatedLeads.length}</strong> leads on this page are selected.</span>
               <button
-                onClick={() => setSelectedIds(new Set(filtered.map((l) => l.id)))}
+                onClick={serverPaginated ? selectAllMatching : () => setSelectedIds(new Set(filtered.map((l) => l.id)))}
                 className="underline font-medium hover:text-blue-900"
               >
-                Select all {filtered.length} leads
+                Select all {effectiveTotal} leads
               </button>
             </>
           )}
@@ -1921,7 +2184,8 @@ export function LeadsTable({
         {/* Pagination Controls - Zunkireelabs style (inside white card) */}
         <div className="shrink-0 flex justify-between items-center px-3 py-2 border-t border-gray-100">
           <span className="text-xs text-gray-500">
-            Showing {startIndex + 1}-{endIndex} of {filtered.length}
+            Showing {effectiveTotal === 0 ? 0 : startIndex + 1}-{endIndex} of {effectiveTotal}
+            {serverPaginated && anySecondaryFilterActive && ` (${filtered.length} shown)`}
           </span>
           <div className="flex items-center gap-4">
             {/* Per page dropdown */}
