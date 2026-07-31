@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeads, getLeadsPage, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
 import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
@@ -170,9 +170,19 @@ export default async function LeadsPage({
       ? await getListPipeline(activeList.id, tenantData.tenant.id)
       : null;
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
+  // Kanban views render every lead in the list/funnel as board columns — not in scope
+  // for pagination (brief covers the LIST table view only) — so they keep the old
+  // full-load getLeads(). The list view fetches just page 1 via getLeadsPage()
+  // (LEADS-SERVER-PAGINATION-BRIEF §2); LeadsTable takes it from there client-side.
+  const wantsFullLoad = canShowKanban || canShowFunnelKanban;
+  const excludeOtherType = tenantData.tenant.industry_id === "education_consultancy";
+  const LIST_PAGE_SIZE = 25;
+
+  const [leadsResult, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
     await Promise.all([
-      getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
+      wantsFullLoad
+        ? getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType }).then((leads) => ({ leads, total: leads.length }))
+        : getLeadsPage(tenantData.tenant.id, { ...scope, excludeOtherType }, 1, LIST_PAGE_SIZE),
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
@@ -190,6 +200,7 @@ export default async function LeadsPage({
         .eq("is_active", true)
         .order("position", { ascending: true }),
     ]);
+  const { leads, total: leadsTotal } = leadsResult;
 
   const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
     serviceClient, tenantData.tenant.id, leads.map((l) => l.id),
@@ -311,6 +322,8 @@ export default async function LeadsPage({
         pageHeading={pageHeading}
         pageHeadingClassName="shrink-0 text-lg font-bold pl-4 pt-4 mb-4 pr-6"
         leads={leads}
+        serverPaginated
+        initialTotal={leadsTotal}
         openTaskLeadIds={openTaskLeadIds}
         leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}

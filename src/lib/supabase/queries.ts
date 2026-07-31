@@ -213,6 +213,86 @@ export async function getLeads(
 }
 
 /**
+ * Server-paginated sibling of getLeads(), for /leads's first-page SSR render
+ * (LEADS-SERVER-PAGINATION-BRIEF §2) — a single .range() page + exact count instead
+ * of getLeads()'s "chunk-fetch up to `limit` rows" pattern. Deliberately NOT a
+ * refactor of getLeads() itself (kept byte-for-byte unchanged): getLeads() has four
+ * other callers (home/pipeline/dashboard/insights pages) outside this PR's scope,
+ * and touching its shared filter closure risks all of them. The filter semantics
+ * here are copied to match getLeads()'s applyFilters exactly, not reimplemented.
+ */
+export async function getLeadsPage(
+  tenantId: string,
+  scope: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    branchId?: string | null;
+    userBranchId?: string | null;
+    crossBranchPoolListSlug?: string | null;
+    listId?: string | null;
+    listIds?: string[] | null;
+    excludeListIds?: string[];
+    onlyDeleted?: boolean;
+    excludeOtherType?: boolean;
+  } | undefined,
+  page: number,
+  pageSize: number,
+): Promise<{ leads: Lead[]; total: number }> {
+  const supabase = await createClient();
+
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q
+      .is("converted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (scope?.onlyDeleted) {
+      q = q.not("deleted_at", "is", null);
+    } else {
+      q = q.is("deleted_at", null);
+    }
+
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+    if (scope?.excludeOtherType) q = q.not("tags", "cs", '{"other"}');
+
+    if (!scope?.onlyDeleted) {
+      if (scope?.listId) {
+        q = q.eq("list_id", scope.listId);
+      } else if (scope?.listIds && scope.listIds.length > 0) {
+        q = q.in("list_id", scope.listIds);
+      } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+      }
+    }
+
+    return q;
+  };
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope, { count: "exact" }));
+  const buildFallbackQuery = () =>
+    applyFilters(
+      supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
+    );
+
+  let { data, error, count } = await buildQuery().range(from, to);
+  if (error && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeadsPage] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
+    });
+    ({ data, error, count } = await buildFallbackQuery().range(from, to));
+  }
+  if (error) {
+    console.error("[getLeadsPage] leads query failed", { tenantId, listId: scope?.listId, error });
+    return { leads: [], total: 0 };
+  }
+  return { leads: (data ?? []) as Lead[], total: count ?? 0 };
+}
+
+/**
  * it_agency Sales Leads "no next task" signal — which of the given leads have at
  * least one open (todo/in_progress) task. Structure only: no automated alerting yet.
  */
