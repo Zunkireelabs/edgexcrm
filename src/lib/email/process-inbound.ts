@@ -15,7 +15,7 @@
 //      unrelated threads).
 
 import { createServiceClient } from "@/lib/supabase/server";
-import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { scopedClientForTenant, type ScopedClient } from "@/lib/supabase/scoped";
 import { logger } from "@/lib/logger";
 import { emitEvent } from "@/lib/api/audit";
 import { upsertThreadNotification, NotificationTypes } from "@/lib/notifications";
@@ -23,8 +23,10 @@ import { normalizeEmail, resolveLeadIdentity } from "@/lib/leads/dedup";
 import { matchInboundToThread, THREAD_COLUMNS, type EmailThreadRow } from "./inbound/match-thread";
 import { getReceivingEmail, forwardReceivingEmail } from "./inbound/resend-client";
 import { PLATFORM_EMAIL_ADDRESS } from "./index";
-import { getInboundDomains, type InboundVerb } from "./inbound/tokens";
+import { getInboundDomains, mintToken, buildInboundAddress, type InboundVerb } from "./inbound/tokens";
 import { processBccDropbox } from "./inbound/bcc-route";
+import { processFwdRelay } from "./inbound/fwd-route";
+import { sanitizeDisplayName } from "./reply-to-label";
 
 interface InboundEnvelope {
   to: string[];
@@ -106,6 +108,17 @@ export async function processInboundEmailEvents(limit = 50): Promise<ProcessResu
 }
 
 // ── RFC822 helpers (headers come back already-parsed key/value from Resend) ──
+
+/**
+ * True when a (parsed, lowercased) From address is EdgeX's own platform
+ * address. Single source of truth for this comparison — reused by the
+ * general loop/auto guard below AND fwd-route.ts's platform-address loop
+ * guard (REPLYABLE-FORWARD-BRIEF.md Stage 2 §d: "reuse it, do not invent a
+ * second check").
+ */
+export function isPlatformSender(fromEmail: string | null): boolean {
+  return fromEmail !== null && fromEmail === normalizeEmail(PLATFORM_EMAIL_ADDRESS);
+}
 
 export function getHeader(headers: Record<string, string> | null, name: string): string | undefined {
   if (!headers) return undefined;
@@ -213,6 +226,16 @@ async function processOneEvent(evt: EventRow): Promise<void> {
     return;
   }
 
+  // Fwd relay (verb='fwd') — a rep replying to the replyable forward. Same
+  // "rep is the author" shape as bcc: its own sender guard, never touches
+  // the reply-path guard/thread logic below, never forwards or notifies.
+  // Its own platform-address loop guard reuses isPlatformSender() below
+  // rather than a second check (REPLYABLE-FORWARD-BRIEF.md Stage 2 §d).
+  if (p.verb === "fwd") {
+    await processFwdRelay({ tenantId: p.tenant_id, resendEmailId: p.resend_email_id, inboundAddressId: p.inbound_address_id }, db, receiving, headers);
+    return;
+  }
+
   // ── 1. Loop/auto guard FIRST, before any write ──────────────────────────
   const autoSubmittedHeader = getHeader(headers, "Auto-Submitted");
   const isAutoSubmitted = !!autoSubmittedHeader && autoSubmittedHeader.trim().toLowerCase() !== "no";
@@ -236,7 +259,7 @@ async function processOneEvent(evt: EventRow): Promise<void> {
   }
   const fromDomain = fromEmail.includes("@") ? fromEmail.split("@")[1] : "";
   const isFromInboundDomain = fromDomain !== "" && inboundDomains.includes(fromDomain);
-  const isFromPlatform = fromEmail === normalizeEmail(PLATFORM_EMAIL_ADDRESS);
+  const isFromPlatform = isPlatformSender(fromEmail);
   const isFromTenantSender = tenantFromAddress !== null && fromEmail === tenantFromAddress;
 
   if (
@@ -439,12 +462,65 @@ async function processOneEvent(evt: EventRow): Promise<void> {
   }
 
   // Tail step: passthrough-forward to the rep's Gmail so they still see the
-  // reply where they expect it (accepted trade-off — brief intro).
+  // reply where they expect it (accepted trade-off — brief intro). Forwarded
+  // from a thread-bound fwd+ token (REPLYABLE-FORWARD-BRIEF.md Stage 2) so
+  // hitting Reply on it relays back to the lead instead of silently
+  // discarding at noreply@ (Stage 1). Never forwards a message whose matched
+  // verb is already 'fwd' — that branch returns above and never reaches here.
   if (connectedAccount) {
+    const forwardFrom = await buildForwardFromAddress(db, thread.id, fromName, fromEmail);
     await forwardReceivingEmail({
       emailId: p.resend_email_id,
       to: connectedAccount.email,
-      from: PLATFORM_EMAIL_ADDRESS,
+      from: forwardFrom,
     });
+  }
+}
+
+/**
+ * Resolves the `from:` address for the passthrough-forward tail step: reuses
+ * an existing active thread-bound fwd token if one exists, else mints one
+ * (brief Stage 2 §a) — never hand-rolls the address (buildInboundAddress()).
+ * Wrapped so any failure (misconfigured inbound envs, DB hiccup) falls back
+ * to the old bare PLATFORM_EMAIL_ADDRESS rather than breaking the forward
+ * that already works today.
+ */
+async function buildForwardFromAddress(
+  db: ScopedClient,
+  threadId: string,
+  leadName: string | null,
+  leadEmail: string,
+): Promise<string> {
+  try {
+    const { data: existing } = await db
+      .from("inbound_addresses")
+      .select("token")
+      .eq("thread_id", threadId)
+      .eq("verb", "fwd")
+      .eq("kind", "thread")
+      .eq("status", "active")
+      .limit(1)
+      .maybeSingle<{ token: string }>();
+
+    let token: string;
+    if (existing?.token) {
+      token = existing.token;
+    } else {
+      const minted = mintToken("fwd");
+      const { data: addrRow, error: addrErr } = await db
+        .from("inbound_addresses")
+        .insert({ kind: "thread", verb: "fwd", token: minted.token, thread_id: threadId, user_id: null, status: "active" })
+        .select("id")
+        .single<{ id: string }>();
+      if (addrErr || !addrRow) throw new Error(addrErr?.message ?? "fwd token insert returned no row");
+      token = minted.token;
+    }
+
+    const address = buildInboundAddress("fwd", token);
+    const label = sanitizeDisplayName(leadName) ?? (leadEmail.includes("@") ? leadEmail.split("@")[0] : null);
+    return label ? `"${label}" <${address}>` : address;
+  } catch (err) {
+    logger.warn({ err, threadId }, "fwd token mint/reuse failed — forwarding from the bare platform address");
+    return PLATFORM_EMAIL_ADDRESS;
   }
 }
