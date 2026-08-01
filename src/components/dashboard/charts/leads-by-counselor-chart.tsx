@@ -1,7 +1,6 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Lead } from "@/types/database";
 
 // Chart colors
 const CHART_COLORS = [
@@ -14,21 +13,23 @@ const CHART_COLORS = [
 ];
 
 interface LeadsByCounselorChartProps {
-  leads: Lead[];
+  /** assigned_to-keyed counts ("(unassigned)" sentinel) — see migration 194's `counselor` dimension. */
+  assignedToCounts: Record<string, number>;
   memberMap: Record<string, string>; // user_id -> email
   memberNames?: Record<string, string>; // user_id -> display name
 }
 
-export function LeadsByCounselorChart({ leads, memberMap, memberNames = {} }: LeadsByCounselorChartProps) {
-  // Group leads by assigned counselor
-  const counselorCounts = leads.reduce((acc, lead) => {
-    const assignedTo = lead.assigned_to;
-    const counselorName = assignedTo
-      ? memberNames[assignedTo] || memberMap[assignedTo]?.split("@")[0] || "Unknown"
-      : "Unassigned";
-    acc[counselorName] = (acc[counselorName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+export function LeadsByCounselorChart({ assignedToCounts, memberMap, memberNames = {} }: LeadsByCounselorChartProps) {
+  // Resolve each assigned_to id to a display name (unchanged resolution logic,
+  // now folding pre-aggregated counts instead of one increment per lead).
+  const counselorCounts: Record<string, number> = {};
+  for (const [assignedTo, count] of Object.entries(assignedToCounts)) {
+    const counselorName =
+      assignedTo !== "(unassigned)"
+        ? memberNames[assignedTo] || memberMap[assignedTo]?.split("@")[0] || "Unknown"
+        : "Unassigned";
+    counselorCounts[counselorName] = (counselorCounts[counselorName] || 0) + count;
+  }
 
   // Convert to chart data and sort by count
   const data = Object.entries(counselorCounts)

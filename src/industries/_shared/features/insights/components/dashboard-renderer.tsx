@@ -9,7 +9,9 @@ import {
   LeadsByCounselorChart,
 } from "@/components/dashboard/charts";
 import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
-import type { Lead, PipelineStage } from "@/types/database";
+import type { PipelineStage } from "@/types/database";
+import type { LeadAggregates } from "@/lib/leads/aggregates";
+import type { LeadUtmRow } from "@/lib/supabase/queries";
 import type { DeliveryWidgetProps } from "@/industries/it-agency/features/delivery-dashboard/widgets/types";
 
 // Accepted trade-off: this makes `_shared` import `it_agency` widget code
@@ -116,11 +118,15 @@ const OVERVIEW_WIDGETS: Record<string, ComponentType<DeliveryWidgetProps>> = {
 
 interface DashboardRendererProps {
   widgetKey: string;
-  leads: Lead[];
+  aggregates: LeadAggregates;
+  sourceCounts: Record<string, number>;
+  /** Only populated when the dashboard's widget list includes "utm" — see the page
+   * loader. UtmAnalyticsSection is the one widget here that still needs row-level
+   * data (interactive cross-filtering), not a pre-aggregated count. */
+  utmRows: LeadUtmRow[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
-  formMap: Record<string, string>;
   currentUserId?: string | null;
   currentTenantUserId?: string | null;
   industryId?: string | null;
@@ -128,11 +134,12 @@ interface DashboardRendererProps {
 
 export function DashboardRenderer({
   widgetKey,
-  leads,
+  aggregates,
+  sourceCounts,
+  utmRows,
   stages,
   memberMap,
   memberNames,
-  formMap,
   currentUserId,
   currentTenantUserId,
   industryId,
@@ -163,15 +170,15 @@ export function DashboardRenderer({
 
   switch (widgetKey) {
     case "stats":
-      return <StatsCards leads={leads} />;
+      return <StatsCards aggregates={aggregates} />;
     case "leads-by-stage":
-      return <LeadsByStageChart leads={leads} stages={stages} />;
+      return <LeadsByStageChart status={aggregates.status} stages={stages} />;
     case "leads-by-source":
-      return <LeadsBySourceChart leads={leads} formMap={formMap} />;
+      return <LeadsBySourceChart sourceCounts={sourceCounts} />;
     case "leads-by-counselor":
-      return <LeadsByCounselorChart leads={leads} memberMap={memberMap} memberNames={memberNames} />;
+      return <LeadsByCounselorChart assignedToCounts={aggregates.counselor} memberMap={memberMap} memberNames={memberNames} />;
     case "utm":
-      return <UtmAnalyticsSection leads={leads} />;
+      return <UtmAnalyticsSection leads={utmRows} />;
     default:
       return null;
   }

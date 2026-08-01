@@ -1,4 +1,4 @@
-import type { Lead } from "@/types/database";
+import type { LeadUtmRow } from "@/lib/supabase/queries";
 
 export type UtmField = "intake_source" | "intake_medium" | "intake_campaign";
 
@@ -10,7 +10,7 @@ export interface UtmBucket {
 const TOP_N = 8;
 
 export function groupByUtmField(
-  leads: Lead[],
+  leads: LeadUtmRow[],
   field: UtmField,
 ): UtmBucket[] {
   const counts: Record<string, number> = {};

@@ -565,12 +565,11 @@ export function LeadsTable({
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
   const hasMultipleForms = formEntries.length > 1;
 
-  // Get unique sources from leads (staging: split on " | "; /leads: exact string)
-  // NOTE: the option LIST is scoped to localLeads (the current server page) — a source
-  // that only appears past page 1 won't show up as a pickable option until that page
-  // loads. This is a facet-list approximation only; the actual filtering (below) is
-  // applied server-side against the full matching set, not just this page.
-  const sources = useMemo(() => {
+  // Get unique sources from leads (staging: split on " | "; /leads: exact string).
+  // Legacy (non-serverPaginated) fallback ONLY — Contacts/leads-organise still load
+  // their full matching set client-side (a separate, already-tracked cap issue), so
+  // computing the facet from `localLeads` there is still an honest full-set answer.
+  const clientSources = useMemo(() => {
     const s = new Set<string>();
     localLeads.forEach((l) => {
       if (!l.intake_source) return;
@@ -584,7 +583,7 @@ export function LeadsTable({
   }, [localLeads, isStagingView]);
 
   // Per-source counts — cross-filtered: reflects all active filters except source itself
-  const sourceCounts = useMemo(() => {
+  const clientSourceCounts = useMemo(() => {
     const m = new Map<string, number>();
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -618,6 +617,56 @@ export function LeadsTable({
     });
     return m;
   }, [localLeads, isStagingView, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter]);
+
+  // Server-computed Source facet (serverPaginated only) — replaces the localLeads-only
+  // (current 25-row page) computation above, which is what made the option list and
+  // its counts wrong once #332 shipped narrow server pages (see
+  // docs/DASHBOARD-AGGREGATES-BRIEF.md addendum). Reuses buildFetchParams' exact same
+  // filter params minus `source`/pagination/sort, so this reflects every OTHER active
+  // filter — matching current cross-filter behavior — via one extra opt-in round-trip.
+  const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const facetFetchParams = useMemo(() => {
+    if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
+    const params = buildFetchParams(1, itemsPerPage, false);
+    params.delete("source");
+    params.delete("page");
+    params.delete("pageSize");
+    params.delete("sort");
+    params.delete("order");
+    params.delete("count");
+    params.set("facets", "source");
+    return params;
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage]);
+
+  useEffect(() => {
+    if (!facetFetchParams) {
+      setServerSourceFacet(null);
+      return;
+    }
+    const controller = new AbortController();
+    fetch(`/api/v1/leads?${facetFetchParams.toString()}`, { signal: controller.signal })
+      .then((res) => res.json())
+      .then((body: { data?: { options?: { name: string; count: number }[] } }) => {
+        if (controller.signal.aborted) return;
+        setServerSourceFacet(body.data?.options ?? []);
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return;
+        // Keep the previous facet (if any) rather than blanking the dropdown on a
+        // transient failure — the leads page itself already surfaced the error.
+        console.error("Failed to load source facet", err);
+      });
+    return () => controller.abort();
+  }, [facetFetchParams]);
+
+  const sources = useMemo(
+    () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
+    [serverSourceFacet, clientSources],
+  );
+  const sourceCounts = useMemo(() => {
+    if (!serverSourceFacet) return clientSourceCounts;
+    return new Map(serverSourceFacet.map((o) => [o.name, o.count]));
+  }, [serverSourceFacet, clientSourceCounts]);
 
   // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
   const counselorCounts = useMemo(() => {

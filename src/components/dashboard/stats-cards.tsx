@@ -2,7 +2,8 @@
 
 import { Users, UserPlus, Activity, CheckCircle2, XCircle, GraduationCap, Phone, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Lead, PipelineStage } from "@/types/database";
+import type { PipelineStage } from "@/types/database";
+import type { LeadAggregates, WeekBucketCounts } from "@/lib/leads/aggregates";
 
 // Legacy hardcoded stats (used when no stages are provided, e.g. education insights widget)
 const LEGACY_STATS = [
@@ -13,38 +14,42 @@ const LEGACY_STATS = [
   { key: "rejected", label: "REJECTED", Icon: XCircle, color: "text-red-600" },
 ];
 
-function filterByWeek(leads: Lead[], from: Date, to: Date, stageIds?: string[]): number {
-  return leads.filter((l) => {
-    const t = new Date(l.created_at);
-    if (t < from || t >= to) return false;
-    if (stageIds !== undefined) return stageIds.some((id) => id === l.stage_id);
-    return true;
-  }).length;
+function emptyBucket(): WeekBucketCounts {
+  return { all: 0, thisWeek: 0, lastWeek: 0 };
 }
 
-function matchesStage(lead: Lead, stage: PipelineStage): boolean {
-  if (lead.stage_id) return lead.stage_id === stage.id;
-  return lead.status === stage.slug;
+function sumBuckets(list: WeekBucketCounts[]): WeekBucketCounts {
+  return list.reduce(
+    (acc, b) => ({ all: acc.all + b.all, thisWeek: acc.thisWeek + b.thisWeek, lastWeek: acc.lastWeek + b.lastWeek }),
+    emptyBucket(),
+  );
 }
 
-function leadsInStages(leads: Lead[], stages: PipelineStage[]): Lead[] {
-  return leads.filter((l) => stages.some((s) => matchesStage(l, s)));
+/**
+ * Reproduces matchesStage()'s dispatch (a lead counts toward a stage if its
+ * stage_id matches, else — only when stage_id is null — if its status matches the
+ * stage's slug) at the pre-aggregated level: `stage` is keyed by stage_id,
+ * `stageFallbackStatus` is keyed by status but ONLY over rows with stage_id NULL,
+ * so summing the two per stage can never double-count a lead.
+ */
+export function resolveStageBucketCounts(
+  stage: Record<string, WeekBucketCounts>,
+  stageFallbackStatus: Record<string, WeekBucketCounts>,
+  pipelineStage: PipelineStage,
+): WeekBucketCounts {
+  const byId = stage[pipelineStage.id];
+  const byFallback = stageFallbackStatus[pipelineStage.slug];
+  return sumBuckets([byId ?? emptyBucket(), byFallback ?? emptyBucket()]);
 }
 
 interface StatsCardsProps {
-  leads: Lead[];
+  aggregates: LeadAggregates;
   stages?: PipelineStage[];
   onFilterClick?: (status: string | null) => void;
   activeFilter?: string | null;
 }
 
-export function StatsCards({ leads, stages, onFilterClick, activeFilter }: StatsCardsProps) {
-  const now = new Date();
-  const oneWeekAgo = new Date(now);
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-  const twoWeeksAgo = new Date(now);
-  twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14);
-
+export function StatsCards({ aggregates, stages, onFilterClick, activeFilter }: StatsCardsProps) {
   const handleClick = (key: string) => {
     if (!onFilterClick) return;
     if (key === "total") {
@@ -65,25 +70,29 @@ export function StatsCards({ leads, stages, onFilterClick, activeFilter }: Stats
     const wonLabel = wonStages[0]?.name ?? "Won";
     const lostLabel = lostStages[0]?.name ?? "Lost";
 
-    const newLeads = defaultStage ? leadsInStages(leads, [defaultStage]) : [];
-    const inProgressLeads = leadsInStages(leads, inProgressStages);
-    const wonLeads = leadsInStages(leads, wonStages);
-    const lostLeads = leadsInStages(leads, lostStages);
+    const stageBucket = (s: PipelineStage) =>
+      resolveStageBucketCounts(aggregates.stage, aggregates.stageFallbackStatus, s);
+
+    const totalBucket = sumBuckets(Object.values(aggregates.status));
+    const newBucket = defaultStage ? stageBucket(defaultStage) : emptyBucket();
+    const inProgressBucket = sumBuckets(inProgressStages.map(stageBucket));
+    const wonBucket = sumBuckets(wonStages.map(stageBucket));
+    const lostBucket = sumBuckets(lostStages.map(stageBucket));
 
     const cards = [
-      { key: "total", label: "TOTAL LEADS", subset: leads, Icon: Users, color: "text-blue-600" },
-      { key: "new", label: "NEW", subset: newLeads, Icon: UserPlus, color: "text-emerald-600" },
-      { key: "in-progress", label: "IN PROGRESS", subset: inProgressLeads, Icon: Activity, color: "text-amber-600" },
-      { key: "won", label: wonLabel.toUpperCase(), subset: wonLeads, Icon: CheckCircle2, color: "text-green-600" },
-      { key: "lost", label: lostLabel.toUpperCase(), subset: lostLeads, Icon: XCircle, color: "text-red-600" },
+      { key: "total", label: "TOTAL LEADS", bucket: totalBucket, Icon: Users, color: "text-blue-600" },
+      { key: "new", label: "NEW", bucket: newBucket, Icon: UserPlus, color: "text-emerald-600" },
+      { key: "in-progress", label: "IN PROGRESS", bucket: inProgressBucket, Icon: Activity, color: "text-amber-600" },
+      { key: "won", label: wonLabel.toUpperCase(), bucket: wonBucket, Icon: CheckCircle2, color: "text-green-600" },
+      { key: "lost", label: lostLabel.toUpperCase(), bucket: lostBucket, Icon: XCircle, color: "text-red-600" },
     ];
 
     return (
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {cards.map(({ key, label, subset, Icon, color }) => {
-          const count = subset.length;
-          const thisWeek = filterByWeek(subset, oneWeekAgo, now);
-          const lastWeek = filterByWeek(subset, twoWeeksAgo, oneWeekAgo);
+        {cards.map(({ key, label, bucket, Icon, color }) => {
+          const count = bucket.all;
+          const thisWeek = bucket.thisWeek;
+          const lastWeek = bucket.lastWeek;
           const trend = thisWeek > lastWeek ? "up" : thisWeek < lastWeek ? "down" : "neutral";
           const isActive = activeFilter === key || (key === "total" && activeFilter === null);
 
@@ -118,28 +127,31 @@ export function StatsCards({ leads, stages, onFilterClick, activeFilter }: Stats
   }
 
   // Legacy fallback (hardcoded statuses) — used by education insights widget
+  const totalBucket = sumBuckets(Object.values(aggregates.status));
+  const bucketFor = (statusKey: string) => aggregates.status[statusKey] ?? emptyBucket();
+
   const counts: Record<string, number> = {
-    total: leads.length,
-    new: leads.filter((l) => l.status === "new").length,
-    contacted: leads.filter((l) => l.status === "contacted").length,
-    enrolled: leads.filter((l) => l.status === "enrolled").length,
-    rejected: leads.filter((l) => l.status === "rejected").length,
+    total: totalBucket.all,
+    new: bucketFor("new").all,
+    contacted: bucketFor("contacted").all,
+    enrolled: bucketFor("enrolled").all,
+    rejected: bucketFor("rejected").all,
   };
 
   const thisWeekCounts: Record<string, number> = {
-    total: filterByWeek(leads, oneWeekAgo, now),
-    new: leads.filter((l) => l.status === "new" && new Date(l.created_at) >= oneWeekAgo).length,
-    contacted: leads.filter((l) => l.status === "contacted" && new Date(l.created_at) >= oneWeekAgo).length,
-    enrolled: leads.filter((l) => l.status === "enrolled" && new Date(l.created_at) >= oneWeekAgo).length,
-    rejected: leads.filter((l) => l.status === "rejected" && new Date(l.created_at) >= oneWeekAgo).length,
+    total: totalBucket.thisWeek,
+    new: bucketFor("new").thisWeek,
+    contacted: bucketFor("contacted").thisWeek,
+    enrolled: bucketFor("enrolled").thisWeek,
+    rejected: bucketFor("rejected").thisWeek,
   };
 
   const lastWeekCounts: Record<string, number> = {
-    total: filterByWeek(leads, twoWeeksAgo, oneWeekAgo),
-    new: leads.filter((l) => l.status === "new" && new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length,
-    contacted: leads.filter((l) => l.status === "contacted" && new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length,
-    enrolled: leads.filter((l) => l.status === "enrolled" && new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length,
-    rejected: leads.filter((l) => l.status === "rejected" && new Date(l.created_at) >= twoWeeksAgo && new Date(l.created_at) < oneWeekAgo).length,
+    total: totalBucket.lastWeek,
+    new: bucketFor("new").lastWeek,
+    contacted: bucketFor("contacted").lastWeek,
+    enrolled: bucketFor("enrolled").lastWeek,
+    rejected: bucketFor("rejected").lastWeek,
   };
 
   return (

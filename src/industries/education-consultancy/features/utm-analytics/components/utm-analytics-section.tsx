@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { X } from "lucide-react";
-import type { Lead } from "@/types/database";
+import type { LeadUtmRow } from "@/lib/supabase/queries";
 import { UtmBarChart } from "./utm-bar-chart";
 import type { UtmField } from "../lib/aggregation";
 import {
@@ -12,7 +12,7 @@ import {
 } from "../lib/date-range";
 
 interface UtmAnalyticsSectionProps {
-  leads: Lead[];
+  leads: LeadUtmRow[];
 }
 
 type Selections = Record<UtmField, string | null>;
@@ -39,7 +39,7 @@ export function UtmAnalyticsSection({ leads }: UtmAnalyticsSectionProps) {
     return leads.filter((lead) => new Date(lead.created_at) >= cutoff);
   }, [leads, dateFilter]);
 
-  function applySelections(except: UtmField): Lead[] {
+  function applySelections(except: UtmField): LeadUtmRow[] {
     return dateFilteredLeads.filter((lead) => {
       for (const field of Object.keys(selected) as UtmField[]) {
         if (field === except) continue;
