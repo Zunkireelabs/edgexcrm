@@ -188,8 +188,10 @@ export async function getLeadAggregates(
 
   const { data, error } = await supabase.rpc("lead_aggregates", params);
   if (error) {
-    console.error("[getLeadAggregates] rpc failed", { tenantId, error });
-    return reshapeLeadAggregateRows([]);
+    // Never render zeros on failure: a silently-wrong number is the defect this module
+    // exists to remove, and the likeliest cause is code live before migration 194
+    // applied. Throw so Sentry captures it and the page fails visibly instead.
+    throw new Error(`lead_aggregates RPC failed for tenant ${tenantId}: ${error.message}`);
   }
 
   return reshapeLeadAggregateRows((data ?? []) as AggregateRow[]);
@@ -298,8 +300,9 @@ export async function getSourceFacet(params: SourceFacetParams): Promise<SourceF
 
   const { data, error } = await supabase.rpc("lead_aggregates", rpcParams);
   if (error) {
-    console.error("[getSourceFacet] rpc failed", { tenantId: params.tenantId, error });
-    return [];
+    // Same reasoning as getLeadAggregates: an empty dropdown reads as "no sources
+    // exist" rather than "the RPC failed" — throw so it fails visibly instead.
+    throw new Error(`lead_aggregates source facet failed for tenant ${params.tenantId}: ${error.message}`);
   }
 
   const dimension = params.dimension ?? "intake_source";

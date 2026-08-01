@@ -469,31 +469,37 @@ export async function GET(request: NextRequest) {
           ? "ids_any"
           : "all";
 
-    const options = await getSourceFacet({
-      tenantId: auth.tenantId,
-      scope: facetScope,
-      user: facetScope === "own" ? scope.userId : null,
-      userBranchId: scope.userBranchId,
-      crossPoolSlug: scope.crossBranchPoolListSlug,
-      idsAnyAssignedTo: scopeIdsAnyAssignedTo,
-      idsAnyLeadId: scopeIdsAnyLeadId,
-      sharedPoolAssignedToAny,
-      pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
-      status: status || null,
-      assigneesAny: assigneesIds.length > 0 ? assigneesIds : null,
-      includeUnassigned: wantsUnassigned,
-      collaboratorIds: validCollaboratorIds.length > 0 ? validCollaboratorIds : null,
-      tag: tagFilter && tagFilter !== "all" ? tagFilter : null,
-      prospectIndustry: industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null,
-      prospectIndustryNone: industryFilter === "__none__",
-      formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
-      createdAfter,
-      listIdEq: resolvedListId,
-      listIdAny: funnelListIds.length > 0 ? funnelListIds : null,
-      excludeListIds: excludeListIds.length > 0 ? excludeListIds : null,
-      search: search ? search.replace(/[,().]/g, "") : null,
-      includeConverted,
-    });
+    let options: Awaited<ReturnType<typeof getSourceFacet>>;
+    try {
+      options = await getSourceFacet({
+        tenantId: auth.tenantId,
+        scope: facetScope,
+        user: facetScope === "own" ? scope.userId : null,
+        userBranchId: scope.userBranchId,
+        crossPoolSlug: scope.crossBranchPoolListSlug,
+        idsAnyAssignedTo: scopeIdsAnyAssignedTo,
+        idsAnyLeadId: scopeIdsAnyLeadId,
+        sharedPoolAssignedToAny,
+        pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
+        status: status || null,
+        assigneesAny: assigneesIds.length > 0 ? assigneesIds : null,
+        includeUnassigned: wantsUnassigned,
+        collaboratorIds: validCollaboratorIds.length > 0 ? validCollaboratorIds : null,
+        tag: tagFilter && tagFilter !== "all" ? tagFilter : null,
+        prospectIndustry: industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null,
+        prospectIndustryNone: industryFilter === "__none__",
+        formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
+        createdAfter,
+        listIdEq: resolvedListId,
+        listIdAny: funnelListIds.length > 0 ? funnelListIds : null,
+        excludeListIds: excludeListIds.length > 0 ? excludeListIds : null,
+        search: search ? search.replace(/[,().]/g, "") : null,
+        includeConverted,
+      });
+    } catch (err) {
+      log.error({ err }, "Failed to fetch source facet");
+      return apiServiceUnavailable("Failed to fetch source facet");
+    }
 
     log.info({ tenantId: auth.tenantId, options: options.length }, "Source facet fetched");
     return apiSuccess({ facet: "source", options });

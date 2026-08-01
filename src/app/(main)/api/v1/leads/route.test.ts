@@ -307,6 +307,27 @@ describe("GET /api/v1/leads — facets=source (dashboard-aggregates review fixes
       "leads/facets: scope.restrictToSelf requires scope.userId",
     );
   });
+
+  it("an RPC error from getSourceFacet surfaces as a 503 apiServiceUnavailable, not an unhandled 500 or empty options", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "admin-1",
+        role: "owner",
+        permissions: permissions({ leadScope: "all" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: () => Promise.resolve({ data: null, error: { message: "connection refused" } }),
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(503);
+    expect(body.error.code).toBe("SERVICE_UNAVAILABLE");
+  });
 });
 
 // --- LEADS-SERVER-PAGINATION-BRIEF: sort allow-list, count=0, list/funnel/recycle-bin ---

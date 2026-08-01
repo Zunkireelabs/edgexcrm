@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Lead, PipelineStage } from "@/types/database";
-import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates } from "./aggregates";
+import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates, getSourceFacet } from "./aggregates";
 import { resolveStageBucketCounts } from "@/components/dashboard/stats-cards";
 
 const { rpcMock, createClientMock } = vi.hoisted(() => {
@@ -422,5 +422,32 @@ describe("getLeadAggregates — restricted-but-empty pipeline allowlist (review 
     expect(rpcMock).toHaveBeenCalledTimes(1);
     const [, params] = rpcMock.mock.calls[0];
     expect(params).toMatchObject({ p_pipeline_ids: ["pipeline-1"] });
+  });
+});
+
+describe("getLeadAggregates / getSourceFacet — RPC failure fails loudly, never renders zeros", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    createClientMock.mockClear();
+  });
+
+  it("getLeadAggregates throws (not zeroed aggregates) when the RPC errors", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: "connection refused" } });
+    await expect(getLeadAggregates("tenant-1", undefined, NOW)).rejects.toThrow(
+      /lead_aggregates RPC failed for tenant tenant-1/,
+    );
+  });
+
+  it("getSourceFacet throws (not an empty option list) when the RPC errors", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: "connection refused" } });
+    await expect(getSourceFacet({ tenantId: "tenant-1", scope: "all" })).rejects.toThrow(
+      /lead_aggregates source facet failed for tenant tenant-1/,
+    );
+  });
+
+  it("a restricted-but-empty pipeline allowlist still short-circuits without calling the RPC (not a failure path)", async () => {
+    const result = await getLeadAggregates("tenant-1", { pipelineIds: [] }, NOW);
+    expect(result).toEqual(emptyAggregates());
+    expect(rpcMock).not.toHaveBeenCalled();
   });
 });
