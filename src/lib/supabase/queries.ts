@@ -172,6 +172,85 @@ export async function getLeads(
   return result ?? [];
 }
 
+export interface LeadUtmRow {
+  id: string;
+  intake_source: string | null;
+  intake_medium: string | null;
+  intake_campaign: string | null;
+  created_at: string;
+}
+
+/**
+ * Narrow, uncapped projection for the UTM Attribution widget (UtmAnalyticsSection) —
+ * NOT a getLeads() call. That component does client-side interactive cross-filtering
+ * across 3 dimensions (source/medium/campaign) plus a date range, which a flat
+ * per-field aggregate cannot support (selecting "Google" under Source must re-count
+ * Medium/Campaign among only the matching rows) and which risks unbounded result
+ * cardinality if computed as a (source, medium, campaign, day) SQL GROUP BY instead
+ * (auto-generated per-lead campaign tags could make the combo count scale with lead
+ * count, defeating the point). Fetching only 5 narrow columns for every visible lead,
+ * uncapped, preserves that UX exactly while fixing the actual defect (truncation at
+ * the old `?? 1000` default) — see docs/DASHBOARD-AGGREGATES-BRIEF.md's report for the
+ * round-trip-count tradeoff this accepts (chunked, same as getLeads(), NOT the single
+ * round-trip the other dashboard widgets get from lead_aggregates()).
+ */
+export async function getLeadUtmRows(
+  tenantId: string,
+  scope?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    branchId?: string | null;
+    userBranchId?: string | null;
+    crossBranchPoolListSlug?: string | null;
+  },
+): Promise<LeadUtmRow[]> {
+  const supabase = await createClient();
+
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q.is("converted_at", null).is("deleted_at", null).order("created_at", { ascending: false }).order("id", { ascending: false });
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+    return q;
+  };
+
+  const buildQuery = () =>
+    applyFilters(
+      visibleLeadsBase(supabase, tenantId, scope).select("id,intake_source,intake_medium,intake_campaign,created_at"),
+    );
+  const buildFallbackQuery = () =>
+    applyFilters(
+      supabase
+        .from("leads")
+        .select("id,intake_source,intake_medium,intake_campaign,created_at")
+        .eq("tenant_id", tenantId)
+        .eq("assigned_to", scope!.userId!),
+    );
+
+  const CHUNK = 1000;
+  const fetchPaged = async (build: () => ReturnType<typeof applyFilters>): Promise<LeadUtmRow[] | null> => {
+    const acc: LeadUtmRow[] = [];
+    for (let from = 0; ; from += CHUNK) {
+      const { data, error } = await build().range(from, from + CHUNK - 1);
+      if (error) {
+        console.error("[getLeadUtmRows] leads query page failed", { tenantId, from, error });
+        return null;
+      }
+      acc.push(...((data ?? []) as unknown as LeadUtmRow[]));
+      if (!data || data.length < CHUNK) break;
+    }
+    return acc;
+  };
+
+  let result = await fetchPaged(buildQuery);
+  if (result === null && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeadUtmRows] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
+    });
+    result = await fetchPaged(buildFallbackQuery);
+  }
+  return result ?? [];
+}
+
 /**
  * Server-paginated sibling of getLeads(), for /leads's first-page SSR render
  * (LEADS-SERVER-PAGINATION-BRIEF §2) — a single .range() page + exact count instead

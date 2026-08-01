@@ -2,7 +2,7 @@
 
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Lead } from "@/types/database";
+import type { LeadUtmRow } from "@/lib/supabase/queries";
 import { groupByUtmField, type UtmField } from "../lib/aggregation";
 
 const CHART_COLORS = [
@@ -21,7 +21,7 @@ interface UtmBarChartProps {
   title: string;
   emptyMessage: string;
   field: UtmField;
-  leads: Lead[];
+  leads: LeadUtmRow[];
   selectedValue?: string | null;
   onSelect?: (value: string | null) => void;
 }

@@ -1,11 +1,12 @@
 import { redirect, notFound } from "next/navigation";
 import {
   getCurrentUserTenant,
-  getLeads,
+  getLeadUtmRows,
   getTeamMembers,
   getPipelineStages,
   getFormConfigsForTenant,
 } from "@/lib/supabase/queries";
+import { getLeadAggregates, resolveSourceCounts } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -70,8 +71,13 @@ export default async function InsightsDashboardViewPage({
       );
 
   const scope = leadQueryScope(permissions, userId);
-  const [leads, teamMembers, stages, formConfigs] = await Promise.all([
-    getLeads(tenantData.tenant.id, scope),
+  // UTM is the one widget that still needs row-level data (interactive cross-filter,
+  // not a pre-aggregated count) — only fetch it when this dashboard actually uses it,
+  // so tenants without the widget (Zunkiree/Mobilise, it_agency) pay nothing for it.
+  const needsUtmRows = dashboard.widgets.includes("utm");
+  const [aggregates, utmRows, teamMembers, stages, formConfigs] = await Promise.all([
+    getLeadAggregates(tenantData.tenant.id, scope, new Date()),
+    needsUtmRows ? getLeadUtmRows(tenantData.tenant.id, scope) : Promise.resolve([]),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),
@@ -80,15 +86,17 @@ export default async function InsightsDashboardViewPage({
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
   const formMap = Object.fromEntries(formConfigs.map((f) => [f.id, f.name]));
+  const sourceCounts = resolveSourceCounts(aggregates.sourceCombos, formMap);
 
   return (
     <DashboardView
       dashboard={dashboard}
-      leads={leads}
+      aggregates={aggregates}
+      sourceCounts={sourceCounts}
+      utmRows={utmRows}
       stages={stages}
       memberMap={memberMap}
       memberNames={memberNames}
-      formMap={formMap}
       visibleDashboards={visibleDashboards}
       canManage={isAdmin}
       industryId={tenantData.tenant.industry_id}

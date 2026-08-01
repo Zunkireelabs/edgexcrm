@@ -2,7 +2,6 @@
 
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, Cell } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Lead } from "@/types/database";
 
 // Chart colors
 const CHART_COLORS = [
@@ -15,19 +14,10 @@ const CHART_COLORS = [
 ];
 
 interface LeadsBySourceChartProps {
-  leads: Lead[];
-  formMap: Record<string, string>; // form_config_id -> form name
+  sourceCounts: Record<string, number>; // resolved source name -> count (see resolveSourceCounts)
 }
 
-export function LeadsBySourceChart({ leads, formMap }: LeadsBySourceChartProps) {
-  // Group leads by form source
-  const sourceCounts = leads.reduce((acc, lead) => {
-    const sourceId = lead.form_config_id || "unknown";
-    const sourceName = formMap[sourceId] || lead.intake_source || "Direct";
-    acc[sourceName] = (acc[sourceName] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
+export function LeadsBySourceChart({ sourceCounts }: LeadsBySourceChartProps) {
   // Convert to chart data and sort by count
   const data = Object.entries(sourceCounts)
     .map(([name, count]) => ({

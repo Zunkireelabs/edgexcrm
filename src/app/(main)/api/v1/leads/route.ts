@@ -34,6 +34,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { getSourceFacet } from "@/lib/leads/aggregates";
 import {
   normalizeEmail,
   normalizePhone,
@@ -315,11 +316,19 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // Hoisted (not just applied to `query` below) so the facets=source branch further
+  // down can pass the SAME resolved id sets into lead_aggregates() instead of
+  // re-deriving this scope logic a second time — see migration 194's ADDENDUM header.
+  let sharedPoolAssignedToAny: string[] | null = null;
+  let scopeIdsAnyAssignedTo: string[] | null = null;
+  let scopeIdsAnyLeadId: string[] | null = null;
+
   if (useSharedPool) {
     // auth.branchMemberIds is empty for own-scope, so resolve explicitly.
     const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId!);
     query = query.in("assigned_to", memberIds);
     assignedTo = null;
+    sharedPoolAssignedToAny = memberIds;
   } else if (scope.restrictToSelf) {
     assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
   } else if (scope.branchId) {
@@ -333,19 +342,27 @@ export async function GET(request: NextRequest) {
     const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
     if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
       query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
+      scopeIdsAnyAssignedTo = auth.branchMemberIds;
+      scopeIdsAnyLeadId = sharedLeadIds;
     } else if (sharedLeadIds.length > 0) {
       query = query.in("id", sharedLeadIds);
+      scopeIdsAnyLeadId = sharedLeadIds;
     } else {
       query = query.in("assigned_to", auth.branchMemberIds);
+      scopeIdsAnyAssignedTo = auth.branchMemberIds;
     }
   }
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
-  // team/own users cannot widen or redirect their scope via this param.
+  // team/own users cannot widen or redirect their scope via this param. Same shape as
+  // the shared-pool AND-filter above (both are "further restrict an already-resolved
+  // 'all' scope by an assigned_to allowlist") — the facets branch below reuses whichever
+  // of the two is active.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
     const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
     query = query.in("assigned_to", memberIds);
+    sharedPoolAssignedToAny = memberIds;
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
@@ -410,11 +427,82 @@ export async function GET(request: NextRequest) {
       : query.eq("prospect_industry", industryFilter);
   }
 
-  if (createdFilter && createdFilter !== "all") {
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const windowMs: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
-    const ms = windowMs[createdFilter];
-    if (ms) query = query.gte("created_at", new Date(Date.now() - ms).toISOString());
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const CREATED_WINDOW_MS: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
+  const createdAfter = createdFilter && createdFilter !== "all" && CREATED_WINDOW_MS[createdFilter]
+    ? new Date(Date.now() - CREATED_WINDOW_MS[createdFilter])
+    : null;
+
+  if (createdAfter) {
+    query = query.gte("created_at", createdAfter.toISOString());
+  }
+
+  // Opt-in Source facet (?facets=source) — same "opt-in, separate round-trip" shape
+  // as ?counts=1 (lead-lists route). Computed via lead_aggregates() (migration 194's
+  // ADDENDUM) over every filter above EXCEPT source itself, per the brief: the option
+  // list AND its counts used to come from `localLeads` — the current 25-row server
+  // page — which is what made this facet broken rather than merely incomplete once
+  // #332 shipped 25-row pages. Recycle-bin (onlyDeleted) leads are excluded from
+  // lead_aggregates unconditionally, so this facet is not offered there — a known,
+  // narrow gap (the recycle bin has no source dropdown today).
+  if (searchParams.get("facets") === "source" && !onlyDeleted) {
+    // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
+    // means the page returns zero leads, so the facet must be empty too. aggregates.ts
+    // omits an empty p_pipeline_ids (→ NULL → no restriction), which would otherwise
+    // count the whole tenant for a user whose list is empty.
+    if (auth.permissions.pipelineAccess !== "all" && auth.permissions.pipelineAccess.ids.size === 0) {
+      return apiSuccess({ facet: "source", options: [] });
+    }
+
+    const assigneesIds = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
+    const wantsUnassigned = assigneesTokens.includes("unassigned");
+    const validCollaboratorIds = collaboratorIds.filter((id) => UUID_RE.test(id));
+
+    if (scope.restrictToSelf && !scope.userId) {
+      throw new Error("leads/facets: scope.restrictToSelf requires scope.userId");
+    }
+
+    const facetScope: "own" | "all" | "ids_any" =
+      !useSharedPool && scope.restrictToSelf && scope.userId
+        ? "own"
+        : scope.branchId && !useSharedPool
+          ? "ids_any"
+          : "all";
+
+    let options: Awaited<ReturnType<typeof getSourceFacet>>;
+    try {
+      options = await getSourceFacet({
+        tenantId: auth.tenantId,
+        scope: facetScope,
+        user: facetScope === "own" ? scope.userId : null,
+        userBranchId: scope.userBranchId,
+        crossPoolSlug: scope.crossBranchPoolListSlug,
+        idsAnyAssignedTo: scopeIdsAnyAssignedTo,
+        idsAnyLeadId: scopeIdsAnyLeadId,
+        sharedPoolAssignedToAny,
+        pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
+        status: status || null,
+        assigneesAny: assigneesIds.length > 0 ? assigneesIds : null,
+        includeUnassigned: wantsUnassigned,
+        collaboratorIds: validCollaboratorIds.length > 0 ? validCollaboratorIds : null,
+        tag: tagFilter && tagFilter !== "all" ? tagFilter : null,
+        prospectIndustry: industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null,
+        prospectIndustryNone: industryFilter === "__none__",
+        formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
+        createdAfter,
+        listIdEq: resolvedListId,
+        listIdAny: funnelListIds.length > 0 ? funnelListIds : null,
+        excludeListIds: excludeListIds.length > 0 ? excludeListIds : null,
+        search: search ? search.replace(/[,().]/g, "") : null,
+        includeConverted,
+      });
+    } catch (err) {
+      log.error({ err }, "Failed to fetch source facet");
+      return apiServiceUnavailable("Failed to fetch source facet");
+    }
+
+    log.info({ tenantId: auth.tenantId, options: options.length }, "Source facet fetched");
+    return apiSuccess({ facet: "source", options });
   }
 
   const from = (page - 1) * pageSize;
