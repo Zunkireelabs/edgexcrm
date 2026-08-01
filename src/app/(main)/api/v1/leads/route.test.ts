@@ -308,6 +308,38 @@ describe("GET /api/v1/leads — facets=source (dashboard-aggregates review fixes
     );
   });
 
+  it("facets=source for an explicitly requested staging list passes listIdEq and excludeListIds as never-both-present — mirrors the page query's either/or (route.ts:309-316) instead of ANDing them into a contradiction", async () => {
+    const rpcCalls: RpcCall[] = [];
+    getFeatureAccessMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "admin-1",
+        role: "owner",
+        permissions: permissions({ leadScope: "all" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        return Promise.resolve({ data: [], error: null });
+      },
+    });
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({
+        leadsCalls: [],
+        lists: [{ id: "list-mqc", slug: "migration-qc", is_staging: true, access: { mode: "all" } }],
+      }),
+    );
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ list: "migration-qc", facets: "source" }));
+    expect(res.status).toBe(200);
+    expect(rpcCalls).toHaveLength(1);
+    const [, rpcParams] = rpcCalls[0] as [string, Record<string, unknown>, unknown];
+    expect(rpcParams.p_list_id_eq).toBe("list-mqc");
+    expect(rpcParams.p_exclude_list_ids).toBeUndefined();
+  });
+
   it("an RPC error from getSourceFacet surfaces as a 503 apiServiceUnavailable, not an unhandled 500 or empty options", async () => {
     authenticateRequestMock.mockResolvedValue(
       authFixture({
