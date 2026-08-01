@@ -3,12 +3,12 @@ services:
     image: ghcr.io/zunkireelabs/edgexcrm:prod
     container_name: leads-crm
     restart: unless-stopped
-    mem_limit: 2g
-    memswap_limit: 2g          # == mem_limit ⇒ swap DISABLED for this container
+    mem_limit: 3g
+    memswap_limit: 3g          # keep swap disabled — swapping a Node heap is worse than dying
     env_file:
       - .env.local
     environment:
-      - NODE_OPTIONS=--max-old-space-size=1536
+      - NODE_OPTIONS=--max-old-space-size=2048
     networks:
       - hosting
     labels:
