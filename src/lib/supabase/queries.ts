@@ -274,11 +274,20 @@ export async function getLeadsPage(
     excludeListIds?: string[];
     onlyDeleted?: boolean;
     excludeOtherType?: boolean;
+    /** Kanban column identity (KANBAN-PAGINATION-BRIEF §3.1) — a stage's `status`
+     * slug within `listId`. Ignored for the recycle bin, same as the list filters. */
+    status?: string | null;
   } | undefined,
   page: number,
   pageSize: number,
+  /** skipCount: true avoids the exact-count query when the caller already has the
+   * total from lead_aggregates (KANBAN-PAGINATION-BRIEF §2b) — used for per-column
+   * Kanban first pages, where an exact count per column would be N extra round
+   * trips the aggregate already made unnecessary. Returned `total` is -1 then. */
+  opts?: { skipCount?: boolean },
 ): Promise<{ leads: Lead[]; total: number }> {
   const supabase = await createClient();
+  const wantCount = !opts?.skipCount;
 
   const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
     q = q
@@ -303,6 +312,7 @@ export async function getLeadsPage(
       } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
         q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
       }
+      if (scope?.status) q = q.eq("status", scope.status);
     }
 
     return q;
@@ -310,11 +320,12 @@ export async function getLeadsPage(
 
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
+  const countOpts = wantCount ? ({ count: "exact" } as const) : {};
 
-  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope, { count: "exact" }));
+  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope, countOpts));
   const buildFallbackQuery = () =>
     applyFilters(
-      supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
+      supabase.from("leads").select("*", countOpts).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
     );
 
   let { data, error, count } = await buildQuery().range(from, to);
@@ -328,7 +339,7 @@ export async function getLeadsPage(
     console.error("[getLeadsPage] leads query failed", { tenantId, listId: scope?.listId, error });
     return { leads: [], total: 0 };
   }
-  return { leads: (data ?? []) as Lead[], total: count ?? 0 };
+  return { leads: (data ?? []) as Lead[], total: wantCount ? (count ?? 0) : -1 };
 }
 
 /**

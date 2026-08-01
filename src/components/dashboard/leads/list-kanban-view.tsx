@@ -3,9 +3,9 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LayoutList, Settings2 } from "lucide-react";
-import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
+import { ListKanbanBoard } from "./list-kanban-board";
 import { PipelineSettingsModal } from "@/components/pipeline/PipelineSettingsModal";
-import type { PipelineStage, PipelineWithCounts, UserRole, TenantEntity } from "@/types/database";
+import type { PipelineStage, PipelineWithCounts, PipelineLead as PipelineLeadType, UserRole, TenantEntity } from "@/types/database";
 
 interface TeamMember {
   user_id: string;
@@ -18,9 +18,9 @@ interface ListKanbanViewProps {
   listSlug: string;
   pipeline: PipelineWithCounts;
   stages: PipelineStage[];
-  /** Leads filtered to this list (full Lead objects are compatible with PipelineLead) */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  leads: any[];
+  /** SSR-seeded page 1 (20 cards) + true count per column, keyed by stage.id
+   * (KANBAN-PAGINATION-BRIEF §3.1) — replaces the old full-list-load `leads` prop. */
+  initialColumns: Record<string, { cards: PipelineLeadType[]; total: number }>;
   role: UserRole;
   userId: string;
   tenantId: string;
@@ -39,7 +39,7 @@ export function ListKanbanView({
   listSlug,
   pipeline,
   stages,
-  leads,
+  initialColumns,
   role,
   userId,
   tenantId,
@@ -83,9 +83,10 @@ export function ListKanbanView({
         )}
       </div>
 
-      <PipelineBoard
+      <ListKanbanBoard
         stages={stages}
-        leads={leads}
+        listSlug={listSlug}
+        initialColumns={initialColumns}
         role={role}
         userId={userId}
         tenantId={tenantId}

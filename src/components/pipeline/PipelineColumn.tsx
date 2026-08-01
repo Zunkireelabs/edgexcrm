@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -7,7 +8,7 @@ import {
 } from "@dnd-kit/sortable";
 import type { PipelineLead, PipelineStage } from "@/types/database";
 import { LeadCard } from "./LeadCard";
-import { Inbox } from "lucide-react";
+import { Inbox, Loader2 } from "lucide-react";
 
 interface PipelineColumnProps {
   stage: PipelineStage;
@@ -15,6 +16,11 @@ interface PipelineColumnProps {
   canDragLead: (lead: PipelineLead) => boolean;
   pipelineId?: string;
   onMovedToPipeline?: (leadId: string) => void;
+  /** True count of leads matching this column's filters (KANBAN-PAGINATION-BRIEF §3.3) —
+   * always the header/footer number, never `leads.length` (that's just what's loaded). */
+  total?: number;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
 }
 
 function calculateAvgDaysInStage(leads: PipelineLead[]): number {
@@ -26,12 +32,53 @@ function calculateAvgDaysInStage(leads: PipelineLead[]): number {
   return Math.round((totalDays / leads.length) * 10) / 10;
 }
 
-export function PipelineColumn({ stage, leads, canDragLead, pipelineId, onMovedToPipeline }: PipelineColumnProps) {
+export function PipelineColumn({
+  stage,
+  leads,
+  canDragLead,
+  pipelineId,
+  onMovedToPipeline,
+  total,
+  isLoadingMore = false,
+  onLoadMore,
+}: PipelineColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
   });
 
   const avgDays = calculateAvgDaysInStage(leads);
+  // Fall back to leads.length when no total was supplied (e.g. tests / callers that
+  // still pass a fully-loaded array) so this stays a drop-in-compatible prop.
+  const trueTotal = total ?? leads.length;
+  const remaining = Math.max(0, trueTotal - leads.length);
+
+  // Phase 2 (infinite scroll): a sentinel at the bottom of THIS column's own scroll
+  // container (not the viewport — the board scrolls horizontally, each column
+  // vertically) triggers the next page automatically. The Load-more button above stays
+  // as the fallback for browsers without IntersectionObserver or a failed auto-load.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const setScrollContainerRef = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    scrollContainerRef.current = node;
+  };
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return; // no observer -> button-only fallback
+    if (!onLoadMore || remaining <= 0 || isLoadingMore) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollContainerRef.current;
+    if (!sentinel || !root) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { root, rootMargin: "150px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadMore, remaining, isLoadingMore]);
 
   return (
     <div className="flex flex-col w-80 min-w-80 shrink-0 h-full">
@@ -43,7 +90,7 @@ export function PipelineColumn({ stage, leads, canDragLead, pipelineId, onMovedT
         />
         <h3 className="text-sm font-semibold truncate flex-1">{stage.name}</h3>
         <span className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 font-medium">
-          {leads.length}
+          {trueTotal}
         </span>
       </div>
 
@@ -52,7 +99,7 @@ export function PipelineColumn({ stage, leads, canDragLead, pipelineId, onMovedT
 
       {/* Droppable Area */}
       <div
-        ref={setNodeRef}
+        ref={setScrollContainerRef}
         className={`flex-1 overflow-y-auto space-y-3 p-2 border border-t-0 bg-muted/20 transition-colors min-h-40 ${
           isOver ? "border-primary bg-primary/5" : "border-border/50"
         }`}
@@ -84,13 +131,37 @@ export function PipelineColumn({ stage, leads, canDragLead, pipelineId, onMovedT
             </div>
           )}
         </SortableContext>
+
+        {isLoadingMore && (
+          /* Visible loading row — distinct from the button's own inline spinner, so an
+             auto-triggered (sentinel) load is visible even though no button was clicked. */
+          <div className="flex items-center justify-center gap-1.5 h-10 rounded-lg border border-dashed border-gray-200 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading more…
+          </div>
+        )}
+
+        {remaining > 0 && onLoadMore && (
+          <button
+            type="button"
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="w-full flex items-center justify-center gap-1.5 h-8 text-xs font-medium rounded-md border border-dashed border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b] disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {isLoadingMore ? "Loading…" : `Load 20 more (${remaining.toLocaleString()} remaining)`}
+          </button>
+        )}
+
+        {/* IntersectionObserver sentinel — invisible, triggers the next page
+            automatically when scrolled near. Rendered only while more pages remain. */}
+        {remaining > 0 && onLoadMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
       </div>
 
       {/* Column Footer */}
       <div className="px-3 py-2 bg-card rounded-b-lg border border-t-0 space-y-0.5">
         <div className="flex items-center justify-between text-xs">
           <span className="text-muted-foreground">Total</span>
-          <span className="font-medium">{leads.length} lead{leads.length !== 1 ? "s" : ""}</span>
+          <span className="font-medium">{trueTotal} lead{trueTotal !== 1 ? "s" : ""}</span>
         </div>
         {leads.length > 0 && (
           <div className="flex items-center justify-between text-xs">

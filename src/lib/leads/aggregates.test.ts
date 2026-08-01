@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Lead, PipelineStage } from "@/types/database";
-import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates, getSourceFacet } from "./aggregates";
+import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates, getSourceFacet, listStatusKey } from "./aggregates";
 import { resolveStageBucketCounts } from "@/components/dashboard/stats-cards";
 
 const { rpcMock, createClientMock } = vi.hoisted(() => {
@@ -349,6 +349,18 @@ describe("lead_aggregates equivalence (dashboard, no other-type exclusion)", () 
       expect(aggregates.listStatuses[listId]).toEqual([...set].sort());
     }
   });
+
+  // KANBAN-PAGINATION-BRIEF §2b: ListKanbanView's per-column (per-status) header
+  // count comes from this map, never from cards.length — must be an exact count,
+  // not just the "does this status exist" boolean listStatuses gives.
+  it("listStatusCounts gives an exact per-(list,status) count, keyed by listStatusKey", () => {
+    const oldCounts: Record<string, number> = {};
+    for (const l of visible) {
+      const key = listStatusKey(l.list_id ?? "(none)", l.status?.trim() || "unknown");
+      oldCounts[key] = (oldCounts[key] ?? 0) + 1;
+    }
+    expect(aggregates.listStatusCounts).toEqual(oldCounts);
+  });
 });
 
 describe("lead_aggregates equivalence (pipeline, education excludeOtherType=true)", () => {
@@ -422,6 +434,28 @@ describe("getLeadAggregates — restricted-but-empty pipeline allowlist (review 
     expect(rpcMock).toHaveBeenCalledTimes(1);
     const [, params] = rpcMock.mock.calls[0];
     expect(params).toMatchObject({ p_pipeline_ids: ["pipeline-1"] });
+  });
+
+  // KANBAN-PAGINATION-BRIEF §2b/§3.1: ListKanbanView/FunnelKanbanBoard scope the
+  // aggregate to one list (listIdEq) or a funnel's stage-lists (listIdAny) so every
+  // dimension in the response — not just `list`/`list_status` — is list-scoped.
+  it("scope.listIdEq is passed through as p_list_id_eq", async () => {
+    await getLeadAggregates("tenant-1", { listIdEq: "list-1" }, NOW);
+    const [, params] = rpcMock.mock.calls[0];
+    expect(params).toMatchObject({ p_list_id_eq: "list-1" });
+  });
+
+  it("scope.listIdAny is passed through as p_list_id_any", async () => {
+    await getLeadAggregates("tenant-1", { listIdAny: ["list-1", "list-2"] }, NOW);
+    const [, params] = rpcMock.mock.calls[0];
+    expect(params).toMatchObject({ p_list_id_any: ["list-1", "list-2"] });
+  });
+
+  it("omits p_list_id_eq / p_list_id_any when neither is set — existing (non-Kanban) callers untouched", async () => {
+    await getLeadAggregates("tenant-1", { branchId: "branch-1" }, NOW);
+    const [, params] = rpcMock.mock.calls[0];
+    expect(params).not.toHaveProperty("p_list_id_eq");
+    expect(params).not.toHaveProperty("p_list_id_any");
   });
 });
 
