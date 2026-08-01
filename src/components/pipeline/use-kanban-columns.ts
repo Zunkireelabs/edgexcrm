@@ -65,6 +65,24 @@ export function useKanbanColumns(
   const isFirstRef = useRef(true);
   const prevSigRef = useRef(filterSignature);
   const abortRef = useRef<AbortController | null>(null);
+  // Phase 2 (infinite scroll): one in-flight load-more request per column, cancelled
+  // on unmount or a filter change — the sentinel can fire again before a slow request
+  // resolves, and a stale response must never land after the user has moved on.
+  const loadMoreAbortRef = useRef<Record<string, AbortController>>({});
+
+  useEffect(() => {
+    const inFlight = loadMoreAbortRef.current;
+    return () => {
+      for (const controller of Object.values(inFlight)) controller.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    // A filter change invalidates every in-flight load-more — its page/column may no
+    // longer even exist under the new filter set.
+    for (const controller of Object.values(loadMoreAbortRef.current)) controller.abort();
+    loadMoreAbortRef.current = {};
+  }, [filterSignature]);
 
   useEffect(() => {
     if (isFirstRef.current) {
@@ -111,6 +129,11 @@ export function useKanbanColumns(
 
   const loadMore = useCallback((key: string, baseParams: URLSearchParams | null) => {
     if (!baseParams) return;
+    // isLoadingMore below is the no-double-fire guard the Load-more button AND the
+    // Phase 2 IntersectionObserver sentinel both rely on — a second call while one is
+    // already in flight for this column is a no-op.
+    if (loadMoreAbortRef.current[key]) return;
+
     setColumns((prev) => {
       const col = prev[key];
       if (!col || col.isLoadingMore || col.loaded >= col.total) return prev;
@@ -121,9 +144,14 @@ export function useKanbanColumns(
       p.set("pageSize", String(KANBAN_PAGE_SIZE));
       p.set("count", "0");
 
-      fetch(`/api/v1/leads?${p.toString()}`)
+      const controller = new AbortController();
+      loadMoreAbortRef.current[key] = controller;
+
+      fetch(`/api/v1/leads?${p.toString()}`, { signal: controller.signal })
         .then((res) => res.json())
         .then((body: { data?: PipelineLead[] }) => {
+          if (controller.signal.aborted) return;
+          delete loadMoreAbortRef.current[key];
           const newCards = body.data ?? [];
           setColumns((cur) => {
             const c = cur[key];
@@ -133,6 +161,8 @@ export function useKanbanColumns(
           });
         })
         .catch(() => {
+          if (controller.signal.aborted) return;
+          delete loadMoreAbortRef.current[key];
           setColumns((cur) => {
             const c = cur[key];
             if (!c) return cur;

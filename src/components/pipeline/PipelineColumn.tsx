@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import {
   SortableContext,
@@ -51,6 +52,34 @@ export function PipelineColumn({
   const trueTotal = total ?? leads.length;
   const remaining = Math.max(0, trueTotal - leads.length);
 
+  // Phase 2 (infinite scroll): a sentinel at the bottom of THIS column's own scroll
+  // container (not the viewport — the board scrolls horizontally, each column
+  // vertically) triggers the next page automatically. The Load-more button above stays
+  // as the fallback for browsers without IntersectionObserver or a failed auto-load.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const setScrollContainerRef = (node: HTMLDivElement | null) => {
+    setNodeRef(node);
+    scrollContainerRef.current = node;
+  };
+
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return; // no observer -> button-only fallback
+    if (!onLoadMore || remaining <= 0 || isLoadingMore) return;
+    const sentinel = sentinelRef.current;
+    const root = scrollContainerRef.current;
+    if (!sentinel || !root) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) onLoadMore();
+      },
+      { root, rootMargin: "150px" },
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [onLoadMore, remaining, isLoadingMore]);
+
   return (
     <div className="flex flex-col w-80 min-w-80 shrink-0 h-full">
       {/* Column Header */}
@@ -70,7 +99,7 @@ export function PipelineColumn({
 
       {/* Droppable Area */}
       <div
-        ref={setNodeRef}
+        ref={setScrollContainerRef}
         className={`flex-1 overflow-y-auto space-y-3 p-2 border border-t-0 bg-muted/20 transition-colors min-h-40 ${
           isOver ? "border-primary bg-primary/5" : "border-border/50"
         }`}
@@ -103,6 +132,15 @@ export function PipelineColumn({
           )}
         </SortableContext>
 
+        {isLoadingMore && (
+          /* Visible loading row — distinct from the button's own inline spinner, so an
+             auto-triggered (sentinel) load is visible even though no button was clicked. */
+          <div className="flex items-center justify-center gap-1.5 h-10 rounded-lg border border-dashed border-gray-200 text-xs text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Loading more…
+          </div>
+        )}
+
         {remaining > 0 && onLoadMore && (
           <button
             type="button"
@@ -110,12 +148,13 @@ export function PipelineColumn({
             disabled={isLoadingMore}
             className="w-full flex items-center justify-center gap-1.5 h-8 text-xs font-medium rounded-md border border-dashed border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b] disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {isLoadingMore ? (
-              <Loader2 className="h-3 w-3 animate-spin" />
-            ) : null}
             {isLoadingMore ? "Loading…" : `Load 20 more (${remaining.toLocaleString()} remaining)`}
           </button>
         )}
+
+        {/* IntersectionObserver sentinel — invisible, triggers the next page
+            automatically when scrolled near. Rendered only while more pages remain. */}
+        {remaining > 0 && onLoadMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
       </div>
 
       {/* Column Footer */}
