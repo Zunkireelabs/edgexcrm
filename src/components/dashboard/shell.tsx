@@ -239,7 +239,7 @@ interface DashboardShellProps {
   userBranchId?: string | null;
   leadScope?: "all" | "own" | "team";
   selectedBranchId?: string | null;
-  leadLists?: (Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key"> & { count?: number })[];
+  leadLists?: Pick<LeadList, "id" | "name" | "slug" | "sort_order" | "funnel_key">[];
   stagingLists?: Pick<LeadList, "id" | "name" | "slug">[];
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */

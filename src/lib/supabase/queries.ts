@@ -6,7 +6,7 @@ import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
-import { visibleLeadsBase, type LeadVisibilityScope } from "@/lib/leads/visibility-query";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -67,42 +67,6 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return (data as LeadList[]) || [];
-}
-
-/**
- * Live lead count per list, for sidebar stage rows. Scoped to the viewer (D1,
- * migration 179): owner/admin get tenant-wide counts (unchanged); a counselor or
- * branch-manager's badge now matches exactly the rows they see in that list,
- * instead of a tenant-wide count via the service client.
- */
-export async function getLeadListCounts(
-  tenantId: string,
-  listIds: string[],
-  // Required (not optional) so every call site makes an explicit choice — an
-  // accidentally-omitted scope must not silently fall back to tenant-wide counts.
-  // Pass `undefined` explicitly for the owner/admin (unrestricted) case.
-  scope: LeadVisibilityScope | undefined,
-): Promise<Record<string, number>> {
-  if (listIds.length === 0) return {};
-  const supabase = await createClient();
-  const counts: Record<string, number> = {};
-  // Single visibility-scoped query covering all lists, paged like the pre-migration-179
-  // version — NOT one RPC call per list (that fired N round trips on every page nav).
-  const CHUNK = 1000;
-  for (let from = 0; ; from += CHUNK) {
-    const { data, error } = await visibleLeadsBase(supabase, tenantId, scope)
-      .in("list_id", listIds)
-      .is("deleted_at", null)
-      .is("converted_at", null)
-      .range(from, from + CHUNK - 1);
-    if (error) throw error;
-    for (const row of data ?? []) {
-      const lid = (row as { list_id: string | null }).list_id;
-      if (lid) counts[lid] = (counts[lid] ?? 0) + 1;
-    }
-    if (!data || data.length < CHUNK) break;
-  }
-  return counts;
 }
 
 export async function getLeads(

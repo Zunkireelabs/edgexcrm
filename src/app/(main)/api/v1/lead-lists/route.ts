@@ -11,9 +11,9 @@ import {
   apiServiceUnavailable,
 } from "@/lib/api/response";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createRequestLogger } from "@/lib/logger";
-import { getLeadListCounts } from "@/lib/supabase/queries";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import type { LeadList } from "@/types/database";
 
@@ -77,18 +77,56 @@ export async function GET(request: NextRequest) {
     canAccessList(auth.permissions, l.access as { mode: string; positionIds?: string[] }, auth.positionId, l.id)
   );
 
+  // Counts are opt-in (?counts=1) — only settings/lead-lists-manager.tsx needs them.
+  // The other two consumers (positions-manager, list-routing-editor) ignore `count` and
+  // now issue zero count queries.
+  if (request.nextUrl.searchParams.get("counts") !== "1") {
+    log.info({ total: accessible.length }, "Lead lists fetched");
+    return apiSuccess(accessible);
+  }
+
   // Count leads per list, visibility-scoped to the caller (uncapped; migration 179).
-  // Previously missed collaborator-visible leads entirely for own-scope — this also fixes that.
-  // Shares getLeadListCounts (one batched query, not one RPC call per list) rather than
-  // reimplementing the same pagination here.
+  // One count-only query per list (visibleLeadsBase with { count: "exact", head: true } —
+  // no rows cross the wire), issued in parallel via Promise.all. NOT sequential — see
+  // docs/LEAD-LIST-COUNTS-BRIEF.md for why a for-loop here would rebuild the exact
+  // N-round-trip problem this route previously moved away from.
   const poolSlug = auth.industryId === "education_consultancy" && auth.positionSlug && auth.branchId
     ? (POSITION_ROUTE_MAP[auth.positionSlug] ?? null)
     : null;
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
-  const countMap = await getLeadListCounts(auth.tenantId, accessible.map((l) => l.id), scope);
+  const countClient = await createClient();
+  // NOTE: leads_visible_to_user() is SECURITY DEFINER + SET search_path, so Postgres
+  // will NOT inline it — `.eq("list_id", X)` cannot be pushed into the function body.
+  // Each call therefore materializes the caller's whole visible-lead set and counts the
+  // subset, i.e. DB work here is O(accessible lists) predicate evaluations for
+  // counselor/branch scope (owner/admin skips the RPC entirely and gets a plain indexed
+  // count). Acceptable today: 10-15 lists, count-only, and this fires only on
+  // Settings -> Stages — never on a hot path. If a tenant reaches ~40 lists, take the
+  // escalation path in docs/LEAD-LIST-COUNTS-BRIEF.md: one SECURITY DEFINER function
+  // doing GROUP BY list_id over leads_visible_to_user(), 1 round-trip instead of N.
+  let countMap: Record<string, number>;
+  try {
+    const countEntries = await Promise.all(
+      accessible.map(async (l) => {
+        const { count, error: countError } = await visibleLeadsBase(countClient, auth.tenantId, scope, {
+          count: "exact",
+          head: true,
+        })
+          .eq("list_id", l.id)
+          .is("deleted_at", null)
+          .is("converted_at", null);
+        if (countError) throw countError;
+        return [l.id, count ?? 0] as const;
+      })
+    );
+    countMap = Object.fromEntries(countEntries);
+  } catch (err) {
+    log.error({ err }, "Failed to count leads per list");
+    return apiServiceUnavailable("Failed to count leads per list");
+  }
 
   const result = accessible.map((l) => ({ ...l, count: countMap[l.id] ?? 0 }));
-  log.info({ total: result.length }, "Lead lists fetched");
+  log.info({ total: result.length }, "Lead lists fetched with counts");
   return apiSuccess(result);
 }
 

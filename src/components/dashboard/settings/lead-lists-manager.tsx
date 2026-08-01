@@ -347,7 +347,7 @@ export function LeadListsManager() {
     setLoading(true);
     try {
       const [listsRes, posRes] = await Promise.all([
-        fetch("/api/v1/lead-lists"),
+        fetch("/api/v1/lead-lists?counts=1"),
         fetch("/api/v1/positions"),
       ]);
       if (listsRes.ok) {
