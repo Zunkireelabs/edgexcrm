@@ -259,6 +259,56 @@ describe("GET /api/v1/leads — counselor-scoping wiring", () => {
   });
 });
 
+describe("GET /api/v1/leads — facets=source (dashboard-aggregates review fixes)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+  });
+
+  it("an empty pipeline allowlist returns options:[] and never calls the aggregate RPC — matches route.ts:370's .in(pipeline_id, []) zero-result semantics", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "admin-1",
+        role: "owner",
+        permissions: permissions({ leadScope: "all", pipelineAccess: { ids: new Set() } }),
+      }),
+    );
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [] });
+    expect(rpcCalls).toEqual([]);
+  });
+
+  it("scope.restrictToSelf without scope.userId throws instead of silently widening the facet to tenant-wide counts", async () => {
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "",
+        role: "counselor",
+        permissions: permissions({ leadScope: "own" }),
+      }),
+    );
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    await expect(GET(fakeReq({ facets: "source" }))).rejects.toThrow(
+      "leads/facets: scope.restrictToSelf requires scope.userId",
+    );
+  });
+});
+
 // --- LEADS-SERVER-PAGINATION-BRIEF: sort allow-list, count=0, list/funnel/recycle-bin ---
 
 function fakeDbWithLists(opts: {

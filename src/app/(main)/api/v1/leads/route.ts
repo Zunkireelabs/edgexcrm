@@ -446,9 +446,21 @@ export async function GET(request: NextRequest) {
   // lead_aggregates unconditionally, so this facet is not offered there — a known,
   // narrow gap (the recycle bin has no source dropdown today).
   if (searchParams.get("facets") === "source" && !onlyDeleted) {
+    // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
+    // means the page returns zero leads, so the facet must be empty too. aggregates.ts
+    // omits an empty p_pipeline_ids (→ NULL → no restriction), which would otherwise
+    // count the whole tenant for a user whose list is empty.
+    if (auth.permissions.pipelineAccess !== "all" && auth.permissions.pipelineAccess.ids.size === 0) {
+      return apiSuccess({ facet: "source", options: [] });
+    }
+
     const assigneesIds = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
     const wantsUnassigned = assigneesTokens.includes("unassigned");
     const validCollaboratorIds = collaboratorIds.filter((id) => UUID_RE.test(id));
+
+    if (scope.restrictToSelf && !scope.userId) {
+      throw new Error("leads/facets: scope.restrictToSelf requires scope.userId");
+    }
 
     const facetScope: "own" | "all" | "ids_any" =
       !useSharedPool && scope.restrictToSelf && scope.userId
