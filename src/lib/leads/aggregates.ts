@@ -27,6 +27,10 @@ export interface LeadAggregates {
   list: Record<string, number>;
   /** list_id -> sorted distinct statuses present in that list. Feeds ListFunnelBoard's filter chips. */
   listStatuses: Record<string, string[]>;
+  /** `${listId}${SEP}${status}`-keyed exact counts. Feeds ListKanbanView's per-column
+   * (per-status) header counts (KANBAN-PAGINATION-BRIEF §2b) — the count half of the
+   * same list_status dimension listStatuses above only samples for distinctness. */
+  listStatusCounts: Record<string, number>;
   /** Sum of status.*.all — never issue a second query for this. */
   total: number;
 }
@@ -42,9 +46,20 @@ export interface AggregateScope {
   crossBranchPoolListSlug?: string | null;
   pipelineIds?: string[] | null;
   excludeOtherType?: boolean;
+  /** Scope every dimension (not just `list`/`list_status`) to one list — KANBAN-
+   * PAGINATION-BRIEF §2b's per-column counts for ListKanbanView. */
+  listIdEq?: string | null;
+  /** Scope every dimension to a funnel's stage-lists — FunnelKanbanBoard's column
+   * counts (the `list` dimension, one count per list in the set). */
+  listIdAny?: string[] | null;
 }
 
 const SEP = "\x1f";
+
+/** Key for `LeadAggregates.listStatusCounts` — KANBAN-PAGINATION-BRIEF §2b. */
+export function listStatusKey(listId: string, status: string): string {
+  return `${listId}${SEP}${status}`;
+}
 
 function emptyBucket(): WeekBucketCounts {
   return { all: 0, thisWeek: 0, lastWeek: 0 };
@@ -73,6 +88,7 @@ export function reshapeLeadAggregateRows(rows: AggregateRow[]): LeadAggregates {
   const counselor: Record<string, number> = {};
   const list: Record<string, number> = {};
   const listStatusSet: Record<string, Set<string>> = {};
+  const listStatusCounts: Record<string, number> = {};
 
   for (const row of rows) {
     const cnt = Number(row.cnt);
@@ -109,6 +125,7 @@ export function reshapeLeadAggregateRows(rows: AggregateRow[]): LeadAggregates {
         const listStatus = sepIdx >= 0 ? row.key.slice(sepIdx + 1) : "";
         if (!listStatusSet[listId]) listStatusSet[listId] = new Set();
         if (cnt > 0 && listStatus) listStatusSet[listId].add(listStatus);
+        listStatusCounts[row.key] = (listStatusCounts[row.key] ?? 0) + cnt;
         break;
       }
       default:
@@ -123,7 +140,7 @@ export function reshapeLeadAggregateRows(rows: AggregateRow[]): LeadAggregates {
 
   const total = Object.values(status).reduce((sum, b) => sum + b.all, 0);
 
-  return { status, stage, stageFallbackStatus, sourceCombos, counselor, list, listStatuses, total };
+  return { status, stage, stageFallbackStatus, sourceCombos, counselor, list, listStatuses, listStatusCounts, total };
 }
 
 /** Zero-valued LeadAggregates shape — every consumer's normal empty state. */
@@ -185,6 +202,8 @@ export async function getLeadAggregates(
 
   if (scope?.pipelineIds && scope.pipelineIds.length > 0) params.p_pipeline_ids = scope.pipelineIds;
   if (scope?.excludeOtherType) params.p_exclude_other_type = true;
+  if (scope?.listIdEq) params.p_list_id_eq = scope.listIdEq;
+  if (scope?.listIdAny && scope.listIdAny.length > 0) params.p_list_id_any = scope.listIdAny;
 
   const { data, error } = await supabase.rpc("lead_aggregates", params);
   if (error) {

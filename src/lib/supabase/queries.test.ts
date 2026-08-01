@@ -29,6 +29,31 @@ function makeChain(calls: Call[], terminal: { data: unknown[]; error: unknown })
   return chain;
 }
 
+// getLeadsPage's chain ends in .range(), and .order() is chainable (not terminal) —
+// a separate builder from makeChain() above, whose terminal is .order().
+function makeRangeChain(calls: Call[], terminal: { data: unknown[]; error: unknown; count: number | null }) {
+  const record =
+    (method: string) =>
+    (...args: unknown[]) => {
+      calls.push([method, args]);
+      return chain;
+    };
+  const chain: Record<string, unknown> = {
+    select: record("select"),
+    eq: record("eq"),
+    is: record("is"),
+    or: record("or"),
+    in: record("in"),
+    not: record("not"),
+    order: record("order"),
+    range: (...args: unknown[]) => {
+      calls.push(["range", args]);
+      return Promise.resolve(terminal);
+    },
+  };
+  return chain;
+}
+
 function fakeClient(rpcCalls: RpcCall[], leadsCalls: Call[]) {
   return {
     rpc: (name: string, params: unknown) => {
@@ -111,5 +136,75 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
 
     expect(rpcCalls).toEqual([]);
     expect(leadsCalls.some(([m, a]) => m === "eq" && a[0] === "tenant_id")).toBe(true);
+  });
+});
+
+// getLeadsPage's per-column Kanban extension (KANBAN-PAGINATION-BRIEF §3.1): a `status`
+// scope filter (a stage's slug, one column's identity) and a `skipCount` opt that avoids
+// an exact-count query per column when the caller already has the true total from
+// lead_aggregates (§2b) — "header count always comes from the aggregate, never from
+// cards.length" only holds if this path never silently re-derives its own count.
+describe("getLeadsPage — Kanban column extension (status filter + skipCount)", () => {
+  beforeEach(() => {
+    createClientMock.mockReset();
+  });
+
+  it("applies scope.status as an .eq('status', …) filter", async () => {
+    const calls: Call[] = [];
+    createClientMock.mockResolvedValue({
+      from: (table: string) => {
+        if (table !== "leads") throw new Error(`unexpected table ${table}`);
+        return makeRangeChain(calls, { data: [], error: null, count: 0 });
+      },
+    });
+
+    const { getLeadsPage } = await import("./queries");
+    await getLeadsPage("tenant-1", { listId: "list-1", status: "qualified" }, 1, 20);
+
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "status" && a[1] === "qualified")).toBe(true);
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "list_id" && a[1] === "list-1")).toBe(true);
+    // First page, 20 per column
+    expect(calls.some(([m, a]) => m === "range" && a[0] === 0 && a[1] === 19)).toBe(true);
+  });
+
+  it("omits scope.status entirely when not provided — existing (non-Kanban) callers untouched", async () => {
+    const calls: Call[] = [];
+    createClientMock.mockResolvedValue({
+      from: () => makeRangeChain(calls, { data: [], error: null, count: 0 }),
+    });
+
+    const { getLeadsPage } = await import("./queries");
+    await getLeadsPage("tenant-1", { listId: "list-1" }, 1, 25);
+
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "status")).toBe(false);
+  });
+
+  it("skipCount:true skips the exact count (no {count:'exact'} on select) and returns total -1", async () => {
+    const calls: Call[] = [];
+    createClientMock.mockResolvedValue({
+      from: () => makeRangeChain(calls, { data: [{ id: "lead-1" }], error: null, count: null }),
+    });
+
+    const { getLeadsPage } = await import("./queries");
+    const result = await getLeadsPage("tenant-1", { listId: "list-1", status: "new" }, 1, 20, { skipCount: true });
+
+    const selectCall = calls.find(([m]) => m === "select");
+    expect(selectCall?.[1][1]).toEqual({});
+    expect(result.total).toBe(-1);
+    expect(result.leads).toEqual([{ id: "lead-1" }]);
+  });
+
+  it("without skipCount, still requests an exact count (unaffected by the Kanban extension)", async () => {
+    const calls: Call[] = [];
+    createClientMock.mockResolvedValue({
+      from: () => makeRangeChain(calls, { data: [], error: null, count: 42 }),
+    });
+
+    const { getLeadsPage } = await import("./queries");
+    const result = await getLeadsPage("tenant-1", { listId: "list-1" }, 1, 20);
+
+    const selectCall = calls.find(([m]) => m === "select");
+    expect(selectCall?.[1][1]).toEqual({ count: "exact" });
+    expect(result.total).toBe(42);
   });
 });

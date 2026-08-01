@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { PipelineColumn } from "@/components/pipeline/PipelineColumn";
 import { LeadCard } from "@/components/pipeline/LeadCard";
+import { useKanbanColumns, type KanbanColumnDef, type KanbanColumnsState } from "@/components/pipeline/use-kanban-columns";
 import { ProspectQualificationDialog } from "./prospect-qualification-dialog";
 import { hasProspectQualification } from "@/lib/leads/prospect-qualification";
 import type { LeadList, PipelineLead, PipelineStage } from "@/types/database";
@@ -22,17 +23,15 @@ import type { LeadList, PipelineLead, PipelineStage } from "@/types/database";
 interface FunnelKanbanBoardProps {
   /** The funnel's stage-lists, ordered by sort_order — each becomes a kanban column. */
   lists: Pick<LeadList, "id" | "name" | "slug" | "color">[];
-  /** Leads across the whole funnel (list_id in one of `lists`). */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  leads: any[];
+  /** SSR-seeded page 1 (20 cards) + true count per column, keyed by list.id
+   * (KANBAN-PAGINATION-BRIEF §3.1) — replaces the old full-funnel-load `leads` prop. */
+  initialColumns: Record<string, { cards: PipelineLead[]; total: number }>;
   canEdit: boolean;
   restrictToSelf?: boolean;
   userId: string;
   industryId?: string | null;
   bypassQualification?: boolean;
 }
-
-type ColumnsState = Record<string, PipelineLead[]>;
 
 // Kanban columns here are stage-lists, not pipeline_stages — adapt each list into the
 // shape PipelineColumn/LeadCard already render, so we reuse them instead of forking a
@@ -54,19 +53,9 @@ function listToStage(list: Pick<LeadList, "id" | "name" | "slug" | "color">): Pi
   };
 }
 
-function groupByList(leads: PipelineLead[], lists: Pick<LeadList, "id">[]): ColumnsState {
-  const columns: ColumnsState = {};
-  for (const list of lists) columns[list.id] = [];
-  for (const lead of leads) {
-    const listId = (lead as { list_id?: string | null }).list_id;
-    if (listId && columns[listId]) columns[listId].push(lead);
-  }
-  return columns;
-}
-
-function findLeadColumn(columns: ColumnsState, leadId: string): string | null {
-  for (const [listId, leads] of Object.entries(columns)) {
-    if (leads.some((l) => l.id === leadId)) return listId;
+function findLeadColumn(columns: KanbanColumnsState, leadId: string): string | null {
+  for (const [listId, col] of Object.entries(columns)) {
+    if (col.cards.some((l) => l.id === leadId)) return listId;
   }
   return null;
 }
@@ -75,18 +64,26 @@ function findLeadColumn(columns: ColumnsState, leadId: string): string | null {
  * the lead between lists (via the bulk API, which already syncs pipeline_id/stage_id to
  * the target list's own status pipeline). Distinct from ListKanbanView, whose columns are
  * one list's own statuses. */
-export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false }: FunnelKanbanBoardProps) {
+export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false }: FunnelKanbanBoardProps) {
   // DnD-kit and Radix generate ids that differ between the SSR pass and the client's first
   // render — mirrors the same guard in PipelineBoard. Render a skeleton until mounted.
   const [mounted, setMounted] = useState(false);
-  const [columns, setColumns] = useState<ColumnsState>(() => groupByList(leads, lists));
   const [activeId, setActiveId] = useState<string | null>(null);
-  const prevColumnsRef = useRef<ColumnsState | null>(null);
+  const prevColumnsRef = useRef<KanbanColumnsState | null>(null);
   const [pendingMove, setPendingMove] = useState<{ leadId: string; targetListId: string; lead: PipelineLead } | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // No filter toolbar on this board today — one static param set per column (its own
+  // list), so the filter signature never changes after mount; page 1 stays SSR-seeded.
+  const columnDefs: KanbanColumnDef[] = lists.map((list) => {
+    const params = new URLSearchParams();
+    params.set("list", list.slug);
+    return { key: list.id, params };
+  });
+  const { columns, setColumns, loadMore } = useKanbanColumns(columnDefs, "static", initialColumns);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const listIds = new Set(lists.map((l) => l.id));
@@ -101,12 +98,12 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
   );
 
   const activeLead = activeId
-    ? Object.values(columns).flat().find((l) => l.id === activeId) ?? null
+    ? Object.values(columns).flatMap((c) => c.cards).find((l) => l.id === activeId) ?? null
     : null;
 
   function handleDragStart(event: DragStartEvent) {
     const id = event.active.id as string;
-    const lead = Object.values(columns).flat().find((l) => l.id === id);
+    const lead = Object.values(columns).flatMap((c) => c.cards).find((l) => l.id === id);
     if (!lead || !canDragLead(lead)) return;
     setActiveId(id);
     prevColumnsRef.current = JSON.parse(JSON.stringify(columns));
@@ -123,14 +120,20 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
     if (!fromCol || !toCol || fromCol === toCol) return;
 
     setColumns((prev) => {
-      const from = prev[fromCol].filter((l) => l.id !== activeLeadId);
-      const lead = prev[fromCol].find((l) => l.id === activeLeadId);
+      const fromState = prev[fromCol];
+      const toState = prev[toCol];
+      const lead = fromState.cards.find((l) => l.id === activeLeadId);
       if (!lead) return prev;
-      const to = [...prev[toCol]];
-      const overIndex = to.findIndex((l) => l.id === overId);
-      if (overIndex >= 0) to.splice(overIndex, 0, lead);
-      else to.push(lead);
-      return { ...prev, [fromCol]: from, [toCol]: to };
+      const fromCards = fromState.cards.filter((l) => l.id !== activeLeadId);
+      const toCards = [...toState.cards];
+      const overIndex = toCards.findIndex((l) => l.id === overId);
+      if (overIndex >= 0) toCards.splice(overIndex, 0, lead);
+      else toCards.push(lead);
+      return {
+        ...prev,
+        [fromCol]: { ...fromState, cards: fromCards, loaded: fromCards.length, total: Math.max(0, fromState.total - 1) },
+        [toCol]: { ...toState, cards: toCards, loaded: toCards.length, total: toState.total + 1 },
+      };
     });
   }
 
@@ -152,7 +155,7 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
       return;
     }
 
-    const lead = Object.values(prevColumnsRef.current || columns).flat().find((l) => l.id === leadId);
+    const lead = Object.values(prevColumnsRef.current || columns).flatMap((c) => c.cards).find((l) => l.id === leadId);
     if (!lead || (lead as { list_id?: string | null }).list_id === targetListId) {
       prevColumnsRef.current = null;
       return;
@@ -180,14 +183,18 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
       });
       if (!res.ok) throw new Error("Failed to move lead");
 
+      // handleDragOver already moved the card + adjusted totals — just stamp the
+      // persisted list_id onto the card object in its (already correct) column.
       setColumns((prev) => {
-        const updated = { ...prev };
-        for (const listId of Object.keys(updated)) {
-          updated[listId] = updated[listId].map((l) =>
-            l.id === leadId ? { ...l, list_id: targetListId } : l
-          );
-        }
-        return updated;
+        const col = prev[targetListId];
+        if (!col) return prev;
+        return {
+          ...prev,
+          [targetListId]: {
+            ...col,
+            cards: col.cards.map((l) => (l.id === leadId ? { ...l, list_id: targetListId } : l)),
+          },
+        };
       });
     } catch {
       if (prevColumnsRef.current) setColumns(prevColumnsRef.current);
@@ -209,12 +216,23 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
       if (!res.ok) throw new Error("Failed to move lead");
 
       setColumns((prev) => {
-        const updated: ColumnsState = {};
-        for (const listId of Object.keys(prev)) {
-          updated[listId] = prev[listId].filter((l) => l.id !== leadId);
+        const sourceId = findLeadColumn(prev, leadId);
+        const next = { ...prev };
+        if (sourceId) {
+          const source = next[sourceId];
+          const cards = source.cards.filter((l) => l.id !== leadId);
+          next[sourceId] = { ...source, cards, loaded: cards.length, total: Math.max(0, source.total - 1) };
         }
-        updated[targetListId] = [...(updated[targetListId] || []), { ...lead, ...patch, list_id: targetListId }];
-        return updated;
+        const target = next[targetListId];
+        if (target) {
+          next[targetListId] = {
+            ...target,
+            cards: [{ ...lead, ...patch, list_id: targetListId }, ...target.cards],
+            loaded: target.loaded + 1,
+            total: target.total + 1,
+          };
+        }
+        return next;
       });
       setPendingMove(null);
     } catch {
@@ -248,14 +266,20 @@ export function FunnelKanbanBoard({ lists, leads, canEdit, restrictToSelf = fals
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-4 overflow-x-auto pb-4 h-full scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/40">
-          {lists.map((list) => (
-            <PipelineColumn
-              key={list.id}
-              stage={listToStage(list)}
-              leads={columns[list.id] || []}
-              canDragLead={canDragLead}
-            />
-          ))}
+          {lists.map((list) => {
+            const col = columns[list.id] ?? { cards: [], loaded: 0, total: 0, page: 1, isLoadingMore: false };
+            return (
+              <PipelineColumn
+                key={list.id}
+                stage={listToStage(list)}
+                leads={col.cards}
+                total={col.total}
+                isLoadingMore={col.isLoadingMore}
+                onLoadMore={() => loadMore(list.id, columnDefs.find((d) => d.key === list.id)?.params ?? null)}
+                canDragLead={canDragLead}
+              />
+            );
+          })}
         </div>
         <DragOverlay>{activeLead ? <LeadCard lead={activeLead} disabled /> : null}</DragOverlay>
       </DndContext>
