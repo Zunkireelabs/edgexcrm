@@ -607,6 +607,11 @@ export function ListKanbanBoard({
   }
 
   const totalLoaded = Object.values(columns).reduce((sum, c) => sum + c.loaded, 0);
+  // True total across columns under the active filters (same figures the column
+  // headers show via col.total) — used to warn BEFORE the Export click when the
+  // CSV will only cover the currently-loaded subset, not cards.length.
+  const totalTrue = Object.values(columns).reduce((sum, c) => sum + c.total, 0);
+  const exportIsPartial = totalLoaded < totalTrue;
 
   const filterDefs: FilterDef[] = [
     ...(sourceFacet.length > 0
@@ -845,9 +850,12 @@ export function ListKanbanBoard({
               type="button"
               onClick={handleExport}
               className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              title={exportIsPartial ? `Only the ${totalLoaded.toLocaleString()} currently-loaded leads will be exported, out of ${totalTrue.toLocaleString()} total` : undefined}
             >
               <Download className="h-3 w-3 shrink-0" />
-              Export
+              {exportIsPartial
+                ? `Export (${totalLoaded.toLocaleString()} of ${totalTrue.toLocaleString()})`
+                : "Export"}
             </button>
           )}
 
