@@ -126,6 +126,11 @@ export function reshapeLeadAggregateRows(rows: AggregateRow[]): LeadAggregates {
   return { status, stage, stageFallbackStatus, sourceCombos, counselor, list, listStatuses, total };
 }
 
+/** Zero-valued LeadAggregates shape — every consumer's normal empty state. */
+export function emptyAggregates(): LeadAggregates {
+  return reshapeLeadAggregateRows([]);
+}
+
 /**
  * One `lead_aggregates()` RPC round-trip, reshaped for the dashboard / insights /
  * pipeline widgets. Replaces the capped `getLeads()` fetch those pages used to make
@@ -169,6 +174,15 @@ export async function getLeadAggregates(
   } else {
     params.p_scope = "all";
   }
+
+  // leadQueryScope returns [] (not null) for a restricted-but-empty pipeline allowlist.
+  // getLeads treats that as `.in("pipeline_id", [])` → zero rows, so these pages showed
+  // zeros before this PR. Omitting p_pipeline_ids would instead mean "no restriction" and
+  // count the whole tenant — fail-open, and a behaviour change. Match getLeads: nothing.
+  if (scope?.pipelineIds !== null && scope?.pipelineIds !== undefined && scope.pipelineIds.length === 0) {
+    return emptyAggregates();
+  }
+
   if (scope?.pipelineIds && scope.pipelineIds.length > 0) params.p_pipeline_ids = scope.pipelineIds;
   if (scope?.excludeOtherType) params.p_exclude_other_type = true;
 

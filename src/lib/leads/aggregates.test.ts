@@ -1,7 +1,14 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Lead, PipelineStage } from "@/types/database";
-import { reshapeLeadAggregateRows, resolveSourceCounts } from "./aggregates";
+import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates } from "./aggregates";
 import { resolveStageBucketCounts } from "@/components/dashboard/stats-cards";
+
+const { rpcMock, createClientMock } = vi.hoisted(() => {
+  const rpcMock = vi.fn();
+  const createClientMock = vi.fn(() => Promise.resolve({ rpc: rpcMock }));
+  return { rpcMock, createClientMock };
+});
+vi.mock("@/lib/supabase/server", () => ({ createClient: createClientMock }));
 
 // Equivalence test (DASHBOARD-AGGREGATES-BRIEF.md §4.1): assert the new
 // aggregate-based path produces the SAME numbers the OLD component logic produced
@@ -381,5 +388,39 @@ describe("/leads source facet invariant (ADDENDUM §\"the invariant that makes t
 
   it("never offers a blank/whitespace-only intake_source as an option", () => {
     expect(intakeSourceRows.every((r) => r.key.trim().length > 0)).toBe(true);
+  });
+});
+
+describe("getLeadAggregates — restricted-but-empty pipeline allowlist (review fix)", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    createClientMock.mockClear();
+    rpcMock.mockResolvedValue({ data: [], error: null });
+  });
+
+  it("scope.pipelineIds: [] (leadQueryScope's restricted-but-empty shape) yields zeroed aggregates and makes zero RPC calls", async () => {
+    const result = await getLeadAggregates("tenant-1", { pipelineIds: [] }, NOW);
+    expect(result).toEqual(emptyAggregates());
+    expect(rpcMock).not.toHaveBeenCalled();
+  });
+
+  it("scope.pipelineIds: null (unrestricted) still calls the RPC normally", async () => {
+    await getLeadAggregates("tenant-1", { pipelineIds: null }, NOW);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    const [name, params] = rpcMock.mock.calls[0];
+    expect(name).toBe("lead_aggregates");
+    expect(params).not.toHaveProperty("p_pipeline_ids");
+  });
+
+  it("scope.pipelineIds: undefined (no scope) still calls the RPC normally", async () => {
+    await getLeadAggregates("tenant-1", undefined, NOW);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a non-empty allowlist still calls the RPC with p_pipeline_ids set", async () => {
+    await getLeadAggregates("tenant-1", { pipelineIds: ["pipeline-1"] }, NOW);
+    expect(rpcMock).toHaveBeenCalledTimes(1);
+    const [, params] = rpcMock.mock.calls[0];
+    expect(params).toMatchObject({ p_pipeline_ids: ["pipeline-1"] });
   });
 });
