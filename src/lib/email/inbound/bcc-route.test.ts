@@ -127,6 +127,7 @@ vi.mock("@/lib/leads/dedup", async (importOriginal) => {
 });
 
 import { processBccDropbox, type BccDropboxParams } from "./bcc-route";
+import { mintToken } from "./tokens";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 
 // Fake ScopedClient — only from()/raw() are ever called by processBccDropbox;
@@ -161,6 +162,8 @@ const BASE_PARAMS: BccDropboxParams = {
 
 beforeEach(() => {
   process.env.INBOUND_EMAIL_DOMAINS = "inbound.edgex.zunkireelabs.com";
+  process.env.INBOUND_TOKEN_SECRET = "a".repeat(64);
+  process.env.INBOUND_ENV_MARKER = "l";
   serviceTables = {};
   scopedTables = {};
   getUserByIdMock = vi.fn(async (id: string) => {
@@ -196,6 +199,87 @@ describe("processBccDropbox — sender-authenticity guard (brief §5 step 2)", (
     expect(serviceTables.inbound_email_dead_letter).toHaveLength(1);
     expect(serviceTables.inbound_email_dead_letter[0].reason).toBe("bcc_sender_mismatch");
     expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+});
+
+describe("processBccDropbox — sender-authenticity guard accepts connected mailboxes (SLICE-A-GUARD-REPLYTO-FIX-BRIEF §1)", () => {
+  it("1. From = login email, no connected accounts → accepted (existing behavior holds)", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "rep@example.com" } } });
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: '"Rep Person" <rep@example.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("rep@example.com");
+  });
+
+  it("2. From = a connected account email that differs from the login email → accepted (regression test — must fail before the fix)", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "user-1", email: "shrestha.sadin007@gmail.com" },
+    ];
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: '"Sadin" <shrestha.sadin007@gmail.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("shrestha.sadin007@gmail.com");
+  });
+
+  it("3. From = a connected account belonging to a DIFFERENT user_id → dead-letter", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "some-other-user", email: "shrestha.sadin007@gmail.com" },
+    ];
+    const headers = { from: '"Not Sadin" <shrestha.sadin007@gmail.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter).toHaveLength(1);
+    expect(serviceTables.inbound_email_dead_letter[0].reason).toBe("bcc_sender_mismatch");
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("4. p.userId === null → dead-letter, zero emails writes", async () => {
+    const headers = { from: '"Rep" <rep@example.com>', to: "lead@example.com" };
+
+    await processBccDropbox({ ...BASE_PARAMS, userId: null }, makeDb(), BASE_RECEIVING, headers);
+
+    expect(getUserByIdMock).not.toHaveBeenCalled();
+    expect(serviceTables.inbound_email_dead_letter).toHaveLength(1);
+    expect(serviceTables.inbound_email_dead_letter[0].reason).toBe("bcc_sender_mismatch");
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("5. Case/whitespace variation on From (\"  SADIN@Zunkireelabs.COM  \") → accepted", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = { from: "  SADIN@Zunkireelabs.COM  ", to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
+    expect(scopedTables.emails[0].from_email).toBe("sadin@zunkireelabs.com");
+  });
+
+  it("logs only the allowed-sender COUNT in the dead-letter rawEvent, never the addresses themselves", async () => {
+    getUserByIdMock.mockResolvedValue({ data: { user: { email: "sadin@zunkireelabs.com" } } });
+    scopedTables.connected_email_accounts = [
+      { user_id: "user-1", email: "shrestha.sadin007@gmail.com" },
+    ];
+    const headers = { from: '"Nope" <attacker@evil.com>', to: "lead@example.com" };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    const deadLetter = serviceTables.inbound_email_dead_letter[0];
+    expect(deadLetter.raw_event.allowed_sender_count).toBe(2); // login + 1 connected account
+    expect(JSON.stringify(deadLetter.raw_event)).not.toContain("sadin@zunkireelabs.com");
+    expect(JSON.stringify(deadLetter.raw_event)).not.toContain("shrestha.sadin007@gmail.com");
   });
 });
 
@@ -307,6 +391,99 @@ describe("processBccDropbox — dropbox token stripped from persisted to/cc (rev
     expect(scopedTables.emails).toHaveLength(1);
     expect(scopedTables.emails[0].to_emails).toEqual(["lead@example.com"]);
     expect(scopedTables.emails[0].cc_emails).toEqual(["other-lead@example.com"]);
+  });
+});
+
+describe("processBccDropbox — reply-token dedup (BCC-DEDUP-FIX-BRIEF — primary signal)", () => {
+  it("1. Reply-To carries a token that exists in inbound_addresses → skip: zero emails inserts, zero dead-letters", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+      "message-id": "<CAOOo9VNrtM=sQdf84eTBP-bCwaN2K3C41Y2=WKSouOAnnuUY_A@mail.gmail.com>",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+    expect(scopedTables.email_threads ?? []).toHaveLength(0);
+  });
+
+  it("2. Reply-To carries a well-formed but unknown token → proceeds and inserts", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply"); // valid shape/checksum, but no matching inbound_addresses row
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+  });
+
+  it('3. Reply-To in "Name" <reply+…> display-name form → still skipped (proves parseInboundAddress reuse)', async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": `"Zunkiree Labs" <${minted.address}>`,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("4. Revoked token → still skipped (match on existence, not status='active')", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("reply");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "revoked" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+  });
+
+  it("a bcc-verb token in Reply-To does NOT skip — only verb === 'reply' does", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const minted = mintToken("bcc");
+    scopedTables.inbound_addresses = [{ id: "addr-1", tenant_id: "tenant-a", token: minted.token, status: "active" }];
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": minted.address,
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(scopedTables.emails).toHaveLength(1);
+  });
+
+  it("no Reply-To, or an unparseable one, falls through without dead-lettering (happy path unaffected)", async () => {
+    resolveLeadIdentityMock.mockResolvedValue({ match: "email", existingLead: { id: "lead-1" }, phoneMatchLeadIds: [] });
+    const headers = {
+      from: '"Rep Person" <rep@example.com>',
+      to: "lead@example.com",
+      "reply-to": "not-a-valid-token@somewhere-else.com",
+    };
+
+    await processBccDropbox(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
+
+    expect(serviceTables.inbound_email_dead_letter ?? []).toHaveLength(0);
+    expect(scopedTables.emails).toHaveLength(1);
   });
 });
 

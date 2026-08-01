@@ -13,7 +13,7 @@ import type { GetReceivingEmailResponseSuccess } from "resend";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import { normalizeEmail, resolveLeadIdentity } from "@/lib/leads/dedup";
 import { matchInboundToThread, THREAD_COLUMNS, type EmailThreadRow } from "./match-thread";
-import { getInboundDomains } from "./tokens";
+import { getInboundDomains, parseInboundAddress } from "./tokens";
 import {
   getHeader,
   parseAddress,
@@ -73,13 +73,39 @@ export async function processBccDropbox(
   // fabricated "outbound" emails into a tenant's lead timeline — forged
   // history that looks first-party. The token alone is an addressing
   // secret, not proof of authorship.
-  let ownerEmail: string | null = null;
+  //
+  // A rep's LOGIN address is routinely NOT the mailbox they send from
+  // (sadin@zunkireelabs.com logs in; shrestha.sadin007@gmail.com sends), so
+  // matching only auth.users.email rejected every real rep. Every
+  // connected_email_accounts row for this user is an OAuth-verified mailbox
+  // — stronger proof of mailbox control than the unverified login address —
+  // so those count too. Scoped to THIS user, and (via scopedClient) THIS
+  // tenant: a teammate's connected mailbox must never authorize a write
+  // against another rep's dropbox token.
+  const allowedSenders = new Set<string>();
   if (p.userId) {
     const { data: userRes } = await db.raw().auth.admin.getUserById(p.userId);
-    ownerEmail = normalizeEmail(userRes?.user?.email ?? null);
+    const loginEmail = normalizeEmail(userRes?.user?.email ?? null);
+    if (loginEmail) allowedSenders.add(loginEmail);
+
+    // Row-type inference from the columns literal is lost through the
+    // ScopedClient passthrough (scoped.ts NOTE) — cast at the call site.
+    const { data: accountsData } = await db
+      .from("connected_email_accounts")
+      .select("email")
+      .eq("user_id", p.userId);
+    const accounts = (accountsData ?? []) as unknown as Array<{ email: string }>;
+    for (const acct of accounts) {
+      const normalized = normalizeEmail(acct.email);
+      if (normalized) allowedSenders.add(normalized);
+    }
   }
 
-  if (!ownerEmail || !fromParsed || normalizeEmail(fromParsed.email) !== ownerEmail) {
+  // `!fromParsed` is redundant with `!fromEmail` at runtime (fromEmail is only
+  // ever non-null when fromParsed is), but TS can't infer that cross-variable
+  // relationship — kept explicit so fromParsed narrows to non-null below.
+  const fromEmail = fromParsed ? normalizeEmail(fromParsed.email) : null;
+  if (!fromParsed || !fromEmail || !allowedSenders.has(fromEmail)) {
     await writeDeadLetter({
       tenantId: p.tenantId,
       providerMessageId: p.resendEmailId,
@@ -87,7 +113,7 @@ export async function processBccDropbox(
       toAddresses: toRaw,
       subject: receiving.subject ?? null,
       reason: "bcc_sender_mismatch",
-      rawEvent: { headers },
+      rawEvent: { headers, allowed_sender_count: allowedSenders.size },
     });
     return;
   }
@@ -141,6 +167,31 @@ export async function processBccDropbox(
   }
 
   // ── 5. Skip an EdgeX-sent copy — the rep BCC'd a message EdgeX itself sent ─
+  //
+  // Primary signal: our own Reply-To token. Gmail REWRITES the Message-ID we
+  // stamp at gmail-client.ts:188 (proven on stage 2026-07-30 — the delivered
+  // copy carried <...@mail.gmail.com>, the emails row stored
+  // <...@edgex-crm.com>), so rfc_message_id equality can never match for a
+  // Gmail-sent message. The reply token can only have been minted by us.
+  const replyToHeader = getHeader(headers, "reply-to");
+  if (replyToHeader) {
+    const parsed = parseInboundAddress(replyToHeader);
+    if (parsed?.verb === "reply") {
+      // Match on token existence regardless of status — a REVOKED token still
+      // proves we authored the message, and revocation must not resurrect the
+      // duplicate this guard exists to prevent. scopedClient scopes to tenant.
+      const { data: ours } = await db
+        .from("inbound_addresses")
+        .select("id")
+        .eq("token", parsed.token)
+        .limit(1)
+        .maybeSingle<{ id: string }>();
+      if (ours) return; // our own send — not an error, not a dead-letter
+    }
+  }
+
+  // Fallback: Message-ID equality. Still correct for any sender that preserves
+  // the ID we stamped, and for sends made with inbound disabled (no token).
   const messageId = getHeader(headers, "message-id") ?? null;
   if (messageId) {
     const { data: existing } = await db
@@ -196,7 +247,7 @@ export async function processBccDropbox(
       provider: "edgex_native",
       provider_message_id: p.resendEmailId,
       inbound_route: "bcc",
-      from_email: fromParsed.email,
+      from_email: fromEmail,
       from_name: fromParsed.name,
       to_emails: toRecipients.map((a) => a.email),
       cc_emails: ccRecipients.map((a) => a.email),

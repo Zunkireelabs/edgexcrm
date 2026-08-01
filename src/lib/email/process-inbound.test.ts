@@ -165,6 +165,16 @@ const processBccDropboxMock = vi.fn(async (params: BccDropboxCallArgs, ...rest: 
   void rest;
 });
 
+interface FwdRelayCallArgs {
+  tenantId: string;
+  resendEmailId: string;
+  inboundAddressId: string;
+}
+const processFwdRelayMock = vi.fn(async (params: FwdRelayCallArgs, ...rest: unknown[]): Promise<void> => {
+  void params;
+  void rest;
+});
+
 vi.mock("@/lib/supabase/server", () => ({
   createServiceClient: vi.fn(async () => makeClient(serviceTables, forceInsertErrors)),
 }));
@@ -211,6 +221,12 @@ vi.mock("./inbound/bcc-route", () => ({
   processBccDropbox: (params: BccDropboxCallArgs, ...rest: unknown[]) => processBccDropboxMock(params, ...rest),
 }));
 
+// Same rationale as bcc-route above — the fwd relay algorithm itself is
+// unit-tested in isolation in ./inbound/fwd-route.test.ts.
+vi.mock("./inbound/fwd-route", () => ({
+  processFwdRelay: (params: FwdRelayCallArgs, ...rest: unknown[]) => processFwdRelayMock(params, ...rest),
+}));
+
 import { processInboundEmailEvents } from "./process-inbound";
 
 const BASE_RECEIVING = {
@@ -244,6 +260,7 @@ function makeEvent(payload: Row) {
 beforeEach(() => {
   process.env.INBOUND_EMAIL_DOMAINS = "inbound.edgex.zunkireelabs.com";
   process.env.INBOUND_ENV_MARKER = "l";
+  process.env.INBOUND_TOKEN_SECRET = "a".repeat(64);
   serviceTables = {};
   scopedTables = {};
   forceInsertErrors = {};
@@ -254,6 +271,7 @@ beforeEach(() => {
   emitEventMock.mockReset().mockResolvedValue("event-id");
   upsertThreadNotificationMock.mockReset().mockResolvedValue(undefined);
   processBccDropboxMock.mockReset().mockResolvedValue(undefined);
+  processFwdRelayMock.mockReset().mockResolvedValue(undefined);
 });
 
 describe("processInboundEmailEvents — happy path (verb=reply, thread_id, authoritative)", () => {
@@ -306,6 +324,68 @@ describe("processInboundEmailEvents — happy path (verb=reply, thread_id, autho
     );
 
     expect(serviceTables.events[0].status).toBe("completed");
+  });
+});
+
+describe("processInboundEmailEvents — passthrough-forward from: (REPLYABLE-FORWARD-BRIEF Stage 2 §a)", () => {
+  it("mints a thread-bound fwd+ token and forwards from it (not the bare platform address)", async () => {
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: "acct-1", gmail_thread_id: "gm-1", lead_id: "lead-1", contact_id: null, message_count: 3 },
+    ];
+    scopedTables.connected_email_accounts = [{ id: "acct-1", tenant_id: "tenant-a", user_id: "user-1", email: "rep@gmail.com" }];
+    scopedTables.leads = [{ id: "lead-1", tenant_id: "tenant-a", assigned_to: "user-2" }];
+
+    serviceTables.events = [
+      makeEvent({
+        resend_email_id: "resend-1",
+        tenant_id: "tenant-a",
+        inbound_address_id: "addr-1",
+        kind: "thread",
+        verb: "reply",
+        thread_id: "thread-1",
+        user_id: null,
+        envelope: { to: BASE_RECEIVING.to, cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+      }),
+    ];
+
+    await processInboundEmailEvents();
+
+    expect(scopedTables.inbound_addresses).toHaveLength(1);
+    expect(scopedTables.inbound_addresses[0]).toMatchObject({ kind: "thread", verb: "fwd", thread_id: "thread-1", status: "active" });
+
+    const call = forwardReceivingEmailMock.mock.calls[0][0] as { from: string };
+    expect(call.from).toContain("fwd+");
+    expect(call.from).not.toBe("noreply@lead-crm.zunkireelabs.com");
+  });
+
+  it("reuses an existing active fwd token for the thread instead of minting a second one", async () => {
+    scopedTables.email_threads = [
+      { id: "thread-1", tenant_id: "tenant-a", connected_email_account_id: "acct-1", gmail_thread_id: "gm-1", lead_id: "lead-1", contact_id: null, message_count: 3 },
+    ];
+    scopedTables.connected_email_accounts = [{ id: "acct-1", tenant_id: "tenant-a", user_id: "user-1", email: "rep@gmail.com" }];
+    scopedTables.leads = [{ id: "lead-1", tenant_id: "tenant-a", assigned_to: "user-2" }];
+    scopedTables.inbound_addresses = [
+      { id: "existing-fwd", tenant_id: "tenant-a", kind: "thread", verb: "fwd", token: "existingtoken1234567890existingtoken12", thread_id: "thread-1", status: "active" },
+    ];
+
+    serviceTables.events = [
+      makeEvent({
+        resend_email_id: "resend-1",
+        tenant_id: "tenant-a",
+        inbound_address_id: "addr-1",
+        kind: "thread",
+        verb: "reply",
+        thread_id: "thread-1",
+        user_id: null,
+        envelope: { to: BASE_RECEIVING.to, cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+      }),
+    ];
+
+    await processInboundEmailEvents();
+
+    expect(scopedTables.inbound_addresses).toHaveLength(1); // no new row minted
+    const call = forwardReceivingEmailMock.mock.calls[0][0] as { from: string };
+    expect(call.from).toContain("existingtoken1234567890existingtoken12");
   });
 });
 
@@ -392,7 +472,7 @@ describe("processInboundEmailEvents — new-thread creation", () => {
     });
 
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "reply", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     const result = await processInboundEmailEvents();
@@ -412,7 +492,7 @@ describe("processInboundEmailEvents — new-thread creation", () => {
   it("leaves lead_id null when resolveLeadIdentity finds no single match", async () => {
     resolveLeadIdentityMock.mockResolvedValue({ match: "none", existingLead: null, phoneMatchLeadIds: ["lead-1", "lead-2"] });
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "reply", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     await processInboundEmailEvents();
@@ -422,7 +502,7 @@ describe("processInboundEmailEvents — new-thread creation", () => {
 });
 
 describe("processInboundEmailEvents — tenant-scoped fallback matcher", () => {
-  it("uses matchInboundToThread's result when verb!=='reply' or thread_id is absent", async () => {
+  it("uses matchInboundToThread's result when thread_id is absent (verb='reply')", async () => {
     matchInboundToThreadMock.mockResolvedValue({
       id: "thread-existing",
       tenant_id: "tenant-a",
@@ -434,7 +514,7 @@ describe("processInboundEmailEvents — tenant-scoped fallback matcher", () => {
     });
 
     serviceTables.events = [
-      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "fwd", thread_id: null, user_id: null, envelope: {} }),
+      makeEvent({ resend_email_id: "r1", tenant_id: "tenant-a", inbound_address_id: "a1", kind: "tenant", verb: "reply", thread_id: null, user_id: null, envelope: {} }),
     ];
 
     await processInboundEmailEvents();
@@ -502,6 +582,44 @@ describe("processInboundEmailEvents — verb='bcc' dispatch (BCC-DROPBOX-BRIEF �
     // The reply-path machinery below the dispatch branch must never run for a
     // bcc event — this is what proves the branch is a full stop, not a
     // fallthrough.
+    expect(matchInboundToThreadMock).not.toHaveBeenCalled();
+    expect(resolveLeadIdentityMock).not.toHaveBeenCalled();
+    expect(emitEventMock).not.toHaveBeenCalled();
+    expect(forwardReceivingEmailMock).not.toHaveBeenCalled();
+    expect(upsertThreadNotificationMock).not.toHaveBeenCalled();
+    expect(scopedTables.email_threads ?? []).toHaveLength(0);
+    expect(scopedTables.emails ?? []).toHaveLength(0);
+
+    expect(serviceTables.events[0].status).toBe("completed");
+  });
+});
+
+describe("processInboundEmailEvents — verb='fwd' dispatch (REPLYABLE-FORWARD-BRIEF Stage 2)", () => {
+  it("delegates to processFwdRelay and never touches the reply-path guard/thread logic", async () => {
+    serviceTables.events = [
+      makeEvent({
+        resend_email_id: "resend-1",
+        tenant_id: "tenant-a",
+        inbound_address_id: "addr-fwd-1",
+        kind: "thread",
+        verb: "fwd",
+        thread_id: "thread-1",
+        user_id: null,
+        envelope: { to: [], cc: [], bcc: [], from: BASE_RECEIVING.from, subject: BASE_RECEIVING.subject },
+      }),
+    ];
+
+    const result = await processInboundEmailEvents();
+
+    expect(result).toEqual({ processed: 1, skipped: 0, errors: 0 });
+
+    expect(processFwdRelayMock).toHaveBeenCalledTimes(1);
+    expect(processFwdRelayMock.mock.calls[0][0]).toEqual({
+      tenantId: "tenant-a",
+      resendEmailId: "resend-1",
+      inboundAddressId: "addr-fwd-1",
+    });
+
     expect(matchInboundToThreadMock).not.toHaveBeenCalled();
     expect(resolveLeadIdentityMock).not.toHaveBeenCalled();
     expect(emitEventMock).not.toHaveBeenCalled();

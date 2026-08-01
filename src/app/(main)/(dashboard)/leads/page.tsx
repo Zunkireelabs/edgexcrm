@@ -1,7 +1,8 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeadsPage, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
 import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
+import { getLeadAggregates, listStatusKey, type AggregateScope } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadsTable } from "@/components/dashboard/leads-table";
 import { ListKanbanView } from "@/components/dashboard/leads/list-kanban-view";
@@ -12,7 +13,7 @@ import { FEATURES } from "@/industries/_registry";
 import { POSITION_ROUTE_MAP as POSITION_HOME_LIST } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { filterAssignableMembersByChain } from "@/lib/leads/assignable";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
-import type { TenantEntity, Industry, LeadList, PipelineWithCounts } from "@/types/database";
+import type { TenantEntity, Industry, LeadList, PipelineWithCounts, Lead, PipelineLead } from "@/types/database";
 
 const FUNNEL_LABELS: Record<string, string> = {
   lead_processing: "Lead Processing",
@@ -170,9 +171,84 @@ export default async function LeadsPage({
       ? await getListPipeline(activeList.id, tenantData.tenant.id)
       : null;
 
-  const [leads, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
+  const excludeOtherType = tenantData.tenant.industry_id === "education_consultancy";
+  const LIST_PAGE_SIZE = 25;
+  const KANBAN_PAGE_SIZE = 20;
+  const isKanban = canShowKanban || canShowFunnelKanban;
+
+  // Kanban: per-column first pages (20 cards) + true counts from lead_aggregates
+  // (migration 194) — replaces the old full-list-load getLeads(50000) (KANBAN-
+  // PAGINATION-BRIEF §3.1). List view (below) is unaffected — it keeps getLeadsPage().
+  const aggScope: AggregateScope = {
+    restrictToSelf: scope.restrictToSelf,
+    userId: scope.userId,
+    branchId: scope.branchId,
+    userBranchId: scope.userBranchId,
+    crossBranchPoolListSlug: scope.crossBranchPoolListSlug,
+    pipelineIds: scope.pipelineIds,
+    excludeOtherType,
+  };
+
+  const kanbanColumns: Record<string, { cards: Lead[]; total: number }> = {};
+  let kanbanLeadCount = 0;
+  if (canShowKanban && listPipelineResult && activeList) {
+    const [listAggregates, columnPages] = await Promise.all([
+      getLeadAggregates(tenantData.tenant.id, { ...aggScope, listIdEq: activeList.id }, new Date()),
+      Promise.all(
+        listPipelineResult.stages.map((stage) =>
+          getLeadsPage(
+            tenantData.tenant.id,
+            { ...scope, status: stage.slug, excludeOtherType },
+            1,
+            KANBAN_PAGE_SIZE,
+            { skipCount: true },
+          ).then((r) => [stage.id, stage.slug, r.leads] as const),
+        ),
+      ),
+    ]);
+    for (const [stageId, statusSlug, cards] of columnPages) {
+      kanbanColumns[stageId] = {
+        cards,
+        total: listAggregates.listStatusCounts[listStatusKey(activeList.id, statusSlug)] ?? 0,
+      };
+    }
+    kanbanLeadCount = listAggregates.total;
+  } else if (canShowFunnelKanban) {
+    const [funnelAggregates, columnPages] = await Promise.all([
+      getLeadAggregates(
+        tenantData.tenant.id,
+        { ...aggScope, listIdAny: activeFunnelLists.map((l) => l.id) },
+        new Date(),
+      ),
+      Promise.all(
+        activeFunnelLists.map((list) =>
+          getLeadsPage(
+            tenantData.tenant.id,
+            { ...scope, listId: list.id, excludeOtherType },
+            1,
+            KANBAN_PAGE_SIZE,
+            { skipCount: true },
+          ).then((r) => [list.id, r.leads] as const),
+        ),
+      ),
+    ]);
+    for (const [listId, cards] of columnPages) {
+      kanbanColumns[listId] = { cards, total: funnelAggregates.list[listId] ?? 0 };
+    }
+  }
+  // Both render branches below need the same cards typed as PipelineLead — mirrors the
+  // pre-existing `leads: any[]` prop the boards took (checklist_total/checklist_completed
+  // aren't in /api/v1/leads' column projection and aren't read by LeadCard either).
+  const kanbanColumnsForBoards = kanbanColumns as unknown as Record<
+    string,
+    { cards: PipelineLead[]; total: number }
+  >;
+
+  const [leadsResult, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
     await Promise.all([
-      getLeads(tenantData.tenant.id, { ...scope, limit: 50000, excludeOtherType: tenantData.tenant.industry_id === "education_consultancy" }),
+      isKanban
+        ? Promise.resolve({ leads: [] as Lead[], total: 0 })
+        : getLeadsPage(tenantData.tenant.id, { ...scope, excludeOtherType }, 1, LIST_PAGE_SIZE),
       getTeamMembers(tenantData.tenant.id),
       getPipelineStages(tenantData.tenant.id),
       getFormConfigsForTenant(tenantData.tenant.id),
@@ -190,9 +266,12 @@ export default async function LeadsPage({
         .eq("is_active", true)
         .order("position", { ascending: true }),
     ]);
+  const { leads, total: leadsTotal } = leadsResult;
 
   const leadCollaboratorsMap = await getLeadCollaboratorsMapForLeads(
-    serviceClient, tenantData.tenant.id, leads.map((l) => l.id),
+    serviceClient,
+    tenantData.tenant.id,
+    isKanban ? Object.values(kanbanColumns).flatMap((c) => c.cards.map((l) => l.id)) : leads.map((l) => l.id),
   );
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
@@ -247,7 +326,7 @@ export default async function LeadsPage({
     const pipeline: PipelineWithCounts = {
       ...listPipelineResult.pipeline,
       stage_count: listPipelineResult.stages.length,
-      lead_count: leads.length,
+      lead_count: kanbanLeadCount,
     };
 
     return (
@@ -257,7 +336,7 @@ export default async function LeadsPage({
           listSlug={activeList.slug}
           pipeline={pipeline}
           stages={listPipelineResult.stages}
-          leads={leads}
+          initialColumns={kanbanColumnsForBoards}
           role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
           userId={tenantData.userId}
           tenantId={tenantData.tenant.id}
@@ -282,7 +361,7 @@ export default async function LeadsPage({
         <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <FunnelKanbanBoard
           lists={activeFunnelLists}
-          leads={leads}
+          initialColumns={kanbanColumnsForBoards}
           canEdit={tenantData.permissions.canEditLeads ?? tenantData.role !== "viewer"}
           restrictToSelf={tenantData.permissions.leadScope === "own"}
           userId={tenantData.userId}
@@ -311,6 +390,8 @@ export default async function LeadsPage({
         pageHeading={pageHeading}
         pageHeadingClassName="shrink-0 text-lg font-bold pl-4 pt-4 mb-4 pr-6"
         leads={leads}
+        serverPaginated
+        initialTotal={leadsTotal}
         openTaskLeadIds={openTaskLeadIds}
         leadCollaborators={leadCollaboratorsMap}
         memberMap={memberMap}

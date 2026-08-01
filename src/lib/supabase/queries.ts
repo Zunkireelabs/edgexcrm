@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from "./server";
+import { createClient, createServiceClient, getCachedUser } from "./server";
 import { scopedClientForTenant } from "./scoped";
 import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
@@ -6,7 +6,7 @@ import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
-import { visibleLeadsBase, type LeadVisibilityScope } from "@/lib/leads/visibility-query";
+import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -20,24 +20,20 @@ export async function getCurrentUserTenant(): Promise<{
   branchId: string | null;
 } | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCachedUser();
   if (!user) return null;
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug)")
+    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug), tenants(*)")
     .eq("user_id", user.id)
     .single();
 
   if (!membership) return null;
 
-  const { data: tenant } = await supabase
-    .from("tenants")
-    .select("*")
-    .eq("id", membership.tenant_id)
-    .single();
+  const tenant = Array.isArray(membership.tenants)
+    ? membership.tenants[0] ?? null
+    : membership.tenants;
 
   if (!tenant) return null;
 
@@ -71,42 +67,6 @@ export async function getLeadListsByTenant(tenantId: string): Promise<LeadList[]
     .order("sort_order", { ascending: true });
   if (error) throw error;
   return (data as LeadList[]) || [];
-}
-
-/**
- * Live lead count per list, for sidebar stage rows. Scoped to the viewer (D1,
- * migration 179): owner/admin get tenant-wide counts (unchanged); a counselor or
- * branch-manager's badge now matches exactly the rows they see in that list,
- * instead of a tenant-wide count via the service client.
- */
-export async function getLeadListCounts(
-  tenantId: string,
-  listIds: string[],
-  // Required (not optional) so every call site makes an explicit choice — an
-  // accidentally-omitted scope must not silently fall back to tenant-wide counts.
-  // Pass `undefined` explicitly for the owner/admin (unrestricted) case.
-  scope: LeadVisibilityScope | undefined,
-): Promise<Record<string, number>> {
-  if (listIds.length === 0) return {};
-  const supabase = await createClient();
-  const counts: Record<string, number> = {};
-  // Single visibility-scoped query covering all lists, paged like the pre-migration-179
-  // version — NOT one RPC call per list (that fired N round trips on every page nav).
-  const CHUNK = 1000;
-  for (let from = 0; ; from += CHUNK) {
-    const { data, error } = await visibleLeadsBase(supabase, tenantId, scope)
-      .in("list_id", listIds)
-      .is("deleted_at", null)
-      .is("converted_at", null)
-      .range(from, from + CHUNK - 1);
-    if (error) throw error;
-    for (const row of data ?? []) {
-      const lid = (row as { list_id: string | null }).list_id;
-      if (lid) counts[lid] = (counts[lid] ?? 0) + 1;
-    }
-    if (!data || data.length < CHUNK) break;
-  }
-  return counts;
 }
 
 export async function getLeads(
@@ -210,6 +170,176 @@ export async function getLeads(
     result = await fetchPaged(buildFallbackQuery);
   }
   return result ?? [];
+}
+
+export interface LeadUtmRow {
+  id: string;
+  intake_source: string | null;
+  intake_medium: string | null;
+  intake_campaign: string | null;
+  created_at: string;
+}
+
+/**
+ * Narrow, uncapped projection for the UTM Attribution widget (UtmAnalyticsSection) —
+ * NOT a getLeads() call. That component does client-side interactive cross-filtering
+ * across 3 dimensions (source/medium/campaign) plus a date range, which a flat
+ * per-field aggregate cannot support (selecting "Google" under Source must re-count
+ * Medium/Campaign among only the matching rows) and which risks unbounded result
+ * cardinality if computed as a (source, medium, campaign, day) SQL GROUP BY instead
+ * (auto-generated per-lead campaign tags could make the combo count scale with lead
+ * count, defeating the point). Fetching only 5 narrow columns for every visible lead,
+ * uncapped, preserves that UX exactly while fixing the actual defect (truncation at
+ * the old `?? 1000` default) — see docs/DASHBOARD-AGGREGATES-BRIEF.md's report for the
+ * round-trip-count tradeoff this accepts (chunked, same as getLeads(), NOT the single
+ * round-trip the other dashboard widgets get from lead_aggregates()).
+ */
+export async function getLeadUtmRows(
+  tenantId: string,
+  scope?: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    branchId?: string | null;
+    userBranchId?: string | null;
+    crossBranchPoolListSlug?: string | null;
+  },
+): Promise<LeadUtmRow[]> {
+  const supabase = await createClient();
+
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q.is("converted_at", null).is("deleted_at", null).order("created_at", { ascending: false }).order("id", { ascending: false });
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+    return q;
+  };
+
+  const buildQuery = () =>
+    applyFilters(
+      visibleLeadsBase(supabase, tenantId, scope).select("id,intake_source,intake_medium,intake_campaign,created_at"),
+    );
+  const buildFallbackQuery = () =>
+    applyFilters(
+      supabase
+        .from("leads")
+        .select("id,intake_source,intake_medium,intake_campaign,created_at")
+        .eq("tenant_id", tenantId)
+        .eq("assigned_to", scope!.userId!),
+    );
+
+  const CHUNK = 1000;
+  const fetchPaged = async (build: () => ReturnType<typeof applyFilters>): Promise<LeadUtmRow[] | null> => {
+    const acc: LeadUtmRow[] = [];
+    for (let from = 0; ; from += CHUNK) {
+      const { data, error } = await build().range(from, from + CHUNK - 1);
+      if (error) {
+        console.error("[getLeadUtmRows] leads query page failed", { tenantId, from, error });
+        return null;
+      }
+      acc.push(...((data ?? []) as unknown as LeadUtmRow[]));
+      if (!data || data.length < CHUNK) break;
+    }
+    return acc;
+  };
+
+  let result = await fetchPaged(buildQuery);
+  if (result === null && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeadUtmRows] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
+    });
+    result = await fetchPaged(buildFallbackQuery);
+  }
+  return result ?? [];
+}
+
+/**
+ * Server-paginated sibling of getLeads(), for /leads's first-page SSR render
+ * (LEADS-SERVER-PAGINATION-BRIEF §2) — a single .range() page + exact count instead
+ * of getLeads()'s "chunk-fetch up to `limit` rows" pattern. Deliberately NOT a
+ * refactor of getLeads() itself (kept byte-for-byte unchanged): getLeads() has four
+ * other callers (home/pipeline/dashboard/insights pages) outside this PR's scope,
+ * and touching its shared filter closure risks all of them. The filter semantics
+ * here are copied to match getLeads()'s applyFilters exactly, not reimplemented.
+ */
+export async function getLeadsPage(
+  tenantId: string,
+  scope: {
+    restrictToSelf?: boolean;
+    userId?: string;
+    pipelineIds?: string[] | null;
+    branchId?: string | null;
+    userBranchId?: string | null;
+    crossBranchPoolListSlug?: string | null;
+    listId?: string | null;
+    listIds?: string[] | null;
+    excludeListIds?: string[];
+    onlyDeleted?: boolean;
+    excludeOtherType?: boolean;
+    /** Kanban column identity (KANBAN-PAGINATION-BRIEF §3.1) — a stage's `status`
+     * slug within `listId`. Ignored for the recycle bin, same as the list filters. */
+    status?: string | null;
+  } | undefined,
+  page: number,
+  pageSize: number,
+  /** skipCount: true avoids the exact-count query when the caller already has the
+   * total from lead_aggregates (KANBAN-PAGINATION-BRIEF §2b) — used for per-column
+   * Kanban first pages, where an exact count per column would be N extra round
+   * trips the aggregate already made unnecessary. Returned `total` is -1 then. */
+  opts?: { skipCount?: boolean },
+): Promise<{ leads: Lead[]; total: number }> {
+  const supabase = await createClient();
+  const wantCount = !opts?.skipCount;
+
+  const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
+    q = q
+      .is("converted_at", null)
+      .order("created_at", { ascending: false })
+      .order("id", { ascending: false });
+
+    if (scope?.onlyDeleted) {
+      q = q.not("deleted_at", "is", null);
+    } else {
+      q = q.is("deleted_at", null);
+    }
+
+    if (scope?.pipelineIds) q = q.in("pipeline_id", scope.pipelineIds);
+    if (scope?.excludeOtherType) q = q.not("tags", "cs", '{"other"}');
+
+    if (!scope?.onlyDeleted) {
+      if (scope?.listId) {
+        q = q.eq("list_id", scope.listId);
+      } else if (scope?.listIds && scope.listIds.length > 0) {
+        q = q.in("list_id", scope.listIds);
+      } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
+        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+      }
+      if (scope?.status) q = q.eq("status", scope.status);
+    }
+
+    return q;
+  };
+
+  const from = (page - 1) * pageSize;
+  const to = from + pageSize - 1;
+  const countOpts = wantCount ? ({ count: "exact" } as const) : {};
+
+  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope, countOpts));
+  const buildFallbackQuery = () =>
+    applyFilters(
+      supabase.from("leads").select("*", countOpts).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
+    );
+
+  let { data, error, count } = await buildQuery().range(from, to);
+  if (error && scope?.restrictToSelf && scope.userId) {
+    console.error("[getLeadsPage] own-scope visibility query failed; retrying assigned-only", {
+      tenantId, userId: scope.userId,
+    });
+    ({ data, error, count } = await buildFallbackQuery().range(from, to));
+  }
+  if (error) {
+    console.error("[getLeadsPage] leads query failed", { tenantId, listId: scope?.listId, error });
+    return { leads: [], total: 0 };
+  }
+  return { leads: (data ?? []) as Lead[], total: wantCount ? (count ?? 0) : -1 };
 }
 
 /**
@@ -476,11 +606,18 @@ export async function getLeadsForPipeline(
   const supabase = await createClient();
 
   // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
-  // Own-scope base is visibility-scoped via leads_visible_to_user() (uncapped; migration 179).
-  // Branch-scope stays the plain unrestricted select — its narrower members-only OR clause
-  // below is applied on top, unchanged (Decision D2 — do not unify with getLeads' branch scope).
-  let query = (options?.restrictToSelf && options.userId
-    ? visibleLeadsBase(supabase, tenantId, { restrictToSelf: true, userId: options.userId })
+  // Own-scope AND branch-scope both route through leads_visible_to_user() (uncapped;
+  // migration 179) via visibleLeadsBase() — the same base /api/v1/leads uses, so the
+  // pipeline board and /leads resolve to the identical branch predicate instead of this
+  // function's own hand-rolled `.or(assigned_to.in.(…),and(assigned_to.is.null,
+  // branch_id.eq.…))` (deleted below — see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md §4.2).
+  const useVisibilityRpc = !!((options?.restrictToSelf && options.userId) || options?.branchId);
+  let query = (useVisibilityRpc
+    ? visibleLeadsBase(supabase, tenantId, {
+        restrictToSelf: options?.restrictToSelf,
+        userId: options?.userId,
+        branchId: options?.branchId,
+      })
     : supabase.from("leads").select("*").eq("tenant_id", tenantId))
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -496,18 +633,6 @@ export async function getLeadsForPipeline(
     query = query.eq("pipeline_id", options.pipelineId);
   } else if (options?.pipelineIds) {
     query = query.in("pipeline_id", options.pipelineIds);
-  }
-
-  if (options?.branchId && !(options?.restrictToSelf && options.userId)) {
-    // Service client: tenant_users RLS hides other users' rows from the RLS client.
-    const svc = await createServiceClient();
-    const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
-    // Include unassigned leads in this branch too — see getLeads() above for why.
-    if (memberIds.length > 0) {
-      query = query.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
-    } else {
-      query = query.is("assigned_to", null).eq("branch_id", options.branchId);
-    }
   }
 
   const { data: leadsData, error: leadsError } = await query.order("created_at", { ascending: false });

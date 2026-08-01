@@ -205,7 +205,13 @@ export async function sendMessage(
     replyTo: args.replyTo,
   });
 
-  const raw = await mail.compile().build();
+  const compiled = mail.compile();
+  // nodemailer strips Bcc from built messages unless keepBcc is set
+  // (mime-node/index.js: `case 'Bcc': if (!this.keepBcc) return;`). Gmail's
+  // messages.send({raw}) has no SMTP envelope — recipients come only from
+  // headers — so without this the Bcc address is delivered to NOBODY, silently.
+  compiled.keepBcc = true;
+  const raw = await compiled.build();
 
   const encoded = raw
     .toString("base64")

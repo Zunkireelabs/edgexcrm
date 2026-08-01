@@ -50,6 +50,7 @@ export function RelatedContactsCard({ siblings, accountId, accountName }: Relate
                   <div className="min-w-0">
                     <Link
                       href={`/contacts/${s.id}`}
+                      prefetch={false}
                       className="text-sm font-medium hover:underline block truncate"
                     >
                       {name}

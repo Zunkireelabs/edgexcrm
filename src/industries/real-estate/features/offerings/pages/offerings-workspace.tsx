@@ -35,6 +35,7 @@ function OfferingCard({ offering }: { offering: EnrichedOffering }) {
   return (
     <Link
       href={`/offerings/${offering.id}`}
+      prefetch={false}
       className="block bg-card border rounded-xl p-5 hover:border-primary/40 hover:shadow-sm transition-colors"
     >
       <div className="flex items-start justify-between gap-3">

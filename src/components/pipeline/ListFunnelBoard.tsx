@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { Mail, Phone, Clock, Filter } from "lucide-react";
 import {
@@ -14,6 +14,12 @@ interface ListFunnelBoardProps {
   lists: LeadList[];
   leadsByListId: Record<string, Lead[]>;
   memberNames: Record<string, string>;
+  /** list_id -> exact lead count (lead_aggregates' `list` dimension) — replaces the
+   * capped `leadsByListId[id].length` the column header used to show. */
+  listCounts: Record<string, number>;
+  /** list_id -> sorted distinct statuses present in that list, DB-driven instead of
+   * derived from whatever page of leads happened to load. */
+  listStatuses: Record<string, string[]>;
 }
 
 function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string | null }) {
@@ -21,6 +27,7 @@ function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string
   return (
     <Link
       href={`/leads/${lead.id}`}
+      prefetch={false}
       className="block bg-card border rounded-lg p-3 hover:border-primary/40 hover:shadow-sm transition-colors"
     >
       <p className="text-sm font-medium truncate">{name}</p>
@@ -53,20 +60,8 @@ function LeadMiniCard({ lead, assigneeName }: { lead: Lead; assigneeName: string
 
 /** Read-only Kanban view keyed off lead-list membership, not pipeline stages.
  * No drag-and-drop by design — this is a view, not a move tool. */
-export function ListFunnelBoard({ lists, leadsByListId, memberNames }: ListFunnelBoardProps) {
+export function ListFunnelBoard({ lists, leadsByListId, memberNames, listCounts, listStatuses }: ListFunnelBoardProps) {
   const [columnStatusFilters, setColumnStatusFilters] = useState<Record<string, string>>({});
-
-  // Derive available statuses per column from the leads already fetched.
-  // Each list may have different statuses; build from actual lead.status values.
-  const statusesPerList = useMemo(() => {
-    const map: Record<string, string[]> = {};
-    for (const list of lists) {
-      const listLeads = leadsByListId[list.id] ?? [];
-      const unique = [...new Set(listLeads.map((l) => l.status).filter((s): s is string => Boolean(s)))].sort();
-      map[list.id] = unique;
-    }
-    return map;
-  }, [lists, leadsByListId]);
 
   return (
     <div className="flex-1 flex gap-4 overflow-x-auto pb-2">
@@ -76,7 +71,7 @@ export function ListFunnelBoard({ lists, leadsByListId, memberNames }: ListFunne
         const leads = activeStatus && activeStatus !== "all"
           ? allLeads.filter((l) => l.status === activeStatus)
           : allLeads;
-        const availableStatuses = statusesPerList[list.id] ?? [];
+        const availableStatuses = listStatuses[list.id] ?? [];
         return (
           <div key={list.id} className="flex flex-col w-80 min-w-80 shrink-0 h-full">
             <div className="flex items-center gap-2 px-3 py-2.5 bg-card rounded-t-lg border border-b-0">
@@ -86,7 +81,7 @@ export function ListFunnelBoard({ lists, leadsByListId, memberNames }: ListFunne
               />
               <h3 className="text-sm font-semibold truncate flex-1">{list.name}</h3>
               <span className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 font-medium">
-                {leads.length}
+                {listCounts[list.id] ?? 0}
               </span>
               {availableStatuses.length > 0 && (
                 <Popover>

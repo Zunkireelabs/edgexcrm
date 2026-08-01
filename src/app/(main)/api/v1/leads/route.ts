@@ -34,6 +34,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { getSourceFacet } from "@/lib/leads/aggregates";
 import {
   normalizeEmail,
   normalizePhone,
@@ -58,6 +59,57 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
+
+// List-view column projection — every Lead column the table can render, EXCEPT
+// file_urls (a JSONB blob the table never reads — the dominant remaining cost in
+// the old `select("*")` payload). custom_fields IS included: the table reads it
+// live at render time (leads-table.tsx `cf:` columns) and the column picker's
+// "available custom fields" list is derived from whatever page is loaded — SSR
+// page 1 already has it, so an API page without it would blank out/vanish custom
+// columns on every page past 1. At pageSize<=100 the per-page JSONB cost is
+// negligible; the 34MB figure was a 16,898-row artifact of loading everything at
+// once, not of this one column. The single-lead detail path (GET
+// /api/v1/leads/[id]) keeps `select("*")`; only this list endpoint narrows.
+// A SINGLE string-literal token (backslash line continuation, not `+` concatenation
+// or array.join()) — supabase-js's select() type inference parses the literal type of
+// its argument to build the result row type; `+`/`.join()` both widen to plain
+// `string`, which collapses that inference to `GenericStringError` under tsc.
+const LEADS_LIST_COLUMNS = "id,tenant_id,pipeline_id,session_id,step,is_final,status,\
+first_name,last_name,email,phone,city,country,\
+stage_id,assigned_to,entity_id,\
+intake_source,intake_medium,intake_campaign,ref_code,form_source,\
+preferred_contact_method,tags,lead_type,display_id,account_id,\
+form_config_id,deleted_at,converted_at,converted_contact_id,idempotency_key,\
+ai_score,ai_priority,ai_score_updated_at,\
+normalized_email,merged_into,\
+company_name,designation,prospect_industry,owner_id,salutation,company_email,\
+branch_id,list_id,destinations,field_of_study,degree_level,\
+nationality,intake_account,custom_fields,\
+pre_app_fee_status,pre_app_fee_amount,pre_app_fee_notes,\
+see_gpa,see_institution,see_passed_year,\
+plus_two_gpa,plus_two_institution,plus_two_passed_year,\
+bachelor_gpa,bachelor_institution,bachelor_passed_year,\
+masters_gpa,masters_institution,masters_passed_year,\
+ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
+archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
+last_activity_at,created_at,updated_at";
+
+// Sort allow-list — never interpolate a client-supplied column name into the query.
+// Only "created_at" is covered by an index (idx_leads_tenant_created_active); the
+// others page-table already offered client-side and are kept for parity, at the
+// cost of an in-memory sort node over the tenant's active row set (bounded by
+// tenant size, not full-table — see PR report for measured cost).
+const SORT_COLUMNS: Record<string, string[]> = {
+  created_at: ["created_at"],
+  last_activity_at: ["last_activity_at"],
+  updated_at: ["updated_at"],
+  first_name: ["first_name", "last_name"],
+  email: ["email"],
+};
+
+// Only UUID-shaped tokens are ever interpolated into a raw `.or()` filter string
+// (the `assignees` filter below) — anything else is dropped rather than trusted.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function withCors(response: NextResponse): NextResponse {
   for (const [key, value] of Object.entries(CORS_HEADERS)) {
@@ -96,21 +148,70 @@ export async function GET(request: NextRequest) {
   let assignedTo = searchParams.get("assigned_to");
   const includeConverted = searchParams.get("include_converted") === "1";
   const listSlug = searchParams.get("list");
+  const funnelKey = searchParams.get("funnel");
+  // Count is exact but costly (measured 432ms on prod's 16,898-row Admizz tenant — a
+  // seq scan forced by the tags filter). Callers fetch it once per filter-set change
+  // (page=1, or any filter/search/sort edit) and reuse the total client-side while
+  // paging within that same filter set; count=0 skips the recompute.
+  const wantCount = searchParams.get("count") !== "0";
+
+  // Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
+  // prospect industry) — applied server-side against the FULL matching set, not just
+  // the loaded page. All values below are passed through supabase-js's parameterized
+  // filter methods (.eq/.in/.contains/.gte), never string-interpolated into a raw
+  // filter, except `assignees` — its UUID-validated ids are interpolated into an
+  // `.or()` string below because that's the only way to express "unassigned OR in
+  // this list"; validation happens right before that interpolation.
+  const formFilter = searchParams.get("form");
+  const tagFilter = searchParams.get("tag");
+  const createdFilter = searchParams.get("created"); // today | week | month
+  const industryFilter = searchParams.get("industry"); // prospect_industry value, or "__none__"
+  const sourceFilter = (searchParams.get("source") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  const assigneesTokens = (searchParams.get("assignees") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+  // Collaborator filter is user ids only (never leaked into a raw string — see below),
+  // so no UUID validation needed for injection-safety; malformed ids just match nothing.
+  const collaboratorIds = (searchParams.get("collaborators") || "")
+    .split(",").map((s) => s.trim()).filter(Boolean);
+
+  // Sort — allow-listed against SORT_COLUMNS, never interpolated. id is always the
+  // final tiebreaker so a paginated sort never reshuffles rows between pages.
+  const sortKey = searchParams.get("sort") || "created_at";
+  const sortColumns = SORT_COLUMNS[sortKey];
+  if (!sortColumns) {
+    return apiValidationError({ sort: [`Unknown sort key "${sortKey}"`] });
+  }
+  const orderParam = searchParams.get("order");
+  if (orderParam !== null && orderParam !== "asc" && orderParam !== "desc") {
+    return apiValidationError({ order: ['order must be "asc" or "desc"'] });
+  }
+  const sortAscending = orderParam === "asc";
 
   const supabase = await createServiceClient();
   const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const isAdminOrOwner = auth.role === "owner" || auth.role === "admin";
 
-  // Resolve ?list=slug for lead-lists feature
+  // Resolve ?list=slug / ?funnel=key for lead-lists feature. Mirrors the page's own
+  // resolution (src/app/(main)/(dashboard)/leads/page.tsx) exactly, including the
+  // "delete" slug's special recycle-bin meaning and the is_staging admin/owner gate —
+  // this endpoint must reach the identical row set the page would render for the
+  // same URL, not a parallel/divergent implementation.
   let resolvedListId: string | null = null;
-  let archiveListIds: string[] = [];
+  let funnelListIds: string[] = [];
+  let excludeListIds: string[] = [];
+  let onlyDeleted = false;
   if (getFeatureAccess(auth.industryId, FEATURES.LEAD_LISTS)) {
     const { data: lists } = await supabase
       .from("lead_lists")
-      .select("id, slug, is_archive, access")
+      .select("id, slug, is_archive, is_staging, funnel_key, access")
       .eq("tenant_id", auth.tenantId);
 
     if (lists) {
-      archiveListIds = lists.filter((l) => l.is_archive).map((l) => l.id);
+      // Master view (no list/funnel) excludes both archive AND staging lists — the
+      // page's `excludeIds` (page.tsx) filters on `is_archive || is_staging`; the old
+      // version of this route only excluded is_archive, a real parity gap.
+      excludeListIds = lists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
 
       if (listSlug) {
         const targetList = lists.find((l) => l.slug === listSlug);
@@ -118,6 +219,9 @@ export async function GET(request: NextRequest) {
           log.info({ listSlug }, "List not found");
           return apiForbidden();
         }
+        // Staging lists (e.g. New Leads) are admin/owner only — direct URL/param
+        // bypass must 403 the same way the page 404s (page.tsx: `notFound()`).
+        if (targetList.is_staging && !isAdminOrOwner) return apiForbidden();
         const accessible = canAccessList(
           auth.permissions,
           targetList.access as { mode: string; positionIds?: string[] },
@@ -125,7 +229,29 @@ export async function GET(request: NextRequest) {
           targetList.id,
         );
         if (!accessible) return apiForbidden();
-        resolvedListId = targetList.id;
+        // The recycle bin is a real lead_lists row (slug "delete") whose access/staging
+        // gates above still apply — but instead of filtering to its list_id, it flips
+        // the query to the soft-deleted set and skips every other list filter (a
+        // deleted lead's old list_id is irrelevant; the bin spans all lists).
+        if (targetList.slug === "delete") {
+          onlyDeleted = true;
+        } else {
+          resolvedListId = targetList.id;
+        }
+      } else if (funnelKey) {
+        // it_agency funnel workspace: all of the funnel's stage-lists at once,
+        // access-filtered exactly like the page's activeFunnelLists.
+        funnelListIds = lists
+          .filter((l) => l.funnel_key === funnelKey)
+          .filter((l) =>
+            canAccessList(
+              auth.permissions,
+              l.access as { mode: string; positionIds?: string[] },
+              auth.positionId,
+              l.id,
+            ),
+          )
+          .map((l) => l.id);
       }
     }
   }
@@ -138,18 +264,40 @@ export async function GET(request: NextRequest) {
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
   const useSharedPool = !!(auth.branchId && isSharedPoolList(auth.permissions, resolvedListId));
 
-  // Only own-scope routes through the uncapped visibility RPC (the actual fix — needs
-  // the RLS-context client for auth.uid()). Shared-pool, branch-scope, and unrestricted
-  // (owner/admin) all stay on the plain service-client query, filtered below exactly as
-  // before this PR — branch-scope deliberately keeps its own narrower, hand-rolled OR
-  // clause rather than adopting leads_visible_to_user()'s wider branch predicate (that
-  // predicate also matches unassigned leads whose branch_id matches, which this endpoint
-  // never surfaced before; same reasoning as Decision D2 for getLeadsForPipeline).
-  let query = (!useSharedPool && scope.restrictToSelf && scope.userId)
-    ? visibleLeadsBase(userClient, auth.tenantId, scope, { count: "exact" })
-    : supabase.from("leads").select("*", { count: "exact" }).eq("tenant_id", auth.tenantId);
+  // Own-scope AND branch-scope both route through the uncapped visibility RPC (needs
+  // the RLS-context client for auth.uid() — leads_visible_to_user() gates on it for
+  // every p_scope, not just 'own'). Shared-pool and unrestricted (owner/admin) stay on
+  // the plain service-client query. Branch scope used to keep its own narrower,
+  // hand-rolled `.or()` clause built from an unbounded `lead_branches` fetch — that's
+  // the 68KB-URL 503 (>1,855 shared ids) and the silent 1,000-row PostgREST truncation
+  // this fix removes. leads_visible_to_user()'s branch predicate is a strict superset
+  // (also matches unassigned leads whose branch_id matches) and is what dashboard/
+  // insights/pipeline counts already use — collapsing onto it is the fix, not a
+  // side effect (see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md).
+  const countOpts = wantCount ? { count: "exact" as const } : {};
+  const useVisibilityRpc = !useSharedPool && ((scope.restrictToSelf && scope.userId) || !!scope.branchId);
+  // Collaborator filter needs an inner-join embed to filter on lead_collaborators.user_id
+  // rather than resolving matching lead ids client-side first — a popular collaborator can
+  // hold 1000+ historical leads (four Admizz interns hold 1,272-1,319), and bridging that
+  // through a caller-built `.in("id", [...])` array is exactly the undici 16KB-URL pattern
+  // that caused the 300-id visibility bug (non-negotiable #1). PostgREST compiles a filter
+  // on an embedded to-many resource to an EXISTS-style semi-join, so it does not duplicate
+  // parent rows the way a literal SQL INNER JOIN would — confirmed against this repo's other
+  // paginated+counted `!inner` filters (e.g. badge-counts route.ts). RETURNS SETOF leads on
+  // leads_visible_to_user() (migration 179) means the embed works over the RPC path too.
+  // Widened to `string` (not the LEADS_LIST_COLUMNS literal type) — the join-embed
+  // branch isn't a shape select()'s compile-time parser recognizes, which otherwise
+  // collapses inference to `ParserError` (see the LEADS_LIST_COLUMNS comment above).
+  // The `data as Lead[]` / `Record<string, unknown>` casts below already carry the
+  // real typing, same as every other dynamically-shaped query in this route.
+  const selectColumns: string = collaboratorIds.length > 0
+    ? `${LEADS_LIST_COLUMNS},lead_collaborators!inner(user_id)`
+    : LEADS_LIST_COLUMNS;
+  let query = useVisibilityRpc
+    ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(selectColumns)
+    : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
 
-  query = query.is("deleted_at", null);
+  query = onlyDeleted ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
 
   if (!includeConverted) {
     query = query.is("converted_at", null);
@@ -158,45 +306,48 @@ export async function GET(request: NextRequest) {
   // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
   query = query.not("tags", "cs", '{"other"}');
 
-  // Apply list filter
-  if (resolvedListId) {
-    query = query.eq("list_id", resolvedListId);
-  } else if (archiveListIds.length > 0) {
-    // Master view: exclude leads in archive lists
-    query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
+  // Apply list/funnel filters — skipped entirely for the recycle bin (onlyDeleted spans
+  // every list; a deleted lead's old list_id is not a filter axis there), mirroring
+  // getLeads's applyFilters (src/lib/supabase/queries.ts).
+  if (!onlyDeleted) {
+    if (resolvedListId) {
+      query = query.eq("list_id", resolvedListId);
+    } else if (funnelListIds.length > 0) {
+      query = query.in("list_id", funnelListIds);
+    } else if (excludeListIds.length > 0) {
+      // Master view: exclude leads in archive/staging lists
+      query = query.or(`list_id.is.null,list_id.not.in.(${excludeListIds.join(",")})`);
+    }
   }
+
+  // Hoisted (not just applied to `query` below) so the facets=source branch further
+  // down can pass the SAME resolved id set into lead_aggregates() instead of
+  // re-deriving this scope logic a second time — see migration 194's ADDENDUM header.
+  let sharedPoolAssignedToAny: string[] | null = null;
 
   if (useSharedPool) {
     // auth.branchMemberIds is empty for own-scope, so resolve explicitly.
     const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId!);
     query = query.in("assigned_to", memberIds);
     assignedTo = null;
+    sharedPoolAssignedToAny = memberIds;
   } else if (scope.restrictToSelf) {
     assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
-  } else if (scope.branchId) {
-    // Reverted to the pre-existing narrower branch-scope logic (unchanged by this PR):
-    // leads assigned to branch members AND leads shared into this branch via lead_branches.
-    const { data: sharedRows } = await supabase
-      .from("lead_branches")
-      .select("lead_id")
-      .eq("tenant_id", auth.tenantId)
-      .eq("branch_id", scope.branchId);
-    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
-    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
-      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
-    } else if (sharedLeadIds.length > 0) {
-      query = query.in("id", sharedLeadIds);
-    } else {
-      query = query.in("assigned_to", auth.branchMemberIds);
-    }
   }
+  // scope.branchId (non-shared-pool): no further filter needed here — the base query
+  // above already routed through visibleLeadsBase()'s branch-scope RPC, which is the
+  // uncapped, unbounded-URL-free replacement for the deleted lead_branches fetch + .or().
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
-  // team/own users cannot widen or redirect their scope via this param.
+  // team/own users cannot widen or redirect their scope via this param. Same shape as
+  // the shared-pool AND-filter above (both are "further restrict an already-resolved
+  // 'all' scope by an assigned_to allowlist") — the facets branch below reuses whichever
+  // of the two is active.
   const adminBranchFilter = searchParams.get("branch_id");
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
     const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
     query = query.in("assigned_to", memberIds);
+    sharedPoolAssignedToAny = memberIds;
   }
 
   // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
@@ -222,26 +373,175 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  // ── Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
+  // prospect industry) — composed with every filter above via AND, same as status/
+  // search. These used to be applied client-side over whichever page happened to be
+  // loaded, which silently narrowed a "300 matching leads" filter down to "2, because
+  // that's all that fit on this page" (LEADS-SERVER-PAGINATION-BRIEF review). ──
+  if (formFilter && formFilter !== "all") {
+    query = query.eq("form_config_id", formFilter);
+  }
+
+  if (assigneesTokens.length > 0) {
+    const wantsUnassigned = assigneesTokens.includes("unassigned");
+    const ids = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
+    if (wantsUnassigned && ids.length > 0) {
+      query = query.or(`assigned_to.is.null,assigned_to.in.(${ids.join(",")})`);
+    } else if (wantsUnassigned) {
+      query = query.is("assigned_to", null);
+    } else if (ids.length > 0) {
+      query = query.in("assigned_to", ids);
+    }
+  }
+
+  if (collaboratorIds.length > 0) {
+    query = query.in("lead_collaborators.user_id", collaboratorIds);
+  }
+
+  if (sourceFilter.length > 0) {
+    query = query.in("intake_source", sourceFilter);
+  }
+
+  if (tagFilter && tagFilter !== "all") {
+    query = query.contains("tags", [tagFilter]);
+  }
+
+  if (industryFilter && industryFilter !== "all") {
+    query = industryFilter === "__none__"
+      ? query.is("prospect_industry", null)
+      : query.eq("prospect_industry", industryFilter);
+  }
+
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  const CREATED_WINDOW_MS: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
+  const createdAfter = createdFilter && createdFilter !== "all" && CREATED_WINDOW_MS[createdFilter]
+    ? new Date(Date.now() - CREATED_WINDOW_MS[createdFilter])
+    : null;
+
+  if (createdAfter) {
+    query = query.gte("created_at", createdAfter.toISOString());
+  }
+
+  // Opt-in Source facet (?facets=source) — same "opt-in, separate round-trip" shape
+  // as ?counts=1 (lead-lists route). Computed via lead_aggregates() (migration 194's
+  // ADDENDUM) over every filter above EXCEPT source itself, per the brief: the option
+  // list AND its counts used to come from `localLeads` — the current 25-row server
+  // page — which is what made this facet broken rather than merely incomplete once
+  // #332 shipped 25-row pages. Recycle-bin (onlyDeleted) leads are excluded from
+  // lead_aggregates unconditionally, so this facet is not offered there — a known,
+  // narrow gap (the recycle bin has no source dropdown today).
+  if (searchParams.get("facets") === "source" && !onlyDeleted) {
+    // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
+    // means the page returns zero leads, so the facet must be empty too. aggregates.ts
+    // omits an empty p_pipeline_ids (→ NULL → no restriction), which would otherwise
+    // count the whole tenant for a user whose list is empty.
+    if (auth.permissions.pipelineAccess !== "all" && auth.permissions.pipelineAccess.ids.size === 0) {
+      return apiSuccess({ facet: "source", options: [] });
+    }
+
+    const assigneesIds = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
+    const wantsUnassigned = assigneesTokens.includes("unassigned");
+    const validCollaboratorIds = collaboratorIds.filter((id) => UUID_RE.test(id));
+
+    if (scope.restrictToSelf && !scope.userId) {
+      throw new Error("leads/facets: scope.restrictToSelf requires scope.userId");
+    }
+
+    // Facet must follow the page: branch scope now resolves through the same
+    // leads_visible_to_user() 'branch' predicate the base query uses above, not the
+    // deleted 'ids_any' hand-rolled id-array path. Page and facet resolving to the
+    // identical predicate is the whole point of this fix.
+    const facetScope: "own" | "all" | "branch" =
+      !useSharedPool && scope.restrictToSelf && scope.userId
+        ? "own"
+        : scope.branchId && !useSharedPool
+          ? "branch"
+          : "all";
+
+    let options: Awaited<ReturnType<typeof getSourceFacet>>;
+    try {
+      options = await getSourceFacet({
+        tenantId: auth.tenantId,
+        scope: facetScope,
+        user: facetScope === "own" ? scope.userId : null,
+        userBranchId: scope.userBranchId,
+        crossPoolSlug: scope.crossBranchPoolListSlug,
+        branchId: facetScope === "branch" ? scope.branchId : null,
+        sharedPoolAssignedToAny,
+        pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
+        status: status || null,
+        assigneesAny: assigneesIds.length > 0 ? assigneesIds : null,
+        includeUnassigned: wantsUnassigned,
+        collaboratorIds: validCollaboratorIds.length > 0 ? validCollaboratorIds : null,
+        tag: tagFilter && tagFilter !== "all" ? tagFilter : null,
+        prospectIndustry: industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null,
+        prospectIndustryNone: industryFilter === "__none__",
+        formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
+        createdAfter,
+        // Mirror the page query's either/or (route.ts:309-316) exactly: an explicit list
+        // wins outright, a funnel's list set wins next, and the archive/staging exclusion
+        // only applies when neither is present. Passing more than one of these unconditionally
+        // ANDs them in lead_aggregates — for a staging list that becomes `list_id = X AND
+        // list_id NOT IN (…X…)`, an unsatisfiable predicate that zeroed the facet.
+        listIdEq: resolvedListId,
+        listIdAny: !resolvedListId && funnelListIds.length > 0 ? funnelListIds : null,
+        excludeListIds:
+          !resolvedListId && funnelListIds.length === 0 && excludeListIds.length > 0
+            ? excludeListIds
+            : null,
+        search: search ? search.replace(/[,().]/g, "") : null,
+        includeConverted,
+      });
+    } catch (err) {
+      log.error({ err }, "Failed to fetch source facet");
+      return apiServiceUnavailable("Failed to fetch source facet");
+    }
+
+    log.info({ tenantId: auth.tenantId, options: options.length }, "Source facet fetched");
+    return apiSuccess({ facet: "source", options });
+  }
+
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
-  const { data, error, count } = await query
-    .order("last_activity_at", { ascending: false })
-    .range(from, to);
+  // created_at DESC, id DESC is index-ordered (idx_leads_tenant_created_active) — no
+  // sort node, no page drift. Non-default sort keys still get id DESC as the final
+  // tiebreaker so ties never reshuffle rows between pages.
+  for (const col of sortColumns) {
+    query = query.order(col, { ascending: sortAscending });
+  }
+  query = query.order("id", { ascending: false });
+
+  const { data, error, count } = await query.range(from, to);
 
   if (error) {
     log.error({ err: error }, "Failed to fetch leads");
     return apiServiceUnavailable("Failed to fetch leads");
   }
 
-  const total = count || 0;
-  log.info({ total, page, pageSize }, "Leads fetched");
+  // -1 sentinel: count was skipped (?count=0, §3 — exact count is ~432ms on Admizz's
+  // 16,898 rows). The caller must have a cached total from a prior count=1 response
+  // for the same filter set before it ever sends count=0; apiPaginated cannot enforce
+  // that contract, only signal "not computed" instead of silently lying with 0.
+  const total = wantCount ? (count ?? 0) : -1;
+  log.info({ total, page, pageSize, wantCount }, "Leads fetched");
 
-  return apiPaginated(data as Lead[], {
+  // Strip the lead_collaborators embed — it only existed to filter (see selectColumns
+  // above), it is not part of the Lead shape the client expects. `data`'s inferred type
+  // is the widened-string fallback (see selectColumns above), hence the `unknown` hop.
+  const responseData = collaboratorIds.length > 0
+    ? (data as unknown as Array<Record<string, unknown>>).map((row) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { lead_collaborators, ...rest } = row;
+        return rest;
+      })
+    : data;
+
+  return apiPaginated(responseData as unknown as Lead[], {
     page,
     pageSize,
     total,
-    totalPages: Math.ceil(total / pageSize),
+    totalPages: total === -1 ? -1 : Math.ceil(total / pageSize),
   });
 }
 

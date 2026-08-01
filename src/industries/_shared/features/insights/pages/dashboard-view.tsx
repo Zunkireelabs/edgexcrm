@@ -4,7 +4,9 @@ import React from "react";
 import { DashboardRenderer } from "../components/dashboard-renderer";
 import { DashboardSwitcher } from "../components/dashboard-switcher";
 import { WIDGET_SIZE, type WidgetSize } from "../lib/widget-catalog";
-import type { Dashboard, Lead, PipelineStage } from "@/types/database";
+import type { Dashboard, PipelineStage } from "@/types/database";
+import type { LeadAggregates } from "@/lib/leads/aggregates";
+import type { LeadUtmRow } from "@/lib/supabase/queries";
 
 // "stat" and "half" widgets group with consecutive same-size widgets into a
 // row; "full" always stands alone. Lead-widget sizes reproduce the pre-Phase-2
@@ -16,11 +18,12 @@ const GROUP_CLASS: Partial<Record<WidgetSize, string>> = {
 };
 
 interface RendererProps {
-  leads: Lead[];
+  aggregates: LeadAggregates;
+  sourceCounts: Record<string, number>;
+  utmRows: LeadUtmRow[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
-  formMap: Record<string, string>;
   currentUserId?: string | null;
   currentTenantUserId?: string | null;
   industryId?: string | null;
@@ -61,11 +64,12 @@ function renderWidgets(widgets: string[], props: RendererProps) {
 
 interface DashboardViewProps {
   dashboard: Dashboard;
-  leads: Lead[];
+  aggregates: LeadAggregates;
+  sourceCounts: Record<string, number>;
+  utmRows: LeadUtmRow[];
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
-  formMap: Record<string, string>;
   visibleDashboards: Dashboard[];
   canManage: boolean;
   industryId: string | null;
@@ -75,11 +79,12 @@ interface DashboardViewProps {
 
 export function DashboardView({
   dashboard,
-  leads,
+  aggregates,
+  sourceCounts,
+  utmRows,
   stages,
   memberMap,
   memberNames,
-  formMap,
   visibleDashboards,
   canManage,
   industryId,
@@ -104,11 +109,12 @@ export function DashboardView({
       ) : (
         <div className="space-y-6">
           {renderWidgets(dashboard.widgets, {
-            leads,
+            aggregates,
+            sourceCounts,
+            utmRows,
             stages,
             memberMap,
             memberNames,
-            formMap,
             currentUserId,
             currentTenantUserId,
             industryId,

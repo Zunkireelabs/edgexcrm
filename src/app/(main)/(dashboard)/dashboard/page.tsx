@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeads, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranchIds } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranchIds } from "@/lib/supabase/queries";
+import { getLeadAggregates, resolveSourceCounts } from "@/lib/leads/aggregates";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
 import { canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
@@ -45,8 +46,8 @@ export default async function DashboardPage() {
     scope.branchId = effectiveBranch;
   }
 
-  const [leads, teamMembers, stages, formConfigs] = await Promise.all([
-    getLeads(tenantData.tenant.id, scope),
+  const [aggregates, teamMembers, stages, formConfigs] = await Promise.all([
+    getLeadAggregates(tenantData.tenant.id, scope, new Date()),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
     getFormConfigsForTenant(tenantData.tenant.id),
@@ -60,6 +61,7 @@ export default async function DashboardPage() {
   const formMap = Object.fromEntries(
     formConfigs.map((f) => [f.id, f.name])
   );
+  const sourceCounts = resolveSourceCounts(aggregates.sourceCombos, formMap);
 
   return (
     <div className="space-y-6">
@@ -67,18 +69,18 @@ export default async function DashboardPage() {
       <h1 className="text-lg font-bold">Dashboard</h1>
 
       {/* Stats Cards */}
-      {canSeeWidget(permissions, "stats") && <StatsCards leads={leads} stages={stages} />}
+      {canSeeWidget(permissions, "stats") && <StatsCards aggregates={aggregates} stages={stages} />}
 
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {canSeeWidget(permissions, "leads-by-stage") && (
-          <LeadsByStageChart leads={leads} stages={stages} />
+          <LeadsByStageChart status={aggregates.status} stages={stages} />
         )}
         {canSeeWidget(permissions, "leads-by-source") && (
-          <LeadsBySourceChart leads={leads} formMap={formMap} />
+          <LeadsBySourceChart sourceCounts={sourceCounts} />
         )}
         {canSeeWidget(permissions, "leads-by-counselor") && (
-          <LeadsByCounselorChart leads={leads} memberMap={memberMap} memberNames={memberNames} />
+          <LeadsByCounselorChart assignedToCounts={aggregates.counselor} memberMap={memberMap} memberNames={memberNames} />
         )}
       </div>
 

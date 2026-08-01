@@ -90,6 +90,7 @@ function CommitmentCard({
         <div className="flex items-center gap-1 shrink-0">
           <Link
             href={`/leads/${commitment.lead_id}`}
+            prefetch={false}
             onPointerDown={(e) => e.stopPropagation()}
             className="text-muted-foreground hover:text-foreground"
             title="Open investor"

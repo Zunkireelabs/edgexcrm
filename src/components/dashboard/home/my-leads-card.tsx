@@ -50,6 +50,7 @@ export function MyLeadsCard({ leads, unreadLeadIds }: MyLeadsCardProps) {
                 <Link
                   key={lead.id}
                   href={`/leads/${lead.id}`}
+                  prefetch={false}
                   className="flex items-center gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors group"
                 >
                   {isUnread ? (

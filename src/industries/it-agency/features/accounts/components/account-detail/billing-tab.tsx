@@ -76,6 +76,7 @@ export function BillingTab({ accountId, isAdmin }: BillingTabProps) {
               {inv.projects && (
                 <Link
                   href={`/projects/${inv.project_id}`}
+                  prefetch={false}
                   onClick={(e) => e.stopPropagation()}
                   className="text-xs text-muted-foreground hover:text-foreground hover:underline"
                 >

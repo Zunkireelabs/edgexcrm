@@ -30,7 +30,14 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 10m
+          # 10m -> 25m, same GHCR-pull throughput problem as deploy.yml/deploy-staging.yml
+          # (three stage deploys timed out at ~604-607s on 2026-07-31). This one is the
+          # worst case of the three: it pulls :prod-<older-sha>, a tag that by definition
+          # is NOT the image currently on the box, so the layer cache does not help and
+          # every rollback is a cold pull. And it runs during an incident, when prod is
+          # already down — a rollback that times out at 10m turns a bad deploy into a
+          # prolonged outage. Longest realistic pull gets the longest window.
+          command_timeout: 25m
           envs: GHCR_USER,GHCR_TOKEN,TARGET_SHA,ROLLBACK_REASON
           script: |
             set -e

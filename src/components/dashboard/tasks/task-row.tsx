@@ -92,17 +92,17 @@ export function TaskRow({
             <span className="text-xs text-muted-foreground">→ {task.assignee_name}</span>
           )}
           {leadName && task.leads && (
-            <Link href={`/leads/${task.leads.id}`} className="text-xs text-blue-600 hover:underline truncate">
+            <Link href={`/leads/${task.leads.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
               {leadName}
             </Link>
           )}
           {task.deals && (
-            <Link href={`/deals/${task.deals.id}`} className="text-xs text-blue-600 hover:underline truncate">
+            <Link href={`/deals/${task.deals.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
               {task.deals.name}
             </Link>
           )}
           {task.projects && (
-            <Link href={`/projects/${task.projects.id}`} className="text-xs text-blue-600 hover:underline truncate">
+            <Link href={`/projects/${task.projects.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
               {task.projects.name}
             </Link>
           )}

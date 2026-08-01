@@ -10,6 +10,7 @@ import {
   getLeads,
   getBranchIds,
 } from "@/lib/supabase/queries";
+import { getLeadAggregates } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
 import { PipelineSelector } from "@/components/pipeline/PipelineSelector";
@@ -61,17 +62,26 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       : null;
     const visibleLists = intakeStagingList ? [intakeStagingList, ...funnelLists] : funnelLists;
 
-    const [leadsPerList, teamMembers] = await Promise.all([
+    const excludeOtherType = tenantData.tenant.industry_id === "education_consultancy";
+
+    // Card loading stays as-is (getLeads, capped at its default 1,000/list) — per-column
+    // card pagination is the follow-up brief (merges with the Kanban item at
+    // leads/page.tsx:184). The column HEADER count and status chips below come from
+    // lead_aggregates() instead — exact, uncapped — so a column can show a true count
+    // above a partial card list. That is a known, accepted, temporary state; see the
+    // PR report.
+    const [leadsPerList, teamMembers, aggregates] = await Promise.all([
       Promise.all(
         visibleLists.map((list) =>
           getLeads(tenantData.tenant.id, {
             ...pipelineScope,
             listId: list.id,
-            excludeOtherType: tenantData.tenant.industry_id === "education_consultancy",
+            excludeOtherType,
           })
         )
       ),
       getTeamMembers(tenantData.tenant.id),
+      getLeadAggregates(tenantData.tenant.id, { ...pipelineScope, excludeOtherType }, new Date()),
     ]);
 
     const leadsByListId: Record<string, (typeof leadsPerList)[number]> = {};
@@ -89,7 +99,13 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         <div className="flex items-center justify-between shrink-0 mb-4">
           <h1 className="text-lg font-bold">Pipeline</h1>
         </div>
-        <ListFunnelBoard lists={visibleLists} leadsByListId={leadsByListId} memberNames={memberNames} />
+        <ListFunnelBoard
+          lists={visibleLists}
+          leadsByListId={leadsByListId}
+          memberNames={memberNames}
+          listCounts={aggregates.list}
+          listStatuses={aggregates.listStatuses}
+        />
       </div>
     );
   }

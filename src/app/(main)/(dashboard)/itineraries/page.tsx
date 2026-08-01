@@ -117,7 +117,7 @@ export default async function ItinerariesPage() {
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-border last:border-0 hover:bg-muted/40 transition-colors">
                   <td className="px-4 py-3">
-                    <Link href={`/leads/${r.id}`} className="font-medium text-primary hover:underline">
+                    <Link href={`/leads/${r.id}`} prefetch={false} className="font-medium text-primary hover:underline">
                       {r.name}
                     </Link>
                   </td>

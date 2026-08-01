@@ -2,7 +2,8 @@
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Lead, PipelineStage } from "@/types/database";
+import type { PipelineStage } from "@/types/database";
+import type { WeekBucketCounts } from "@/lib/leads/aggregates";
 
 // Status colors matching the theme
 const STATUS_COLORS: Record<string, string> = {
@@ -24,17 +25,16 @@ const CHART_COLORS = [
 ];
 
 interface LeadsByStageChartProps {
-  leads: Lead[];
+  status: Record<string, WeekBucketCounts>;
   stages?: PipelineStage[];
 }
 
-export function LeadsByStageChart({ leads, stages }: LeadsByStageChartProps) {
-  // Group leads by status
-  const statusCounts = leads.reduce((acc, lead) => {
-    const status = lead.status || "unknown";
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+export function LeadsByStageChart({ status, stages }: LeadsByStageChartProps) {
+  // Group leads by status (pre-aggregated — see migration 194's `status` dimension)
+  const statusCounts: Record<string, number> = {};
+  for (const [key, bucket] of Object.entries(status)) {
+    if (bucket.all > 0) statusCounts[key] = bucket.all;
+  }
 
   // Convert to chart data
   const data = Object.entries(statusCounts)
@@ -59,7 +59,7 @@ export function LeadsByStageChart({ leads, stages }: LeadsByStageChartProps) {
     return CHART_COLORS[index % CHART_COLORS.length];
   };
 
-  const total = leads.length;
+  const total = Object.values(statusCounts).reduce((sum, v) => sum + v, 0);
 
   if (data.length === 0) {
     return (

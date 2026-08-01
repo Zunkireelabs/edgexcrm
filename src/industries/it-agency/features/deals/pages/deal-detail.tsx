@@ -694,6 +694,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
               <div key={p.id} className="flex items-center justify-between py-2.5 text-sm">
                 <Link
                   href={`/proposals/${p.id}`}
+                  prefetch={false}
                   className="font-medium hover:text-primary transition-colors truncate max-w-xs"
                 >
                   {p.proposal_number} · {p.title}
@@ -767,6 +768,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
                           <div className="flex items-center gap-2">
                             <Link
                               href={`/contacts/${c.id}`}
+                              prefetch={false}
                               className="text-sm font-medium hover:underline"
                             >
                               {fullName}

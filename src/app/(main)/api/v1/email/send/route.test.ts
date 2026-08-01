@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { AuthContext } from "@/lib/api/auth";
+import { buildInboundAddress } from "@/lib/email/inbound/tokens";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Row = Record<string, any>;
@@ -78,6 +79,12 @@ interface FakeDbOptions {
   tenantSettings?: { inbound_enabled: boolean } | null;
   forceEmailThreadsInsertError?: boolean;
   forceInboundAddressesInsertError?: boolean;
+  /** raw().auth.admin.getUserById() → { data: { user: { user_metadata } } } */
+  userMetadata?: Record<string, unknown> | null;
+  /** raw().auth.admin.getUserById() rejects instead of resolving, when true. */
+  getUserByIdThrows?: boolean;
+  /** raw().from("tenants").select("name")... → { data: { name } | null } */
+  tenantName?: string | null;
 }
 
 function fakeDb(opts: FakeDbOptions = {}) {
@@ -88,6 +95,7 @@ function fakeDb(opts: FakeDbOptions = {}) {
     deletedAddressIds: [] as string[],
     updatedThreads: [] as { id: string; patch: Row }[],
     insertedEmails: [] as Row[],
+    getUserByIdCallCount: 0,
   };
   let threadSeq = 0;
   let addrSeq = 0;
@@ -195,7 +203,33 @@ function fakeDb(opts: FakeDbOptions = {}) {
 
       throw new Error(`fakeDb: unexpected table ${table}`);
     },
-    raw: () => ({}),
+    raw: () => ({
+      auth: {
+        admin: {
+          getUserById: async (id: string) => {
+            void id;
+            state.getUserByIdCallCount += 1;
+            if (opts.getUserByIdThrows) throw new Error("getUserById failed");
+            return { data: { user: { user_metadata: opts.userMetadata ?? null } } };
+          },
+        },
+      },
+      from(table: string) {
+        if (table === "tenants") {
+          return {
+            select: () => ({
+              eq: () => ({
+                maybeSingle: async () => ({
+                  data: opts.tenantName !== undefined ? { name: opts.tenantName } : null,
+                  error: null,
+                }),
+              }),
+            }),
+          };
+        }
+        throw new Error(`fakeDb.raw(): unexpected table ${table}`);
+      },
+    }),
   };
 
   return { db, state };
@@ -272,7 +306,10 @@ describe("POST /api/v1/email/send — flag ON, tenant inbound_enabled=true: pre-
     expect(state.insertedAddresses[0].verb).toBe("reply");
 
     const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
-    expect(sendArgs.replyTo).toMatch(/^reply\+l.+@inbound\.edgex\.zunkireelabs\.com$/);
+    // ACCOUNT_ROW.display_name = "Rep" (not email-shaped) → used as the Reply-To
+    // label (SLICE-A-GUARD-REPLYTO-FIX-BRIEF §2); see the dedicated "Reply-To
+    // display name" describe block below for the full label-resolution matrix.
+    expect(sendArgs.replyTo).toMatch(/^"Rep" <reply\+l.+@inbound\.edgex\.zunkireelabs\.com>$/);
 
     // Post-send: the provisional thread was PATCHED (not re-inserted) with the real gmail_thread_id.
     expect(state.updatedThreads).toHaveLength(1);
@@ -307,7 +344,8 @@ describe("POST /api/v1/email/send — flag ON, tenant inbound_enabled=true: pre-
     expect(state.insertedAddresses[0].thread_id).toBe("thread-existing");
 
     const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
-    expect(sendArgs.replyTo).toMatch(/^reply\+l/);
+    // ACCOUNT_ROW.display_name = "Rep" (not email-shaped) → used as the label.
+    expect(sendArgs.replyTo).toMatch(/^"Rep" <reply\+l/);
 
     // Existing-thread bump path unchanged: message_count incremented via update.
     expect(state.updatedThreads).toHaveLength(1);
@@ -414,5 +452,235 @@ describe("POST /api/v1/email/send — failure path: Gmail send fails after pre-s
     expect(state.insertedThreads).toHaveLength(0);
     expect(state.deletedThreadIds).toHaveLength(0);
     expect(state.deletedAddressIds).toHaveLength(0);
+  });
+});
+
+describe("POST /api/v1/email/send — Reply-To display name (SLICE-A-GUARD-REPLYTO-FIX-BRIEF §2)", () => {
+  function enableInbound() {
+    process.env.EDGEX_INBOUND_ENABLED = "true";
+  }
+
+  it("1. display_name is email-shaped (skipped) + user_metadata.name present → replyTo is a quoted label wrapping the UNTOUCHED minted token", async () => {
+    enableInbound();
+    const account = { ...ACCOUNT_ROW, display_name: "rep@zunkireelabs.com" };
+    const { db, state } = fakeDb({
+      account,
+      tenantSettings: { inbound_enabled: true },
+      userMetadata: { name: "Sadin Shrestha" },
+    });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({ from_account_id: account.id, subject: "Hi", body_html: "<p>Hi</p>", to: ["lead@example.com"] }),
+    );
+    expect(res.status).toBe(200);
+
+    const mintedToken = state.insertedAddresses[0].token as string;
+    const expectedAddress = buildInboundAddress("reply", mintedToken);
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.replyTo).toBe(`"Sadin Shrestha" <${expectedAddress}>`);
+    // The token embedded in replyTo is byte-identical to the minted address —
+    // the label wraps it, never shortens/aliases/otherwise touches it.
+    expect(sendArgs.replyTo).toContain(expectedAddress);
+  });
+
+  it("2. no name anywhere (display_name null, no user_metadata name, no tenant name) → replyTo === minted.address, unchanged/bare", async () => {
+    enableInbound();
+    const account = { ...ACCOUNT_ROW, display_name: null };
+    const { db, state } = fakeDb({
+      account,
+      tenantSettings: { inbound_enabled: true },
+      userMetadata: null,
+      tenantName: null,
+    });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({ from_account_id: account.id, subject: "Hi", body_html: "<p>Hi</p>", to: ["lead@example.com"] }),
+    );
+    expect(res.status).toBe(200);
+
+    const mintedToken = state.insertedAddresses[0].token as string;
+    const expectedAddress = buildInboundAddress("reply", mintedToken);
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.replyTo).toBe(expectedAddress); // bare, no quotes, no label
+  });
+
+  it("3. name lookup throws → replyTo still gets set from the mint (label is optional; a name failure must not null out replyTo or trip cleanup/rollback)", async () => {
+    enableInbound();
+    const account = { ...ACCOUNT_ROW, display_name: "rep@zunkireelabs.com" }; // email-shaped, skipped -> falls to the throwing lookup
+    const { db, state } = fakeDb({
+      account,
+      tenantSettings: { inbound_enabled: true },
+      getUserByIdThrows: true,
+    });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({ from_account_id: account.id, subject: "Hi", body_html: "<p>Hi</p>", to: ["lead@example.com"] }),
+    );
+    expect(res.status).toBe(200);
+
+    const mintedToken = state.insertedAddresses[0].token as string;
+    const expectedAddress = buildInboundAddress("reply", mintedToken);
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.replyTo).toBe(expectedAddress); // bare — label lookup failed, mint didn't
+    // The name-lookup failure must NOT be mistaken for an inbound-wiring failure:
+    // nothing pre-created gets rolled back, and the send is not blocked.
+    expect(state.deletedThreadIds).toHaveLength(0);
+    expect(state.deletedAddressIds).toHaveLength(0);
+    expect(state.insertedAddresses).toHaveLength(1);
+  });
+
+  it("4. EDGEX_INBOUND_ENABLED !== 'true' → replyTo undefined, no name/label lookups at all", async () => {
+    // enableInbound() deliberately NOT called; beforeEach already deletes the env var.
+    const account = { ...ACCOUNT_ROW, display_name: "rep@zunkireelabs.com" };
+    const { db, state } = fakeDb({ account, userMetadata: { name: "Sadin Shrestha" } });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({ from_account_id: account.id, subject: "Hi", body_html: "<p>Hi</p>", to: ["lead@example.com"] }),
+    );
+    expect(res.status).toBe(200);
+
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.replyTo).toBeUndefined();
+    expect(state.getUserByIdCallCount).toBe(0);
+    expect(state.insertedAddresses).toHaveLength(0);
+  });
+});
+
+describe("POST /api/v1/email/send — Bcc persistence filters own inbound-domain addresses (BCC delivery fix change 2)", () => {
+  it("sends the full bcc list but persists only non-inbound-domain addresses", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"],
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Send still gets the full list — the rep asked for both recipients.
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.bcc).toEqual(["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"]);
+
+    // Persisted bcc_emails drops our own inbound-domain dropbox address.
+    expect(state.insertedEmails).toHaveLength(1);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["teammate@example.com"]);
+  });
+
+  it("INBOUND_EMAIL_DOMAINS unset: send still succeeds and persists the bcc list unfiltered", async () => {
+    delete process.env.INBOUND_EMAIL_DOMAINS;
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "bcc+sabc123@inbound.edgex.zunkireelabs.com"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([
+      "teammate@example.com",
+      "bcc+sabc123@inbound.edgex.zunkireelabs.com",
+    ]);
+  });
+
+  it("strips a 'Name <addr>' own-domain address (the shape pasted from a mail client)", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["teammate@example.com", "Sadin Shrestha <bcc+sabc123@inbound.edgex.zunkireelabs.com>"],
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    // Send still gets the full, unparsed list.
+    const sendArgs = sendMessageMock.mock.calls[0][1] as Row;
+    expect(sendArgs.bcc).toEqual([
+      "teammate@example.com",
+      "Sadin Shrestha <bcc+sabc123@inbound.edgex.zunkireelabs.com>",
+    ]);
+
+    // Persisted bcc_emails still drops the own-domain address despite the "Name <addr>" wrapper.
+    expect(state.insertedEmails).toHaveLength(1);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["teammate@example.com"]);
+  });
+
+  it("strips an angle-bracket-only own-domain address", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["<bcc+sabc123@inbound.edgex.zunkireelabs.com>"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([]);
+  });
+
+  it("strips a own-domain address surrounded by stray whitespace and mixed case", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["  bcc+sabc123@INBOUND.EDGEX.zunkireelabs.com  "],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual([]);
+  });
+
+  it("keeps an address with no '@' at all — fail-open, can't prove it's ours", async () => {
+    const { db, state } = fakeDb({ account: ACCOUNT_ROW });
+    scopedClientMock.mockResolvedValue(db);
+
+    const { POST } = await import("./route");
+    const res = await POST(
+      fakeReq({
+        from_account_id: ACCOUNT_ROW.id,
+        subject: "Hi",
+        body_html: "<p>Hi</p>",
+        to: ["lead@example.com"],
+        bcc: ["garbage"],
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(state.insertedEmails[0].bcc_emails).toEqual(["garbage"]);
   });
 });

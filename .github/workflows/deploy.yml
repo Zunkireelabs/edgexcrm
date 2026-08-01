@@ -74,6 +74,15 @@ jobs:
             NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
             NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
             NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_SENTRY_DSN=${{ secrets.NEXT_PUBLIC_SENTRY_DSN }}
+            NEXT_PUBLIC_SENTRY_ENVIRONMENT=production
+            NEXT_PUBLIC_SENTRY_RELEASE=${{ github.sha }}
+            SENTRY_ORG=${{ secrets.SENTRY_ORG }}
+            SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+          # Real credential — mounted as a BuildKit secret so it never lands in
+          # the image layer metadata that gets pushed to GHCR.
+          secrets: |
+            sentry_auth_token=${{ secrets.SENTRY_AUTH_TOKEN }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -162,7 +171,14 @@ jobs:
           host: ${{ secrets.SSH_HOST }}
           username: ${{ secrets.SSH_USERNAME }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          command_timeout: 10m
+          # Same 10m -> 25m raise as deploy-staging.yml, and it matters MORE here.
+          # This step runs AFTER the approval-gated `migrate` job has already applied
+          # migrations to the prod DB. A timeout here therefore leaves prod in a
+          # split-brain: new schema, old container — the exact failure mode the
+          # migration-before-code ordering exists to avoid, discovered mid-promotion
+          # with a reviewer waiting. Stage hit this three times on 2026-07-31; prod
+          # pulls the same image over the same link and has had no reason to be immune.
+          command_timeout: 25m
           envs: GHCR_USER,GHCR_TOKEN,INNGEST_EVENT_KEY,INNGEST_SIGNING_KEY,OPENAI_API_KEY,LANGFUSE_PUBLIC_KEY,LANGFUSE_SECRET_KEY,RESEND_INBOUND_WEBHOOK_SECRET,INBOUND_TOKEN_SECRET,NEXTAUTH_SECRET
           script: |
             set -e

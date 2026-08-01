@@ -319,7 +319,7 @@ export function ReviewContent({ items: initialItems, approvals }: ReviewContentP
                   {item.subjectLabel && (
                     <div className="mt-1 text-sm">
                       {item.subjectId && item.subjectType === "lead" ? (
-                        <Link href={`/leads/${item.subjectId}`} className="text-[#eb1600] hover:underline">
+                        <Link href={`/leads/${item.subjectId}`} prefetch={false} className="text-[#eb1600] hover:underline">
                           {item.subjectLabel}
                         </Link>
                       ) : (

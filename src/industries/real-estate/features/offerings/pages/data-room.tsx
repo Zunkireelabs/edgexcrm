@@ -64,6 +64,7 @@ export function DataRoomWorkspace() {
             <li key={o.id}>
               <Link
                 href={`/offerings/${o.id}?tab=data-room`}
+                prefetch={false}
                 className="flex items-center gap-3 bg-card border rounded-xl p-4 hover:border-primary/40 hover:shadow-sm transition-colors"
               >
                 <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
