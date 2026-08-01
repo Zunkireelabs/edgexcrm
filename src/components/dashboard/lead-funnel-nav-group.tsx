@@ -11,7 +11,7 @@ interface LeadFunnelNavGroupProps {
   funnelKey: string;
   label: string;
   icon: LucideIcon;
-  lists: (Pick<LeadList, "id" | "name" | "slug" | "sort_order"> & { count?: number })[];
+  lists: Pick<LeadList, "id" | "name" | "slug" | "sort_order">[];
   onNavigate: () => void;
   isAdmin?: boolean;
 }
@@ -73,16 +73,13 @@ export function LeadFunnelNavGroup({ funnelKey, label, icon: Icon, lists, onNavi
                 key={list.id}
                 href={`/leads?list=${list.slug}`}
                 onClick={onNavigate}
-                className={`w-full flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
+                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
                     : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
                 }`}
               >
                 <span className="truncate">{list.name}</span>
-                {typeof list.count === "number" && (
-                  <span className="shrink-0 text-[11px] text-gray-400 tabular-nums">{list.count}</span>
-                )}
               </Link>
             );
           })}
