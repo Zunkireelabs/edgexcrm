@@ -227,7 +227,11 @@ describe("GET /api/v1/leads — counselor-scoping wiring", () => {
     expect(assignedToCalls).toEqual([["eq", ["assigned_to", "other-user"]]]);
   });
 
-  it("branch-manager (leadScope:'team' + branchId) is restricted to branch member assignees", async () => {
+  it("branch-manager (leadScope:'team' + branchId) is routed through the uncapped leads_visible_to_user() RPC as scope 'branch', not the old hand-rolled lead_branches/.or() query (BRANCH-SCOPE-TRUNCATION-503-BRIEF)", async () => {
+    const rpcCalls: RpcCall[] = [];
+    // No lead_branches row given — if the route still fetched it, fakeDb's `from()`
+    // would still resolve it (it's stubbed), but the real proof is rpcCalls below and
+    // that the service-client leads table is never touched for the base query.
     const calls: Call[] = [];
     authenticateRequestMock.mockResolvedValue(
       authFixture({
@@ -237,13 +241,54 @@ describe("GET /api/v1/leads — counselor-scoping wiring", () => {
         permissions: permissions({ leadScope: "team" }),
       }),
     );
-    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls, leadBranchesRows: [] }));
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
 
     const { GET } = await import("./route");
     const res = await GET(fakeReq());
 
     expect(res.status).toBe(200);
-    expect(calls).toContainEqual(["in", ["assigned_to", ["u1", "u2"]]]);
+    expect(rpcCalls).toEqual([
+      [
+        "leads_visible_to_user",
+        { p_tenant: "tenant-1", p_scope: "branch", p_branch_id: "branch-1" },
+        { count: "exact" },
+      ],
+    ]);
+    // The service client's leads table is never touched for the base query — no
+    // .or(assigned_to.in.(…),id.in.(…)) built from an unbounded lead_branches fetch.
+    expect(calls.some(([m]) => m === "or")).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it("branch-manager scope never fetches lead_branches — the removed unbounded (PostgREST-capped-at-1000) shared-id query", async () => {
+    const rpcCalls: RpcCall[] = [];
+    let leadBranchesQueried = false;
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue(fakeUserClient(rpcCalls));
+    createServiceClientMock.mockResolvedValue({
+      from: (table: string) => {
+        if (table === "leads") return makeLeadsChain([]);
+        if (table === "lead_branches") {
+          leadBranchesQueried = true;
+          return { select: () => ({ eq: () => ({ eq: () => Promise.resolve({ data: [] }) }) }) };
+        }
+        throw new Error(`unexpected table ${table}`);
+      },
+    });
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq());
+
+    expect(res.status).toBe(200);
+    expect(leadBranchesQueried).toBe(false);
   });
 
   it("canSeeNav gate: a fixture without /leads nav access is forbidden before any query runs", async () => {
@@ -289,6 +334,51 @@ describe("GET /api/v1/leads — facets=source (dashboard-aggregates review fixes
     expect(res.status).toBe(200);
     expect(body.data).toEqual({ facet: "source", options: [] });
     expect(rpcCalls).toEqual([]);
+  });
+
+  it("branch-manager facets=source resolves p_scope to 'branch' + p_branch_id — the same leads_visible_to_user() predicate the page query uses, not the deleted 'ids_any' id-array path", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      // Two RPC shapes go through this same client here: the base page query
+      // (leads_visible_to_user, chained with .select()/.range() but never executed
+      // on this facets=source path) and lead_aggregates (facet — awaited directly,
+      // real supabase-js's PostgrestFilterBuilder is thenable the same way).
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: [], error: null });
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          is: () => chain,
+          not: () => chain,
+          eq: () => chain,
+          order: () => chain,
+          range: () => Promise.resolve({ data: [], error: null, count: 0 }),
+        };
+        return chain;
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source" }));
+    expect(res.status).toBe(200);
+
+    // Two RPCs: the base page query (leads_visible_to_user) and lead_aggregates (facet).
+    const facetCall = rpcCalls.find(([name]) => name === "lead_aggregates");
+    expect(facetCall).toBeDefined();
+    const [, facetParams] = facetCall as RpcCall;
+    expect((facetParams as Record<string, unknown>).p_scope).toBe("branch");
+    expect((facetParams as Record<string, unknown>).p_branch_id).toBe("branch-1");
+    expect((facetParams as Record<string, unknown>).p_ids_any_assigned_to).toBeUndefined();
+    expect((facetParams as Record<string, unknown>).p_ids_any_lead_id).toBeUndefined();
   });
 
   it("scope.restrictToSelf without scope.userId throws instead of silently widening the facet to tenant-wide counts", async () => {

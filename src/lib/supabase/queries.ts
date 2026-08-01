@@ -595,11 +595,18 @@ export async function getLeadsForPipeline(
   const supabase = await createClient();
 
   // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
-  // Own-scope base is visibility-scoped via leads_visible_to_user() (uncapped; migration 179).
-  // Branch-scope stays the plain unrestricted select — its narrower members-only OR clause
-  // below is applied on top, unchanged (Decision D2 — do not unify with getLeads' branch scope).
-  let query = (options?.restrictToSelf && options.userId
-    ? visibleLeadsBase(supabase, tenantId, { restrictToSelf: true, userId: options.userId })
+  // Own-scope AND branch-scope both route through leads_visible_to_user() (uncapped;
+  // migration 179) via visibleLeadsBase() — the same base /api/v1/leads uses, so the
+  // pipeline board and /leads resolve to the identical branch predicate instead of this
+  // function's own hand-rolled `.or(assigned_to.in.(…),and(assigned_to.is.null,
+  // branch_id.eq.…))` (deleted below — see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md §4.2).
+  const useVisibilityRpc = !!((options?.restrictToSelf && options.userId) || options?.branchId);
+  let query = (useVisibilityRpc
+    ? visibleLeadsBase(supabase, tenantId, {
+        restrictToSelf: options?.restrictToSelf,
+        userId: options?.userId,
+        branchId: options?.branchId,
+      })
     : supabase.from("leads").select("*").eq("tenant_id", tenantId))
     .is("deleted_at", null)
     .is("converted_at", null)
@@ -615,18 +622,6 @@ export async function getLeadsForPipeline(
     query = query.eq("pipeline_id", options.pipelineId);
   } else if (options?.pipelineIds) {
     query = query.in("pipeline_id", options.pipelineIds);
-  }
-
-  if (options?.branchId && !(options?.restrictToSelf && options.userId)) {
-    // Service client: tenant_users RLS hides other users' rows from the RLS client.
-    const svc = await createServiceClient();
-    const memberIds = await branchMemberIds(svc, tenantId, options.branchId);
-    // Include unassigned leads in this branch too — see getLeads() above for why.
-    if (memberIds.length > 0) {
-      query = query.or(`assigned_to.in.(${memberIds.join(",")}),and(assigned_to.is.null,branch_id.eq.${options.branchId})`);
-    } else {
-      query = query.is("assigned_to", null).eq("branch_id", options.branchId);
-    }
   }
 
   const { data: leadsData, error: leadsError } = await query.order("created_at", { ascending: false });
