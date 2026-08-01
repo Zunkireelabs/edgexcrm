@@ -490,9 +490,17 @@ export async function GET(request: NextRequest) {
         prospectIndustryNone: industryFilter === "__none__",
         formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
         createdAfter,
+        // Mirror the page query's either/or (route.ts:309-316) exactly: an explicit list
+        // wins outright, a funnel's list set wins next, and the archive/staging exclusion
+        // only applies when neither is present. Passing more than one of these unconditionally
+        // ANDs them in lead_aggregates — for a staging list that becomes `list_id = X AND
+        // list_id NOT IN (…X…)`, an unsatisfiable predicate that zeroed the facet.
         listIdEq: resolvedListId,
-        listIdAny: funnelListIds.length > 0 ? funnelListIds : null,
-        excludeListIds: excludeListIds.length > 0 ? excludeListIds : null,
+        listIdAny: !resolvedListId && funnelListIds.length > 0 ? funnelListIds : null,
+        excludeListIds:
+          !resolvedListId && funnelListIds.length === 0 && excludeListIds.length > 0
+            ? excludeListIds
+            : null,
         search: search ? search.replace(/[,().]/g, "") : null,
         includeConverted,
       });
