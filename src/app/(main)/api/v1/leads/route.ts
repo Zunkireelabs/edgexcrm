@@ -264,14 +264,18 @@ export async function GET(request: NextRequest) {
   const scope = leadQueryScope(auth.permissions, auth.userId, auth.branchId, poolSlug);
   const useSharedPool = !!(auth.branchId && isSharedPoolList(auth.permissions, resolvedListId));
 
-  // Only own-scope routes through the uncapped visibility RPC (the actual fix — needs
-  // the RLS-context client for auth.uid()). Shared-pool, branch-scope, and unrestricted
-  // (owner/admin) all stay on the plain service-client query, filtered below exactly as
-  // before this PR — branch-scope deliberately keeps its own narrower, hand-rolled OR
-  // clause rather than adopting leads_visible_to_user()'s wider branch predicate (that
-  // predicate also matches unassigned leads whose branch_id matches, which this endpoint
-  // never surfaced before; same reasoning as Decision D2 for getLeadsForPipeline).
+  // Own-scope AND branch-scope both route through the uncapped visibility RPC (needs
+  // the RLS-context client for auth.uid() — leads_visible_to_user() gates on it for
+  // every p_scope, not just 'own'). Shared-pool and unrestricted (owner/admin) stay on
+  // the plain service-client query. Branch scope used to keep its own narrower,
+  // hand-rolled `.or()` clause built from an unbounded `lead_branches` fetch — that's
+  // the 68KB-URL 503 (>1,855 shared ids) and the silent 1,000-row PostgREST truncation
+  // this fix removes. leads_visible_to_user()'s branch predicate is a strict superset
+  // (also matches unassigned leads whose branch_id matches) and is what dashboard/
+  // insights/pipeline counts already use — collapsing onto it is the fix, not a
+  // side effect (see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md).
   const countOpts = wantCount ? { count: "exact" as const } : {};
+  const useVisibilityRpc = !useSharedPool && ((scope.restrictToSelf && scope.userId) || !!scope.branchId);
   // Collaborator filter needs an inner-join embed to filter on lead_collaborators.user_id
   // rather than resolving matching lead ids client-side first — a popular collaborator can
   // hold 1000+ historical leads (four Admizz interns hold 1,272-1,319), and bridging that
@@ -289,7 +293,7 @@ export async function GET(request: NextRequest) {
   const selectColumns: string = collaboratorIds.length > 0
     ? `${LEADS_LIST_COLUMNS},lead_collaborators!inner(user_id)`
     : LEADS_LIST_COLUMNS;
-  let query = (!useSharedPool && scope.restrictToSelf && scope.userId)
+  let query = useVisibilityRpc
     ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(selectColumns)
     : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
 
@@ -317,11 +321,9 @@ export async function GET(request: NextRequest) {
   }
 
   // Hoisted (not just applied to `query` below) so the facets=source branch further
-  // down can pass the SAME resolved id sets into lead_aggregates() instead of
+  // down can pass the SAME resolved id set into lead_aggregates() instead of
   // re-deriving this scope logic a second time — see migration 194's ADDENDUM header.
   let sharedPoolAssignedToAny: string[] | null = null;
-  let scopeIdsAnyAssignedTo: string[] | null = null;
-  let scopeIdsAnyLeadId: string[] | null = null;
 
   if (useSharedPool) {
     // auth.branchMemberIds is empty for own-scope, so resolve explicitly.
@@ -331,27 +333,10 @@ export async function GET(request: NextRequest) {
     sharedPoolAssignedToAny = memberIds;
   } else if (scope.restrictToSelf) {
     assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
-  } else if (scope.branchId) {
-    // Reverted to the pre-existing narrower branch-scope logic (unchanged by this PR):
-    // leads assigned to branch members AND leads shared into this branch via lead_branches.
-    const { data: sharedRows } = await supabase
-      .from("lead_branches")
-      .select("lead_id")
-      .eq("tenant_id", auth.tenantId)
-      .eq("branch_id", scope.branchId);
-    const sharedLeadIds = (sharedRows ?? []).map((r: { lead_id: string }) => r.lead_id);
-    if (auth.branchMemberIds.length > 0 && sharedLeadIds.length > 0) {
-      query = query.or(`assigned_to.in.(${auth.branchMemberIds.join(",")}),id.in.(${sharedLeadIds.join(",")})`);
-      scopeIdsAnyAssignedTo = auth.branchMemberIds;
-      scopeIdsAnyLeadId = sharedLeadIds;
-    } else if (sharedLeadIds.length > 0) {
-      query = query.in("id", sharedLeadIds);
-      scopeIdsAnyLeadId = sharedLeadIds;
-    } else {
-      query = query.in("assigned_to", auth.branchMemberIds);
-      scopeIdsAnyAssignedTo = auth.branchMemberIds;
-    }
   }
+  // scope.branchId (non-shared-pool): no further filter needed here — the base query
+  // above already routed through visibleLeadsBase()'s branch-scope RPC, which is the
+  // uncapped, unbounded-URL-free replacement for the deleted lead_branches fetch + .or().
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
   // team/own users cannot widen or redirect their scope via this param. Same shape as
@@ -462,11 +447,15 @@ export async function GET(request: NextRequest) {
       throw new Error("leads/facets: scope.restrictToSelf requires scope.userId");
     }
 
-    const facetScope: "own" | "all" | "ids_any" =
+    // Facet must follow the page: branch scope now resolves through the same
+    // leads_visible_to_user() 'branch' predicate the base query uses above, not the
+    // deleted 'ids_any' hand-rolled id-array path. Page and facet resolving to the
+    // identical predicate is the whole point of this fix.
+    const facetScope: "own" | "all" | "branch" =
       !useSharedPool && scope.restrictToSelf && scope.userId
         ? "own"
         : scope.branchId && !useSharedPool
-          ? "ids_any"
+          ? "branch"
           : "all";
 
     let options: Awaited<ReturnType<typeof getSourceFacet>>;
@@ -477,8 +466,7 @@ export async function GET(request: NextRequest) {
         user: facetScope === "own" ? scope.userId : null,
         userBranchId: scope.userBranchId,
         crossPoolSlug: scope.crossBranchPoolListSlug,
-        idsAnyAssignedTo: scopeIdsAnyAssignedTo,
-        idsAnyLeadId: scopeIdsAnyLeadId,
+        branchId: facetScope === "branch" ? scope.branchId : null,
         sharedPoolAssignedToAny,
         pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
         status: status || null,

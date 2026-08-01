@@ -224,17 +224,21 @@ export interface SourceFacetOption {
  * Every filter axis /api/v1/leads applies (its GET handler), mirrored so the source
  * facet is computed over the identical predicate — minus `source` itself, per the
  * brief's "pass every active filter except the one being faceted" rule. `scope`
- * dispatches into lead_aggregates()'s own/all/ids_any modes; 'ids_any' plus
- * idsAnyAssignedTo/idsAnyLeadId mirror that route's own hand-rolled branch-scope
- * predicate (see migration 194's ADDENDUM header) — pass the SAME id arrays the route
- * already resolved, never re-derive them.
+ * dispatches into lead_aggregates()'s own/branch/all modes, which for 'own'/'branch'
+ * delegate straight through to leads_visible_to_user() — the same predicate the base
+ * page query uses via visibleLeadsBase() (see visibility-query.ts). 'ids_any' plus
+ * idsAnyAssignedTo/idsAnyLeadId (still supported by migration 194's SQL) are dead from
+ * this route as of the branch-scope fix — no caller passes them anymore; left in the
+ * RPC only because nothing else references or removes that SQL path.
  */
 export interface SourceFacetParams {
   tenantId: string;
-  scope: "own" | "all" | "ids_any";
+  scope: "own" | "all" | "branch" | "ids_any";
   user?: string | null;
   userBranchId?: string | null;
   crossPoolSlug?: string | null;
+  /** p_branch_id for scope 'branch' — mirrors visibleLeadsBase()'s scope.branchId. */
+  branchId?: string | null;
   idsAnyAssignedTo?: string[] | null;
   idsAnyLeadId?: string[] | null;
   sharedPoolAssignedToAny?: string[] | null;
@@ -275,6 +279,7 @@ export async function getSourceFacet(params: SourceFacetParams): Promise<SourceF
     p_exclude_other_type: true, // /api/v1/leads always excludes "other"-tagged contacts
   };
   if (params.user) rpcParams.p_user = params.user;
+  if (params.branchId) rpcParams.p_branch_id = params.branchId;
   if (params.userBranchId) rpcParams.p_user_branch_id = params.userBranchId;
   if (params.crossPoolSlug) rpcParams.p_cross_pool_slug = params.crossPoolSlug;
   if (params.idsAnyAssignedTo && params.idsAnyAssignedTo.length > 0) rpcParams.p_ids_any_assigned_to = params.idsAnyAssignedTo;
