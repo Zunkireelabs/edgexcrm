@@ -67,6 +67,7 @@ interface PipelineBoardProps {
   /** Position-derived permissions (source of truth). Fall back to legacy `role` if omitted. */
   canEditLeads?: boolean;
   restrictToSelf?: boolean;
+  isTeamScoped?: boolean;
   leadCollaborators?: Record<string, string[]>;
   formMap?: Record<string, string>;
 }
@@ -143,6 +144,7 @@ export function PipelineBoard({
   industryId,
   canEditLeads,
   restrictToSelf,
+  isTeamScoped = false,
   leadCollaborators = {},
   formMap = {},
 }: PipelineBoardProps) {
@@ -677,7 +679,7 @@ export function PipelineBoard({
           } satisfies FilterDef,
         ]
       : []),
-    ...(isAdmin
+    ...(isAdmin || isTeamScoped
       ? [
           {
             id: "counselor",
@@ -707,7 +709,7 @@ export function PipelineBoard({
           } satisfies FilterDef,
         ]
       : []),
-    ...(isAdmin && Object.keys(leadCollaborators).length > 0
+    ...((isAdmin || isTeamScoped) && Object.keys(leadCollaborators).length > 0
       ? [
           {
             id: "collaborator",
