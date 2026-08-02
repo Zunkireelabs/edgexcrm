@@ -39,7 +39,8 @@ export default async function LeadsOrganisePage() {
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantData.tenant.id)
         .eq("list_id", list.id)
-        .is("deleted_at", null);
+        .is("deleted_at", null)
+        .is("converted_at", null);
       return { id: list.id, count: count ?? 0 };
     })
   );

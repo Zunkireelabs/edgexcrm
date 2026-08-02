@@ -193,6 +193,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
         industryId={tenantData.tenant.industry_id}
         canEditLeads={tenantData.permissions.canEditLeads}
         restrictToSelf={tenantData.permissions.leadScope === "own"}
+        isTeamScoped={tenantData.permissions.leadScope === "team"}
       />
     </div>
   );

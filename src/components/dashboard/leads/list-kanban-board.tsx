@@ -79,6 +79,7 @@ interface ListKanbanBoardProps {
   /** Position-derived permissions (source of truth). Fall back to legacy `role` if omitted. */
   canEditLeads?: boolean;
   restrictToSelf?: boolean;
+  isTeamScoped?: boolean;
   leadCollaborators?: Record<string, string[]>;
   formMap?: Record<string, string>;
 }
@@ -104,6 +105,7 @@ export function ListKanbanBoard({
   industryId,
   canEditLeads,
   restrictToSelf,
+  isTeamScoped = false,
   leadCollaborators = {},
   formMap = {},
 }: ListKanbanBoardProps) {
@@ -631,7 +633,7 @@ export function ListKanbanBoard({
           } satisfies FilterDef,
         ]
       : []),
-    ...(isAdmin
+    ...(isAdmin || isTeamScoped
       ? [
           {
             id: "counselor",
@@ -660,7 +662,7 @@ export function ListKanbanBoard({
           } satisfies FilterDef,
         ]
       : []),
-    ...(isAdmin && Object.keys(leadCollaborators).length > 0
+    ...((isAdmin || isTeamScoped) && Object.keys(leadCollaborators).length > 0
       ? [
           {
             id: "collaborator",
