@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { fetch as undiciFetch } from "undici";
@@ -66,11 +67,28 @@ export const getCachedUser = cache(async (): Promise<CachedUser | null> => {
   };
 });
 
+// createServiceClient() used to build a fresh supabase-js client on every call (183+ call
+// sites across the codebase). Each fresh client's first request still round-trips through
+// Next's instrumented fetch/cookies() request-store machinery (see the leakFreeFetch note
+// above), so an unmemoized client compounds the per-render leak by the number of call
+// sites hit in that render instead of paying it once. The service-role client carries no
+// user session, so a single process-wide instance is safe to share across requests;
+// scopedClient() wraps it per call without mutating it. See docs/MEMORY-LEAK-FIX-BRIEF.md.
+let _serviceClientPromise: Promise<SupabaseClient> | null = null;
+
 export async function createServiceClient() {
-  const { createClient } = await import("@supabase/supabase-js");
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { global: { fetch: leakFreeFetch } }
-  );
+  if (!_serviceClientPromise) {
+    _serviceClientPromise = (async () => {
+      const { createClient } = await import("@supabase/supabase-js");
+      return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          global: { fetch: leakFreeFetch },
+          auth: { persistSession: false, autoRefreshToken: false },
+        }
+      );
+    })();
+  }
+  return _serviceClientPromise;
 }
