@@ -67,13 +67,18 @@ export const getCachedUser = cache(async (): Promise<CachedUser | null> => {
   };
 });
 
-// createServiceClient() used to build a fresh supabase-js client on every call (183+ call
-// sites across the codebase). Each fresh client's first request still round-trips through
-// Next's instrumented fetch/cookies() request-store machinery (see the leakFreeFetch note
-// above), so an unmemoized client compounds the per-render leak by the number of call
-// sites hit in that render instead of paying it once. The service-role client carries no
-// user session, so a single process-wide instance is safe to share across requests;
-// scopedClient() wraps it per call without mutating it. See docs/MEMORY-LEAK-FIX-BRIEF.md.
+// createServiceClient() used to build a fresh supabase-js client on every call (16 call
+// sites in queries.ts alone; the dashboard layout reaches it via getLeadListsByTenant).
+// Those per-call clients were what retained the leak: MEASURED at one Next.js request
+// store per authenticated dashboard render — 5 -> 205 `IncrementalCache` objects across
+// 200 /leads renders — while the SSR createClient() under identical load stayed flat at
+// 2 -> 2. Memoizing takes the same gate to 3 -> 3 (VPS) and 4 -> 5 (local), i.e. +200 -> +1.
+// This is what OOM-crashed prod ~hourly (05:56 / 07:19 / 09:36 UTC on 2026-08-02).
+//
+// Memoize the PROMISE, not the client, so concurrent first callers can't each construct one.
+// The service-role client carries no user session, so one process-wide instance is safe to
+// share: nothing calls setSession() or sets per-request headers on it, and scopedClient()
+// wraps it per call without mutating it. See docs/MEMORY-LEAK-FIX-BRIEF.md.
 let _serviceClientPromise: Promise<SupabaseClient> | null = null;
 
 export async function createServiceClient() {
