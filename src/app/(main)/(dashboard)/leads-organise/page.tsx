@@ -32,15 +32,18 @@ export default async function LeadsOrganisePage() {
 
   // Get lead counts for each staging list
   const supabase = await createServiceClient();
+  const excludeOtherType = tenantData.tenant.industry_id === "education_consultancy";
   const counts = await Promise.all(
     stagingLists.map(async (list) => {
-      const { count } = await supabase
+      let query = supabase
         .from("leads")
         .select("id", { count: "exact", head: true })
         .eq("tenant_id", tenantData.tenant.id)
         .eq("list_id", list.id)
         .is("deleted_at", null)
         .is("converted_at", null);
+      if (excludeOtherType) query = query.not("tags", "cs", '{"other"}');
+      const { count } = await query;
       return { id: list.id, count: count ?? 0 };
     })
   );
