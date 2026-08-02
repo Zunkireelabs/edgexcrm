@@ -31,6 +31,7 @@ interface ListKanbanViewProps {
   isAdmin: boolean;
   canEditLeads?: boolean;
   restrictToSelf?: boolean;
+  isTeamScoped?: boolean;
   leadCollaborators?: Record<string, string[]>;
   formMap?: Record<string, string>;
 }
@@ -50,6 +51,7 @@ export function ListKanbanView({
   isAdmin,
   canEditLeads,
   restrictToSelf,
+  isTeamScoped,
   leadCollaborators = {},
   formMap = {},
 }: ListKanbanViewProps) {
@@ -97,6 +99,7 @@ export function ListKanbanView({
         industryId={industryId}
         canEditLeads={canEditLeads}
         restrictToSelf={restrictToSelf}
+        isTeamScoped={isTeamScoped}
         leadCollaborators={leadCollaborators}
         formMap={formMap}
       />
