@@ -1,4 +1,5 @@
 import { createServerClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
 import { cache } from "react";
 import { fetch as undiciFetch } from "undici";
@@ -66,11 +67,33 @@ export const getCachedUser = cache(async (): Promise<CachedUser | null> => {
   };
 });
 
+// createServiceClient() used to build a fresh supabase-js client on every call (16 call
+// sites in queries.ts alone; the dashboard layout reaches it via getLeadListsByTenant).
+// Those per-call clients were what retained the leak: MEASURED at one Next.js request
+// store per authenticated dashboard render — 5 -> 205 `IncrementalCache` objects across
+// 200 /leads renders — while the SSR createClient() under identical load stayed flat at
+// 2 -> 2. Memoizing takes the same gate to 3 -> 3 (VPS) and 4 -> 5 (local), i.e. +200 -> +1.
+// This is what OOM-crashed prod ~hourly (05:56 / 07:19 / 09:36 UTC on 2026-08-02).
+//
+// Memoize the PROMISE, not the client, so concurrent first callers can't each construct one.
+// The service-role client carries no user session, so one process-wide instance is safe to
+// share: nothing calls setSession() or sets per-request headers on it, and scopedClient()
+// wraps it per call without mutating it. See docs/MEMORY-LEAK-FIX-BRIEF.md.
+let _serviceClientPromise: Promise<SupabaseClient> | null = null;
+
 export async function createServiceClient() {
-  const { createClient } = await import("@supabase/supabase-js");
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { global: { fetch: leakFreeFetch } }
-  );
+  if (!_serviceClientPromise) {
+    _serviceClientPromise = (async () => {
+      const { createClient } = await import("@supabase/supabase-js");
+      return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY!,
+        {
+          global: { fetch: leakFreeFetch },
+          auth: { persistSession: false, autoRefreshToken: false },
+        }
+      );
+    })();
+  }
+  return _serviceClientPromise;
 }
