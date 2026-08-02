@@ -1,14 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// getLeadsForPipeline's branch-scope predicate — verifies BRANCH-SCOPE-TRUNCATION-503-BRIEF
+// getLeadsPage's branch-scope predicate — verifies BRANCH-SCOPE-TRUNCATION-503-BRIEF
 // §4.2: branch scope must route through visibleLeadsBase() -> leads_visible_to_user() RPC,
-// the same base /api/v1/leads uses, not the old hand-rolled
+// the same base /api/v1/leads uses, not a hand-rolled
 // `.or(assigned_to.in.(…),and(assigned_to.is.null,branch_id.eq.…))` built from a separate
-// branchMemberIds() lookup.
+// branchMemberIds() lookup. (Originally proved against getLeadsForPipeline, the classic
+// pipeline board's now-removed capped-at-500 loader — pipeline-column-pagination Phase 2
+// moved the board onto getLeadsPage's own per-column pagination, which shares the same
+// visibleLeadsBase() plumbing, so the coverage moves with it rather than being dropped.)
 
 type RpcCall = [name: string, params: unknown];
 type Call = [method: string, args: unknown[]];
 
+// .order()-terminal chain builder — for queries (getLeadNotes/getLeadChecklists/
+// getFormConfigsForTenant/getBranches) whose chain ends at .order().
 function makeChain(calls: Call[], terminal: { data: unknown[]; error: unknown }) {
   const record =
     (method: string) =>
@@ -29,8 +34,7 @@ function makeChain(calls: Call[], terminal: { data: unknown[]; error: unknown })
   return chain;
 }
 
-// getLeadsPage's chain ends in .range(), and .order() is chainable (not terminal) —
-// a separate builder from makeChain() above, whose terminal is .order().
+// getLeadsPage's chain ends in .range(), and .order() is chainable (not terminal).
 function makeRangeChain(calls: Call[], terminal: { data: unknown[]; error: unknown; count: number | null }) {
   const record =
     (method: string) =>
@@ -54,18 +58,17 @@ function makeRangeChain(calls: Call[], terminal: { data: unknown[]; error: unkno
   return chain;
 }
 
-function fakeClient(rpcCalls: RpcCall[], leadsCalls: Call[]) {
+// A range-terminal RPC double for the branch/own-scope RPC-routing proof — getLeadsPage's
+// chain ends in .range(), not .order().
+function fakeRangeClient(rpcCalls: RpcCall[], leadsCalls: Call[]) {
   return {
     rpc: (name: string, params: unknown) => {
       rpcCalls.push([name, params]);
-      return makeChain(leadsCalls, { data: [], error: null });
+      return makeRangeChain(leadsCalls, { data: [], error: null, count: 0 });
     },
     from: (table: string) => {
-      if (table === "leads") return makeChain(leadsCalls, { data: [], error: null });
-      if (table === "lead_checklists") {
-        return { select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) }) };
-      }
-      throw new Error(`unexpected table ${table}`);
+      if (table !== "leads") throw new Error(`unexpected table ${table}`);
+      return makeRangeChain(leadsCalls, { data: [], error: null, count: 0 });
     },
   };
 }
@@ -88,7 +91,7 @@ vi.mock("@/lib/leads/branch-membership", () => ({
 vi.mock("@/lib/leads/collaborators", () => ({ isLeadCollaborator: vi.fn() }));
 vi.mock("./scoped", () => ({ scopedClientForTenant: vi.fn() }));
 
-describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIEF §4.2)", () => {
+describe("getLeadsPage — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIEF §4.2)", () => {
   beforeEach(() => {
     createClientMock.mockReset();
     createServiceClientMock.mockReset();
@@ -98,18 +101,18 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
   it("branch scope routes through the leads_visible_to_user RPC, not a hand-rolled .or() built from branchMemberIds", async () => {
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
-    createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
-    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
 
-    const { getLeadsForPipeline } = await import("./queries");
-    const result = await getLeadsForPipeline("tenant-1", { branchId: "branch-1" });
+    const { getLeadsPage } = await import("./queries");
+    const result = await getLeadsPage("tenant-1", { branchId: "branch-1" }, 1, 20, { skipCount: true });
 
-    expect(result).toEqual([]);
+    expect(result.leads).toEqual([]);
     expect(rpcCalls).toEqual([
       ["leads_visible_to_user", { p_tenant: "tenant-1", p_scope: "branch", p_branch_id: "branch-1" }],
     ]);
-    // The old path resolved branch members via branchMemberIds() and built .or(...) —
-    // neither should happen anymore for branch scope.
+    // Branch scope must not resolve branch members via branchMemberIds() and build
+    // .or(...) itself — that predicate lives inside the RPC now.
     expect(branchMemberIdsMock).not.toHaveBeenCalled();
     expect(leadsCalls.some(([m]) => m === "or")).toBe(false);
   });
@@ -117,11 +120,11 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
   it("own scope (restrictToSelf) still routes through the RPC as scope 'own', unaffected by the branch-scope fix", async () => {
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
-    createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
-    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
 
-    const { getLeadsForPipeline } = await import("./queries");
-    await getLeadsForPipeline("tenant-1", { restrictToSelf: true, userId: "user-1" });
+    const { getLeadsPage } = await import("./queries");
+    await getLeadsPage("tenant-1", { restrictToSelf: true, userId: "user-1" }, 1, 20, { skipCount: true });
 
     expect(rpcCalls).toEqual([
       ["leads_visible_to_user", { p_tenant: "tenant-1", p_user: "user-1", p_scope: "own" }],
@@ -131,14 +134,26 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
   it("no scope (owner/admin, unrestricted) stays on the plain unrestricted select — no RPC call", async () => {
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
-    createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
-    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
 
-    const { getLeadsForPipeline } = await import("./queries");
-    await getLeadsForPipeline("tenant-1", {});
+    const { getLeadsPage } = await import("./queries");
+    await getLeadsPage("tenant-1", {}, 1, 20, { skipCount: true });
 
     expect(rpcCalls).toEqual([]);
     expect(leadsCalls.some(([m, a]) => m === "eq" && a[0] === "tenant_id")).toBe(true);
+  });
+
+  it("scope.stageId applies .eq('stage_id', …) — the classic pipeline board's column identity (pipeline-column-pagination Phase 2)", async () => {
+    const rpcCalls: RpcCall[] = [];
+    const leadsCalls: Call[] = [];
+    createClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeRangeClient(rpcCalls, leadsCalls));
+
+    const { getLeadsPage } = await import("./queries");
+    await getLeadsPage("tenant-1", { stageId: "stage-1" }, 1, 20, { skipCount: true });
+
+    expect(leadsCalls.some(([m, a]) => m === "eq" && a[0] === "stage_id" && a[1] === "stage-1")).toBe(true);
   });
 });
 
