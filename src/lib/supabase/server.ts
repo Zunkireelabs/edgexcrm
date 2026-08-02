@@ -1,6 +1,19 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { cache } from "react";
+import { fetch as undiciFetch } from "undici";
+
+// Next.js 16.1.6 instruments the global `fetch` and retains each request's store
+// (IncrementalCache + requestHeaders + the caller's session cookie) in a WeakMap that
+// never releases — ~0.55 MiB of live heap per authenticated dashboard render, which
+// OOM-crashed prod roughly hourly. Known upstream bug, clusters on Docker +
+// `output: standalone` + fetch (vercel/next.js#88603, #90433, #85914, #64212).
+// Routing Supabase through undici's fetch bypasses the instrumented global entirely,
+// so no WeakMap entry is created. Safe here: we use none of Next's fetch cache (zero
+// unstable_cache/force-cache/revalidate in src/). The global dispatcher configured in
+// src/instrumentation.ts still applies, so keep-alive tuning is preserved.
+// See docs/MEMORY-LEAK-FIX-BRIEF.md.
+const leakFreeFetch = undiciFetch as unknown as typeof globalThis.fetch;
 
 export async function createClient() {
   const cookieStore = await cookies();
@@ -9,6 +22,7 @@ export async function createClient() {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: { fetch: leakFreeFetch },
       cookies: {
         getAll() {
           return cookieStore.getAll();
@@ -56,6 +70,7 @@ export async function createServiceClient() {
   const { createClient } = await import("@supabase/supabase-js");
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { global: { fetch: leakFreeFetch } }
   );
 }
