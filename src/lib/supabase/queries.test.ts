@@ -214,3 +214,135 @@ describe("getLeadsPage — Kanban column extension (status filter + skipCount)",
     expect(result.total).toBe(42);
   });
 });
+
+// TENANT-ISOLATION-TESTS-BRIEF.md §2b — the new cross-tenant filters Phase A (#354)
+// introduced on a service client, which bypasses RLS entirely. These are the only
+// thing separating tenants on these paths now.
+describe("getLeadNotes — leads!inner(tenant_id) embed filter (TENANT-ISOLATION-TESTS-BRIEF §2b)", () => {
+  beforeEach(() => {
+    createClientMock.mockReset();
+    createServiceClientMock.mockReset();
+  });
+
+  it("applies both .eq('lead_id', …) and .eq('leads.tenant_id', …) via the leads!inner embed, and strips the embed from the returned rows", async () => {
+    const calls: Call[] = [];
+    const selectArgs: unknown[] = [];
+    const client = {
+      from: (table: string) => {
+        if (table !== "lead_notes") throw new Error(`unexpected table ${table}`);
+        return {
+          select: (...args: unknown[]) => {
+            selectArgs.push(...args);
+            return makeChain(calls, {
+              data: [{ id: "note-1", content: "hi", leads: { tenant_id: "tenant-1" } }],
+              error: null,
+            });
+          },
+        };
+      },
+    };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
+
+    const { getLeadNotes } = await import("./queries");
+    const result = await getLeadNotes("lead-1", "tenant-1");
+
+    expect(selectArgs[0]).toBe("*, leads!inner(tenant_id)");
+    expect(calls).toEqual([
+      ["eq", ["lead_id", "lead-1"]],
+      ["eq", ["leads.tenant_id", "tenant-1"]],
+    ]);
+    // The embed used only to enforce the tenant filter must not leak into the returned shape.
+    expect(result).toEqual([{ id: "note-1", content: "hi" }]);
+  });
+
+  it("wrong tenant -> the query returns [] (the embed filter, not app-layer post-filtering, is what protects this)", async () => {
+    const calls: Call[] = [];
+    const client = {
+      from: () => ({
+        select: () => makeChain(calls, { data: [], error: null }),
+      }),
+    };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
+
+    const { getLeadNotes } = await import("./queries");
+    const result = await getLeadNotes("lead-1", "tenant-does-not-own-this-lead");
+
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "leads.tenant_id" && a[1] === "tenant-does-not-own-this-lead")).toBe(true);
+    expect(result).toEqual([]);
+  });
+});
+
+describe("getLeadChecklists — .eq('tenant_id', …) (TENANT-ISOLATION-TESTS-BRIEF §2b)", () => {
+  beforeEach(() => {
+    createClientMock.mockReset();
+    createServiceClientMock.mockReset();
+  });
+
+  it("applies both .eq('lead_id', …) and .eq('tenant_id', …)", async () => {
+    const calls: Call[] = [];
+    const client = {
+      from: (table: string) => {
+        if (table !== "lead_checklists") throw new Error(`unexpected table ${table}`);
+        return { select: () => makeChain(calls, { data: [], error: null }) };
+      },
+    };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
+
+    const { getLeadChecklists } = await import("./queries");
+    await getLeadChecklists("lead-1", "tenant-1");
+
+    expect(calls).toEqual([
+      ["eq", ["lead_id", "lead-1"]],
+      ["eq", ["tenant_id", "tenant-1"]],
+    ]);
+  });
+});
+
+describe("getFormConfigsForTenant — .eq('tenant_id', …) (TENANT-ISOLATION-TESTS-BRIEF §2b)", () => {
+  beforeEach(() => {
+    createClientMock.mockReset();
+    createServiceClientMock.mockReset();
+  });
+
+  it("scopes form_configs by tenant_id", async () => {
+    const calls: Call[] = [];
+    const client = {
+      from: (table: string) => {
+        if (table !== "form_configs") throw new Error(`unexpected table ${table}`);
+        return { select: () => makeChain(calls, { data: [], error: null }) };
+      },
+    };
+    createServiceClientMock.mockResolvedValue(client);
+
+    const { getFormConfigsForTenant } = await import("./queries");
+    await getFormConfigsForTenant("tenant-1");
+
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "tenant_id" && a[1] === "tenant-1")).toBe(true);
+  });
+});
+
+describe("getBranches — .eq('tenant_id', …) (TENANT-ISOLATION-TESTS-BRIEF §2b)", () => {
+  beforeEach(() => {
+    createClientMock.mockReset();
+    createServiceClientMock.mockReset();
+  });
+
+  it("scopes branches by tenant_id", async () => {
+    const calls: Call[] = [];
+    const client = {
+      from: (table: string) => {
+        if (table !== "branches") throw new Error(`unexpected table ${table}`);
+        return { select: () => makeChain(calls, { data: [], error: null }) };
+      },
+    };
+    createServiceClientMock.mockResolvedValue(client);
+
+    const { getBranches } = await import("./queries");
+    await getBranches("tenant-1");
+
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "tenant_id" && a[1] === "tenant-1")).toBe(true);
+  });
+});
