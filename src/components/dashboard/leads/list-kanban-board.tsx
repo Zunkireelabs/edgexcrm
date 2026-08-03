@@ -12,7 +12,6 @@ import {
   useSensors,
   closestCorners,
 } from "@dnd-kit/core";
-import { createClient } from "@/lib/supabase/client";
 import type { PipelineLead, PipelineStage, UserRole } from "@/types/database";
 import { PipelineColumn } from "@/components/pipeline/PipelineColumn";
 import { LeadCard } from "@/components/pipeline/LeadCard";
@@ -224,83 +223,6 @@ export function ListKanbanBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stages]);
 
-  // Realtime — scoped to cards already on the board. A brand-new lead can't be
-  // validated against the active server-side filters without a round trip, so (unlike
-  // the old full-load version) it is NOT spliced in here; it appears on the next
-  // filter change / Load more / navigation. Moves and edits of an already-visible
-  // card still update live. DELETE / leaving the tenant always removes it (always
-  // correct regardless of active filters).
-  useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel(`pipeline-${tenantId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "leads",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          const updatedLead = newRecord as PipelineLead | undefined;
-          const leadId = (updatedLead?.id || (oldRecord as PipelineLead)?.id) as string;
-          if (!leadId) return;
-
-          setColumns((prev) => {
-            const currentCol = findLeadColumn(prev, leadId);
-            if (!currentCol) return prev; // not currently on the board — leave it out
-
-            const next = { ...prev };
-            const removeFrom = (stageId: string) => {
-              const col = next[stageId];
-              const cards = col.cards.filter((l) => l.id !== leadId);
-              next[stageId] = { ...col, cards, loaded: cards.length, total: Math.max(0, col.total - 1) };
-            };
-
-            if (eventType === "DELETE" || (updatedLead && updatedLead.deleted_at)) {
-              removeFrom(currentCol);
-              return next;
-            }
-
-            if (eventType === "UPDATE" && updatedLead) {
-              const targetCol = updatedLead.stage_id;
-              if (targetCol && targetCol !== currentCol && next[targetCol]) {
-                removeFrom(currentCol);
-                const col = next[targetCol];
-                const existing = prev[currentCol].cards.find((l) => l.id === leadId);
-                const merged: PipelineLead = {
-                  ...(existing ?? updatedLead),
-                  ...updatedLead,
-                };
-                next[targetCol] = {
-                  ...col,
-                  cards: [merged, ...col.cards],
-                  loaded: col.loaded + 1,
-                  total: col.total + 1,
-                };
-              } else {
-                // Same column — patch the card in place, no count change.
-                const col = next[currentCol];
-                next[currentCol] = {
-                  ...col,
-                  cards: col.cards.map((l) => (l.id === leadId ? { ...l, ...updatedLead } : l)),
-                };
-              }
-            }
-
-            return next;
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [tenantId, setColumns]);
 
   // Currently-loaded cards across every column — used for filter option lists whose
   // exact counts would need a new server aggregate (out of KANBAN-PAGINATION-BRIEF's

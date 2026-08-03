@@ -95,11 +95,13 @@ function LoginPageContent() {
   useEffect(() => {
     if (!supabase) return;
 
+    // Real health check, not a table read: pre-auth (anon) callers have no business
+    // reading `tenants` at all, and post role-scoping revoke the grant that made this
+    // ping work no longer exists. getSession() only talks to the `auth` schema, so it
+    // proves connectivity without needing any table grant.
     const checkConnection = async () => {
       try {
-        const { error } = await withRetry(async () =>
-          await supabase.from('tenants').select('count', { count: 'exact', head: true })
-        );
+        const { error } = await withRetry(async () => await supabase.auth.getSession());
         setDbStatus(error ? 'offline' : 'online');
       } catch {
         setDbStatus('offline');

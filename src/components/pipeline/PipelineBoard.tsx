@@ -12,7 +12,6 @@ import {
   useSensors,
   closestCorners,
 } from "@dnd-kit/core";
-import { createClient } from "@/lib/supabase/client";
 import type { PipelineLead, PipelineStage, UserRole } from "@/types/database";
 import { PipelineColumn } from "./PipelineColumn";
 import { LeadCard } from "./LeadCard";
@@ -206,69 +205,6 @@ export function PipelineBoard({
       return next;
     });
   }, [stages]);
-
-  // Realtime Subscription
-  useEffect(() => {
-    const supabase = createClient();
-
-    const channel = supabase
-      .channel(`pipeline-${tenantId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "leads",
-          filter: `tenant_id=eq.${tenantId}`,
-        },
-        (payload) => {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-
-          setColumns((prev) => {
-            const next = { ...prev };
-            const updatedLead = newRecord as PipelineLead;
-            const leadId = (updatedLead?.id || (oldRecord as PipelineLead)?.id) as string;
-
-            // 1. Find and remove the lead from its current position
-            let existingLead: PipelineLead | undefined;
-            for (const stageId in next) {
-              const foundIdx = next[stageId].findIndex((l) => l.id === leadId);
-              if (foundIdx !== -1) {
-                existingLead = next[stageId][foundIdx];
-                next[stageId] = next[stageId].filter((l) => l.id !== leadId);
-                break;
-              }
-            }
-
-            // 2. Handle the event
-            if (eventType === "DELETE" || (updatedLead && updatedLead.deleted_at)) {
-              // Already removed from next above
-              return { ...next };
-            }
-
-            if (eventType === "INSERT" || eventType === "UPDATE") {
-              const stageId = updatedLead.stage_id;
-              if (stageId && next[stageId]) {
-                const mergedLead: PipelineLead = {
-                  ...updatedLead,
-                  checklist_total: existingLead?.checklist_total || 0,
-                  checklist_completed: existingLead?.checklist_completed || 0,
-                };
-                // Add to top of the column
-                next[stageId] = [mergedLead, ...next[stageId]];
-              }
-            }
-
-            return { ...next };
-          });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [tenantId]);
 
   // Derived unique sources for filter
   const sources = useMemo(() => {

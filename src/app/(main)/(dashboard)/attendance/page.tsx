@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { canManageHR } from "@/lib/api/permissions";
 import { AttendanceWorkspace } from "@/components/dashboard/hr/attendance/attendance-workspace";
@@ -9,7 +9,7 @@ export default async function AttendancePage() {
   if (!tenantData) redirect("/login");
 
   const { userId, permissions } = tenantData;
-  const supabase = await createClient();
+  const supabase = await scopedClientForTenant(tenantData.tenant.id);
 
   const { data: membership } = await supabase
     .from("tenant_users")

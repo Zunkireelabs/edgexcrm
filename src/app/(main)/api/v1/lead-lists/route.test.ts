@@ -99,6 +99,49 @@ function fakeListsServiceClient() {
 type RpcCall = [name: string, params: unknown, opts: unknown];
 type FromCall = [selectOpts: unknown];
 
+// Service client for the unrestricted (owner/admin) scope test: the RLS-scoping fix
+// (Phase A §2b) moved visibleLeadsBase()'s unrestricted branch onto the service
+// client, so this fixture must answer both "lead_lists" (the initial list fetch)
+// and "leads" (the per-list count-only query) — unlike fakeListsServiceClient(),
+// which only stubs "lead_lists" and throws on "leads".
+function fakeUnrestrictedServiceClient(fromCalls: FromCall[]) {
+  function chain() {
+    let listId: string | undefined;
+    const c: Record<string, unknown> = {
+      eq: (col: string, val: string) => {
+        if (col === "list_id") listId = val;
+        return c;
+      },
+      is: () => c,
+      then: (resolve: (v: { count: number; error: null }) => void) =>
+        resolve({ count: listId ? ({ "list-1": 40, "list-2": 12 }[listId] ?? 0) : 0, error: null }),
+    };
+    return c;
+  }
+  return {
+    from: (table: string) => {
+      if (table === "lead_lists") {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: LISTS, error: null }),
+            }),
+          }),
+        };
+      }
+      if (table === "leads") {
+        return {
+          select: (_cols: string, selOpts: unknown) => {
+            fromCalls.push([selOpts]);
+            return chain();
+          },
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
+    },
+  };
+}
+
 // Records every rpc(name, params, opts) call and every from("leads").select(cols, opts)
 // call, and terminates each chain's .eq(...).is(...) tail as a thenable resolving to a
 // count keyed by whichever list_id was filtered on — mirrors the real
@@ -194,9 +237,10 @@ describe("GET /api/v1/lead-lists — ?counts=1 opt-in + visibility scoping (LEAD
     authenticateRequestMock.mockResolvedValue(
       authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }),
     );
-    createClientMock.mockResolvedValue(
-      fakeCountClient({ countsByListId: { "list-1": 40, "list-2": 12 }, rpcCalls, fromCalls }),
-    );
+    // Unrestricted scope never calls the RPC, so countClient (createClient()) is unused
+    // here — the unrestricted branch reads via the service client instead (Phase A §2b).
+    createClientMock.mockResolvedValue(fakeCountClient({ countsByListId: {}, rpcCalls, fromCalls: [] }));
+    createServiceClientMock.mockResolvedValue(fakeUnrestrictedServiceClient(fromCalls));
 
     const { GET } = await import("./route");
     const res = await GET(fakeReq({ counts: "1" }));
