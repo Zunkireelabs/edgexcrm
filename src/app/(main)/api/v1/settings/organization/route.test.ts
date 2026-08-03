@@ -26,26 +26,27 @@ function fakeReq(body: unknown): NextRequest {
 
 type Call = [table: string, method: string, args: unknown[]];
 
-function fakeDb(calls: Call[]) {
-  function makeUpdatable(table: string) {
-    return {
-      update: (values: unknown) => {
-        calls.push([table, "update", [values]]);
-        return {
-          eq: (col: string, val: unknown) => {
-            calls.push([table, "eq", [col, val]]);
-            return Promise.resolve({ error: null });
-          },
-        };
-      },
-    };
-  }
+function makeUpdatable(table: string, calls: Call[], error: { code: string } | null = null) {
+  return {
+    update: (values: unknown) => {
+      calls.push([table, "update", [values]]);
+      return {
+        eq: (col: string, val: unknown) => {
+          calls.push([table, "eq", [col, val]]);
+          return Promise.resolve({ error });
+        },
+      };
+    },
+  };
+}
+
+function fakeDb(calls: Call[], opts: { tenantsError?: { code: string } | null } = {}) {
   const rawClient = {
-    from: (table: string) => makeUpdatable(table),
+    from: (table: string) => makeUpdatable(table, calls, opts.tenantsError ?? null),
   };
   return {
     raw: () => rawClient,
-    from: (table: string) => makeUpdatable(table),
+    from: (table: string) => makeUpdatable(table, calls),
   };
 }
 
@@ -102,15 +103,7 @@ describe("PATCH /api/v1/settings/organization — tenant isolation (TENANT-ISOLA
 
   it("a caller-supplied slug collision (23505) surfaces as a validation error, not a 500", async () => {
     const calls: Call[] = [];
-    const db = fakeDb(calls);
-    db.raw = () => ({
-      from: () => ({
-        update: () => ({
-          eq: () => Promise.resolve({ error: { code: "23505" } }),
-        }),
-      }),
-    });
-    scopedClientMock.mockResolvedValue(db);
+    scopedClientMock.mockResolvedValue(fakeDb(calls, { tenantsError: { code: "23505" } }));
 
     const { PATCH } = await import("./route");
     const res = await PATCH(fakeReq({ slug: "taken-slug" }));
