@@ -99,6 +99,7 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
     createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
 
     const { getLeadsForPipeline } = await import("./queries");
     const result = await getLeadsForPipeline("tenant-1", { branchId: "branch-1" });
@@ -117,6 +118,7 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
     createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
 
     const { getLeadsForPipeline } = await import("./queries");
     await getLeadsForPipeline("tenant-1", { restrictToSelf: true, userId: "user-1" });
@@ -130,6 +132,7 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
     const rpcCalls: RpcCall[] = [];
     const leadsCalls: Call[] = [];
     createClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
+    createServiceClientMock.mockResolvedValue(fakeClient(rpcCalls, leadsCalls));
 
     const { getLeadsForPipeline } = await import("./queries");
     await getLeadsForPipeline("tenant-1", {});
@@ -147,16 +150,19 @@ describe("getLeadsForPipeline — branch scope (BRANCH-SCOPE-TRUNCATION-503-BRIE
 describe("getLeadsPage — Kanban column extension (status filter + skipCount)", () => {
   beforeEach(() => {
     createClientMock.mockReset();
+    createServiceClientMock.mockReset();
   });
 
   it("applies scope.status as an .eq('status', …) filter", async () => {
     const calls: Call[] = [];
-    createClientMock.mockResolvedValue({
+    const client = {
       from: (table: string) => {
         if (table !== "leads") throw new Error(`unexpected table ${table}`);
         return makeRangeChain(calls, { data: [], error: null, count: 0 });
       },
-    });
+    };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
 
     const { getLeadsPage } = await import("./queries");
     await getLeadsPage("tenant-1", { listId: "list-1", status: "qualified" }, 1, 20);
@@ -169,9 +175,9 @@ describe("getLeadsPage — Kanban column extension (status filter + skipCount)",
 
   it("omits scope.status entirely when not provided — existing (non-Kanban) callers untouched", async () => {
     const calls: Call[] = [];
-    createClientMock.mockResolvedValue({
-      from: () => makeRangeChain(calls, { data: [], error: null, count: 0 }),
-    });
+    const client = { from: () => makeRangeChain(calls, { data: [], error: null, count: 0 }) };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
 
     const { getLeadsPage } = await import("./queries");
     await getLeadsPage("tenant-1", { listId: "list-1" }, 1, 25);
@@ -181,9 +187,9 @@ describe("getLeadsPage — Kanban column extension (status filter + skipCount)",
 
   it("skipCount:true skips the exact count (no {count:'exact'} on select) and returns total -1", async () => {
     const calls: Call[] = [];
-    createClientMock.mockResolvedValue({
-      from: () => makeRangeChain(calls, { data: [{ id: "lead-1" }], error: null, count: null }),
-    });
+    const client = { from: () => makeRangeChain(calls, { data: [{ id: "lead-1" }], error: null, count: null }) };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
 
     const { getLeadsPage } = await import("./queries");
     const result = await getLeadsPage("tenant-1", { listId: "list-1", status: "new" }, 1, 20, { skipCount: true });
@@ -196,9 +202,9 @@ describe("getLeadsPage — Kanban column extension (status filter + skipCount)",
 
   it("without skipCount, still requests an exact count (unaffected by the Kanban extension)", async () => {
     const calls: Call[] = [];
-    createClientMock.mockResolvedValue({
-      from: () => makeRangeChain(calls, { data: [], error: null, count: 42 }),
-    });
+    const client = { from: () => makeRangeChain(calls, { data: [], error: null, count: 42 }) };
+    createClientMock.mockResolvedValue(client);
+    createServiceClientMock.mockResolvedValue(client);
 
     const { getLeadsPage } = await import("./queries");
     const result = await getLeadsPage("tenant-1", { listId: "list-1" }, 1, 20);

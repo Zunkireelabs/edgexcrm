@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import type { Tenant, FormConfig } from "@/types/database";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -151,24 +150,22 @@ export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
     }
 
     setSaving(true);
-    const supabase = createClient();
 
-    const updateData: { name: string; primary_color: string; slug?: string } = {
-      name,
-      primary_color: primaryColor,
-    };
+    const res = await fetch("/api/v1/settings/organization", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        primaryColor,
+        slug: slugChanged && slugStatus === "available" ? slug : undefined,
+        formConfigId: selectedForm?.id,
+        redirectUrl: selectedForm ? redirectUrl : undefined,
+      }),
+    });
 
-    if (slugChanged && slugStatus === "available") {
-      updateData.slug = slug;
-    }
-
-    const { error: tenantError } = await supabase
-      .from("tenants")
-      .update(updateData)
-      .eq("id", tenant.id);
-
-    if (tenantError) {
-      if (tenantError.code === "23505") {
+    if (!res.ok) {
+      const json = await res.json().catch(() => ({}));
+      if (json.error?.details?.slug) {
         toast.error("This slug is already taken");
         setSlugStatus("taken");
         setSlugError("This slug is already taken");
@@ -177,13 +174,6 @@ export function SettingsForm({ tenant, formConfigs = [] }: SettingsFormProps) {
       }
       setSaving(false);
       return;
-    }
-
-    if (selectedForm) {
-      await supabase
-        .from("form_configs")
-        .update({ redirect_url: redirectUrl || null })
-        .eq("id", selectedForm.id);
     }
 
     setSaving(false);

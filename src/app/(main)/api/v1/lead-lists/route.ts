@@ -108,7 +108,7 @@ export async function GET(request: NextRequest) {
   try {
     const countEntries = await Promise.all(
       accessible.map(async (l) => {
-        const { count, error: countError } = await visibleLeadsBase(countClient, auth.tenantId, scope, {
+        const { count, error: countError } = await visibleLeadsBase({ user: countClient, service: supabase }, auth.tenantId, scope, {
           count: "exact",
           head: true,
         })

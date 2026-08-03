@@ -22,9 +22,21 @@ export interface LeadVisibilityScope {
  * function's own DEFAULT NULL apply, which works identically for both the POST (data)
  * and GET/HEAD (count-only) call shapes.
  */
-export function visibleLeadsBase(
+export interface VisibleLeadsClients {
+  /** RLS-context client (must carry a real `auth.uid()`) — required by the RPC
+   * branches below, which are SECURITY DEFINER and fail closed (zero rows) if
+   * called without an authenticated JWT (e.g. a service-role client). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  supabase: SupabaseClient<any>,
+  user: SupabaseClient<any>;
+  /** Service/scoped client for the unrestricted (owner/admin) branch — a direct
+   * table read that, post role-scoping revoke, the user-context client can no
+   * longer perform. Must carry its own explicit tenant_id filter. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  service: SupabaseClient<any>;
+}
+
+export function visibleLeadsBase(
+  clients: VisibleLeadsClients,
   tenantId: string,
   scope: LeadVisibilityScope | undefined,
   rpcOpts?: { count?: "exact" | "planned" | "estimated"; head?: boolean },
@@ -44,14 +56,14 @@ export function visibleLeadsBase(
     };
     if (scope.userBranchId) params.p_user_branch_id = scope.userBranchId;
     if (scope.crossBranchPoolListSlug) params.p_cross_pool_slug = scope.crossBranchPoolListSlug;
-    return supabase.rpc("leads_visible_to_user", params, rpcOpts);
+    return clients.user.rpc("leads_visible_to_user", params, rpcOpts);
   }
   if (scope?.branchId) {
-    return supabase.rpc("leads_visible_to_user", {
+    return clients.user.rpc("leads_visible_to_user", {
       p_tenant: tenantId,
       p_scope: "branch",
       p_branch_id: scope.branchId,
     }, rpcOpts);
   }
-  return supabase.from("leads").select("*", rpcOpts).eq("tenant_id", tenantId);
+  return clients.service.from("leads").select("*", rpcOpts).eq("tenant_id", tenantId);
 }
