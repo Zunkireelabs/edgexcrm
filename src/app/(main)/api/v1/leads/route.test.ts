@@ -615,3 +615,78 @@ describe("GET /api/v1/leads — sort/count/list/funnel/recycle-bin (LEADS-SERVER
     expect(res.status).toBe(403);
   });
 });
+
+// --- pipeline-column-pagination Phase 1: ?stage= filter ---
+
+describe("GET /api/v1/leads — ?stage= filter (pipeline-column-pagination Phase 1)", () => {
+  const VALID_STAGE_ID = "11111111-2222-4333-8444-555555555555";
+
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }),
+    );
+  });
+
+  it("applies a well-formed ?stage= as .eq('stage_id', <value>) — exact match, no widening", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ stage: VALID_STAGE_ID }));
+
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["eq", ["stage_id", VALID_STAGE_ID]]);
+  });
+
+  it("drops a malformed ?stage= value instead of interpolating it — no stage_id filter is applied", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ stage: "'; DROP TABLE leads; --" }));
+
+    expect(res.status).toBe(200);
+    expect(calls.some(([m, a]) => m === "eq" && a[0] === "stage_id")).toBe(false);
+  });
+
+  it("composes ?stage= with ?funnel= — both filters are applied together, neither silently drops the other", async () => {
+    const calls: Call[] = [];
+    getFeatureAccessMock.mockReturnValue(true);
+    createServiceClientMock.mockResolvedValue(
+      fakeDbWithLists({
+        leadsCalls: calls,
+        lists: [
+          { id: "l1", slug: "new", funnel_key: "lead_processing" },
+          { id: "l2", slug: "contacted", funnel_key: "lead_processing" },
+        ],
+      }),
+    );
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ funnel: "lead_processing", stage: VALID_STAGE_ID }));
+
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["in", ["list_id", ["l1", "l2"]]]);
+    expect(calls).toContainEqual(["eq", ["stage_id", VALID_STAGE_ID]]);
+  });
+
+  it("composes ?stage= with ?search= — both filters are applied together", async () => {
+    const calls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ stage: VALID_STAGE_ID, search: "acme" }));
+
+    expect(res.status).toBe(200);
+    expect(calls).toContainEqual(["eq", ["stage_id", VALID_STAGE_ID]]);
+    expect(calls.some(([m, a]) => m === "or" && String(a[0]).includes("acme"))).toBe(true);
+  });
+});

@@ -66,7 +66,7 @@ function findLeadColumn(columns: KanbanColumnsState, leadId: string): string | n
  * one list's own statuses. */
 export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false }: FunnelKanbanBoardProps) {
   // DnD-kit and Radix generate ids that differ between the SSR pass and the client's first
-  // render — mirrors the same guard in PipelineBoard. Render a skeleton until mounted.
+  // render — mirrors the same guard in KanbanBoard. Render a skeleton until mounted.
   const [mounted, setMounted] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const prevColumnsRef = useRef<KanbanColumnsState | null>(null);

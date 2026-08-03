@@ -45,8 +45,10 @@ function seedColumn(seed: { cards: PipelineLead[]; total: number } | undefined):
 }
 
 /**
- * Per-column lazy-loading state machine shared by ListKanbanView (PipelineBoard) and
- * FunnelKanbanBoard — KANBAN-PAGINATION-BRIEF §2-4. Page 1 of every column is SSR-seeded
+ * Per-column lazy-loading state machine shared by KanbanBoard (both the lead-lists
+ * Kanban view and the classic single-pipeline board, since pipeline-column-pagination
+ * Phase 2 unified them) and FunnelKanbanBoard — KANBAN-PAGINATION-BRIEF §2-4. Page 1
+ * of every column is SSR-seeded
  * (server-rendered props); this hook re-fetches page 1 (with an exact count) for every
  * column, in parallel, whenever `filterSignature` changes, and exposes `loadMore` for the
  * Load-more button / Phase 2 infinite-scroll sentinel.
