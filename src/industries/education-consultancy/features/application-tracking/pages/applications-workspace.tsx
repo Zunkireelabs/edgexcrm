@@ -21,7 +21,8 @@ import {
   APPLICATION_DEFAULT_COLUMN_KEYS,
 } from "../components/applications-table";
 import { AddApplicationSheet } from "../components/add-application-sheet";
-import type { Application, ApplicationStage } from "@/types/database";
+import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
+import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
 
 interface ApplicationsWorkspaceTeamMember {
   user_id: string;
@@ -34,6 +35,9 @@ interface ApplicationsWorkspaceProps {
   applications: Application[];
   canManageApplications: boolean;
   teamMembers: ApplicationsWorkspaceTeamMember[];
+  pipelines?: ApplicationPipelineWithCounts[];
+  role: UserRole;
+  tenantId: string;
 }
 
 type View = "board" | "list";
@@ -62,6 +66,9 @@ export function ApplicationsWorkspace({
   applications: initialApplications,
   canManageApplications,
   teamMembers,
+  pipelines,
+  role,
+  tenantId,
 }: ApplicationsWorkspaceProps) {
   const router = useRouter();
 
@@ -71,6 +78,22 @@ export function ApplicationsWorkspace({
   const [addOpen, setAddOpen] = useState(false);
   const [columnDialogOpen, setColumnDialogOpen] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<string[]>(APPLICATION_DEFAULT_COLUMN_KEYS);
+  // Defaults to the tenant's Default Pipeline so the very first render already
+  // scopes to one pipeline's stages, instead of showing every pipeline's stages
+  // interleaved (all 12 pipelines' position-0 "Shortlisted" stage sorting
+  // adjacent, etc. — the bug this default avoids re-introducing).
+  const [selectedPipelineId, setSelectedPipelineId] = useState<string | null>(
+    () => pipelines?.find((p) => p.is_default)?.id ?? pipelines?.[0]?.id ?? null
+  );
+
+  const handlePipelineChange = useCallback((pipelineId: string) => {
+    setSelectedPipelineId(pipelineId);
+  }, []);
+
+  const filteredStages = useMemo(
+    () => (selectedPipelineId ? stages.filter((s) => s.pipeline_id === selectedPipelineId) : stages),
+    [stages, selectedPipelineId]
+  );
 
   const [search, setSearch] = useState("");
   const [stageFilter, setStageFilter] = useState("all");
@@ -115,8 +138,8 @@ export function ApplicationsWorkspace({
 
   const stageOptions = useMemo(() => [
     { value: "all", label: "All stages" },
-    ...stages.map((s) => ({ value: s.id, label: s.name })),
-  ], [stages]);
+    ...filteredStages.map((s) => ({ value: s.id, label: s.name })),
+  ], [filteredStages]);
 
   const countryOptions = useMemo(() => {
     const countries = Array.from(new Set(applications.flatMap((a) => a.countries ?? [])));
@@ -168,6 +191,10 @@ export function ApplicationsWorkspace({
   const filteredApplications = useMemo(() => {
     let result = applications;
 
+    if (selectedPipelineId) {
+      result = result.filter((a) => a.pipeline_id === selectedPipelineId);
+    }
+
     if (search) {
       const q = search.toLowerCase();
       result = result.filter((a) =>
@@ -204,7 +231,7 @@ export function ApplicationsWorkspace({
     });
 
     return result;
-  }, [applications, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir]);
+  }, [applications, search, stageFilter, countryFilter, createdByFilter, sortField, sortDir, selectedPipelineId]);
 
   // Scoped to Stage + Country + Created By — Search stays independent so clearing
   // filters never unexpectedly wipes out what the user typed in the search box.
@@ -257,8 +284,27 @@ export function ApplicationsWorkspace({
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       {/* Header */}
-      <div className="shrink-0">
+      <div className="flex items-center justify-between gap-3 shrink-0">
         <h1 className="text-xl font-bold">Applications</h1>
+        <div className="flex items-center gap-2">
+          <ApplicationPipelineSelector
+            pipelines={pipelines ?? []}
+            selectedPipelineId={selectedPipelineId ?? ""}
+            role={role}
+            tenantId={tenantId}
+            onPipelineChange={handlePipelineChange}
+          />
+          {canManageApplications && (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+            >
+              <Plus className="h-3 w-3 shrink-0" />
+              Add Application
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -315,17 +361,6 @@ export function ApplicationsWorkspace({
             icon={<ArrowUpDown className="h-3 w-3" />}
             searchable={false}
           />
-
-          {canManageApplications && (
-            <button
-              type="button"
-              onClick={() => setAddOpen(true)}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
-            >
-              <Plus className="h-3 w-3 shrink-0" />
-              Add Application
-            </button>
-          )}
         </div>
 
         {activeFieldFilterCount > 0 && (
@@ -337,7 +372,7 @@ export function ApplicationsWorkspace({
       {view === "board" ? (
         <div className="flex-1 min-h-0 overflow-hidden">
           <ApplicationsBoard
-            stages={stages}
+            stages={filteredStages}
             applications={filteredApplications}
             canManageApplications={canManageApplications}
             onRefresh={handleRefresh}
@@ -347,7 +382,7 @@ export function ApplicationsWorkspace({
         <div className="flex-1 min-h-0 overflow-y-auto">
           <ApplicationsTable
             applications={filteredApplications}
-            stages={stages}
+            stages={filteredStages}
             visibleKeys={visibleColumnKeys}
           />
         </div>

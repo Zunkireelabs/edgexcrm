@@ -14,6 +14,7 @@ import { getLeadAggregates, type AggregateScope } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
 import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { PipelineSelector } from "@/components/pipeline/PipelineSelector";
+import { PipelineViewToggle } from "@/components/pipeline/PipelineViewToggle";
 import { ListFunnelBoard } from "@/components/pipeline/ListFunnelBoard";
 import { canSeeNav, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -29,7 +30,7 @@ import type { UserRole, TenantEntity, Industry, LeadList, PipelineLead } from "@
 const KANBAN_PAGE_SIZE = 20;
 
 interface PipelinePageProps {
-  searchParams: Promise<{ pipeline?: string }>;
+  searchParams: Promise<{ pipeline?: string; view?: string }>;
 }
 
 export default async function PipelinePage({ searchParams }: PipelinePageProps) {
@@ -58,7 +59,19 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
   // intake/staging list for owner/admin only) instead of the classic single-
   // pipeline board below. No drag-and-drop — view only, by design.
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
-  if (hasLeadLists) {
+
+  // education_consultancy tenants can toggle to the classic multi-pipeline board
+  // as a second view alongside the funnel board. Other hasLeadLists industries
+  // (it_agency, travel_agency) keep exactly today's funnel-only behavior — no
+  // toggle rendered, ?view= ignored.
+  const isEducationConsultancy = tenantData.tenant.industry_id === "education_consultancy";
+  const canToggleView = hasLeadLists && isEducationConsultancy;
+  const requestedView = params.view === "pipeline" || params.view === "funnel" ? params.view : null;
+  const activeView = canToggleView && requestedView === "pipeline"
+    ? "pipeline"
+    : (hasLeadLists ? "funnel" : "pipeline");
+
+  if (activeView === "funnel") {
     const isAdminOrOwner = tenantData.role === "owner" || tenantData.role === "admin";
     const allLists = (await getLeadListsByTenant(tenantData.tenant.id)) as LeadList[];
     const funnelLists = allLists
@@ -105,6 +118,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       <div className="flex flex-col h-[calc(100vh-90px)]">
         <div className="flex items-center justify-between shrink-0 mb-4">
           <h1 className="text-lg font-bold">Pipeline</h1>
+          {canToggleView && <PipelineViewToggle activeView="funnel" />}
         </div>
         <ListFunnelBoard
           lists={visibleLists}
@@ -135,6 +149,7 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       <div className="flex flex-col h-[calc(100vh-90px)]">
         <div className="flex items-center gap-3 shrink-0 mb-4">
           <h1 className="text-lg font-bold">Pipeline</h1>
+          {canToggleView && <PipelineViewToggle activeView="pipeline" />}
         </div>
         <div className="flex-1 flex items-center justify-center text-muted-foreground">
           No pipelines found. Create your first pipeline to get started.
@@ -213,12 +228,15 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       {/* Header with Pipeline Selector */}
       <div className="flex items-center justify-between shrink-0 mb-4">
         <h1 className="text-lg font-bold">Pipeline</h1>
-        <PipelineSelector
-          pipelines={pipelines}
-          selectedPipelineId={selectedPipelineId}
-          role={tenantData.role as UserRole}
-          tenantId={tenantData.tenant.id}
-        />
+        <div className="flex items-center gap-3">
+          {canToggleView && <PipelineViewToggle activeView="pipeline" />}
+          <PipelineSelector
+            pipelines={pipelines}
+            selectedPipelineId={selectedPipelineId}
+            role={tenantData.role as UserRole}
+            tenantId={tenantData.tenant.id}
+          />
+        </div>
       </div>
 
       {/* Pipeline Board — keyed on pipeline so switching pipelines remounts and

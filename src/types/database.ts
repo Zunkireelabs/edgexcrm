@@ -1076,14 +1076,42 @@ export interface LeadDuplicateSuggestion {
 export interface ApplicationStage {
   id: string;
   tenant_id: string;
+  pipeline_id: string | null;
   name: string;
   slug: string;
   position: number;
   color: string;
   is_default: boolean;
+  is_terminal: boolean;
   terminal_type: "won" | "lost" | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ApplicationPipeline {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  is_default: boolean;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApplicationPipelineWithCounts extends ApplicationPipeline {
+  stage_count: number;
+  application_count: number;
+}
+
+export interface ApplicationPipelineWithStages extends ApplicationPipeline {
+  stages: ApplicationStageWithCount[];
+  application_count: number;
+}
+
+export interface ApplicationStageWithCount extends ApplicationStage {
+  application_count: number;
 }
 
 export interface Application {
@@ -1097,6 +1125,7 @@ export interface Application {
   intake_term: string | null;
   country: string | null;
   countries: string[] | null;
+  pipeline_id: string | null;
   stage_id: string;
   status: string;
   offer_type: "conditional" | "unconditional" | null;

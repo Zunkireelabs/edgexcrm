@@ -9,7 +9,7 @@ import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { ApplicationsWorkspace } from "@/industries/education-consultancy/features/application-tracking/pages/applications-workspace";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { ApplicationStage, Application } from "@/types/database";
+import type { ApplicationStage, Application, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
 
 // Fetch applications in 250-ID chunks to avoid Node/undici 16 KB URL limit.
 async function fetchApplicationsByLeadIds(
@@ -78,7 +78,7 @@ export default async function ApplicationsRoute() {
   }
   // else: leadScope 'all' → no filter
 
-  const [stagesResult, applications, teamMembers] = await Promise.all([
+  const [stagesResult, applications, teamMembers, pipelinesResult] = await Promise.all([
     supabase
       .from("application_stages")
       .select("*")
@@ -100,9 +100,16 @@ export default async function ApplicationsRoute() {
       : fetchApplicationsByLeadIds(supabase, tenantData.tenant.id, leadIds),
     // Roster for resolving applications.created_by → name/email in the Created By filter.
     getTeamMembers(tenantData.tenant.id),
+    supabase
+      .from("application_pipelines")
+      .select("*")
+      .eq("tenant_id", tenantData.tenant.id)
+      .eq("is_active", true)
+      .order("position", { ascending: true }),
   ]);
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];
+  const pipelines = (pipelinesResult.data ?? []) as ApplicationPipelineWithCounts[];
 
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
@@ -111,6 +118,9 @@ export default async function ApplicationsRoute() {
         applications={applications}
         canManageApplications={tenantData.permissions.canManageApplications}
         teamMembers={teamMembers.map((m) => ({ user_id: m.user_id, name: m.name, email: m.email }))}
+        pipelines={pipelines}
+        role={tenantData.role as UserRole}
+        tenantId={tenantData.tenant.id}
       />
     </div>
   );
