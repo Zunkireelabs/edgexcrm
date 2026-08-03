@@ -280,7 +280,7 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
         <div className="flex items-center gap-2">
           {/* Last-changed (any field) — recency signal, distinct from the stage badge */}
           <span
-            className="text-[10px] font-medium text-red-500 whitespace-nowrap"
+            className="text-[10px] font-medium text-muted-foreground whitespace-nowrap"
             title={`Last changed ${formatDate(lead.updated_at)}`}
           >
             {formatRelativeShort(lead.updated_at)}
