@@ -63,7 +63,7 @@ export default async function ClassesRoute() {
   if (scope.restrictToSelf && scope.userId) {
     // Visibility-scoped (uncapped; migration 179) — includes collaborator-visible leads,
     // not just direct assignments.
-    const { data, error } = await visibleLeadsBase(userClient, tenantData.tenant.id, scope).is("deleted_at", null);
+    const { data, error } = await visibleLeadsBase({ user: userClient, service: supabase }, tenantData.tenant.id, scope).is("deleted_at", null);
     if (error) {
       console.error("[classes/page] own-scope lead visibility query failed", {
         tenantId: tenantData.tenant.id, userId: scope.userId, error,

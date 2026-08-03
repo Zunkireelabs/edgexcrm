@@ -1,7 +1,7 @@
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { createClient } from "@/lib/supabase/server";
+import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { formatMoney } from "@/lib/travel/currency";
@@ -43,13 +43,23 @@ export default async function ItinerariesPage() {
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.ITINERARY)) notFound();
 
-  const supabase = await createClient();
-  const { data: leads } = await supabase
+  const supabase = await scopedClientForTenant(tenantData.tenant.id);
+  const { data: leadsData } = await supabase
     .from("leads")
     .select("id, first_name, last_name, email, custom_fields, updated_at, stage:pipeline_stages(name, color)")
     .eq("tenant_id", tenantData.tenant.id)
     .is("deleted_at", null)
     .order("updated_at", { ascending: false });
+  // scopedClientForTenant()'s select() loses column-literal type inference by design
+  // (see scoped.ts's from() docstring) — cast at the call site as documented.
+  const leads = (leadsData ?? []) as unknown as Array<{
+    id: string;
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    custom_fields: unknown;
+    updated_at: string;
+  }>;
 
   const rows: ItineraryRow[] = (leads ?? [])
     .map((l): ItineraryRow | null => {

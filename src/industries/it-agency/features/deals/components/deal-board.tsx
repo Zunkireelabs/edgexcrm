@@ -12,7 +12,6 @@ import {
   useSensors,
   closestCorners,
 } from "@dnd-kit/core";
-import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { DealColumn } from "./deal-column";
 import { DealCard } from "./deal-card";
@@ -48,7 +47,7 @@ interface DealBoardProps {
   onDealsChange?: (deals: Deal[]) => void;
 }
 
-export function DealBoard({ stages, deals, role, tenantId, onRefresh }: DealBoardProps) {
+export function DealBoard({ stages, deals, role, onRefresh }: DealBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(deals, stages));
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -62,44 +61,6 @@ export function DealBoard({ stages, deals, role, tenantId, onRefresh }: DealBoar
   useEffect(() => {
     setColumns(groupByStage(deals, stages));
   }, [deals, stages]);
-
-  // Realtime subscription
-  useEffect(() => {
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`deals-board-${tenantId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "deals", filter: `tenant_id=eq.${tenantId}` },
-        (payload) => {
-          const { eventType, new: newRecord, old: oldRecord } = payload;
-          setColumns((prev) => {
-            const next = { ...prev };
-            const updatedDeal = newRecord as Deal;
-            const dealId = (updatedDeal?.id || (oldRecord as Deal)?.id) as string;
-
-            // Remove from current position
-            for (const stageId in next) {
-              next[stageId] = next[stageId].filter((d) => d.id !== dealId);
-            }
-
-            if (eventType === "DELETE" || (updatedDeal && updatedDeal.deleted_at)) {
-              return { ...next };
-            }
-
-            if ((eventType === "INSERT" || eventType === "UPDATE") && updatedDeal?.stage_id) {
-              const sid = updatedDeal.stage_id;
-              if (next[sid]) next[sid] = [updatedDeal, ...next[sid]];
-            }
-
-            return { ...next };
-          });
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }, [tenantId]);
 
   const stageMap = useMemo(() => new Map(stages.map((s) => [s.id, s])), [stages]);
 

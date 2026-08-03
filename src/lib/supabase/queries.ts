@@ -19,7 +19,10 @@ export async function getCurrentUserTenant(): Promise<{
   entitlements: Entitlements;
   branchId: string | null;
 } | null> {
-  const supabase = await createClient();
+  // Service client: runs pre-tenant (this IS how we resolve the tenant), so
+  // there is no tenant_id to auto-scope by — the explicit .eq("user_id", ...)
+  // below is the only filter and is already correct (Phase A §2a canonical example).
+  const supabase = await createServiceClient();
   const user = await getCachedUser();
   if (!user) return null;
 
@@ -87,7 +90,8 @@ export async function getLeads(
     excludeOtherType?: boolean;
   }
 ): Promise<Lead[]> {
-  const supabase = await createClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const serviceClient = await createServiceClient();
 
   // Shared filter chain applied on top of whichever base the caller resolves to (the
   // visibility-scoped RPC, or the plain assigned-only fallback below) so both stay
@@ -127,14 +131,14 @@ export async function getLeads(
 
   // Base query is visibility-scoped via leads_visible_to_user() (own/branch, uncapped —
   // migration 179) or the plain unrestricted select (owner/admin, unchanged).
-  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope));
+  const buildQuery = () => applyFilters(visibleLeadsBase({ user: userClient, service: serviceClient }, tenantId, scope));
 
   // Own-scope fallback: a plain assigned-only query, bypassing the visibility RPC
   // entirely. Restores the pre-migration-179 safety net — if the RPC ever errors
   // (bad param, transient DB error), a counselor's directly-assigned leads must
   // still render instead of the page going blank.
   const buildFallbackQuery = () =>
-    applyFilters(supabase.from("leads").select("*").eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!));
+    applyFilters(serviceClient.from("leads").select("*").eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!));
 
   // TEMPORARY: loads the whole list into the client; proper server-side pagination is the real roadmap fix.
   // PostgREST caps each response at max-rows=1000, so .limit() alone can't exceed that. We page in CHUNK-sized
@@ -205,7 +209,8 @@ export async function getLeadUtmRows(
     crossBranchPoolListSlug?: string | null;
   },
 ): Promise<LeadUtmRow[]> {
-  const supabase = await createClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const serviceClient = await createServiceClient();
 
   const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
     q = q.is("converted_at", null).is("deleted_at", null).order("created_at", { ascending: false }).order("id", { ascending: false });
@@ -215,11 +220,11 @@ export async function getLeadUtmRows(
 
   const buildQuery = () =>
     applyFilters(
-      visibleLeadsBase(supabase, tenantId, scope).select("id,intake_source,intake_medium,intake_campaign,created_at"),
+      visibleLeadsBase({ user: userClient, service: serviceClient }, tenantId, scope).select("id,intake_source,intake_medium,intake_campaign,created_at"),
     );
   const buildFallbackQuery = () =>
     applyFilters(
-      supabase
+      serviceClient
         .from("leads")
         .select("id,intake_source,intake_medium,intake_campaign,created_at")
         .eq("tenant_id", tenantId)
@@ -286,7 +291,8 @@ export async function getLeadsPage(
    * trips the aggregate already made unnecessary. Returned `total` is -1 then. */
   opts?: { skipCount?: boolean },
 ): Promise<{ leads: Lead[]; total: number }> {
-  const supabase = await createClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const serviceClient = await createServiceClient();
   const wantCount = !opts?.skipCount;
 
   const applyFilters = (q: ReturnType<typeof visibleLeadsBase>) => {
@@ -322,10 +328,10 @@ export async function getLeadsPage(
   const to = from + pageSize - 1;
   const countOpts = wantCount ? ({ count: "exact" } as const) : {};
 
-  const buildQuery = () => applyFilters(visibleLeadsBase(supabase, tenantId, scope, countOpts));
+  const buildQuery = () => applyFilters(visibleLeadsBase({ user: userClient, service: serviceClient }, tenantId, scope, countOpts));
   const buildFallbackQuery = () =>
     applyFilters(
-      supabase.from("leads").select("*", countOpts).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
+      serviceClient.from("leads").select("*", countOpts).eq("tenant_id", tenantId).eq("assigned_to", scope!.userId!),
     );
 
   let { data, error, count } = await buildQuery().range(from, to);
@@ -373,7 +379,7 @@ export async function getLead(
   tenantId: string,
   scope?: { restrictToSelf?: boolean; userId?: string; pipelineIds?: string[] | null; branchId?: string | null }
 ): Promise<Lead | null> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("leads")
     .select("*")
@@ -394,9 +400,7 @@ export async function getLead(
       if (!isCollab) return null;
     }
     if (scope.branchId) {
-      // Service client: tenant_users RLS hides other users' rows from the RLS client.
-      const svc = await createServiceClient();
-      const memberIds = await branchMemberIds(svc, tenantId, scope.branchId);
+      const memberIds = await branchMemberIds(supabase, tenantId, scope.branchId);
       // In-branch via the lead_branches roster, a direct branch_id, or a
       // branch-member assignee. Mirrors requireLeadBranchAccess / requireLeadAccess
       // and the getLeads list scope so the detail page matches the list — a lead a
@@ -416,16 +420,24 @@ export async function getLead(
   return data as Lead;
 }
 
-export async function getLeadNotes(leadId: string): Promise<LeadNote[]> {
-  const supabase = await createClient();
+// lead_notes has no tenant_id column (its RLS policy joins through leads instead —
+// see migration 001) — the tenantId param + `leads!inner(tenant_id)` embed filter
+// below reproduce that same tenant check explicitly, since a service client bypasses
+// RLS (Phase A §2a: no explicit filter here would mean this becomes a cross-tenant
+// read for any caller-supplied leadId).
+export async function getLeadNotes(leadId: string, tenantId: string): Promise<LeadNote[]> {
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("lead_notes")
-    .select("*")
+    .select("*, leads!inner(tenant_id)")
     .eq("lead_id", leadId)
+    .eq("leads.tenant_id", tenantId)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
-  return (data as LeadNote[]) || [];
+  return ((data ?? []) as unknown as (LeadNote & { leads: unknown })[]).map(
+    ({ leads: _leads, ...note }) => note as LeadNote,
+  );
 }
 
 export async function getFormConfigByTenantSlug(
@@ -468,7 +480,7 @@ export async function getFormConfigByTenantSlug(
 export async function getFormConfigsForTenant(
   tenantId: string
 ): Promise<FormConfig[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
 
   const { data, error } = await supabase
     .from("form_configs")
@@ -485,7 +497,7 @@ export async function getPipelineStages(
   tenantId: string,
   pipelineId?: string
 ): Promise<PipelineStage[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   let query = supabase
     .from("pipeline_stages")
     .select("*")
@@ -502,7 +514,7 @@ export async function getPipelineStages(
 }
 
 export async function getPipelines(tenantId: string): Promise<PipelineWithCounts[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
 
   const { data: pipelines, error } = await supabase
     .from("pipelines")
@@ -553,7 +565,7 @@ export async function getListPipeline(
   listId: string,
   tenantId: string,
 ): Promise<{ pipeline: Pipeline; stages: PipelineStage[] } | null> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
 
   const { data: list } = await supabase
     .from("lead_lists")
@@ -565,7 +577,11 @@ export async function getListPipeline(
   if (!list?.pipeline_id) return null;
 
   const [{ data: pipeline }, { data: stages }] = await Promise.all([
-    supabase.from("pipelines").select("*").eq("id", list.pipeline_id).single(),
+    // Explicit tenant_id filter added here (Phase A §2a) — this lookup previously
+    // relied on RLS alone; list.pipeline_id is already tenant-verified via the
+    // lead_lists row above, but the filter is added for defense in depth now that
+    // RLS is no longer the only thing standing between this query and another tenant.
+    supabase.from("pipelines").select("*").eq("id", list.pipeline_id).eq("tenant_id", tenantId).single(),
     supabase
       .from("pipeline_stages")
       .select("*")
@@ -579,7 +595,7 @@ export async function getListPipeline(
 }
 
 export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | null> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
 
   const { data, error } = await supabase
     .from("pipelines")
@@ -603,7 +619,8 @@ export async function getLeadsForPipeline(
     excludeOtherType?: boolean;
   }
 ): Promise<PipelineLead[]> {
-  const supabase = await createClient();
+  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
+  const serviceClient = await createServiceClient();
 
   // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
   // Own-scope AND branch-scope both route through leads_visible_to_user() (uncapped;
@@ -613,12 +630,12 @@ export async function getLeadsForPipeline(
   // branch_id.eq.…))` (deleted below — see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md §4.2).
   const useVisibilityRpc = !!((options?.restrictToSelf && options.userId) || options?.branchId);
   let query = (useVisibilityRpc
-    ? visibleLeadsBase(supabase, tenantId, {
+    ? visibleLeadsBase({ user: userClient, service: serviceClient }, tenantId, {
         restrictToSelf: options?.restrictToSelf,
         userId: options?.userId,
         branchId: options?.branchId,
       })
-    : supabase.from("leads").select("*").eq("tenant_id", tenantId))
+    : serviceClient.from("leads").select("*").eq("tenant_id", tenantId))
     .is("deleted_at", null)
     .is("converted_at", null)
     .not("stage_id", "is", null)
@@ -641,7 +658,7 @@ export async function getLeadsForPipeline(
   if (leads.length === 0) return [];
 
   // Fetch checklist counts - use tenant_id filter instead of .in() to avoid URL length limits
-  const { data: checklistCounts, error: clError } = await supabase
+  const { data: checklistCounts, error: clError } = await serviceClient
     .from("lead_checklists")
     .select("lead_id, is_completed")
     .eq("tenant_id", tenantId);
@@ -756,7 +773,7 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
 }
 
 export async function getBranches(tenantId: string): Promise<Branch[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data } = await supabase
     .from("branches")
     .select("*")
@@ -766,17 +783,18 @@ export async function getBranches(tenantId: string): Promise<Branch[]> {
 }
 
 export async function getBranchIds(tenantId: string): Promise<string[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data } = await supabase.from("branches").select("id").eq("tenant_id", tenantId);
   return (data ?? []).map((b) => b.id as string);
 }
 
-export async function getLeadChecklists(leadId: string): Promise<LeadChecklist[]> {
-  const supabase = await createClient();
+export async function getLeadChecklists(leadId: string, tenantId: string): Promise<LeadChecklist[]> {
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("lead_checklists")
     .select("*")
     .eq("lead_id", leadId)
+    .eq("tenant_id", tenantId)
     .order("position", { ascending: true });
 
   if (error) throw error;
@@ -793,7 +811,7 @@ export interface LeadActivity {
 }
 
 export async function getLeadActivity(leadId: string, tenantId: string): Promise<LeadActivity[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("audit_logs")
     .select("id, action, entity_type, changes, user_id, created_at")
@@ -814,7 +832,7 @@ export async function getLeadSubmissionHistory(
   leadId: string,
   tenantId: string
 ): Promise<LeadSubmissionSnapshot[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("lead_submissions")
     .select("custom_fields")
@@ -827,7 +845,7 @@ export async function getLeadSubmissionHistory(
 }
 
 export async function getApplicationActivity(applicationId: string, tenantId: string): Promise<LeadActivity[]> {
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
   const { data, error } = await supabase
     .from("audit_logs")
     .select("id, action, entity_type, changes, user_id, created_at")

@@ -45,8 +45,8 @@ export default async function LeadDetailPage({
 
   const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
   const [notes, checklists, activities, submissionHistory, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
-    getLeadNotes(lead.id),
-    getLeadChecklists(lead.id),
+    getLeadNotes(lead.id, tenantData.tenant.id),
+    getLeadChecklists(lead.id, tenantData.tenant.id),
     getLeadActivity(lead.id, tenantData.tenant.id),
     getLeadSubmissionHistory(lead.id, tenantData.tenant.id),
     // Load this lead's list-pipeline stages (preferred); fallback to all tenant stages

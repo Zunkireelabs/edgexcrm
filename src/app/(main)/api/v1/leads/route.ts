@@ -294,7 +294,7 @@ export async function GET(request: NextRequest) {
     ? `${LEADS_LIST_COLUMNS},lead_collaborators!inner(user_id)`
     : LEADS_LIST_COLUMNS;
   let query = useVisibilityRpc
-    ? visibleLeadsBase(userClient, auth.tenantId, scope, countOpts).select(selectColumns)
+    ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, countOpts).select(selectColumns)
     : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
 
   query = onlyDeleted ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
