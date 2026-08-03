@@ -3,23 +3,30 @@ import { cookies } from "next/headers";
 import {
   getCurrentUserTenant,
   getPipelineStages,
-  getLeadsForPipeline,
+  getLeadsPage,
   getTeamMembers,
   getPipelines,
   getLeadListsByTenant,
   getLeads,
   getBranchIds,
 } from "@/lib/supabase/queries";
-import { getLeadAggregates } from "@/lib/leads/aggregates";
+import { getLeadAggregates, type AggregateScope } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
-import { PipelineBoard } from "@/components/pipeline/PipelineBoard";
+import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { PipelineSelector } from "@/components/pipeline/PipelineSelector";
 import { ListFunnelBoard } from "@/components/pipeline/ListFunnelBoard";
 import { canSeeNav, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
-import type { UserRole, TenantEntity, Industry, LeadList } from "@/types/database";
+import type { UserRole, TenantEntity, Industry, LeadList, PipelineLead } from "@/types/database";
+
+// SSR-seeded page 1 (20 cards) + true count per column, keyed by stage.id — same
+// shape as ListKanbanView's initialColumns (KANBAN-PAGINATION-BRIEF §3.1), computed
+// here via getLeadAggregates()'s `stage` dimension (migration 194) + one getLeadsPage
+// per stage (each scoped by the Phase 1 stage_id filter, mirrored server-side via
+// getLeadsPage's `stageId` option) instead of the old capped-at-500 getLeadsForPipeline.
+const KANBAN_PAGE_SIZE = 20;
 
 interface PipelinePageProps {
   searchParams: Promise<{ pipeline?: string }>;
@@ -136,13 +143,10 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     );
   }
 
-  const [stages, leads, teamMembers, industryResult, entitiesResult] = await Promise.all([
+  const excludeOtherType = tenantData.tenant.industry_id === "education_consultancy";
+
+  const [stages, teamMembers, industryResult, entitiesResult] = await Promise.all([
     getPipelineStages(tenantData.tenant.id, selectedPipelineId),
-    getLeadsForPipeline(tenantData.tenant.id, {
-      ...pipelineScope,
-      pipelineId: selectedPipelineId,
-      excludeOtherType: tenantData.tenant.industry_id === "education_consultancy",
-    }),
     getTeamMembers(tenantData.tenant.id),
     // Fetch industry if tenant has one
     tenantData.tenant.industry_id
@@ -160,6 +164,46 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
       .eq("is_active", true)
       .order("position", { ascending: true }),
   ]);
+
+  // Per-column first pages (20 cards) + exact per-stage totals from lead_aggregates()
+  // (migration 194's `stage` dimension) — replaces getLeadsForPipeline's capped-at-500
+  // full board load (KANBAN-PAGINATION-BRIEF-style fix, applied to the classic
+  // single-pipeline board). Each stage.id is unique to this pipeline (stages are
+  // fetched scoped to selectedPipelineId above), so no extra pipeline_id filter is
+  // needed alongside the per-stage getLeadsPage call.
+  const aggScope: AggregateScope = {
+    restrictToSelf: pipelineScope.restrictToSelf,
+    userId: pipelineScope.userId,
+    branchId: pipelineScope.branchId,
+    userBranchId: pipelineScope.userBranchId,
+    crossBranchPoolListSlug: pipelineScope.crossBranchPoolListSlug,
+    pipelineIds: pipelineScope.pipelineIds,
+    excludeOtherType,
+  };
+  const [aggregates, columnPages] = await Promise.all([
+    getLeadAggregates(tenantData.tenant.id, aggScope, new Date()),
+    Promise.all(
+      stages.map((stage) =>
+        getLeadsPage(
+          tenantData.tenant.id,
+          { ...pipelineScope, stageId: stage.id, excludeOtherType },
+          1,
+          KANBAN_PAGE_SIZE,
+          { skipCount: true },
+        ).then((r) => [stage.id, r.leads] as const),
+      ),
+    ),
+  ]);
+  const initialColumns: Record<string, { cards: PipelineLead[]; total: number }> = {};
+  for (const [stageId, cards] of columnPages) {
+    initialColumns[stageId] = {
+      // Same PipelineLead-shaped cast as ListKanbanView's initialColumns — /api/v1/
+      // leads' (and getLeadsPage's) column projection doesn't carry
+      // checklist_total/checklist_completed, which LeadCard treats as optional.
+      cards: cards as unknown as PipelineLead[],
+      total: aggregates.stage[stageId]?.all ?? 0,
+    };
+  }
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -179,10 +223,11 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
 
       {/* Pipeline Board — keyed on pipeline so switching pipelines remounts and
           re-seeds the board's columns from the correct leads (fixes stale-view F8) */}
-      <PipelineBoard
+      <KanbanBoard
         key={selectedPipelineId}
+        mode="stage"
         stages={stages}
-        leads={leads}
+        initialColumns={initialColumns}
         role={tenantData.role as UserRole}
         userId={tenantData.userId}
         tenantId={tenantData.tenant.id}

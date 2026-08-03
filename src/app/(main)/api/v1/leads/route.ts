@@ -163,6 +163,13 @@ export async function GET(request: NextRequest) {
   // `.or()` string below because that's the only way to express "unassigned OR in
   // this list"; validation happens right before that interpolation.
   const formFilter = searchParams.get("form");
+  // Pipeline-board column identity (KANBAN-PAGINATION-BRIEF Phase 1 / stage filter) — a
+  // pipeline column is a stage_id, unlike the list-Kanban's (list,status) columns. Only
+  // a UUID-shaped value is ever applied; anything else is dropped silently (same
+  // never-interpolate-untrusted-input posture as `assignees`/`collaborators` above,
+  // though this one goes through .eq(), never a raw string).
+  const stageFilterRaw = searchParams.get("stage");
+  const stageFilter = stageFilterRaw && UUID_RE.test(stageFilterRaw) ? stageFilterRaw : null;
   const tagFilter = searchParams.get("tag");
   const createdFilter = searchParams.get("created"); // today | week | month
   const industryFilter = searchParams.get("industry"); // prospect_industry value, or "__none__"
@@ -363,6 +370,10 @@ export async function GET(request: NextRequest) {
     query = query.eq("status", status);
   }
 
+  if (stageFilter) {
+    query = query.eq("stage_id", stageFilter);
+  }
+
   if (search) {
     // Sanitize search input to prevent PostgREST filter injection
     const sanitized = search.replace(/[,().]/g, "");
@@ -430,6 +441,12 @@ export async function GET(request: NextRequest) {
   // #332 shipped 25-row pages. Recycle-bin (onlyDeleted) leads are excluded from
   // lead_aggregates unconditionally, so this facet is not offered there — a known,
   // narrow gap (the recycle bin has no source dropdown today).
+  //
+  // KNOWN GAP (pipeline-column-pagination Phase 1): lead_aggregates() (migration 194)
+  // has no `p_stage_eq` param, so a `?stage=` filter is NOT mirrored into this facet the
+  // way `status`/`list`/etc. are below. A caller combining `stage` with `facets=source`
+  // gets a facet computed WITHOUT the stage restriction — flagged, not silently fixed;
+  // closing it needs a migration (out of this PR's additive-only-locally scope).
   if (searchParams.get("facets") === "source" && !onlyDeleted) {
     // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
     // means the page returns zero leads, so the facet must be empty too. aggregates.ts

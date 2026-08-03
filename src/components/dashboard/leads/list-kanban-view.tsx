@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LayoutList, Settings2 } from "lucide-react";
-import { ListKanbanBoard } from "./list-kanban-board";
+import { KanbanBoard } from "@/components/pipeline/KanbanBoard";
 import { PipelineSettingsModal } from "@/components/pipeline/PipelineSettingsModal";
 import type { PipelineStage, PipelineWithCounts, PipelineLead as PipelineLeadType, UserRole, TenantEntity } from "@/types/database";
 
@@ -85,7 +85,8 @@ export function ListKanbanView({
         )}
       </div>
 
-      <ListKanbanBoard
+      <KanbanBoard
+        mode="list"
         stages={stages}
         listSlug={listSlug}
         initialColumns={initialColumns}

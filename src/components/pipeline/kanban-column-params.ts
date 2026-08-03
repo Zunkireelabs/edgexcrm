@@ -1,9 +1,16 @@
 /**
- * Pure /api/v1/leads query-param builder for a Kanban column, shared by list-kanban-
- * board.tsx's toolbar filter state and its tests — KANBAN-PAGINATION-BRIEF §3.4:
- * "thread every active filter into each column request." Kept side-effect-free (no
- * React) so it's unit-testable without a DOM/component-test harness, which this repo
- * doesn't have (vitest here runs `environment: "node"`, `.test.ts` only).
+ * Pure /api/v1/leads query-param builder for a Kanban column, shared by KanbanBoard's
+ * toolbar filter state and its tests — KANBAN-PAGINATION-BRIEF §3.4: "thread every
+ * active filter into each column request." Kept side-effect-free (no React) so it's
+ * unit-testable without a DOM/component-test harness, which this repo doesn't have
+ * (vitest here runs `environment: "node"`, `.test.ts` only).
+ *
+ * Generalized (pipeline-column-pagination Phase 2) to cover BOTH Kanban flavors that
+ * share KanbanBoard: list-Kanban's columns are (list, status) — one status slug within
+ * one list; the classic single-pipeline board's columns are one stage_id (Phase 1's
+ * `?stage=` filter), no list at all. `listSlug` on KanbanFilterState is therefore
+ * optional, and the per-column identity (previously a bare `statusSlug` string) is now
+ * a small `{ status?, stage? }` object so a column can identify itself either way.
  */
 
 export type SortField = "created" | "updated" | "name" | "email";
@@ -17,7 +24,9 @@ export const SORT_FIELD_TO_API: Record<SortField, string> = {
 };
 
 export interface KanbanFilterState {
-  listSlug: string;
+  /** Omitted for the classic single-pipeline board (mode "stage") — its leads aren't
+   * scoped to a lead_lists row at all. */
+  listSlug?: string;
   sortField: SortField;
   sortDirection: SortDirection;
   debouncedSearch: string;
@@ -30,11 +39,23 @@ export interface KanbanFilterState {
   industryFilter: string;
 }
 
-/** Every active filter, as /api/v1/leads query params, for one column's status. */
-export function buildKanbanColumnParams(state: KanbanFilterState, statusSlug: string): URLSearchParams {
+/** A column's identity, as far as /api/v1/leads is concerned — exactly one of these
+ * is set per column, matching the board's `mode`. */
+export interface KanbanColumnIdentity {
+  /** list-Kanban: the stage's `status` slug (compared against lead.status, within
+   * `state.listSlug`). */
+  status?: string;
+  /** Classic pipeline board: the stage's id (compared against lead.stage_id via the
+   * Phase 1 `?stage=` filter) — exact, unlike `status` which is only a slug match. */
+  stage?: string;
+}
+
+/** Every active filter, as /api/v1/leads query params, for one column. */
+export function buildKanbanColumnParams(state: KanbanFilterState, identity: KanbanColumnIdentity): URLSearchParams {
   const params = new URLSearchParams();
-  params.set("list", state.listSlug);
-  params.set("status", statusSlug);
+  if (state.listSlug) params.set("list", state.listSlug);
+  if (identity.status) params.set("status", identity.status);
+  if (identity.stage) params.set("stage", identity.stage);
   params.set("sort", SORT_FIELD_TO_API[state.sortField]);
   params.set("order", state.sortDirection === "asc" ? "asc" : "desc");
   if (state.debouncedSearch) params.set("search", state.debouncedSearch);
@@ -49,16 +70,21 @@ export function buildKanbanColumnParams(state: KanbanFilterState, statusSlug: st
 }
 
 /**
- * A column's request, or `null` to skip fetching it — the global "Status" filter and
- * a column's own identity are the same axis (both filter on `status`); a mismatched
- * global filter just skips that column's fetch rather than sending two contradictory
- * `status` values (KANBAN-PAGINATION-BRIEF §3.4).
+ * A column's request, or `null` to skip fetching it — the global "Status" toolbar
+ * filter and a column's own identity are the same axis (both ultimately mean "this
+ * lead's status/stage slug"), so a mismatched global filter just skips that column's
+ * fetch rather than sending two contradictory values (KANBAN-PAGINATION-BRIEF §3.4).
+ * `columnSlug` is always the stage's own slug in both modes (list-Kanban's status
+ * slug IS the stage slug within that list; the classic board's Status dropdown is
+ * built from the same stage slugs) — only `identity` (what's actually sent to the
+ * API) differs by mode.
  */
 export function resolveKanbanColumnParams(
   state: KanbanFilterState,
   statusFilter: string,
-  stageSlug: string,
+  columnSlug: string,
+  identity: KanbanColumnIdentity,
 ): URLSearchParams | null {
-  if (statusFilter !== "all" && statusFilter !== stageSlug) return null;
-  return buildKanbanColumnParams(state, stageSlug);
+  if (statusFilter !== "all" && statusFilter !== columnSlug) return null;
+  return buildKanbanColumnParams(state, identity);
 }

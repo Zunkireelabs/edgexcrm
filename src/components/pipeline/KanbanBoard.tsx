@@ -13,17 +13,17 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import type { PipelineLead, PipelineStage, UserRole } from "@/types/database";
-import { PipelineColumn } from "@/components/pipeline/PipelineColumn";
-import { LeadCard } from "@/components/pipeline/LeadCard";
+import { PipelineColumn } from "./PipelineColumn";
+import { LeadCard } from "./LeadCard";
 import { toast } from "sonner";
-import { useKanbanColumns, type KanbanColumnDef, type KanbanColumnsState } from "@/components/pipeline/use-kanban-columns";
+import { useKanbanColumns, type KanbanColumnDef, type KanbanColumnsState } from "./use-kanban-columns";
 import {
   buildKanbanColumnParams,
   resolveKanbanColumnParams,
   type KanbanFilterState,
   type SortField,
   type SortDirection,
-} from "@/components/pipeline/kanban-column-params";
+} from "./kanban-column-params";
 import {
   Select,
   SelectContent,
@@ -60,11 +60,18 @@ interface TeamMemberData {
   name: string;
 }
 
-interface ListKanbanBoardProps {
+interface KanbanBoardProps {
+  /** "list": columns are (list, status) — the lead-lists Kanban view, one status
+   * within one list. "stage": columns are one stage_id each — the classic
+   * single-pipeline board (no lead-lists feature), using the Phase 1 `?stage=`
+   * filter. The only real behavioral fork in this component; see the identity/
+   * facet branches below. */
+  mode: "list" | "stage";
   stages: PipelineStage[];
-  /** listSlug: needed to scope every per-column /api/v1/leads request (KANBAN-
-   * PAGINATION-BRIEF §2a) — the column identity itself is stage.slug (`status`). */
-  listSlug: string;
+  /** Required (and meaningful) only in mode "list" — scopes every per-column
+   * /api/v1/leads request (KANBAN-PAGINATION-BRIEF §2a). Column identity itself is
+   * stage.slug (`status`) within this list. */
+  listSlug?: string;
   /** SSR-seeded page 1 + true count per column, keyed by stage.id. */
   initialColumns: Record<string, { cards: PipelineLead[]; total: number }>;
   role: UserRole;
@@ -90,7 +97,8 @@ function findLeadColumn(columns: KanbanColumnsState, leadId: string): string | n
   return null;
 }
 
-export function ListKanbanBoard({
+export function KanbanBoard({
+  mode,
   stages,
   listSlug,
   initialColumns,
@@ -107,12 +115,12 @@ export function ListKanbanBoard({
   isTeamScoped = false,
   leadCollaborators = {},
   formMap = {},
-}: ListKanbanBoardProps) {
+}: KanbanBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
   const prevColumnsRef = useRef<KanbanColumnsState | null>(null);
 
-  // Filter States — drive server requests now (KANBAN-PAGINATION-BRIEF §3.4), not an
+  // Filter States — drive server requests (KANBAN-PAGINATION-BRIEF §3.4), not an
   // in-memory .filter() over a fully-loaded array.
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -148,23 +156,25 @@ export function ListKanbanBoard({
     };
   }, [searchQuery]);
 
-  // Per-column request params — status filter is redundant-with/conflicting-with a
-  // column's own identity (each column already IS one status), so a mismatched global
-  // statusFilter just skips that column's fetch (KANBAN-PAGINATION-BRIEF §3.4) rather
-  // than sending two contradictory `status` values. Extracted to kanban-column-params.ts
-  // (pure, no React) so it's unit-testable without a DOM/component-test harness.
+  // Per-column request params — status/stage filter is redundant-with/conflicting-
+  // with a column's own identity (each column already IS one status or stage), so a
+  // mismatched global statusFilter just skips that column's fetch (KANBAN-PAGINATION-
+  // BRIEF §3.4) rather than sending two contradictory values. Extracted to
+  // kanban-column-params.ts (pure, no React) so it's unit-testable without a
+  // DOM/component-test harness, which this repo doesn't have.
   const filterState: KanbanFilterState = useMemo(
     () => ({
-      listSlug, sortField, sortDirection, debouncedSearch, counselorFilter, collaboratorFilter,
+      listSlug: mode === "list" ? listSlug : undefined,
+      sortField, sortDirection, debouncedSearch, counselorFilter, collaboratorFilter,
       sourceFilter, tagFilter, formFilter, createdFilter, industryFilter,
     }),
     [
-      listSlug, sortField, sortDirection, debouncedSearch, counselorFilter, collaboratorFilter,
+      mode, listSlug, sortField, sortDirection, debouncedSearch, counselorFilter, collaboratorFilter,
       sourceFilter, tagFilter, formFilter, createdFilter, industryFilter,
     ],
   );
   const buildColumnParams = useCallback(
-    (statusSlug: string) => buildKanbanColumnParams(filterState, statusSlug),
+    (statusSlug: string) => buildKanbanColumnParams(filterState, { status: statusSlug }),
     [filterState],
   );
 
@@ -172,19 +182,24 @@ export function ListKanbanBoard({
     () =>
       stages.map((stage) => ({
         key: stage.id,
-        params: resolveKanbanColumnParams(filterState, statusFilter, stage.slug),
+        params: resolveKanbanColumnParams(
+          filterState,
+          statusFilter,
+          stage.slug,
+          mode === "list" ? { status: stage.slug } : { stage: stage.id },
+        ),
       })),
-    [stages, statusFilter, filterState],
+    [stages, statusFilter, filterState, mode],
   );
 
   const filterSignature = useMemo(
     () =>
       JSON.stringify([
-        listSlug, debouncedSearch, counselorFilter, sourceFilter, collaboratorFilter, tagFilter,
+        mode, listSlug, debouncedSearch, counselorFilter, sourceFilter, collaboratorFilter, tagFilter,
         statusFilter, formFilter, createdFilter, industryFilter, sortField, sortDirection,
       ]),
     [
-      listSlug, debouncedSearch, counselorFilter, sourceFilter, collaboratorFilter, tagFilter,
+      mode, listSlug, debouncedSearch, counselorFilter, sourceFilter, collaboratorFilter, tagFilter,
       statusFilter, formFilter, createdFilter, industryFilter, sortField, sortDirection,
     ],
   );
@@ -223,13 +238,11 @@ export function ListKanbanBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stages]);
 
-
   // Currently-loaded cards across every column — used for filter option lists whose
   // exact counts would need a new server aggregate (out of KANBAN-PAGINATION-BRIEF's
   // scope: "do not build new endpoints"). Counts below are therefore approximate —
   // they reflect loaded cards only, not the column's full total — same tradeoff as
-  // the Export button below. Source itself does NOT use this: it reuses the exact
-  // server-side `facets=source` endpoint the leads table already relies on.
+  // the Export button below.
   const loadedCards = useMemo(() => Object.values(columns).flatMap((c) => c.cards), [columns]);
 
   const counselors = useMemo(
@@ -256,10 +269,18 @@ export function ListKanbanBoard({
     [stages]
   );
 
-  // Server-computed Source facet — exact, cross-filtered over every OTHER active
-  // filter, same mechanism leads-table.tsx uses (route.ts's `facets=source`).
+  // Server-computed Source facet (mode "list" only) — exact, cross-filtered over
+  // every OTHER active filter, same mechanism leads-table.tsx uses (route.ts's
+  // `facets=source`). Mode "stage" has no server facet: lead_aggregates() (migration
+  // 194) has no per-pipeline/per-stage scoping param, so a tenant-wide facet would be
+  // WRONG for a multi-pipeline tenant (it would count every pipeline's leads, not just
+  // the selected one) — flagged in the pipeline-column-pagination Phase 1 report as a
+  // known gap, not silently worked around here. Falls back to the loaded-cards-only
+  // approximation below instead (same tradeoff already accepted for counselor/
+  // collaborator counts).
   const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
   useEffect(() => {
+    if (mode !== "list") return;
     const params = buildColumnParams("__all__"); // status placeholder, stripped below
     params.delete("status");
     params.set("facets", "source");
@@ -276,7 +297,27 @@ export function ListKanbanBoard({
       });
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listSlug, debouncedSearch, counselorFilter, collaboratorFilter, tagFilter, formFilter, createdFilter, industryFilter]);
+  }, [mode, listSlug, debouncedSearch, counselorFilter, collaboratorFilter, tagFilter, formFilter, createdFilter, industryFilter]);
+
+  // Approximate (loaded-cards-only) Source counts — the mode "stage" fallback, and
+  // also what mode "list" would show before its facet round-trip resolves.
+  const loadedSourceCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    loadedCards.forEach((l) => {
+      if (l.intake_source) m.set(l.intake_source, (m.get(l.intake_source) ?? 0) + 1);
+    });
+    return m;
+  }, [loadedCards]);
+
+  const sourceOptions = useMemo(
+    () =>
+      mode === "list"
+        ? sourceFacet
+        : Array.from(loadedSourceCounts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => b.count - a.count),
+    [mode, sourceFacet, loadedSourceCounts],
+  );
 
   // Per-counselor / per-collaborator counts — approximate (loaded cards only, see
   // loadedCards comment above).
@@ -538,7 +579,7 @@ export function ListKanbanBoard({
   const exportIsPartial = totalLoaded < totalTrue;
 
   const filterDefs: FilterDef[] = [
-    ...(sourceFacet.length > 0
+    ...(sourceOptions.length > 0
       ? [
           {
             id: "source",
@@ -547,7 +588,7 @@ export function ListKanbanBoard({
             multiple: true,
             value: sourceFilter,
             onChange: setSourceFilter,
-            options: sourceFacet.map((s) => ({
+            options: sourceOptions.map((s) => ({
               value: s.name,
               label: `${s.name} (${s.count.toLocaleString()})`,
               description: `Leads from ${s.name}`,

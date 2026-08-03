@@ -1,6 +1,6 @@
 import { createClient, createServiceClient, getCachedUser } from "./server";
 import { scopedClientForTenant } from "./scoped";
-import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, PipelineLead, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
 import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
@@ -282,6 +282,12 @@ export async function getLeadsPage(
     /** Kanban column identity (KANBAN-PAGINATION-BRIEF §3.1) — a stage's `status`
      * slug within `listId`. Ignored for the recycle bin, same as the list filters. */
     status?: string | null;
+    /** Pipeline-board column identity (pipeline-column-pagination Phase 2) — the exact
+     * stage_id, unlike `status` above which is only a slug comparison. Used by the
+     * classic (no lead-lists) single-pipeline Kanban board, whose columns are stages
+     * of ONE pipeline rather than statuses within one list. Ignored for the recycle
+     * bin, same as `status`/the list filters. */
+    stageId?: string | null;
   } | undefined,
   page: number,
   pageSize: number,
@@ -319,6 +325,7 @@ export async function getLeadsPage(
         q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
       }
       if (scope?.status) q = q.eq("status", scope.status);
+      if (scope?.stageId) q = q.eq("stage_id", scope.stageId);
     }
 
     return q;
@@ -606,86 +613,6 @@ export async function getDefaultPipeline(tenantId: string): Promise<Pipeline | n
 
   if (error) return null;
   return data as Pipeline;
-}
-
-export async function getLeadsForPipeline(
-  tenantId: string,
-  options?: {
-    restrictToSelf?: boolean;
-    userId?: string;
-    pipelineIds?: string[] | null;
-    pipelineId?: string;
-    branchId?: string | null;
-    excludeOtherType?: boolean;
-  }
-): Promise<PipelineLead[]> {
-  const userClient = await createClient(); // RLS-context client — leads_visible_to_user() needs a real auth.uid()
-  const serviceClient = await createServiceClient();
-
-  // Fetch leads (limit to 500 for pipeline performance - kanban with 1000+ cards is unusable)
-  // Own-scope AND branch-scope both route through leads_visible_to_user() (uncapped;
-  // migration 179) via visibleLeadsBase() — the same base /api/v1/leads uses, so the
-  // pipeline board and /leads resolve to the identical branch predicate instead of this
-  // function's own hand-rolled `.or(assigned_to.in.(…),and(assigned_to.is.null,
-  // branch_id.eq.…))` (deleted below — see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md §4.2).
-  const useVisibilityRpc = !!((options?.restrictToSelf && options.userId) || options?.branchId);
-  let query = (useVisibilityRpc
-    ? visibleLeadsBase({ user: userClient, service: serviceClient }, tenantId, {
-        restrictToSelf: options?.restrictToSelf,
-        userId: options?.userId,
-        branchId: options?.branchId,
-      })
-    : serviceClient.from("leads").select("*").eq("tenant_id", tenantId))
-    .is("deleted_at", null)
-    .is("converted_at", null)
-    .not("stage_id", "is", null)
-    .limit(500);
-
-  // Exclude "other" type contacts from the board — they're walk-in visitors only.
-  if (options?.excludeOtherType) query = query.not("tags", "cs", '{"other"}');
-
-  if (options?.pipelineId) {
-    // If this specific pipeline isn't in the allowed set, return empty immediately.
-    if (options.pipelineIds && !options.pipelineIds.includes(options.pipelineId)) return [];
-    query = query.eq("pipeline_id", options.pipelineId);
-  } else if (options?.pipelineIds) {
-    query = query.in("pipeline_id", options.pipelineIds);
-  }
-
-  const { data: leadsData, error: leadsError } = await query.order("created_at", { ascending: false });
-  if (leadsError) throw leadsError;
-  const leads = (leadsData ?? []) as Lead[];
-  if (leads.length === 0) return [];
-
-  // Fetch checklist counts - use tenant_id filter instead of .in() to avoid URL length limits
-  const { data: checklistCounts, error: clError } = await serviceClient
-    .from("lead_checklists")
-    .select("lead_id, is_completed")
-    .eq("tenant_id", tenantId);
-
-  if (clError) throw clError;
-
-  // Create a set of lead IDs for fast lookup
-  const leadIdSet = new Set(leads.map((l) => l.id));
-
-  // Aggregate counts per lead (only for leads we're displaying)
-  const countsMap = new Map<string, { total: number; completed: number }>();
-  for (const item of checklistCounts || []) {
-    if (!leadIdSet.has(item.lead_id)) continue;
-    const entry = countsMap.get(item.lead_id) || { total: 0, completed: 0 };
-    entry.total++;
-    if (item.is_completed) entry.completed++;
-    countsMap.set(item.lead_id, entry);
-  }
-
-  return leads.map((lead) => {
-    const counts = countsMap.get(lead.id) || { total: 0, completed: 0 };
-    return {
-      ...(lead as Lead),
-      checklist_total: counts.total,
-      checklist_completed: counts.completed,
-    };
-  });
 }
 
 function resolveDisplayName(email: string, meta?: Record<string, unknown> | null): string {
