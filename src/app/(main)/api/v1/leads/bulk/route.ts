@@ -258,6 +258,7 @@ export async function PATCH(request: NextRequest) {
   if (body.branch_id !== undefined) bulkUpdatePayload.branch_id = body.branch_id ?? null;
   if (body.list_id !== undefined) {
     bulkUpdatePayload.list_id = body.list_id ?? null;
+    bulkUpdatePayload.stage_changed_at = now;
     if (targetList) {
       bulkUpdatePayload.lead_type = targetList.slug === "prospects" ? "prospect" : "lead";
       if (body.archive_reason) bulkUpdatePayload.archive_reason = body.archive_reason;
