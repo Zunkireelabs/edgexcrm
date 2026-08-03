@@ -780,6 +780,15 @@ export async function applyLeadPatch(
     }
   }
 
+  // Stage-age badge tracks stage/status moves only, not every field edit —
+  // set it here (not via the updated_at trigger) so notes/tags/etc. don't reset it.
+  if (
+    (updatePayload.list_id !== undefined && updatePayload.list_id !== (existingLead as Record<string, unknown>).list_id) ||
+    (updatePayload.status !== undefined && updatePayload.status !== (existingLead as Record<string, unknown>).status)
+  ) {
+    updatePayload.stage_changed_at = new Date().toISOString();
+  }
+
   const { data: updated, error } = await supabase
     .from("leads")
     .update(updatePayload)
@@ -881,6 +890,7 @@ export async function applyLeadPatch(
               list_id: prospectsList.id,
               lead_type: "prospect",
               updated_at: new Date().toISOString(),
+              stage_changed_at: new Date().toISOString(),
             };
             if (prospectsList.pipeline_id) {
               const { data: defaultStage } = await supabase

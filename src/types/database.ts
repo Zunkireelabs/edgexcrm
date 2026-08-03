@@ -222,6 +222,7 @@ export interface Lead {
   archived_from_list_id: string | null;
   archived_from_status: string | null;
   last_activity_at: string;
+  stage_changed_at: string;
   created_at: string;
   updated_at: string;
 }

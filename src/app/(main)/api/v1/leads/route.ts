@@ -92,7 +92,7 @@ bachelor_gpa,bachelor_institution,bachelor_passed_year,\
 masters_gpa,masters_institution,masters_passed_year,\
 ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
 archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
-last_activity_at,created_at,updated_at";
+stage_changed_at,last_activity_at,created_at,updated_at";
 
 // Sort allow-list — never interpolate a client-supplied column name into the query.
 // Only "created_at" is covered by an index (idx_leads_tenant_created_active); the
@@ -378,9 +378,26 @@ export async function GET(request: NextRequest) {
     // Sanitize search input to prevent PostgREST filter injection
     const sanitized = search.replace(/[,().]/g, "");
     if (sanitized) {
-      query = query.or(
-        `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
-      );
+      const orClauses = [
+        `first_name.ilike.%${sanitized}%`,
+        `last_name.ilike.%${sanitized}%`,
+        `email.ilike.%${sanitized}%`,
+        `phone.ilike.%${sanitized}%`,
+      ];
+
+      // Full-name search: "John Smith" won't match first_name/last_name
+      // individually since PostgREST can't filter on a concatenated
+      // expression — match token pairs against first/last in either order.
+      const tokens = sanitized.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length >= 2) {
+        const [t1, t2] = tokens;
+        orClauses.push(
+          `and(first_name.ilike.%${t1}%,last_name.ilike.%${t2}%)`,
+          `and(first_name.ilike.%${t2}%,last_name.ilike.%${t1}%)`
+        );
+      }
+
+      query = query.or(orClauses.join(","));
     }
   }
 
