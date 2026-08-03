@@ -61,10 +61,15 @@ function formatDate(dateString: string): string {
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
-function formatRelativeDays(dateString: string): string {
-  const diff = Date.now() - new Date(dateString).getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-  return days === 0 ? "Updated today" : `Updated ${days}d ago`;
+function formatRelativeShort(dateString: string): string {
+  const diffMs = Date.now() - new Date(dateString).getTime();
+  const minutes = Math.floor(diffMs / (1000 * 60));
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  return `${days}d ago`;
 }
 
 function truncateText(text: string, maxLength: number): string {
@@ -229,14 +234,6 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
       {/* Footer: Time badge + Action chips + Avatar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          {/* Last-changed (any field) — neutral, informational only */}
-          <span
-            className="text-[10px] text-muted-foreground whitespace-nowrap"
-            title={`Last changed ${formatDate(lead.updated_at)}`}
-          >
-            {formatRelativeDays(lead.updated_at)}
-          </span>
-
           {/* Time Badge — stage/status age only */}
           <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}>
             <Clock className="h-3 w-3" />
@@ -280,22 +277,32 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
           </TooltipProvider>
         </div>
 
-        {/* Assignee Avatar */}
-        {lead.assigned_to ? (
-          <div
-            className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary"
-            title={`Assigned`}
+        <div className="flex items-center gap-2">
+          {/* Last-changed (any field) — recency signal, distinct from the stage badge */}
+          <span
+            className="text-[10px] font-medium text-red-500 whitespace-nowrap"
+            title={`Last changed ${formatDate(lead.updated_at)}`}
           >
-            {getInitials(lead.first_name, lead.last_name)}
-          </div>
-        ) : (
-          <div
-            className="h-6 w-6 rounded-full bg-muted border border-border flex items-center justify-center"
-            title="Unassigned"
-          >
-            <User className="h-3 w-3 text-muted-foreground" />
-          </div>
-        )}
+            {formatRelativeShort(lead.updated_at)}
+          </span>
+
+          {/* Assignee Avatar */}
+          {lead.assigned_to ? (
+            <div
+              className="h-6 w-6 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary"
+              title={`Assigned`}
+            >
+              {getInitials(lead.first_name, lead.last_name)}
+            </div>
+          ) : (
+            <div
+              className="h-6 w-6 rounded-full bg-muted border border-border flex items-center justify-center"
+              title="Unassigned"
+            >
+              <User className="h-3 w-3 text-muted-foreground" />
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Move to Pipeline Modal */}
