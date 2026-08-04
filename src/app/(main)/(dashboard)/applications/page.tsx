@@ -109,7 +109,21 @@ export default async function ApplicationsRoute() {
   ]);
 
   const stages = (stagesResult.data ?? []) as ApplicationStage[];
-  const pipelines = (pipelinesResult.data ?? []) as ApplicationPipelineWithCounts[];
+  const rawPipelines = pipelinesResult.data ?? [];
+
+  const stageCountByPipeline = new Map<string, number>();
+  for (const s of stages) {
+    if (s.pipeline_id) stageCountByPipeline.set(s.pipeline_id, (stageCountByPipeline.get(s.pipeline_id) ?? 0) + 1);
+  }
+  const appCountByPipeline = new Map<string, number>();
+  for (const a of applications) {
+    if (a.pipeline_id) appCountByPipeline.set(a.pipeline_id, (appCountByPipeline.get(a.pipeline_id) ?? 0) + 1);
+  }
+  const pipelines: ApplicationPipelineWithCounts[] = rawPipelines.map((p) => ({
+    ...p,
+    stage_count: stageCountByPipeline.get(p.id) ?? 0,
+    application_count: appCountByPipeline.get(p.id) ?? 0,
+  }));
 
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">

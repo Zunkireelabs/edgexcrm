@@ -17,18 +17,23 @@ CREATE INDEX IF NOT EXISTS idx_application_pipelines_tenant ON application_pipel
 
 ALTER TABLE application_pipelines ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "application_pipelines_select" ON application_pipelines;
 CREATE POLICY "application_pipelines_select" ON application_pipelines
   FOR SELECT USING (tenant_id IN (SELECT get_user_tenant_ids()));
 
+DROP POLICY IF EXISTS "application_pipelines_insert" ON application_pipelines;
 CREATE POLICY "application_pipelines_insert" ON application_pipelines
   FOR INSERT WITH CHECK (is_tenant_admin(tenant_id));
 
+DROP POLICY IF EXISTS "application_pipelines_update" ON application_pipelines;
 CREATE POLICY "application_pipelines_update" ON application_pipelines
   FOR UPDATE USING (is_tenant_admin(tenant_id)) WITH CHECK (is_tenant_admin(tenant_id));
 
+DROP POLICY IF EXISTS "application_pipelines_delete" ON application_pipelines;
 CREATE POLICY "application_pipelines_delete" ON application_pipelines
   FOR DELETE USING (is_tenant_admin(tenant_id));
 
+DROP TRIGGER IF EXISTS trigger_application_pipelines_updated_at ON application_pipelines;
 CREATE TRIGGER trigger_application_pipelines_updated_at
   BEFORE UPDATE ON application_pipelines FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
@@ -44,6 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_applications_pipeline ON applications(pipeline_id
 
 ALTER TABLE application_stages DROP CONSTRAINT IF EXISTS application_stages_tenant_id_slug_key;
 
+ALTER TABLE application_stages DROP CONSTRAINT IF EXISTS application_stages_tenant_pipeline_slug_key;
 ALTER TABLE application_stages ADD CONSTRAINT application_stages_tenant_pipeline_slug_key
   UNIQUE (tenant_id, pipeline_id, slug);
 
@@ -95,9 +101,17 @@ BEGIN
     SET pipeline_id = default_pipeline_id
     WHERE tenant_id = tenant_row.id AND pipeline_id IS NULL;
 
-    -- 4. Seed one additional pipeline per active country row
+    -- 4. Seed one additional pipeline per active country row.
+    -- Slug algorithm MUST match ensureApplicationPipelineForCountry() in
+    -- src/lib/applications/pipeline-resolution.ts (and the POST /api/v1/application-pipelines
+    -- route's own slugify) — country names are free-text admin input (up to 255 chars,
+    -- no character restriction), so a punctuation-only-vs-regex mismatch here previously
+    -- meant a country like "Korea, South" got a different slug from this backfill than
+    -- from the live create-pipeline path, producing a silent duplicate pipeline the next
+    -- time that country was deleted/recreated.
     FOR country_name, country_slug IN
-      SELECT name, lower(translate(name, ' ''', '--')) FROM countries
+      SELECT name, trim(both '-' from lower(regexp_replace(name, '[^a-zA-Z0-9]+', '-', 'g')))
+      FROM countries
       WHERE tenant_id = tenant_row.id AND is_active = true
     LOOP
       -- Skip if slug would collide with the default pipeline slug
@@ -138,7 +152,7 @@ BEGIN
 END;
 $$;
 
-COMMIT;
-
 INSERT INTO public.schema_migrations (version) VALUES ('197_application_pipelines.sql')
   ON CONFLICT (version) DO NOTHING;
+
+COMMIT;

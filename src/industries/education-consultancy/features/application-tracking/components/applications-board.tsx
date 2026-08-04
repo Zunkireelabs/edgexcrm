@@ -172,30 +172,28 @@ export function ApplicationsBoard({ stages, applications, canManageApplications,
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragStart={handleDragStart}
-        onDragOver={handleDragOver}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex gap-4 overflow-x-auto pb-4 h-full">
-          {stages.map((stage) => (
-            <ApplicationColumn
-              key={stage.id}
-              stage={stage}
-              applications={columns[stage.id] ?? []}
-              canDrag={canManageApplications}
-              onOpenDetail={handleOpenDetail}
-            />
-          ))}
-        </div>
-      </DndContext>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+        {stages.map((stage) => (
+          <ApplicationColumn
+            key={stage.id}
+            stage={stage}
+            applications={columns[stage.id] ?? []}
+            canDrag={canManageApplications}
+            onOpenDetail={handleOpenDetail}
+          />
+        ))}
+      </div>
 
       <DragOverlay>
         {activeApp ? <ApplicationCard application={activeApp} disabled /> : null}
       </DragOverlay>
-    </div>
+    </DndContext>
   );
 }
