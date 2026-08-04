@@ -15,6 +15,10 @@ import {
 } from "@/components/ui/select";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
+
+// Shared list/page title style — keep every leads-family heading (All Leads, Pre-qualified,
+// New Leads (Unrouted), Contacts, Leads Organise, ...) on one consistent size.
+export const PAGE_HEADING_CLASSNAME = "shrink-0 text-base font-bold mb-4 pr-6";
 import {
   Dialog,
   DialogContent,
@@ -304,7 +308,7 @@ export function LeadsTable({
   excludeDefaultVisibleKeys = [],
   columnPrefsScope,
   pageHeading,
-  pageHeadingClassName = "shrink-0 text-lg font-bold mb-4 pr-6",
+  pageHeadingClassName = PAGE_HEADING_CLASSNAME,
   pageSubheading,
   beforeTable,
 }: LeadsTableProps) {

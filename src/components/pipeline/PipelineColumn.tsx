@@ -85,7 +85,7 @@ export function PipelineColumn({
   }, [onLoadMore, remaining, isLoadingMore]);
 
   return (
-    <div className="flex flex-col w-80 min-w-80 shrink-0 h-full rounded-lg bg-muted/50">
+    <div className="flex flex-col w-80 min-w-80 shrink-0 h-full rounded-lg bg-sidebar-bg">
       {/* Column Header — same background as the column body, no border/card box */}
       <div className="flex items-center gap-2 px-3 py-3 shrink-0">
         <div
@@ -102,7 +102,7 @@ export function PipelineColumn({
       {/* Droppable Area — cards float on the same column background, no separate box */}
       <div
         ref={setScrollContainerRef}
-        className={`flex-1 overflow-y-auto space-y-3 px-2 pb-2 transition-colors min-h-40 rounded-lg ${
+        className={`flex-1 overflow-y-auto space-y-2 px-2 pb-2 transition-colors min-h-40 rounded-lg ${
           isOver ? "bg-primary/5" : ""
         }`}
       >

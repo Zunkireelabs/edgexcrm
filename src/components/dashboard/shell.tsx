@@ -432,7 +432,7 @@ export function DashboardShell({
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] border border-gray-200 text-[13px] leading-5 font-medium transition-colors text-[#666666] bg-white hover:bg-[#ebebeb] hover:border-gray-300 hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>

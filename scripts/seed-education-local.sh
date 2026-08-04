@@ -98,11 +98,19 @@ ON CONFLICT (id) DO NOTHING;
 --    a re-run must fix a DB left over from before this line existed.
 INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, color, access, pipeline_id)
 VALUES
-  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, true,  '#6366f1', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
+  ('22222222-2222-2222-2222-000000000030', '$TENANT_ID', 'Pre-qualified',  'pre-qualified',  1, true, false, '#6366f1', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
   ('22222222-2222-2222-2222-000000000031', '$TENANT_ID', 'Qualified',      'qualified',       2, true, false, '#3b82f6', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
   ('22222222-2222-2222-2222-000000000032', '$TENANT_ID', 'Prospects',      'prospects',       3, true, false, '#f97316', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'),
   ('22222222-2222-2222-2222-000000000033', '$TENANT_ID', 'Applications',   'applications',    4, true, false, '#22c55e', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010')
-ON CONFLICT (id) DO UPDATE SET pipeline_id = EXCLUDED.pipeline_id;
+ON CONFLICT (id) DO UPDATE SET pipeline_id = EXCLUDED.pipeline_id, is_intake = EXCLUDED.is_intake;
+
+-- 5b. Staging list ("Leads Organise" cockpit — only shows in the sidebar when a
+--     tenant has at least one is_staging=true list) + a few unrouted leads in it.
+INSERT INTO public.lead_lists (id, tenant_id, name, slug, sort_order, is_system, is_intake, is_staging, color, access, pipeline_id)
+VALUES (
+  '22222222-2222-2222-2222-000000000034', '$TENANT_ID', 'New Leads (Unrouted)', 'new-leads-unrouted', 0, false, false, true, '#a855f7', '{"mode":"all"}'::jsonb, '22222222-2222-2222-2222-000000000010'
+)
+ON CONFLICT (tenant_id, slug) DO NOTHING;
 
 -- 6. Positions (counselor, lead-executive, branch-manager)
 --    permissions MUST carry nav / pipelines / dashboard. resolvePermissions()
@@ -159,7 +167,12 @@ VALUES
   ('$TENANT_ID','Deepa',     'Chaudhary', 'deepa.chaudhary@gmail.com',  '+9779867890125', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['parent'],  'walk_in',  'check_in', true, 'enrolled', 'Nepal',  '{}'::jsonb,                                                  'ADM-027'),
   ('$TENANT_ID','Santosh',   'Oli',       'santosh.oli@gmail.com',      '+9779878901236', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'website',  'organic',  true, 'enrolled', 'India',  '{"degree_level":"masters","destination":"Germany"}'::jsonb,  'ADM-028'),
   ('$TENANT_ID','Binita',    'Karmacharya','binita.k@gmail.com',        '+9779889012347', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'referral', 'offline',  true, 'enrolled', 'Nepal',  '{"degree_level":"bachelors","destination":"UK"}'::jsonb,     'ADM-029'),
-  ('$TENANT_ID','Hari',      'Prasad',    'hari.prasad@gmail.com',      '+9779890123458', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'walk_in',  'check_in', true, 'enrolled', 'Nepal',  '{"degree_level":"diploma","destination":"Australia"}'::jsonb,'ADM-030')
+  ('$TENANT_ID','Hari',      'Prasad',    'hari.prasad@gmail.com',      '+9779890123458', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000022', '22222222-2222-2222-2222-000000000033', ARRAY['student'], 'walk_in',  'check_in', true, 'enrolled', 'Nepal',  '{"degree_level":"diploma","destination":"Australia"}'::jsonb,'ADM-030'),
+
+  -- New Leads (Unrouted) — staging cockpit
+  ('$TENANT_ID','Manish',    'Karki',     'manish.karki@gmail.com',     '+9779841112233', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000020', '22222222-2222-2222-2222-000000000034', ARRAY['student'], 'facebook', 'social',   true, 'new', 'Nepal', '{"degree_level":"bachelors","destination":"Canada"}'::jsonb, 'ADM-034'),
+  ('$TENANT_ID','Sushmita',  'Rai',       'sushmita.rai@yahoo.com',     '+9779851223344', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000020', '22222222-2222-2222-2222-000000000034', ARRAY['student'], 'website',  'organic',  true, 'new', 'Nepal', '{}'::jsonb,                                                    'ADM-035'),
+  ('$TENANT_ID','Kiran',     'Shrestha',  'kiran.shrestha@hotmail.com', '+9779861334455', '22222222-2222-2222-2222-000000000010', '22222222-2222-2222-2222-000000000020', '22222222-2222-2222-2222-000000000034', ARRAY['walk_in'], 'walk_in',  'offline',  true, 'new', 'Nepal', '{}'::jsonb,                                                    'ADM-036')
 ON CONFLICT DO NOTHING;
 
 -- 8. Counselor user. Must come AFTER positions (7) — tenant_users.position_id FKs to positions(id).

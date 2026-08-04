@@ -158,13 +158,15 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
             {fullName}
           </Link>
           {subtitleParts.length > 0 && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {subtitleParts.join(" · ")}
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-1.5">
+              <Phone className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{subtitleParts.join(" · ")}</span>
             </p>
           )}
           {lead.email && (
-            <p className="text-xs text-muted-foreground truncate mt-0.5">
-              {lead.email}
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground truncate mt-1">
+              <Mail className="h-3 w-3 flex-shrink-0" />
+              <span className="truncate">{lead.email}</span>
             </p>
           )}
         </div>

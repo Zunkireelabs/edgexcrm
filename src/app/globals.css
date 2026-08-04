@@ -55,7 +55,7 @@
   --radius: 1rem;
   /* Zunkireelabs unified color system (matches agentic-commerce) */
   --background: #f7f7f7;
-  --foreground: #171717;
+  --foreground: #333333;
   --card: #ffffff;
   --card-foreground: #171717;
   --popover: #ffffff;
@@ -187,11 +187,12 @@ button:disabled,
 
 /* Scrollbars: transparent track, subtle thumb — app-wide */
 * {
+  scrollbar-width: thin; /* standard CSS Scrollbars spec (modern Chromium + Firefox) */
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent; /* Firefox: thumb, track */
 }
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 4px;
+  height: 4px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;

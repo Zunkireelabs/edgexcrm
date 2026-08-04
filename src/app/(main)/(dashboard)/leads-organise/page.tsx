@@ -52,7 +52,7 @@ export default async function LeadsOrganisePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-bold">Leads Organise</h1>
+        <h1 className="text-base font-bold">Leads Organise</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Staging lists where imported leads land. Route chunks into the live pipeline.
         </p>
