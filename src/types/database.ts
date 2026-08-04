@@ -1144,6 +1144,7 @@ export interface Application {
   field_of_study: string | null;
   created_at: string;
   updated_at: string;
+  stage_changed_at: string;
   deleted_at: string | null;
   // Joined fields (present when fetched with select joins)
   leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;

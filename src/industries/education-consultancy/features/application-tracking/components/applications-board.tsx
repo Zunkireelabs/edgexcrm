@@ -43,9 +43,11 @@ interface ApplicationsBoardProps {
   applications: Application[];
   canManageApplications: boolean;
   onRefresh: () => void;
+  /** user_id -> display name, for resolving a card's assignee to a real name. */
+  assigneeNames?: Record<string, string>;
 }
 
-export function ApplicationsBoard({ stages, applications, canManageApplications, onRefresh }: ApplicationsBoardProps) {
+export function ApplicationsBoard({ stages, applications, canManageApplications, onRefresh, assigneeNames }: ApplicationsBoardProps) {
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
   const [columns, setColumns] = useState<ColumnsState>(() => groupByStage(applications, stages));
@@ -187,12 +189,19 @@ export function ApplicationsBoard({ stages, applications, canManageApplications,
             applications={columns[stage.id] ?? []}
             canDrag={canManageApplications}
             onOpenDetail={handleOpenDetail}
+            assigneeNames={assigneeNames}
           />
         ))}
       </div>
 
       <DragOverlay>
-        {activeApp ? <ApplicationCard application={activeApp} disabled /> : null}
+        {activeApp ? (
+          <ApplicationCard
+            application={activeApp}
+            disabled
+            assigneeName={activeApp.assigned_to ? assigneeNames?.[activeApp.assigned_to] : undefined}
+          />
+        ) : null}
       </DragOverlay>
     </DndContext>
   );

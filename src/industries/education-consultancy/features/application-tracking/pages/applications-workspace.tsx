@@ -107,6 +107,11 @@ export function ApplicationsWorkspace({
     [teamMembers],
   );
 
+  const assigneeNames = useMemo(
+    () => Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name])),
+    [teamMembers],
+  );
+
   // Load saved column prefs after mount to avoid SSR hydration mismatch.
   // Why: react-hooks/set-state-in-effect rejects synchronous setState inside an
   // effect body; deferring via setTimeout places the update outside the
@@ -376,6 +381,7 @@ export function ApplicationsWorkspace({
             applications={filteredApplications}
             canManageApplications={canManageApplications}
             onRefresh={handleRefresh}
+            assigneeNames={assigneeNames}
           />
         </div>
       ) : (
