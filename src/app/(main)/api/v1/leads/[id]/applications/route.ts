@@ -5,6 +5,7 @@ import { getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { canCreateOrReorderApplications } from "@/lib/api/applications";
+import { resolveApplicationPipelineAndStage } from "@/lib/applications/pipeline-resolution";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -176,6 +177,44 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   if (!stageId) return apiError("NO_STAGES", "No application stages found for this tenant", 500);
 
+  // Resolve pipeline from the first declared country (server-side only).
+  // Never trust a client-supplied pipeline_id.
+  let pipelineId: string | undefined;
+  const countries = body.countries as string[] | undefined;
+  if (countries && countries.length > 0) {
+    const resolution = await resolveApplicationPipelineAndStage(supabase, {
+      tenantId: auth.tenantId,
+      countryName: countries[0],
+    });
+    if (resolution.ok) {
+      pipelineId = resolution.pipelineId;
+      // If the resolved stage belongs to the matched pipeline, use it;
+      // otherwise keep the stage resolved above (default/fallback).
+      const stageInPipeline = await db
+        .from("application_stages")
+        .select("id")
+        .eq("id", stageId)
+        .eq("pipeline_id", pipelineId)
+        .maybeSingle();
+      if (stageInPipeline.data) {
+        // stage already belongs to the pipeline — keep it
+      } else {
+        // Override stage_id with the pipeline's entry stage
+        const { data: entryStage } = await db
+          .from("application_stages")
+          .select("id")
+          .eq("pipeline_id", pipelineId)
+          .order("is_default", { ascending: false })
+          .order("position", { ascending: true })
+          .limit(1)
+          .maybeSingle();
+        if (entryStage) {
+          stageId = (entryStage as unknown as { id: string }).id;
+        }
+      }
+    }
+  }
+
   // Append to the end of the lead's panel order (position = current max + 1).
   const { data: maxRow } = await db
     .from("applications")
@@ -196,6 +235,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     position: nextPosition,
     created_by: auth.userId,
   };
+  if (pipelineId) insert.pipeline_id = pipelineId;
   if (body.intake_term) insert.intake_term = String(body.intake_term);
   if (body.countries !== undefined) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {

@@ -27,6 +27,7 @@ interface ClassRow {
   name: string;
   default_fee: number | null;
   is_active: boolean;
+  end_date: string | null;
   enrollmentCount: number;
 }
 
@@ -34,10 +35,11 @@ interface ClassFormState {
   name: string;
   default_fee: string;
   is_active: boolean;
+  end_date: string;
 }
 
 function buildDefaultForm(): ClassFormState {
-  return { name: "", default_fee: "", is_active: true };
+  return { name: "", default_fee: "", is_active: true, end_date: "" };
 }
 
 function formFromClass(cls: ClassRow): ClassFormState {
@@ -45,6 +47,7 @@ function formFromClass(cls: ClassRow): ClassFormState {
     name: cls.name,
     default_fee: cls.default_fee != null ? String(cls.default_fee) : "",
     is_active: cls.is_active,
+    end_date: cls.end_date ?? "",
   };
 }
 
@@ -108,6 +111,8 @@ export function ClassesManager() {
       };
       if (feeRaw) body.default_fee = Number(feeRaw);
       else if (editingClass) body.default_fee = null;
+      if (form.end_date) body.end_date = form.end_date;
+      else if (editingClass) body.end_date = null;
 
       const res = await fetch(url, {
         method,
@@ -210,6 +215,11 @@ export function ClassesManager() {
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {cls.enrollmentCount} enrolled
                       </Badge>
+                      {cls.end_date && (
+                        <span className="text-xs text-muted-foreground">
+                          Ends {new Date(cls.end_date).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      )}
                       {!cls.is_active && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
                           Inactive
@@ -287,6 +297,18 @@ export function ClassesManager() {
                 onChange={(e) => setForm((f) => ({ ...f, default_fee: e.target.value }))}
                 placeholder="Leave blank if no default"
               />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>End Date</Label>
+              <Input
+                type="date"
+                value={form.end_date}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Once passed, active enrollments auto-flip to Completed overnight. Leave blank for ongoing classes.
+              </p>
             </div>
 
             <div className="flex items-center justify-between">

@@ -81,10 +81,10 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-[4px] border-[0.5px] text-[10px] font-semibold cursor-pointer transition-colors ${
         currentType === "prospect"
-          ? "bg-purple-100 text-purple-700 hover:bg-purple-200"
-          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+          ? "bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200"
+          : "bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200"
       }`}
       title={`Click to change to ${nextType}`}
     >
@@ -94,8 +94,8 @@ function LeadTypeToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (type: strin
 }
 
 const TAG_CLASSES_BY_VALUE: Record<string, string> = {
-  other: "bg-amber-100 text-amber-700 hover:bg-amber-200",
-  student: "bg-blue-100 text-blue-700 hover:bg-blue-200",
+  other: "bg-amber-100 text-amber-700 border-amber-300 hover:bg-amber-200",
+  student: "bg-blue-100 text-blue-700 border-blue-300 hover:bg-blue-200",
 };
 const TAG_LABELS_BY_VALUE: Record<string, string> = { other: "Other", student: "Student" };
 
@@ -121,7 +121,7 @@ function LeadTagToggle({ lead, onUpdate }: { lead: Lead; onUpdate: (tags: string
   return (
     <button
       onClick={toggle}
-      className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-semibold cursor-pointer transition-colors ${TAG_CLASSES_BY_VALUE[currentTag]}`}
+      className={`inline-flex items-center px-1.5 py-0.5 rounded-[4px] border-[0.5px] text-[10px] font-semibold cursor-pointer transition-colors ${TAG_CLASSES_BY_VALUE[currentTag]}`}
       title={`Click to change to ${nextTag}`}
     >
       {TAG_LABELS_BY_VALUE[currentTag]}
@@ -242,7 +242,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               <button
                 type="button"
                 onClick={() => ctx.onRestore!(lead.id)}
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-emerald-300 text-[10px] font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition-colors"
               >
                 <RotateCcw className="w-3 h-3" />
                 Restore
@@ -367,16 +367,13 @@ const STATIC_COLUMNS: LeadColumn[] = [
       const assignedName = lead.assigned_to ? ctx.memberNames?.[lead.assigned_to] : null;
       const label = assignedName || (assignedEmail ? assignedEmail.split("@")[0] : "");
 
-      // Education keeps its exact plain-text render — protects counselor / shared-pool /
+      // Education: same read-only AssigneeChip visual as other industries, but never
+      // routed through AssigneeSelector — protects counselor / shared-pool /
       // branch-manager assignment logic that reads/writes assigned_to elsewhere.
       if (ctx.industryId === "education_consultancy") {
         return (
           <td key="assigned" className="px-3 py-1.5 hidden lg:table-cell text-sm font-normal text-[#787871]">
-            {assignedEmail ? (
-              <span>{label}</span>
-            ) : (
-              <span className="text-gray-400">—</span>
-            )}
+            <AssigneeChip seed={lead.assigned_to ?? null} label={label} />
           </td>
         );
       }
@@ -424,10 +421,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
       // are available. Trash/archive views pass no onStageChange ⇒ read-only badge.
       const editable = !!ctx.canEditLeads && !!ctx.onStageChange && leadStages.length > 0;
       const badgeColors: Record<string, string> = {
-        new: "bg-blue-100 text-blue-800",
-        contacted: "bg-yellow-100 text-yellow-800",
-        enrolled: "bg-green-100 text-green-800",
-        rejected: "bg-red-100 text-red-800",
+        new: "bg-blue-100 text-blue-800 border-blue-300",
+        contacted: "bg-yellow-100 text-yellow-800 border-yellow-300",
+        enrolled: "bg-green-100 text-green-800 border-green-300",
+        rejected: "bg-red-100 text-red-800 border-red-300",
       };
       return (
         <td key="status" className="px-3 py-1.5" onClick={(e) => e.stopPropagation()}>
@@ -439,10 +436,10 @@ const STATIC_COLUMNS: LeadColumn[] = [
             />
           ) : (
             <span
-              className={`inline-flex items-center px-2 py-0.5 rounded-[8px] text-xs font-medium whitespace-nowrap ${
-                stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800"
+              className={`inline-flex items-center px-2 py-0.5 rounded-[4px] border-[0.5px] text-xs font-medium whitespace-nowrap ${
+                stage ? "" : badgeColors[lead.status] || "bg-gray-100 text-gray-800 border-gray-300"
               }`}
-              style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color } : undefined}
+              style={stage ? { backgroundColor: `${stage.color}20`, color: stage.color, borderColor: `${stage.color}66` } : undefined}
             >
               {stage?.name || lead.status}
             </span>
@@ -496,7 +493,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
     renderTd: (lead) => (
       <td key="ref_code" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
         {lead.ref_code ? (
-          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium whitespace-nowrap">
+          <span className="text-xs px-2 py-0.5 rounded-[4px] border border-amber-300 bg-amber-100 text-amber-800 font-medium whitespace-nowrap">
             {lead.ref_code}
           </span>
         ) : (
@@ -550,7 +547,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
       return (
         <td key="form_source" className="px-3 py-1.5 hidden md:table-cell whitespace-nowrap">
           {display ? (
-            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 whitespace-nowrap">
+            <span className="text-xs px-2 py-0.5 rounded-[4px] border border-gray-300 bg-gray-100 text-gray-700 whitespace-nowrap">
               {display}
             </span>
           ) : (
@@ -664,7 +661,13 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
     renderTd: (lead) => (
       <td key="display_id" className="px-3 py-1.5 text-sm font-normal text-[#787871]">
-        {lead.display_id || <span className="text-gray-400">—</span>}
+        {lead.display_id ? (
+          <span className="text-xs px-2 py-0.5 rounded-[8px] bg-gray-100 text-gray-700 whitespace-nowrap">
+            {lead.display_id}
+          </span>
+        ) : (
+          <span className="text-gray-400">—</span>
+        )}
       </td>
     ),
   },

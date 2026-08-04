@@ -29,7 +29,7 @@ export function ArchiveNavLinks({ lists, onNavigate }: ArchiveNavLinksProps) {
             className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
               active
                 ? "bg-[#ebebeb] text-gray-900"
-                : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+                : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
             }`}
           >
             <Icon className="w-[18px] h-[18px] shrink-0" />

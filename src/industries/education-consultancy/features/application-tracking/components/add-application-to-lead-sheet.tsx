@@ -26,7 +26,7 @@ import { AddUniversityWithProgramsDialog } from "./add-university-with-programs-
 import { useApplicationReferenceData, getCollegeSuggestions } from "../hooks/use-application-reference-data";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
-import type { ApplicationStage } from "@/types/database";
+import type { ApplicationStage, Lead } from "@/types/database";
 
 interface AddApplicationToLeadSheetProps {
   open: boolean;
@@ -59,11 +59,24 @@ export function AddApplicationToLeadSheet({
   const [agentId, setAgentId] = useState("");
   const [appliedDate, setAppliedDate] = useState("");
   const [intakeStartDate, setIntakeStartDate] = useState("");
+  const [leadDestinations, setLeadDestinations] = useState<string[]>([]);
   const {
     agents, partnerColleges, countries: countryOptions, intakeMonths, intakeYears,
     createPartnerCollege, programsByUniversity, fetchPrograms, createProgram, fetchDistinctProgramNames,
   } = useApplicationReferenceData(open);
   const { studyLevels, fieldsOfStudy } = useEduTaxonomy();
+
+  // Fetch the lead's destinations when the sheet opens
+  useEffect(() => {
+    if (!open) return;
+    fetch(`/api/v1/leads/${leadId}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const lead = j.data as Lead;
+        setLeadDestinations(lead.destinations ?? []);
+      })
+      .catch(() => {});
+  }, [open, leadId]);
 
   // Colleges tagged to any of the selected countries (+ untagged) rank first;
   // every college stays selectable so the autocomplete's dedupe check never
@@ -88,6 +101,7 @@ export function AddApplicationToLeadSheet({
       setAgentId("");
       setAppliedDate("");
       setIntakeStartDate("");
+      setLeadDestinations([]);
     }
     if (open) setStageId(defaultStage?.id ?? "");
   }, [open, defaultStage?.id]);
@@ -136,6 +150,12 @@ export function AddApplicationToLeadSheet({
     const created = await createProgram(universityId, name);
     if (created) setProgramName(created.name);
   }
+
+  // Country options: if lead has declared destinations, restrict to those;
+  // otherwise show the full tenant countries catalog.
+  const availableCountryOptions = leadDestinations.length > 0
+    ? countryOptions.filter((c) => leadDestinations.includes(c))
+    : countryOptions;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -189,13 +209,13 @@ export function AddApplicationToLeadSheet({
         </SheetHeader>
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
-          <DestinationsMultiSelect
-            selected={countries}
-            onChange={setCountries}
-            options={countryOptions}
-            label="Destination"
-            optional={false}
-          />
+           <DestinationsMultiSelect
+             selected={countries}
+             onChange={setCountries}
+             options={availableCountryOptions}
+             label="Destination"
+             optional={false}
+           />
 
           <div className="space-y-1.5">
             <Label htmlFor="app-university" className="text-xs text-gray-600">

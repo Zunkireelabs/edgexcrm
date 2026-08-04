@@ -130,6 +130,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     }
   }
   if (body.notes !== undefined) patch.notes = body.notes === null ? null : String(body.notes);
+  if (body.status !== undefined) {
+    if (body.status !== "active" && body.status !== "inactive" && body.status !== "completed") {
+      return apiValidationError({ status: ["status must be 'active', 'inactive', or 'completed'"] });
+    }
+    patch.status = body.status;
+  }
 
   if (Object.keys(patch).length === 0) return apiSuccess(existingRow);
 

@@ -181,7 +181,11 @@ export function ApplicationDetailPage({
       : intakeYears;
 
   const currentStage = stages.find((s) => s.id === application.stage_id);
-  const progress = computeProgress(stages, application.stage_id);
+  const appPipelineId = (application as { pipeline_id?: string | null }).pipeline_id ?? null;
+  const pipelineStages = appPipelineId
+    ? stages.filter((s) => s.pipeline_id === appPipelineId)
+    : stages;
+  const progress = computeProgress(pipelineStages, application.stage_id);
   const showOfferType = currentStage != null && OFFER_STAGE_POSITIONS.has(currentStage.position);
   const leadId =
     (application.leads as { id?: string } | null)?.id ?? application.lead_id;
@@ -380,7 +384,7 @@ export function ApplicationDetailPage({
             Application Stage
           </p>
           <StageStepperHorizontal
-            stages={stages}
+            stages={pipelineStages}
             currentStageId={application.stage_id}
             applicationId={application.id}
             canManage={canEdit}

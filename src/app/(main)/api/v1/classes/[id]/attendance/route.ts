@@ -49,12 +49,16 @@ export async function GET(request: NextRequest, { params }: Props) {
   const { data: classRow } = await db.from("classes").select("id, name").eq("id", id).maybeSingle();
   if (!classRow) return apiNotFound("Class");
 
-  // All active enrollments for this class — deliberately NOT filtered to the
+  // Actual, active enrollments for this class — deliberately NOT filtered to the
   // caller's assigned leads; markers see every student enrolled in the class.
+  // Demo enrollments are excluded: a student on trial isn't tracked for
+  // attendance, and including both rows would show the same student twice.
   const { data: enrollments, error: enrollError } = await db
     .from("class_enrollments")
     .select("id, lead_id, leads!class_enrollments_lead_id_fkey(id,first_name,last_name)")
     .eq("class_id", id)
+    .eq("enrollment_type", "actual")
+    .eq("status", "active")
     .is("deleted_at", null)
     .order("created_at", { ascending: true });
 
@@ -139,6 +143,8 @@ export async function POST(request: NextRequest, { params }: Props) {
     .from("class_enrollments")
     .select("id")
     .eq("class_id", id)
+    .eq("enrollment_type", "actual")
+    .eq("status", "active")
     .is("deleted_at", null);
 
   if (enrollError) return apiError("DB_ERROR", "Failed to verify enrollments", 500);

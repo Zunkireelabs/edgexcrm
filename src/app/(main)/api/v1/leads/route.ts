@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
-import { getBranchIds } from "@/lib/supabase/queries";
+import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -92,7 +92,7 @@ bachelor_gpa,bachelor_institution,bachelor_passed_year,\
 masters_gpa,masters_institution,masters_passed_year,\
 ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
 archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
-last_activity_at,created_at,updated_at";
+last_activity_at,stage_changed_at,created_at,updated_at";
 
 // Sort allow-list — never interpolate a client-supplied column name into the query.
 // Only "created_at" is covered by an index (idx_leads_tenant_created_active); the
@@ -378,9 +378,26 @@ export async function GET(request: NextRequest) {
     // Sanitize search input to prevent PostgREST filter injection
     const sanitized = search.replace(/[,().]/g, "");
     if (sanitized) {
-      query = query.or(
-        `first_name.ilike.%${sanitized}%,last_name.ilike.%${sanitized}%,email.ilike.%${sanitized}%,phone.ilike.%${sanitized}%`
-      );
+      const orClauses = [
+        `first_name.ilike.%${sanitized}%`,
+        `last_name.ilike.%${sanitized}%`,
+        `email.ilike.%${sanitized}%`,
+        `phone.ilike.%${sanitized}%`,
+      ];
+
+      // Full-name search: "John Smith" won't match first_name/last_name
+      // individually since PostgREST can't filter on a concatenated
+      // expression — match token pairs against first/last in either order.
+      const tokens = sanitized.trim().split(/\s+/).filter(Boolean);
+      if (tokens.length >= 2) {
+        const [t1, t2] = tokens;
+        orClauses.push(
+          `and(first_name.ilike.%${t1}%,last_name.ilike.%${t2}%)`,
+          `and(first_name.ilike.%${t2}%,last_name.ilike.%${t1}%)`
+        );
+      }
+
+      query = query.or(orClauses.join(","));
     }
   }
 
@@ -546,13 +563,33 @@ export async function GET(request: NextRequest) {
   // Strip the lead_collaborators embed — it only existed to filter (see selectColumns
   // above), it is not part of the Lead shape the client expects. `data`'s inferred type
   // is the widened-string fallback (see selectColumns above), hence the `unknown` hop.
-  const responseData = collaboratorIds.length > 0
+  const strippedData: Array<Record<string, unknown>> = collaboratorIds.length > 0
     ? (data as unknown as Array<Record<string, unknown>>).map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { lead_collaborators, ...rest } = row;
         return rest;
       })
-    : data;
+    : (data as unknown as Array<Record<string, unknown>>) ?? [];
+
+  // Kanban-card checklist + task rollups (PIPELINE-CARD-REDESIGN) — cheap at page
+  // size <=100; the list-view table simply ignores these four extra fields.
+  const pageLeadIds = strippedData.map((row) => row.id as string);
+  const [checklistCounts, taskCounts] = await Promise.all([
+    getChecklistCounts(auth.tenantId, pageLeadIds),
+    getTaskCounts(auth.tenantId, pageLeadIds),
+  ]);
+  const responseData = strippedData.map((row) => {
+    const id = row.id as string;
+    const checklist = checklistCounts[id];
+    const tasks = taskCounts[id];
+    return {
+      ...row,
+      checklist_total: checklist?.total ?? 0,
+      checklist_completed: checklist?.completed ?? 0,
+      task_total: tasks?.total ?? 0,
+      task_completed: tasks?.completed ?? 0,
+    };
+  });
 
   return apiPaginated(responseData as unknown as Lead[], {
     page,
