@@ -863,6 +863,7 @@ export function KanbanBoard({
                   canDragLead={canDragLead}
                   pipelineId={pipelineId}
                   onMovedToPipeline={handleLeadMovedToPipeline}
+                  industryId={industryId}
                 />
               );
             })}

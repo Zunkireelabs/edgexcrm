@@ -37,6 +37,7 @@ interface LeadCardProps {
   disabled: boolean;
   pipelineId?: string;
   onMovedToPipeline?: (leadId: string) => void;
+  industryId?: string | null;
 }
 
 function getDaysInStage(updatedAt: string): number {
@@ -77,7 +78,7 @@ function truncateText(text: string, maxLength: number): string {
   return text.slice(0, maxLength) + "...";
 }
 
-export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: LeadCardProps) {
+export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, industryId }: LeadCardProps) {
   const [moveModalOpen, setMoveModalOpen] = useState(false);
   const {
     attributes,
@@ -98,6 +99,7 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
 
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown";
   const subtitle = lead.country || (lead.custom_fields?.course_name as string) || null;
+  const showStageAgeBadge = industryId === "education_consultancy";
   const days = getDaysInStage(lead.stage_changed_at);
   const urgencyStyles = getUrgencyStyles(days);
 
@@ -234,11 +236,13 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
       {/* Footer: Time badge + Action chips + Avatar */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
-          {/* Time Badge — stage/status age only */}
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}>
-            <Clock className="h-3 w-3" />
-            <span>{days === 0 ? "Today" : `${days}d`}</span>
-          </div>
+          {/* Time Badge — stage/status age only; education_consultancy only */}
+          {showStageAgeBadge && (
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-[10px] font-medium ${urgencyStyles.bg} ${urgencyStyles.text}`}>
+              <Clock className="h-3 w-3" />
+              <span>{days === 0 ? "Today" : `${days}d`}</span>
+            </div>
+          )}
 
           {/* Action Chips */}
           <TooltipProvider delayDuration={300}>
@@ -278,13 +282,15 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline }: Lead
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Last-changed (any field) — recency signal, distinct from the stage badge */}
-          <span
-            className="text-[10px] font-medium text-muted-foreground whitespace-nowrap"
-            title={`Last changed ${formatDate(lead.updated_at)}`}
-          >
-            {formatRelativeShort(lead.updated_at)}
-          </span>
+          {/* Last-changed (any field) — recency signal, distinct from the stage badge; education_consultancy only */}
+          {showStageAgeBadge && (
+            <span
+              className="text-[10px] font-medium text-muted-foreground whitespace-nowrap"
+              title={`Last changed ${formatDate(lead.updated_at)}`}
+            >
+              {formatRelativeShort(lead.updated_at)}
+            </span>
+          )}
 
           {/* Assignee Avatar */}
           {lead.assigned_to ? (

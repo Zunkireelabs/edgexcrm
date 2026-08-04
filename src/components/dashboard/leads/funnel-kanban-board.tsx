@@ -277,6 +277,7 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
                 isLoadingMore={col.isLoadingMore}
                 onLoadMore={() => loadMore(list.id, columnDefs.find((d) => d.key === list.id)?.params ?? null)}
                 canDragLead={canDragLead}
+                industryId={industryId}
               />
             );
           })}

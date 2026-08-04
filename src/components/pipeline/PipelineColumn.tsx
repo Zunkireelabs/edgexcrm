@@ -21,6 +21,7 @@ interface PipelineColumnProps {
   total?: number;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
+  industryId?: string | null;
 }
 
 function calculateAvgDaysInStage(leads: PipelineLead[]): number {
@@ -41,6 +42,7 @@ export function PipelineColumn({
   total,
   isLoadingMore = false,
   onLoadMore,
+  industryId,
 }: PipelineColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
@@ -116,6 +118,7 @@ export function PipelineColumn({
                 disabled={!canDragLead(lead)}
                 pipelineId={pipelineId}
                 onMovedToPipeline={onMovedToPipeline}
+                industryId={industryId}
               />
             ))
           ) : (
