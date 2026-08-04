@@ -21,7 +21,9 @@ interface PipelineColumnProps {
   total?: number;
   isLoadingMore?: boolean;
   onLoadMore?: () => void;
-  industryId?: string | null;
+  /** user_id -> display name, for resolving a card's assignee to a real name
+   * instead of a bare "Assigned" (PIPELINE-CARD-REDESIGN). */
+  assigneeNames?: Record<string, string>;
 }
 
 function calculateAvgDaysInStage(leads: PipelineLead[]): number {
@@ -42,7 +44,7 @@ export function PipelineColumn({
   total,
   isLoadingMore = false,
   onLoadMore,
-  industryId,
+  assigneeNames,
 }: PipelineColumnProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: stage.id,
@@ -83,27 +85,25 @@ export function PipelineColumn({
   }, [onLoadMore, remaining, isLoadingMore]);
 
   return (
-    <div className="flex flex-col w-80 min-w-80 shrink-0 h-full">
-      {/* Column Header */}
-      <div className="flex items-center gap-2 px-3 py-2.5 bg-card rounded-t-lg border border-b-0">
+    <div className="flex flex-col w-80 min-w-80 shrink-0 h-full rounded-lg bg-sidebar-bg">
+      {/* Column Header — same background as the column body, no border/card box */}
+      <div className="flex items-center gap-2 px-3 py-3 shrink-0">
         <div
           className="h-3 w-3 rounded-full shrink-0"
           style={{ backgroundColor: stage.color }}
         />
         <h3 className="text-sm font-semibold truncate flex-1">{stage.name}</h3>
-        <span className="text-xs text-muted-foreground bg-muted rounded-full px-2.5 py-0.5 font-medium">
-          {trueTotal}
+        <span className="text-xs text-muted-foreground">
+          {trueTotal} {trueTotal === 1 ? "lead" : "leads"}
+          {leads.length > 0 && ` · ${avgDays}d avg`}
         </span>
       </div>
 
-      {/* Header Divider */}
-      <div className="h-px bg-border" />
-
-      {/* Droppable Area */}
+      {/* Droppable Area — cards float on the same column background, no separate box */}
       <div
         ref={setScrollContainerRef}
-        className={`flex-1 overflow-y-auto space-y-3 p-2 border border-t-0 bg-muted/20 transition-colors min-h-40 ${
-          isOver ? "border-primary bg-primary/5" : "border-border/50"
+        className={`flex-1 overflow-y-auto space-y-2 px-2 pb-2 transition-colors min-h-40 rounded-lg ${
+          isOver ? "bg-primary/5" : ""
         }`}
       >
         <SortableContext
@@ -118,7 +118,7 @@ export function PipelineColumn({
                 disabled={!canDragLead(lead)}
                 pipelineId={pipelineId}
                 onMovedToPipeline={onMovedToPipeline}
-                industryId={industryId}
+                assigneeName={lead.assigned_to ? assigneeNames?.[lead.assigned_to] : undefined}
               />
             ))
           ) : (
@@ -158,20 +158,6 @@ export function PipelineColumn({
         {/* IntersectionObserver sentinel — invisible, triggers the next page
             automatically when scrolled near. Rendered only while more pages remain. */}
         {remaining > 0 && onLoadMore && <div ref={sentinelRef} aria-hidden className="h-px" />}
-      </div>
-
-      {/* Column Footer */}
-      <div className="px-3 py-2 bg-card rounded-b-lg border border-t-0 space-y-0.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="text-muted-foreground">Total</span>
-          <span className="font-medium">{trueTotal} lead{trueTotal !== 1 ? "s" : ""}</span>
-        </div>
-        {leads.length > 0 && (
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Avg. time</span>
-            <span className="font-medium">{avgDays} day{avgDays !== 1 ? "s" : ""}</span>
-          </div>
-        )}
       </div>
     </div>
   );

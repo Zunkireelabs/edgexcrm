@@ -106,7 +106,7 @@ export default async function ContactsRoutePage() {
       <div className="flex flex-col h-full min-h-0">
         <LeadsTable
           pageHeading="Contacts"
-          pageHeadingClassName="shrink-0 text-lg font-bold mb-1 pr-6"
+          pageHeadingClassName="shrink-0 text-base font-bold mb-1 pr-6"
           pageSubheading="Walk-in visitors tagged as Other"
           leads={leads}
           leadCollaborators={leadCollaboratorsMap}

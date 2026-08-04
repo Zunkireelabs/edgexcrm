@@ -12,6 +12,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { ensureApplicationPipelineForCountry } from "@/lib/applications/pipeline-resolution";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -71,6 +72,19 @@ export async function POST(request: NextRequest) {
     return apiError("DB_ERROR", "Failed to create country", 500);
   }
 
-  log.info({ countryId: (data as { id: string }).id }, "Country created");
+  const countryRow = data as { id: string; name: string };
+  log.info({ countryId: countryRow.id }, "Country created");
+
+  // Best-effort: auto-create a matching application pipeline (cloning the
+  // Default pipeline's stages) so a new destination country is immediately
+  // usable without an admin manually hitting "+ Create Pipeline" first.
+  // Never fails the country-creation request — the country is already
+  // created; a missing pipeline is recoverable via the UI.
+  try {
+    await ensureApplicationPipelineForCountry(db, auth.tenantId, countryRow.name);
+  } catch (pipelineErr) {
+    log.error({ error: pipelineErr, countryId: countryRow.id }, "Failed to auto-create application pipeline for new country");
+  }
+
   return apiSuccess(data, 201);
 }

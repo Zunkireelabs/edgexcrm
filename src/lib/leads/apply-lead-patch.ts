@@ -780,8 +780,8 @@ export async function applyLeadPatch(
     }
   }
 
-  // Stage-age badge tracks stage/status moves only, not every field edit —
-  // set it here (not via the updated_at trigger) so notes/tags/etc. don't reset it.
+  // Stage-age badge tracks stage/status moves only, not every field edit — set it here
+  // (not via the updated_at trigger) so notes/tags/custom-field edits don't reset it.
   if (
     (updatePayload.list_id !== undefined && updatePayload.list_id !== (existingLead as Record<string, unknown>).list_id) ||
     (updatePayload.status !== undefined && updatePayload.status !== (existingLead as Record<string, unknown>).status)

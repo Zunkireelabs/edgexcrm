@@ -31,9 +31,9 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
           href="/leads-organise"
           onClick={onNavigate}
           className={`flex-1 flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
-            parentActive || hasActiveChild
+            parentActive
               ? "bg-[#ebebeb] text-gray-900"
-              : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
           }`}
         >
           <PackageOpen className="w-[18px] h-[18px] shrink-0" />
@@ -52,24 +52,34 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
       </div>
 
       {expanded && lists.length > 0 && (
-        <div className="relative mt-1 ml-[20px] pl-[18px] border-l border-gray-300 space-y-1">
-          {lists.map((list) => {
-            const active = pathname === `/leads-organise/${list.slug}`;
-            return (
-              <Link
-                key={list.id}
-                href={`/leads-organise/${list.slug}`}
-                onClick={onNavigate}
-                className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
-                  active
-                    ? "bg-[#ebebeb] text-gray-900 font-medium"
-                    : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
-                }`}
-              >
-                {list.name}
-              </Link>
-            );
-          })}
+        <div className="relative mt-1 ml-[20px] space-y-0.5">
+          {(() => {
+            const activeIndex = lists.findIndex((l) => pathname === `/leads-organise/${l.slug}`);
+            return lists.map((list, idx) => {
+              const active = idx === activeIndex;
+              const isLast = idx === lists.length - 1;
+              const topDark = activeIndex !== -1 && idx <= activeIndex;
+              const bottomDark = activeIndex !== -1 && idx < activeIndex;
+              return (
+                <div key={list.id} className="relative pl-[18px]">
+                  <span aria-hidden className={`absolute left-0 top-0 h-1/2 w-px ${topDark ? "bg-gray-400" : "bg-gray-200"}`} />
+                  {!isLast && <span aria-hidden className={`absolute left-0 top-1/2 bottom-0 w-px ${bottomDark ? "bg-gray-400" : "bg-gray-200"}`} />}
+                  <span aria-hidden className={`absolute left-0 top-1/2 -translate-y-1/2 w-[10px] h-px ${active ? "bg-gray-400" : "bg-gray-200"}`} />
+                  <Link
+                    href={`/leads-organise/${list.slug}`}
+                    onClick={onNavigate}
+                    className={`w-full flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] leading-5 transition-colors ${
+                      active
+                        ? "bg-[#ebebeb] text-gray-900 font-medium"
+                        : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+                    }`}
+                  >
+                    {list.name}
+                  </Link>
+                </div>
+              );
+            });
+          })()}
         </div>
       )}
     </div>

@@ -87,6 +87,9 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     if (!stageRow) return apiError("NOT_FOUND", "Application stage not found", 404);
     patch.stage_id = body.stage_id;
     patch.status = stageRow.slug;
+    // Stage-age badge tracks stage moves only, not every field edit — set it here
+    // (not via the updated_at trigger) so notes/deadline/etc. edits don't reset it.
+    patch.stage_changed_at = new Date().toISOString();
   }
 
   // Scalar fields
