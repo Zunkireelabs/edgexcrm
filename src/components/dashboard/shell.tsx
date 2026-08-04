@@ -184,7 +184,7 @@ function SidebarGroupRender({
         className={`w-full flex items-center justify-between gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
           hasActiveChild
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -206,7 +206,7 @@ function SidebarGroupRender({
                 className={`w-full flex items-center gap-2 rounded-[8px] px-2 py-1.5 text-[13px] leading-5 transition-colors ${
                   active
                     ? "bg-[#ebebeb] text-gray-900 font-medium"
-                    : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+                    : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
                 }`}
               >
                 <ChildIcon className="w-4 h-4" />
@@ -351,7 +351,7 @@ export function DashboardShell({
         className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
-            : "text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+            : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
         <item.icon className="w-[18px] h-[18px]" />
@@ -432,7 +432,7 @@ export function DashboardShell({
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors text-[#0f172a] hover:bg-[#ebebeb] hover:text-gray-900"
+          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
           <span className="flex-1 text-left">Global Search</span>
@@ -443,7 +443,7 @@ export function DashboardShell({
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
         {navMode === "ops" ? (
           isEducation ? (() => {
             // Finds a flat industry item by href (all education items are flat after manifest refactor)
@@ -465,7 +465,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Leads" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -477,7 +477,7 @@ export function DashboardShell({
                   </Suspense>
                 )}
                 <Suspense key="lead-lists-nav" fallback={
-                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                     <Users className="w-[18px] h-[18px] shrink-0" />
                     All Leads
                   </div>
@@ -533,7 +533,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Sales" />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
-                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                       <span className="w-[18px] h-[18px] shrink-0" />
                       Leads Organise
                     </div>
@@ -566,7 +566,7 @@ export function DashboardShell({
                   if (processingLists.length === 0 && salesLists.length === 0) {
                     return ungroupedLists.length > 0 ? (
                       <Suspense key="lead-lists-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                           <Users className="w-[18px] h-[18px] shrink-0" />
                           All Leads
                         </div>
@@ -585,7 +585,7 @@ export function DashboardShell({
                   return (
                     <>
                       <Suspense key="lead-processing-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                           <Filter className="w-[18px] h-[18px] shrink-0" />
                           Lead Processing
                         </div>
@@ -600,7 +600,7 @@ export function DashboardShell({
                         />
                       </Suspense>
                       <Suspense key="sales-leads-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                           <Target className="w-[18px] h-[18px] shrink-0" />
                           Sales Leads
                         </div>
@@ -616,7 +616,7 @@ export function DashboardShell({
                       </Suspense>
                       {ungroupedLists.length > 0 && (
                         <Suspense key="lead-lists-nav" fallback={
-                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                             <Users className="w-[18px] h-[18px] shrink-0" />
                             All Leads
                           </div>
@@ -712,7 +712,7 @@ export function DashboardShell({
           <>
             {stagingLists.length > 0 && navAllowed("/leads-organise") && (
               <Suspense key="leads-organise-nav" fallback={
-                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                   <span className="w-[18px] h-[18px] shrink-0" />
                   Leads Organise
                 </div>
@@ -730,7 +730,7 @@ export function DashboardShell({
                 if (item.href === "/leads" && leadLists.length > 0) {
                   return [
                     <Suspense key="lead-lists-nav" fallback={
-                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#0f172a]">
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
                         <Users className="w-[18px] h-[18px] shrink-0" />
                         All Leads
                       </div>

@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
+import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 import {
   Dialog,
   DialogContent,
@@ -205,9 +206,6 @@ const MIN_COLUMN_WIDTH = 60;
 // question. Still present in old leads' custom_fields (data, not schema), but no
 // longer worth surfacing as separate pickable columns now that the real column exists.
 const LEGACY_DESTINATION_KEYS = new Set<string>(DESTINATION_SYNONYM_KEYS);
-
-const TOOLBAR_BTN =
-  "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
 
 // A manually-resized column is pinned to a single line and clipped with an ellipsis at the
 // boundary — like Excel/Sheets/Airtable — instead of spilling its text into the next column.

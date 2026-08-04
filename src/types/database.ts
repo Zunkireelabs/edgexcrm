@@ -538,6 +538,8 @@ export interface LeadChecklist {
 export interface PipelineLead extends Lead {
   checklist_total: number;
   checklist_completed: number;
+  task_total: number;
+  task_completed: number;
 }
 
 export interface PaginationMeta {

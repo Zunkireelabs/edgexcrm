@@ -9,6 +9,8 @@ import {
   getLeadListsByTenant,
   getLeads,
   getBranchIds,
+  getChecklistCounts,
+  getTaskCounts,
 } from "@/lib/supabase/queries";
 import { getLeadAggregates, type AggregateScope } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -199,10 +201,26 @@ export default async function PipelinePage({ searchParams }: PipelinePageProps) 
     initialColumns[stageId] = {
       // Same PipelineLead-shaped cast as ListKanbanView's initialColumns — /api/v1/
       // leads' (and getLeadsPage's) column projection doesn't carry
-      // checklist_total/checklist_completed, which LeadCard treats as optional.
+      // checklist_total/checklist_completed; batched in separately below.
       cards: cards as unknown as PipelineLead[],
       total: aggregates.stage[stageId]?.all ?? 0,
     };
+  }
+
+  const pipelineLeadIds = Object.values(initialColumns).flatMap((c) => c.cards.map((l) => l.id));
+  const [checklistCounts, taskCounts] = await Promise.all([
+    getChecklistCounts(tenantData.tenant.id, pipelineLeadIds),
+    getTaskCounts(tenantData.tenant.id, pipelineLeadIds),
+  ]);
+  for (const col of Object.values(initialColumns)) {
+    for (const card of col.cards) {
+      const counts = checklistCounts[card.id];
+      card.checklist_total = counts?.total ?? 0;
+      card.checklist_completed = counts?.completed ?? 0;
+      const tasks = taskCounts[card.id];
+      card.task_total = tasks?.total ?? 0;
+      card.task_completed = tasks?.completed ?? 0;
+    }
   }
 
   const industry = industryResult.data as Industry | null;

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { normalizePhoneForStorage } from "@/lib/phone-utils";
-import { getBranchIds } from "@/lib/supabase/queries";
+import { getBranchIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { leadQueryScope, canSeeNav, canAccessList, isSharedPoolList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -546,13 +546,33 @@ export async function GET(request: NextRequest) {
   // Strip the lead_collaborators embed — it only existed to filter (see selectColumns
   // above), it is not part of the Lead shape the client expects. `data`'s inferred type
   // is the widened-string fallback (see selectColumns above), hence the `unknown` hop.
-  const responseData = collaboratorIds.length > 0
+  const strippedData: Array<Record<string, unknown>> = collaboratorIds.length > 0
     ? (data as unknown as Array<Record<string, unknown>>).map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { lead_collaborators, ...rest } = row;
         return rest;
       })
-    : data;
+    : (data as unknown as Array<Record<string, unknown>>) ?? [];
+
+  // Kanban-card checklist + task rollups (PIPELINE-CARD-REDESIGN) — cheap at page
+  // size <=100; the list-view table simply ignores these four extra fields.
+  const pageLeadIds = strippedData.map((row) => row.id as string);
+  const [checklistCounts, taskCounts] = await Promise.all([
+    getChecklistCounts(auth.tenantId, pageLeadIds),
+    getTaskCounts(auth.tenantId, pageLeadIds),
+  ]);
+  const responseData = strippedData.map((row) => {
+    const id = row.id as string;
+    const checklist = checklistCounts[id];
+    const tasks = taskCounts[id];
+    return {
+      ...row,
+      checklist_total: checklist?.total ?? 0,
+      checklist_completed: checklist?.completed ?? 0,
+      task_total: tasks?.total ?? 0,
+      task_completed: tasks?.completed ?? 0,
+    };
+  });
 
   return apiPaginated(responseData as unknown as Lead[], {
     page,

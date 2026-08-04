@@ -381,6 +381,70 @@ export async function getOpenTaskLeadIds(tenantId: string, leadIds: string[]): P
   return openIds;
 }
 
+/**
+ * Batched lead_checklists rollup for Kanban cards (PIPELINE-CARD-REDESIGN) — one
+ * chunked query per page load instead of a per-card fetch. Mirrors the CHUNK-200
+ * pattern in getOpenTaskLeadIds above (undici's 16KB .in() URL cap).
+ */
+export async function getChecklistCounts(
+  tenantId: string,
+  leadIds: string[],
+): Promise<Record<string, { total: number; completed: number }>> {
+  const counts: Record<string, { total: number; completed: number }> = {};
+  if (leadIds.length === 0) return counts;
+  const supabase = await createServiceClient();
+  const CHUNK = 200;
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    const chunk = leadIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("lead_checklists")
+      .select("lead_id, is_completed")
+      .eq("tenant_id", tenantId)
+      .in("lead_id", chunk);
+    if (error) throw error;
+    for (const row of (data ?? []) as { lead_id: string; is_completed: boolean }[]) {
+      const entry = counts[row.lead_id] ?? { total: 0, completed: 0 };
+      entry.total += 1;
+      if (row.is_completed) entry.completed += 1;
+      counts[row.lead_id] = entry;
+    }
+  }
+  return counts;
+}
+
+/**
+ * Batched tasks rollup for Kanban cards (PIPELINE-CARD-REDESIGN) — same chunked
+ * shape as getChecklistCounts, but over the universal `tasks` table (lead_id,
+ * status: todo/in_progress/done — migration 110's task-assignment feature), not
+ * lead_checklists. Distinct concept from a checklist: tasks are the universal
+ * task-assignment feature shared with deals/projects.
+ */
+export async function getTaskCounts(
+  tenantId: string,
+  leadIds: string[],
+): Promise<Record<string, { total: number; completed: number }>> {
+  const counts: Record<string, { total: number; completed: number }> = {};
+  if (leadIds.length === 0) return counts;
+  const supabase = await createServiceClient();
+  const CHUNK = 200;
+  for (let i = 0; i < leadIds.length; i += CHUNK) {
+    const chunk = leadIds.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("lead_id, status")
+      .eq("tenant_id", tenantId)
+      .in("lead_id", chunk);
+    if (error) throw error;
+    for (const row of (data ?? []) as { lead_id: string; status: string }[]) {
+      const entry = counts[row.lead_id] ?? { total: 0, completed: 0 };
+      entry.total += 1;
+      if (row.status === "done") entry.completed += 1;
+      counts[row.lead_id] = entry;
+    }
+  }
+  return counts;
+}
+
 export async function getLead(
   leadId: string,
   tenantId: string,
