@@ -19,6 +19,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { AddEnrollmentToLeadSheet } from "./add-enrollment-to-lead-sheet";
@@ -56,6 +60,7 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
   const [markPaidTarget, setMarkPaidTarget] = useState<Enrollment | null>(null);
   const [feeAmountInput, setFeeAmountInput] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
   const fetchEnrollments = useCallback(async () => {
     try {
@@ -116,6 +121,25 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
     }
   }
 
+  async function handleStatusChange(enrollment: Enrollment, status: Enrollment["status"]) {
+    if (status === enrollment.status) return;
+    setStatusUpdatingId(enrollment.id);
+    try {
+      const res = await fetch(`/api/v1/class-enrollments/${enrollment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed to update");
+      toast.success("Status updated");
+      fetchEnrollments();
+    } catch {
+      toast.error("Failed to update status");
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  }
+
   async function handleUnenroll(enrollment: Enrollment) {
     const className = enrollment.classes?.name ?? "this class";
     if (!confirm(`Un-enroll from ${className}?`)) return;
@@ -167,65 +191,84 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
             <div className="space-y-2">
               {enrollments.map((enrollment) => {
                 const className = enrollment.classes?.name ?? "Unknown class";
+                const isUpdating = statusUpdatingId === enrollment.id;
                 return (
                   <div
                     key={enrollment.id}
-                    className="flex items-start justify-between border rounded-md p-3 gap-2"
+                    className="border rounded-md p-3 hover:bg-muted/30 transition-colors"
                   >
-                    <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
                       <p className="text-sm font-medium truncate">{className}</p>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {enrollment.enrollment_type === "demo" && (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">
-                            Demo
-                          </Badge>
-                        )}
-                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 capitalize ${STATUS_STYLES[enrollment.status]}`}>
-                          {enrollment.status}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground">
-                          Started {new Date(enrollment.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-1">
-                        {enrollment.fee_paid ? (
-                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
-                            <Check className="h-2.5 w-2.5 mr-0.5" />
-                            Paid
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                            <X className="h-2.5 w-2.5 mr-0.5" />
-                            Unpaid
-                          </Badge>
-                        )}
-                        {enrollment.fee_amount != null && (
-                          <span className="text-xs text-muted-foreground">
-                            {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
-                          </span>
-                        )}
-                      </div>
+                      {canManage && (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0 -mt-0.5" disabled={isUpdating}>
+                              {isUpdating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MoreHorizontal className="h-3.5 w-3.5" />}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuSub>
+                              <DropdownMenuSubTrigger>Change status</DropdownMenuSubTrigger>
+                              <DropdownMenuSubContent>
+                                {(["active", "inactive", "completed"] as const).map((s) => (
+                                  <DropdownMenuItem
+                                    key={s}
+                                    disabled={s === enrollment.status}
+                                    onClick={() => handleStatusChange(enrollment, s)}
+                                  >
+                                    <span className={`h-1.5 w-1.5 rounded-full mr-2 ${
+                                      s === "active" ? "bg-green-600" : s === "completed" ? "bg-blue-600" : "bg-muted-foreground"
+                                    }`} />
+                                    <span className="capitalize">{s}</span>
+                                    {s === enrollment.status && <Check className="h-3 w-3 ml-auto" />}
+                                  </DropdownMenuItem>
+                                ))}
+                              </DropdownMenuSubContent>
+                            </DropdownMenuSub>
+                            <DropdownMenuItem onClick={() => handleToggleFeePaid(enrollment)}>
+                              {enrollment.fee_paid ? "Mark unpaid" : "Mark paid"}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleUnenroll(enrollment)}
+                            >
+                              Un-enroll
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </div>
-                    {canManage && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0">
-                            <MoreHorizontal className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => handleToggleFeePaid(enrollment)}>
-                            {enrollment.fee_paid ? "Mark unpaid" : "Mark paid"}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => handleUnenroll(enrollment)}
-                          >
-                            Un-enroll
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
+
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {enrollment.enrollment_type === "demo" && (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">
+                          Demo
+                        </Badge>
+                      )}
+                      <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 capitalize ${STATUS_STYLES[enrollment.status]}`}>
+                        {enrollment.status}
+                      </Badge>
+                      {enrollment.fee_paid ? (
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
+                          <Check className="h-2.5 w-2.5 mr-0.5" />
+                          Paid
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">
+                          <X className="h-2.5 w-2.5 mr-0.5" />
+                          Unpaid
+                        </Badge>
+                      )}
+                      {enrollment.fee_amount != null && (
+                        <span className="text-xs text-muted-foreground">
+                          {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Started {new Date(enrollment.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
                   </div>
                 );
               })}
