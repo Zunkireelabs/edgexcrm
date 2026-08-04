@@ -28,6 +28,7 @@ interface Enrollment {
   class_id: string;
   fee_paid: boolean;
   fee_amount: number | null;
+  enrollment_type: "demo" | "actual";
   status: "active" | "inactive" | "completed";
   created_at: string;
   classes?: {
@@ -174,6 +175,11 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{className}</p>
                       <div className="flex items-center gap-1.5 mt-1">
+                        {enrollment.enrollment_type === "demo" && (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-amber-50 text-amber-700 border-amber-200">
+                            Demo
+                          </Badge>
+                        )}
                         <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 capitalize ${STATUS_STYLES[enrollment.status]}`}>
                           {enrollment.status}
                         </Badge>

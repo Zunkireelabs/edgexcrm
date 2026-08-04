@@ -135,6 +135,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (isNaN(feeAmount) || feeAmount < 0) return apiValidationError({ fee_amount: ["fee_amount must be a non-negative number"] });
   }
   const notes = body.notes ? String(body.notes) : null;
+  const enrollmentType = body.enrollment_type === "demo" ? "demo" : "actual";
 
   const { data: created, error } = await db
     .from("class_enrollments")
@@ -144,13 +145,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       fee_paid: feePaid,
       fee_amount: feeAmount,
       notes,
+      enrollment_type: enrollmentType,
     })
     .select("*, classes!class_enrollments_class_id_fkey(id,name,default_fee)")
     .single();
 
   if (error) {
     if (error.code === "23505") {
-      return apiConflict("This student is already enrolled in this class.");
+      return apiConflict(
+        enrollmentType === "demo"
+          ? "This student already has a demo enrollment in this class."
+          : "This student is already enrolled in this class."
+      );
     }
     log.error({ error }, "Failed to create enrollment");
     return apiError("DB_ERROR", "Failed to create enrollment", 500);

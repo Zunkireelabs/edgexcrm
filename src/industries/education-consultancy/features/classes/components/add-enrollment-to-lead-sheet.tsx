@@ -44,6 +44,7 @@ export function AddEnrollmentToLeadSheet({
   const [submitting, setSubmitting] = useState(false);
   const [classes, setClasses] = useState<ClassOption[]>([]);
   const [classId, setClassId] = useState("");
+  const [enrollmentType, setEnrollmentType] = useState<"demo" | "actual">("actual");
   const [feePaid, setFeePaid] = useState(false);
   const [feeAmount, setFeeAmount] = useState("");
   const [notes, setNotes] = useState("");
@@ -57,6 +58,7 @@ export function AddEnrollmentToLeadSheet({
       setNotes("");
       setClassId("");
     }
+    if (open) setEnrollmentType("actual");
   }, [open]);
 
   // Load active classes when sheet opens
@@ -89,6 +91,7 @@ export function AddEnrollmentToLeadSheet({
     try {
       const body: Record<string, unknown> = {
         class_id: classId,
+        enrollment_type: enrollmentType,
         fee_paid: feePaid,
       };
       if (feePaid && feeAmount.trim()) body.fee_amount = Number(feeAmount);
@@ -135,6 +138,19 @@ export function AddEnrollmentToLeadSheet({
                 {classes.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Enrollment type</Label>
+            <Select value={enrollmentType} onValueChange={(v) => setEnrollmentType(v as "demo" | "actual")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="demo">Demo class (2-3 day trial)</SelectItem>
+                <SelectItem value="actual">Actual class</SelectItem>
               </SelectContent>
             </Select>
           </div>
