@@ -1,6 +1,6 @@
 import { redirect, notFound } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getLeadsPage, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getLeadsPage, getLeadListsByTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranches, getListPipeline, getOpenTaskLeadIds, getChecklistCounts, getTaskCounts } from "@/lib/supabase/queries";
 import { getLeadCollaboratorsMapForLeads } from "@/lib/leads/collaborators";
 import { getLeadAggregates, listStatusKey, type AggregateScope } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
@@ -237,12 +237,31 @@ export default async function LeadsPage({
     }
   }
   // Both render branches below need the same cards typed as PipelineLead — mirrors the
-  // pre-existing `leads: any[]` prop the boards took (checklist_total/checklist_completed
-  // aren't in /api/v1/leads' column projection and aren't read by LeadCard either).
+  // pre-existing `leads: any[]` prop the boards took. checklist_total/checklist_completed
+  // aren't in /api/v1/leads' column projection, so they're batched in separately below
+  // (PIPELINE-CARD-REDESIGN) rather than selected here.
   const kanbanColumnsForBoards = kanbanColumns as unknown as Record<
     string,
     { cards: PipelineLead[]; total: number }
   >;
+
+  if (isKanban) {
+    const kanbanLeadIds = Object.values(kanbanColumnsForBoards).flatMap((c) => c.cards.map((l) => l.id));
+    const [checklistCounts, taskCounts] = await Promise.all([
+      getChecklistCounts(tenantData.tenant.id, kanbanLeadIds),
+      getTaskCounts(tenantData.tenant.id, kanbanLeadIds),
+    ]);
+    for (const col of Object.values(kanbanColumnsForBoards)) {
+      for (const card of col.cards) {
+        const counts = checklistCounts[card.id];
+        card.checklist_total = counts?.total ?? 0;
+        card.checklist_completed = counts?.completed ?? 0;
+        const tasks = taskCounts[card.id];
+        card.task_total = tasks?.total ?? 0;
+        card.task_completed = tasks?.completed ?? 0;
+      }
+    }
+  }
 
   const [leadsResult, teamMembers, stages, formConfigs, industryResult, entitiesResult] =
     await Promise.all([
@@ -331,7 +350,7 @@ export default async function LeadsPage({
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <ListKanbanView
           listSlug={activeList.slug}
           pipeline={pipeline}
@@ -359,7 +378,7 @@ export default async function LeadsPage({
   if (canShowFunnelKanban) {
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-lg font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
         <FunnelKanbanBoard
           lists={activeFunnelLists}
           initialColumns={kanbanColumnsForBoards}
@@ -370,6 +389,7 @@ export default async function LeadsPage({
           bypassQualification={canBypassProspectQualification(
             tenantData.permissions.baseTier, tenantData.positionSlug
           )}
+          teamMembers={teamMembers}
         />
       </div>
     );
@@ -389,7 +409,7 @@ export default async function LeadsPage({
     <div className="flex flex-col h-full min-h-0">
       <LeadsTable
         pageHeading={pageHeading}
-        pageHeadingClassName="shrink-0 text-lg font-bold pl-4 pt-4 mb-4 pr-6"
+        pageHeadingClassName="shrink-0 text-base font-bold pl-4 pt-4 mb-4 pr-6"
         leads={leads}
         serverPaginated
         initialTotal={leadsTotal}

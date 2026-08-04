@@ -14,6 +14,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
+import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
+
+// Shared list/page title style — keep every leads-family heading (All Leads, Pre-qualified,
+// New Leads (Unrouted), Contacts, Leads Organise, ...) on one consistent size.
+export const PAGE_HEADING_CLASSNAME = "shrink-0 text-base font-bold mb-4 pr-6";
 import {
   Dialog,
   DialogContent,
@@ -206,9 +211,6 @@ const MIN_COLUMN_WIDTH = 60;
 // longer worth surfacing as separate pickable columns now that the real column exists.
 const LEGACY_DESTINATION_KEYS = new Set<string>(DESTINATION_SYNONYM_KEYS);
 
-const TOOLBAR_BTN =
-  "inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-[8px] border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]";
-
 // A manually-resized column is pinned to a single line and clipped with an ellipsis at the
 // boundary — like Excel/Sheets/Airtable — instead of spilling its text into the next column.
 // Only applied once the user has actually dragged that column; untouched columns are unaffected.
@@ -306,7 +308,7 @@ export function LeadsTable({
   excludeDefaultVisibleKeys = [],
   columnPrefsScope,
   pageHeading,
-  pageHeadingClassName = "shrink-0 text-lg font-bold mb-4 pr-6",
+  pageHeadingClassName = PAGE_HEADING_CLASSNAME,
   pageSubheading,
   beforeTable,
 }: LeadsTableProps) {

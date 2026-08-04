@@ -32,6 +32,7 @@ import {
   SelectValue
 } from "@/components/ui/select";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
+import { TOOLBAR_BTN, TOOLBAR_PRIMARY_BTN, TOOLBAR_SEARCH_INPUT } from "@/components/dashboard/leads/toolbar-btn";
 import {
   Search,
   Users2,
@@ -43,6 +44,8 @@ import {
   Briefcase,
   Tag,
   UserPlus,
+  LayoutList,
+  Settings2,
 } from "lucide-react";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import {
@@ -88,6 +91,13 @@ interface KanbanBoardProps {
   isTeamScoped?: boolean;
   leadCollaborators?: Record<string, string[]>;
   formMap?: Record<string, string>;
+  /** mode "list" only — renders a "List view" link in the toolbar, in the same slot
+   * the list view's own "Kanban view" button occupies, so the two toolbars match. */
+  listViewHref?: string;
+  /** mode "list" only — renders a "Manage stages"/"Manage statuses" button (admin-only,
+   * caller gates that) in the same slot the list view's "Edit columns" button occupies. */
+  onManageStages?: () => void;
+  manageStagesLabel?: string;
 }
 
 function findLeadColumn(columns: KanbanColumnsState, leadId: string): string | null {
@@ -115,6 +125,9 @@ export function KanbanBoard({
   isTeamScoped = false,
   leadCollaborators = {},
   formMap = {},
+  listViewHref,
+  onManageStages,
+  manageStagesLabel = "Manage stages",
 }: KanbanBoardProps) {
   const [mounted, setMounted] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -551,7 +564,7 @@ export function KanbanBoard({
         </div>
         {/* Columns skeleton */}
         <div className="flex-1 min-h-0 overflow-hidden">
-          <div className="flex gap-4 overflow-x-auto pb-4 h-full">
+          <div className="flex gap-4 overflow-x-auto pb-4 pl-3 h-full">
             {stages.map((stage) => (
               <div
                 key={stage.id}
@@ -744,9 +757,30 @@ export function KanbanBoard({
               placeholder="Search leads..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-7 pl-7 pr-3 rounded-md border border-gray-300 bg-white text-xs text-gray-600 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-ring"
+              className={`w-full ${TOOLBAR_SEARCH_INPUT}`}
             />
           </div>
+
+          {onManageStages && (
+            <button
+              type="button"
+              onClick={onManageStages}
+              className={TOOLBAR_BTN}
+            >
+              <Settings2 className="h-3 w-3 shrink-0" />
+              <span>{manageStagesLabel}</span>
+            </button>
+          )}
+
+          {listViewHref && (
+            <a
+              href={listViewHref}
+              className={TOOLBAR_BTN}
+            >
+              <LayoutList className="h-3 w-3 shrink-0" />
+              <span>List view</span>
+            </a>
+          )}
 
           <div className="flex-1" />
 
@@ -757,7 +791,7 @@ export function KanbanBoard({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+                className={TOOLBAR_BTN}
               >
                 <ArrowUpDown className="h-3 w-3 shrink-0" />
                 Sort
@@ -814,7 +848,7 @@ export function KanbanBoard({
             <button
               type="button"
               onClick={handleExport}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md border transition-colors border-gray-300 bg-white text-gray-600 hover:bg-[#0000170b]"
+              className={TOOLBAR_BTN}
               title={exportIsPartial ? `Only the ${totalLoaded.toLocaleString()} currently-loaded leads will be exported, out of ${totalTrue.toLocaleString()} total` : undefined}
             >
               <Download className="h-3 w-3 shrink-0" />
@@ -829,7 +863,7 @@ export function KanbanBoard({
             <button
               type="button"
               onClick={() => setAddLeadOpen(true)}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 text-xs font-medium rounded-md transition-colors bg-[#0f0f10] text-white hover:bg-[#0f0f10]/90"
+              className={TOOLBAR_PRIMARY_BTN}
             >
               <Plus className="h-3 w-3 shrink-0" />
               Add Lead
@@ -849,7 +883,7 @@ export function KanbanBoard({
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="flex gap-4 overflow-x-auto pb-4 h-full scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/40">
+          <div className="flex gap-4 overflow-x-auto pb-4 pl-3 h-full scrollbar-thin scrollbar-thumb-muted-foreground/20 hover:scrollbar-thumb-muted-foreground/40">
             {stages.map((stage) => {
               const col = columns[stage.id] ?? { cards: [], loaded: 0, total: 0, page: 1, isLoadingMore: false };
               return (
@@ -863,6 +897,7 @@ export function KanbanBoard({
                   canDragLead={canDragLead}
                   pipelineId={pipelineId}
                   onMovedToPipeline={handleLeadMovedToPipeline}
+                  assigneeNames={memberNames}
                 />
               );
             })}
@@ -873,6 +908,7 @@ export function KanbanBoard({
               <LeadCard
                 lead={activeLead}
                 disabled
+                assigneeName={activeLead.assigned_to ? memberNames[activeLead.assigned_to] : undefined}
               />
             ) : null}
           </DragOverlay>

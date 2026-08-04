@@ -539,6 +539,8 @@ export interface LeadChecklist {
 export interface PipelineLead extends Lead {
   checklist_total: number;
   checklist_completed: number;
+  task_total: number;
+  task_completed: number;
 }
 
 export interface PaginationMeta {
@@ -1076,14 +1078,42 @@ export interface LeadDuplicateSuggestion {
 export interface ApplicationStage {
   id: string;
   tenant_id: string;
+  pipeline_id: string | null;
   name: string;
   slug: string;
   position: number;
   color: string;
   is_default: boolean;
+  is_terminal: boolean;
   terminal_type: "won" | "lost" | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ApplicationPipeline {
+  id: string;
+  tenant_id: string;
+  name: string;
+  slug: string;
+  is_default: boolean;
+  position: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ApplicationPipelineWithCounts extends ApplicationPipeline {
+  stage_count: number;
+  application_count: number;
+}
+
+export interface ApplicationPipelineWithStages extends ApplicationPipeline {
+  stages: ApplicationStageWithCount[];
+  application_count: number;
+}
+
+export interface ApplicationStageWithCount extends ApplicationStage {
+  application_count: number;
 }
 
 export interface Application {
@@ -1097,6 +1127,7 @@ export interface Application {
   intake_term: string | null;
   country: string | null;
   countries: string[] | null;
+  pipeline_id: string | null;
   stage_id: string;
   status: string;
   offer_type: "conditional" | "unconditional" | null;
@@ -1113,6 +1144,7 @@ export interface Application {
   field_of_study: string | null;
   created_at: string;
   updated_at: string;
+  stage_changed_at: string;
   deleted_at: string | null;
   // Joined fields (present when fetched with select joins)
   leads?: { id: string; first_name: string | null; last_name: string | null; email: string | null } | null;

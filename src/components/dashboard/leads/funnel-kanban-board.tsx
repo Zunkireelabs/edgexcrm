@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -31,6 +31,8 @@ interface FunnelKanbanBoardProps {
   userId: string;
   industryId?: string | null;
   bypassQualification?: boolean;
+  /** For resolving a card's assignee to a real name (PIPELINE-CARD-REDESIGN). */
+  teamMembers?: { user_id: string; name: string }[];
 }
 
 // Kanban columns here are stage-lists, not pipeline_stages — adapt each list into the
@@ -64,7 +66,11 @@ function findLeadColumn(columns: KanbanColumnsState, leadId: string): string | n
  * the lead between lists (via the bulk API, which already syncs pipeline_id/stage_id to
  * the target list's own status pipeline). Distinct from ListKanbanView, whose columns are
  * one list's own statuses. */
-export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false }: FunnelKanbanBoardProps) {
+export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSelf = false, userId, industryId, bypassQualification = false, teamMembers = [] }: FunnelKanbanBoardProps) {
+  const assigneeNames = useMemo(
+    () => Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name])),
+    [teamMembers],
+  );
   // DnD-kit and Radix generate ids that differ between the SSR pass and the client's first
   // render — mirrors the same guard in KanbanBoard. Render a skeleton until mounted.
   const [mounted, setMounted] = useState(false);
@@ -277,11 +283,20 @@ export function FunnelKanbanBoard({ lists, initialColumns, canEdit, restrictToSe
                 isLoadingMore={col.isLoadingMore}
                 onLoadMore={() => loadMore(list.id, columnDefs.find((d) => d.key === list.id)?.params ?? null)}
                 canDragLead={canDragLead}
+                assigneeNames={assigneeNames}
               />
             );
           })}
         </div>
-        <DragOverlay>{activeLead ? <LeadCard lead={activeLead} disabled /> : null}</DragOverlay>
+        <DragOverlay>
+          {activeLead ? (
+            <LeadCard
+              lead={activeLead}
+              disabled
+              assigneeName={activeLead.assigned_to ? assigneeNames[activeLead.assigned_to] : undefined}
+            />
+          ) : null}
+        </DragOverlay>
       </DndContext>
       <ProspectQualificationDialog
         lead={(pendingMove?.lead as unknown as Record<string, unknown>) ?? null}
