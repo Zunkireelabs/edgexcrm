@@ -144,12 +144,15 @@ export async function POST(request: NextRequest) {
   }
   const notes = body.notes ? String(body.notes) : null;
 
+  const enrollmentType = body.enrollment_type === "demo" ? "demo" : "actual";
+
   const insert: Record<string, unknown> = {
     lead_id: leadRow.id,
     class_id: cls.id,
     fee_paid: feePaid,
     fee_amount: feeAmount,
     notes,
+    enrollment_type: enrollmentType,
   };
 
   const { data: created, error: insertError } = await db
@@ -160,7 +163,11 @@ export async function POST(request: NextRequest) {
 
   if (insertError) {
     if (insertError.code === "23505") {
-      return apiConflict("This student is already enrolled in this class.");
+      return apiConflict(
+        enrollmentType === "demo"
+          ? "This student already has a demo enrollment in this class."
+          : "This student is already enrolled in this class."
+      );
     }
     log.error({ error: insertError }, "Failed to create enrollment");
     return apiError("DB_ERROR", "Failed to create enrollment", 500);

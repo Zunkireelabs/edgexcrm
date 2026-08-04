@@ -7,6 +7,7 @@ import { inboxProcess } from "@/lib/inngest/functions/inbox-process";
 import { emailPoll } from "@/lib/inngest/functions/email-poll";
 import { emailInboundProcess } from "@/lib/inngest/functions/email-inbound-process";
 import { displayIdBackfillSweep } from "@/lib/inngest/functions/display-id-backfill-sweep";
+import { classCompletionSweep } from "@/lib/inngest/functions/class-completion-sweep";
 import { agentLeadTriage } from "@/lib/inngest/functions/agent-lead-triage";
 import { agentFollowUpDrafter } from "@/lib/inngest/functions/agent-follow-up-drafter";
 import { agentDailyDigest } from "@/lib/inngest/functions/agent-daily-digest";
@@ -22,6 +23,7 @@ export const { GET, POST, PUT } = serve({
     emailPoll,
     emailInboundProcess,
     displayIdBackfillSweep,
+    classCompletionSweep,
     agentLeadTriage,
     agentFollowUpDrafter,
     agentDailyDigest,

@@ -17,6 +17,13 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { EnrollStudentSheet } from "../components/enroll-student-sheet";
 import { AttendanceSheet } from "../components/attendance-sheet";
 import { AttendanceHistory } from "../components/attendance-history";
@@ -36,6 +43,8 @@ interface Enrollment {
   class_id: string;
   fee_paid: boolean;
   fee_amount: number | null;
+  enrollment_type: "demo" | "actual";
+  status: "active" | "inactive" | "completed";
   created_at: string;
   leads?: {
     id: string;
@@ -44,6 +53,15 @@ interface Enrollment {
     email: string | null;
     assigned_to: string | null;
   } | null;
+}
+
+interface StudentRoster {
+  leadId: string;
+  demo: Enrollment | null;
+  actual: Enrollment | null;
+  /** Row used for the Status/Fee/Enrolled columns and the edit dialog — actual enrollment
+   * takes precedence since that's the real class the fee/status is tracked against. */
+  primary: Enrollment;
 }
 
 interface ClassesWorkspaceProps {
@@ -66,6 +84,9 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
   const [editFeePaid, setEditFeePaid] = useState(false);
   const [editFeeAmount, setEditFeeAmount] = useState("");
   const [editFeeSubmitting, setEditFeeSubmitting] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<"active" | "inactive" | "completed">("active");
+  const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
+  const [convertingLeadId, setConvertingLeadId] = useState<string | null>(null);
 
   const enrollments = initialEnrollments as unknown as Enrollment[];
 
@@ -79,11 +100,36 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     return map;
   }, [enrollments]);
 
-  // Roster for the selected class
-  const roster = useMemo(() => {
+  // Roster for the selected class — one row per student, pairing their demo and
+  // actual enrollment (a student may hold either or both for the same class).
+  const roster = useMemo((): StudentRoster[] => {
     if (!selectedClassId) return [];
-    return enrollmentsByClass[selectedClassId] ?? [];
+    const list = enrollmentsByClass[selectedClassId] ?? [];
+    const byLead = new Map<string, { demo: Enrollment | null; actual: Enrollment | null }>();
+    for (const e of list) {
+      const entry = byLead.get(e.lead_id) ?? { demo: null, actual: null };
+      if (e.enrollment_type === "demo") entry.demo = e;
+      else entry.actual = e;
+      byLead.set(e.lead_id, entry);
+    }
+    return Array.from(byLead.entries()).map(([leadId, { demo, actual }]) => ({
+      leadId,
+      demo,
+      actual,
+      primary: (actual ?? demo)!,
+    }));
   }, [selectedClassId, enrollmentsByClass]);
+
+  const rosterCounts = useMemo(() => {
+    const counts = { active: 0, inactive: 0, completed: 0 };
+    for (const row of roster) counts[row.primary.status]++;
+    return counts;
+  }, [roster]);
+
+  const filteredRoster = useMemo(
+    () => roster.filter((row) => row.primary.status === statusFilter),
+    [roster, statusFilter]
+  );
 
   const selectedClass = classes.find((c) => c.id === selectedClassId);
 
@@ -95,6 +141,50 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     setEditFeeTarget(enrollment);
     setEditFeePaid(enrollment.fee_paid);
     setEditFeeAmount(enrollment.fee_amount != null ? String(enrollment.fee_amount) : "");
+  }
+
+  async function handleStatusChange(enrollment: Enrollment, status: "active" | "inactive" | "completed") {
+    if (status === enrollment.status) return;
+    setStatusUpdatingId(enrollment.id);
+    try {
+      const res = await fetch(`/api/v1/class-enrollments/${enrollment.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error("Failed to update status");
+      toast.success("Status updated");
+      handleRefresh();
+    } catch {
+      toast.error("Failed to update status");
+    } finally {
+      setStatusUpdatingId(null);
+    }
+  }
+
+  async function handleConvertToActual(row: StudentRoster) {
+    if (!selectedClassId || !row.demo) return;
+    setConvertingLeadId(row.leadId);
+    try {
+      const res = await fetch("/api/v1/class-enrollments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          lead_id: row.leadId,
+          class_id: selectedClassId,
+          enrollment_type: "actual",
+          fee_paid: row.demo.fee_paid,
+          fee_amount: row.demo.fee_amount,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to convert");
+      toast.success("Converted to actual class");
+      handleRefresh();
+    } catch {
+      toast.error("Failed to convert to actual class");
+    } finally {
+      setConvertingLeadId(null);
+    }
   }
 
   async function handleSaveFee() {
@@ -230,8 +320,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                       Sessions
                     </button>
                   </div>
-                  {detailTab === "attendance" && canMarkAttendance && (
-                    <Button size="sm" variant="outline" onClick={() => setAttendanceOpen(true)}>
+                  {canMarkAttendance && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDetailTab("attendance");
+                        setAttendanceOpen(true);
+                      }}
+                    >
                       <ClipboardCheck className="h-3.5 w-3.5 mr-1" />
                       Take attendance
                     </Button>
@@ -258,26 +355,56 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                     )}
                   </div>
                 ) : (
+                  <>
+                    {/* Status filter — Active/Inactive/Completed are separate views, not mixed in one table */}
+                    <div className="flex items-center gap-1 px-3 py-2 border-b shrink-0">
+                      {(["active", "inactive", "completed"] as const).map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setStatusFilter(s)}
+                          className={cn(
+                            "flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors capitalize",
+                            statusFilter === s ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted"
+                          )}
+                        >
+                          {s}
+                          <span className="text-[10px] bg-muted rounded-full px-1.5 py-0.5 text-muted-foreground">
+                            {rosterCounts[s]}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {filteredRoster.length === 0 ? (
+                      <div className="flex-1 flex items-center justify-center text-sm text-muted-foreground">
+                        No {statusFilter} students.
+                      </div>
+                    ) : (
                   <div className="flex-1 overflow-y-auto">
                     <table className="w-full text-sm">
                       <thead className="sticky top-0 bg-card border-b">
                         <tr className="text-left text-xs text-muted-foreground">
                           <th className="px-4 py-2 font-medium">Student</th>
+                          <th className="px-4 py-2 font-medium">Demo Class</th>
+                          <th className="px-4 py-2 font-medium">Actual Class</th>
+                          <th className="px-4 py-2 font-medium">Status</th>
                           <th className="px-4 py-2 font-medium">Fee</th>
                           <th className="px-4 py-2 font-medium">Enrolled</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
-                        {roster.map((enrollment) => {
-                          const lead = enrollment.leads;
+                        {filteredRoster.map((row) => {
+                          const { demo, actual, primary } = row;
+                          const lead = primary.leads;
                           const name = lead
                             ? [lead.first_name, lead.last_name].filter(Boolean).join(" ") || lead.email || "Unknown"
                             : "Unknown";
                           return (
-                            <tr key={enrollment.id} className="hover:bg-muted/30 transition-colors">
+                            <tr key={row.leadId} className="hover:bg-muted/30 transition-colors">
                               <td className="px-4 py-2.5">
                                 <Link
-                                  href={`/leads/${enrollment.lead_id}`}
+                                  href={`/leads/${row.leadId}`}
                                   prefetch={false}
                                   className="font-medium hover:underline text-foreground"
                                 >
@@ -288,8 +415,73 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                 )}
                               </td>
                               <td className="px-4 py-2.5">
+                                {demo ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(demo.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {actual ? (
+                                  <span className="text-xs text-muted-foreground">
+                                    {new Date(actual.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+                                  </span>
+                                ) : demo && canEnroll ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-6 px-2 text-xs"
+                                    disabled={convertingLeadId === row.leadId}
+                                    onClick={() => handleConvertToActual(row)}
+                                  >
+                                    {convertingLeadId === row.leadId && <Loader2 className="h-3 w-3 mr-1 animate-spin" />}
+                                    Convert
+                                  </Button>
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
+                                {canEnroll ? (
+                                  <Select
+                                    value={primary.status}
+                                    onValueChange={(v) => handleStatusChange(primary, v as "active" | "inactive" | "completed")}
+                                    disabled={statusUpdatingId === primary.id}
+                                  >
+                                    <SelectTrigger
+                                      size="sm"
+                                      className={cn(
+                                        "h-6 text-xs w-[104px] capitalize border-0",
+                                        primary.status === "active"
+                                          ? "bg-green-50 text-green-700"
+                                          : primary.status === "completed"
+                                          ? "bg-blue-50 text-blue-700"
+                                          : "bg-muted text-muted-foreground"
+                                      )}
+                                    >
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="active">Active</SelectItem>
+                                      <SelectItem value="inactive">Inactive</SelectItem>
+                                      <SelectItem value="completed">Completed</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                ) : primary.status === "active" ? (
+                                  <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200 capitalize">
+                                    {primary.status}
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs text-muted-foreground capitalize">
+                                    {primary.status}
+                                  </Badge>
+                                )}
+                              </td>
+                              <td className="px-4 py-2.5">
                                 <div className="flex items-center gap-1.5">
-                                  {enrollment.fee_paid ? (
+                                  {primary.fee_paid ? (
                                     <Badge variant="secondary" className="text-xs bg-green-50 text-green-700 border-green-200">
                                       Paid
                                     </Badge>
@@ -298,15 +490,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                       Unpaid
                                     </Badge>
                                   )}
-                                  {enrollment.fee_amount != null && (
+                                  {primary.fee_amount != null && (
                                     <span className="text-xs text-muted-foreground">
-                                      {enrollment.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                      {primary.fee_amount.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
                                     </span>
                                   )}
                                   {canEnroll && (
                                     <button
                                       type="button"
-                                      onClick={() => openEditFee(enrollment)}
+                                      onClick={() => openEditFee(primary)}
                                       className="text-muted-foreground hover:text-foreground transition-colors"
                                       title="Edit fee"
                                     >
@@ -316,7 +508,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 text-xs text-muted-foreground">
-                                {new Date(enrollment.created_at).toLocaleDateString(undefined, {
+                                {new Date(primary.created_at).toLocaleDateString(undefined, {
                                   month: "short",
                                   day: "numeric",
                                   year: "numeric",
@@ -328,6 +520,8 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                       </tbody>
                     </table>
                   </div>
+                    )}
+                  </>
                 )
               ) : detailTab === "attendance" ? (
                 <AttendanceHistory classId={selectedClass.id} className={selectedClass.name} />
@@ -366,7 +560,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs text-gray-600">Status</Label>
+              <Label className="text-xs text-gray-600">Fee</Label>
               <div className="flex gap-2">
                 <Button
                   type="button"

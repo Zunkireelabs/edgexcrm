@@ -16,6 +16,8 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { canManageClasses } from "@/lib/api/permissions";
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 interface Props {
   params: Promise<{ id: string }>;
 }
@@ -59,6 +61,14 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   }
   if (body.is_active !== undefined) {
     patch.is_active = Boolean(body.is_active);
+  }
+  if (body.end_date !== undefined) {
+    if (body.end_date === null) {
+      patch.end_date = null;
+    } else {
+      if (!DATE_RE.test(String(body.end_date))) return apiValidationError({ end_date: ["end_date must be in YYYY-MM-DD format"] });
+      patch.end_date = String(body.end_date);
+    }
   }
 
   if (Object.keys(patch).length === 0) return apiSuccess(existing);
