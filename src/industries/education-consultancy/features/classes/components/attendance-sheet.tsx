@@ -107,11 +107,23 @@ export function AttendanceSheet({ open, onOpenChange, classId, className }: Atte
           <SheetDescription>Mark each enrolled student Present or Absent for the selected date.</SheetDescription>
         </SheetHeader>
 
-        <div className="shrink-0 px-4 pt-4">
+        <div className="shrink-0 px-4 pt-4 flex items-end justify-between gap-3">
           <div className="space-y-1.5">
             <Label className="text-xs text-gray-600">Date</Label>
             <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
           </div>
+          {!loading && students.length > 0 && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="h-8 text-xs"
+              onClick={() => setStudents((prev) => prev.map((s) => ({ ...s, status: "present" })))}
+            >
+              <Check className="h-3.5 w-3.5 mr-1" />
+              Mark all present
+            </Button>
+          )}
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 py-4">
