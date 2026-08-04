@@ -61,3 +61,4 @@ temp_ss/
 # graphify skill output (generated knowledge graph — regenerated locally via /graphify, never committed)
 graphify-out/
 src/graphify-out/
+/design-previews/
