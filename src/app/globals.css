@@ -55,7 +55,7 @@
   --radius: 1rem;
   /* Zunkireelabs unified color system (matches agentic-commerce) */
   --background: #f7f7f7;
-  --foreground: #171717;
+  --foreground: #333333;
   --card: #ffffff;
   --card-foreground: #171717;
   --popover: #ffffff;
@@ -84,8 +84,8 @@
   --chart-4: #f59e0b;
   --chart-5: #ef4444;
   /* Layout surfaces (Zunkireelabs standard) */
-  --sidebar-bg: #ffffff;   /* app chrome: sidebar + header + frame */
-  --content-bg: #fafbfd;   /* scrolling content pane */
+  --sidebar-bg: #f9f9f9;   /* app chrome: sidebar + header + frame */
+  --content-bg: #ffffff;   /* scrolling content pane */
   --page-bg: #edeef2;      /* desktop behind the floating app card (light) */
   --nav-active: #f0f0f0;   /* active segmented tab (Ops/Orca) on white chrome */
   /* Sidebar */
@@ -187,11 +187,12 @@ button:disabled,
 
 /* Scrollbars: transparent track, subtle thumb — app-wide */
 * {
+  scrollbar-width: thin; /* standard CSS Scrollbars spec (modern Chromium + Firefox) */
   scrollbar-color: rgba(0, 0, 0, 0.25) transparent; /* Firefox: thumb, track */
 }
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 4px;
+  height: 4px;
 }
 *::-webkit-scrollbar-track {
   background: transparent;
