@@ -36,21 +36,30 @@ describe("stripDecoration", () => {
 });
 
 describe("normalizeDestinations", () => {
-  it("strips flags and canonicalizes aliases for explicitly-posted destinations", () => {
+  it("strips decoration for explicitly-posted destinations", () => {
     // This is the exact bug from the screenshot: a form posting the real `destinations`
-    // key directly previously got ZERO cleanup (canonicalize() was only reachable via
-    // the custom_fields synonym-key fallback).
+    // key directly previously got ZERO cleanup (cleanup was only reachable via the
+    // custom_fields synonym-key fallback).
     expect(normalizeDestinations(["🇺🇸 USA"])).toEqual(["USA"]);
-    expect(normalizeDestinations(["usa"])).toEqual(["USA"]);
-    expect(normalizeDestinations(["united states"])).toEqual(["USA"]);
   });
 
-  it("dedupes after canonicalization", () => {
+  it("never rewrites to a different spelling — tenants configure their own catalog wording", () => {
+    // Regression guard for the incident this rewrite caused: a prior version rewrote
+    // "united states"/"united kingdom" to hardcoded abbreviations ("USA"/"UK"), which broke
+    // for any tenant whose real Settings catalog uses full names — an already-correct
+    // "United Kingdom" got silently rewritten to "UK", matching no checkbox in that
+    // tenant's actual options list.
+    expect(normalizeDestinations(["united states"])).toEqual(["united states"]);
+    expect(normalizeDestinations(["United Kingdom"])).toEqual(["United Kingdom"]);
+    expect(normalizeDestinations(["Dubai"])).toEqual(["Dubai"]);
+  });
+
+  it("dedupes case/whitespace-insensitively, keeping the first-seen spelling", () => {
     expect(normalizeDestinations(["USA", "usa", "🇺🇸 USA"])).toEqual(["USA"]);
+    expect(normalizeDestinations(["usa", "USA"])).toEqual(["usa"]);
   });
 
   it("keeps values outside the curated taxonomy as-is (never drops real data)", () => {
-    expect(normalizeDestinations(["Dubai"])).toEqual(["UAE"]);
     expect(normalizeDestinations(["Some Other Country"])).toEqual(["Some Other Country"]);
   });
 
@@ -60,8 +69,14 @@ describe("normalizeDestinations", () => {
 });
 
 describe("extractDestinationsFromCustomFields", () => {
-  it("still normalizes via the synonym-key fallback path", () => {
-    expect(extractDestinationsFromCustomFields({ interested_country: "🇬🇧 UK" })).toEqual(["UK"]);
+  it("strips decoration via the synonym-key fallback path without rewriting spelling", () => {
+    expect(extractDestinationsFromCustomFields({ interested_country: "🇬🇧 United Kingdom" })).toEqual(["United Kingdom"]);
+  });
+
+  it("dedupes across multiple synonym keys, case/whitespace-insensitively", () => {
+    expect(
+      extractDestinationsFromCustomFields({ interested_country: "USA", country: "usa" })
+    ).toEqual(["USA"]);
   });
 
   it("returns empty array for no custom_fields", () => {
@@ -83,19 +98,18 @@ describe("normalizeFieldOfStudy", () => {
 });
 
 describe("normalizeDegreeLevel", () => {
-  it("canonicalizes common aliases to the full taxonomy label", () => {
-    expect(normalizeDegreeLevel("UG")).toBe("Undergraduate");
-    expect(normalizeDegreeLevel("bachelor's")).toBe("Undergraduate");
-    expect(normalizeDegreeLevel("PG")).toBe("Postgraduate");
-    expect(normalizeDegreeLevel("master's")).toBe("Postgraduate");
-    expect(normalizeDegreeLevel("phd")).toBe("Doctor of Philosophy (PhD)");
+  it("never rewrites to a different spelling — study_levels is a tenant-configurable catalog", () => {
+    // Same rewrite-risk class as destinations: degree_level values must match whatever
+    // a tenant's own Settings > Study Levels catalog actually says, not a hardcoded alias.
+    expect(normalizeDegreeLevel("UG")).toBe("UG");
+    expect(normalizeDegreeLevel("bachelor's")).toBe("bachelor's");
   });
 
-  it("strips decoration before canonicalizing", () => {
-    expect(normalizeDegreeLevel("🎓 UG")).toBe("Undergraduate");
+  it("strips decoration only", () => {
+    expect(normalizeDegreeLevel("🎓 Undergraduate")).toBe("Undergraduate");
   });
 
-  it("passes through an already-canonical value unchanged", () => {
+  it("passes through an already-clean value unchanged", () => {
     expect(normalizeDegreeLevel("Undergraduate")).toBe("Undergraduate");
   });
 
@@ -126,13 +140,13 @@ describe("resolveDegreeLevel", () => {
     expect(resolveDegreeLevel("Postgraduate", { degree_level: "UG" })).toBe("Postgraduate");
   });
 
-  it("falls back to custom_fields degree_level, then education_level", () => {
-    expect(resolveDegreeLevel(null, { degree_level: "UG" })).toBe("Undergraduate");
-    expect(resolveDegreeLevel(null, { education_level: "PG" })).toBe("Postgraduate");
+  it("falls back to custom_fields degree_level, then education_level, without rewriting spelling", () => {
+    expect(resolveDegreeLevel(null, { degree_level: "UG" })).toBe("UG");
+    expect(resolveDegreeLevel(null, { education_level: "Postgraduate" })).toBe("Postgraduate");
   });
 
   it("prefers degree_level over education_level when both are present", () => {
-    expect(resolveDegreeLevel(null, { degree_level: "UG", education_level: "PG" })).toBe("Undergraduate");
+    expect(resolveDegreeLevel(null, { degree_level: "UG", education_level: "Postgraduate" })).toBe("UG");
   });
 
   it("returns null when no source has a value", () => {

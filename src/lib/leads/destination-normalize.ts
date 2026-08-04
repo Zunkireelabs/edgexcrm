@@ -20,36 +20,9 @@ export const DESTINATION_SYNONYM_KEYS = [
   "select_your_preferred_destination",
 ] as const;
 
-// Aliases for values seen across old form option sets (casing, full names, flag emoji).
-// Extra real countries (Dubai/UAE etc.) aren't in the curated DESTINATIONS dropdown but are
-// still stored as-is — never drop a value just because it's outside the curated taxonomy.
-const ALIASES: Record<string, string> = {
-  uk: "UK",
-  "united kingdom": "UK",
-  usa: "USA",
-  "united states": "USA",
-  "united states of america": "USA",
-  "u.s.a": "USA",
-  australia: "Australia",
-  germany: "Germany",
-  "new zealand": "New Zealand",
-  new_zealand: "New Zealand",
-  canada: "Canada",
-  finland: "Finland",
-  india: "India",
-  nepal: "Nepal",
-  europe: "Europe",
-  malta: "Malta",
-  france: "France",
-  sweden: "Sweden",
-  dubai: "UAE",
-  uae: "UAE",
-};
-
 // Strips leading emoji/pictographic decoration (flags, etc.) some forms' admin-typed
 // option values carry — e.g. "🇺🇸 USA" -> "USA". Exported for direct use in tests;
-// consumers reach it indirectly through the normalizeX()/canonicalizeDestination()
-// wrappers below, which apply it plus aliasing/canonicalization.
+// consumers reach it indirectly through the normalizeX() wrappers below.
 //
 // \p{Regional_Indicator} is required, not just \p{Extended_Pictographic}: a national flag
 // emoji (🇺🇸, 🇬🇧, ...) is a pair of Regional Indicator Symbol codepoints (U+1F1E6-U+1F1FF),
@@ -61,29 +34,47 @@ export function stripDecoration(raw: string): string {
   return raw.replace(/^[\p{Regional_Indicator}\p{Extended_Pictographic}️\s]+/gu, "").trim();
 }
 
-function canonicalizeDestination(raw: string): string | null {
-  const cleaned = stripDecoration(raw);
-  if (!cleaned) return null;
-  return ALIASES[cleaned.toLowerCase()] ?? cleaned;
+// Deliberately NOT rewritten to a hardcoded "canonical" spelling (e.g. "united states" ->
+// "USA"). Destinations/degree levels are each tenant's OWN configurable catalog (Settings ->
+// Destination Countries / Study Levels — the `countries`/`study_levels` tables), and different
+// tenants spell the same option differently (one tenant's real catalog says "United States",
+// not "USA"). A prior version of this function rewrote to a hardcoded abbreviation and it
+// silently broke: a lead already correctly holding "United Kingdom" (matching that tenant's
+// real catalog) got rewritten to "UK" mid-normalization, which then matched NO checkbox in
+// that tenant's actual options list — an already-fine value became an invisible orphan.
+// Cleanup here is intentionally limited to what's safe for ANY tenant's spelling: strip
+// decoration, and nothing else. Case/whitespace-only duplicates still merge (see the Map-based
+// dedup below), keeping whichever spelling was seen first — never inventing a new one.
+function cleanValue(raw: string): string | null {
+  return stripDecoration(raw) || null;
+}
+
+// Dedupes case/whitespace-insensitively while preserving the first-seen spelling — so
+// ["USA", "usa"] collapses to one entry using whichever spelling appeared first, but never
+// substitutes a different spelling than what was actually present.
+function dedupePreservingFirstSpelling(values: string[]): string[] {
+  const seen = new Map<string, string>(); // lowercased key -> first-seen original spelling
+  for (const raw of values) {
+    const cleaned = cleanValue(raw);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    if (!seen.has(key)) seen.set(key, cleaned);
+  }
+  return [...seen.values()];
 }
 
 // Applies the same cleanup an explicitly-posted `destinations` array skipped before this
-// fix — canonicalize() was previously only reachable via the custom_fields synonym-key
-// fallback, so a form using the real `destinations` key directly got zero normalization.
+// fix — this was previously only reachable via the custom_fields synonym-key fallback, so a
+// form using the real `destinations` key directly got zero normalization.
 export function normalizeDestinations(raw: string[]): string[] {
-  const found = new Set<string>();
-  for (const value of raw) {
-    const canonical = canonicalizeDestination(value);
-    if (canonical) found.add(canonical);
-  }
-  return [...found];
+  return dedupePreservingFirstSpelling(raw);
 }
 
 export function extractDestinationsFromCustomFields(
   customFields: Record<string, unknown> | null | undefined
 ): string[] {
   if (!customFields) return [];
-  const found = new Set<string>();
+  const collected: string[] = [];
   for (const key of DESTINATION_SYNONYM_KEYS) {
     const raw = customFields[key];
     const rawValues = Array.isArray(raw)
@@ -91,12 +82,9 @@ export function extractDestinationsFromCustomFields(
       : typeof raw === "string"
         ? raw.split(/[,|/\n\t]+/)
         : [];
-    for (const value of rawValues) {
-      const canonical = canonicalizeDestination(value);
-      if (canonical) found.add(canonical);
-    }
+    collected.push(...rawValues);
   }
-  return [...found];
+  return dedupePreservingFirstSpelling(collected);
 }
 
 // One known legacy custom_fields key per field (the key key-info-section.tsx's display-time
@@ -107,32 +95,16 @@ const DEGREE_LEVEL_SYNONYM_KEYS = ["degree_level", "education_level"] as const;
 
 export function normalizeFieldOfStudy(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  return stripDecoration(raw) || null;
+  return cleanValue(raw);
 }
 
-const DEGREE_LEVEL_ALIASES: Record<string, string> = {
-  ug: "Undergraduate",
-  undergraduate: "Undergraduate",
-  bachelor: "Undergraduate",
-  bachelors: "Undergraduate",
-  "bachelor's": "Undergraduate",
-  pg: "Postgraduate",
-  postgraduate: "Postgraduate",
-  master: "Postgraduate",
-  masters: "Postgraduate",
-  "master's": "Postgraduate",
-  phd: "Doctor of Philosophy (PhD)",
-  "ph.d": "Doctor of Philosophy (PhD)",
-  "ph.d.": "Doctor of Philosophy (PhD)",
-  doctorate: "Doctor of Philosophy (PhD)",
-  "doctor of philosophy": "Doctor of Philosophy (PhD)",
-};
-
+// Same "never rewrite to a hardcoded spelling" rule as destinations — degree_level is also a
+// tenant-configurable catalog (`study_levels` table), so a fixed alias map (e.g. "UG" ->
+// "Undergraduate") carries the identical risk of drifting from what a given tenant actually
+// configured. Strip decoration only; leave the wording exactly as given.
 export function normalizeDegreeLevel(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const cleaned = stripDecoration(raw);
-  if (!cleaned) return null;
-  return DEGREE_LEVEL_ALIASES[cleaned.toLowerCase()] ?? cleaned;
+  return cleanValue(raw);
 }
 
 // Extracts a single value from custom_fields for a single-value (non-array) field, trying
