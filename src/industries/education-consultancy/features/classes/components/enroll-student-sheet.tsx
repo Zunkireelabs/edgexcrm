@@ -56,6 +56,7 @@ export function EnrollStudentSheet({
   const [leadSearching, setLeadSearching] = useState(false);
   const [selectedLead, setSelectedLead] = useState<LeadOption | null>(null);
   const [classId, setClassId] = useState(defaultClassId ?? classes[0]?.id ?? "");
+  const [enrollmentType, setEnrollmentType] = useState<"demo" | "actual">("actual");
   const [feePaid, setFeePaid] = useState(false);
   const [feeAmount, setFeeAmount] = useState("");
   const [notes, setNotes] = useState("");
@@ -74,6 +75,7 @@ export function EnrollStudentSheet({
     }
     if (open) {
       setClassId(defaultClassId ?? classes[0]?.id ?? "");
+      setEnrollmentType("actual");
     }
   }, [open, defaultClassId, classes]);
 
@@ -114,6 +116,7 @@ export function EnrollStudentSheet({
       const body: Record<string, unknown> = {
         lead_id: selectedLead.id,
         class_id: classId,
+        enrollment_type: enrollmentType,
         fee_paid: feePaid,
       };
       if (feePaid && feeAmount.trim()) body.fee_amount = Number(feeAmount);
@@ -221,6 +224,20 @@ export function EnrollStudentSheet({
                 {classes.map((c) => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Demo vs actual */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-gray-600">Enrollment type</Label>
+            <Select value={enrollmentType} onValueChange={(v) => setEnrollmentType(v as "demo" | "actual")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="demo">Demo class (2-3 day trial)</SelectItem>
+                <SelectItem value="actual">Actual class</SelectItem>
               </SelectContent>
             </Select>
           </div>

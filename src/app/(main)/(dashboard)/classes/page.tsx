@@ -77,7 +77,7 @@ export default async function ClassesRoute() {
   const [classesResult, enrollments] = await Promise.all([
     supabase
       .from("classes")
-      .select("id, name, default_fee, is_active")
+      .select("id, name, default_fee, is_active, end_date")
       .eq("tenant_id", tenantData.tenant.id)
       .eq("is_active", true)
       .order("name", { ascending: true }),
@@ -102,6 +102,7 @@ export default async function ClassesRoute() {
     name: string;
     default_fee: number | null;
     is_active: boolean;
+    end_date: string | null;
   }>;
 
   const canMarkAttendance =

@@ -16,6 +16,8 @@ import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { canManageClasses } from "@/lib/api/permissions";
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
@@ -25,7 +27,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const showAll = searchParams.get("all") === "true";
 
-  let query = db.from("classes").select("id, name, default_fee, is_active, created_at, updated_at");
+  let query = db.from("classes").select("id, name, default_fee, is_active, end_date, created_at, updated_at");
   if (!showAll) query = query.eq("is_active", true);
 
   const { data: classes, error } = await query.order("name", { ascending: true });
@@ -46,7 +48,7 @@ export async function GET(request: NextRequest) {
   }
 
   const result = (classes ?? []).map((c) => {
-    const row = c as unknown as { id: string; name: string; default_fee: number | null; is_active: boolean; created_at: string; updated_at: string };
+    const row = c as unknown as { id: string; name: string; default_fee: number | null; is_active: boolean; end_date: string | null; created_at: string; updated_at: string };
     return {
       ...row,
       enrollmentCount: countMap[row.id] ?? 0,
@@ -89,10 +91,16 @@ export async function POST(request: NextRequest) {
 
   const isActive = body.is_active === undefined ? true : Boolean(body.is_active);
 
+  let endDate: string | null = null;
+  if (body.end_date !== undefined && body.end_date !== null) {
+    if (!DATE_RE.test(String(body.end_date))) return apiValidationError({ end_date: ["end_date must be in YYYY-MM-DD format"] });
+    endDate = String(body.end_date);
+  }
+
   const db = await scopedClient(auth);
   const { data: created, error } = await db
     .from("classes")
-    .insert({ name, default_fee: defaultFee, is_active: isActive })
+    .insert({ name, default_fee: defaultFee, is_active: isActive, end_date: endDate })
     .select()
     .single();
 

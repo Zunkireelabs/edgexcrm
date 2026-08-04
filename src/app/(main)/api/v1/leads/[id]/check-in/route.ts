@@ -145,16 +145,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
       };
       if (newAssigned !== lead.assigned_to) updatePayload.assigned_to = newAssigned;
 
+      let targetListName: string | null = null;
       if (targetSlug) {
         const { data: target } = await supabase
           .from("lead_lists")
-          .select("id, pipeline_id")
+          .select("id, name, pipeline_id")
           .eq("tenant_id", auth.tenantId)
           .eq("slug", targetSlug)
           .maybeSingle();
         if (target) {
           updatePayload.list_id = target.id;
           updatePayload.stage_changed_at = new Date().toISOString();
+          targetListName = target.name;
           if (targetSlug === "prospects") updatePayload.lead_type = "prospect";
           if (target.pipeline_id) {
             const landing = await getPipelineLandingStage(supabase, target.pipeline_id);
@@ -183,6 +185,27 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .eq("tenant_id", auth.tenantId);
         if (triageError) {
           logger.error({ err: triageError, leadId: id }, "Failed to apply check-in triage");
+        } else {
+          // Surface the triage move/assign in System Activity — was previously silent
+          // (only the check-in note itself was audited), so a stage/status change from
+          // check-in triage never showed up in the lead's activity timeline.
+          const triageChanges: Record<string, { old: unknown; new: unknown }> = {};
+          if (updatePayload.list_id !== undefined) {
+            triageChanges.list = { old: currentSlug, new: targetListName ?? updatePayload.list_id };
+          }
+          if (updatePayload.assigned_to !== undefined) {
+            triageChanges.assigned_to = { old: lead.assigned_to, new: updatePayload.assigned_to };
+          }
+          if (Object.keys(triageChanges).length > 0) {
+            await createAuditLog({
+              tenantId: auth.tenantId,
+              userId: auth.userId,
+              action: "lead.updated",
+              entityType: "lead",
+              entityId: id,
+              changes: triageChanges,
+            });
+          }
         }
       }
     } catch (triageErr) {
@@ -271,7 +294,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       if (targetSlug) {
         const { data: target } = await supabase
           .from("lead_lists")
-          .select("id, pipeline_id")
+          .select("id, name, pipeline_id")
           .eq("tenant_id", auth.tenantId)
           .eq("slug", targetSlug)
           .maybeSingle();
@@ -308,6 +331,22 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .eq("tenant_id", auth.tenantId);
           if (promoteError) {
             logger.error({ err: promoteError, leadId: id }, "Failed to auto-promote lead on check-in");
+          } else {
+            // Same gap as the triage block above — auto-promote was silent in System Activity.
+            const promoteChanges: Record<string, { old: unknown; new: unknown }> = {
+              list: { old: currentSlug, new: target.name },
+            };
+            if (typeof promotePayload.assigned_to !== "undefined") {
+              promoteChanges.assigned_to = { old: lead.assigned_to, new: promotePayload.assigned_to };
+            }
+            await createAuditLog({
+              tenantId: auth.tenantId,
+              userId: auth.userId,
+              action: "lead.updated",
+              entityType: "lead",
+              entityId: id,
+              changes: promoteChanges,
+            });
           }
         }
       }
