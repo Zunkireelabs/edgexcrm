@@ -166,7 +166,7 @@ export function CreateApplicationPipelineModal({ open, onClose, pipelines }: Cre
             <Button type="button" variant="outline" onClick={handleClose}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting || !name.trim}>
+            <Button type="submit" disabled={isSubmitting || !name.trim()}>
               {isSubmitting ? "Creating..." : "Create Pipeline"}
             </Button>
           </DialogFooter>

@@ -37,6 +37,34 @@ DROP TRIGGER IF EXISTS trigger_application_pipelines_updated_at ON application_p
 CREATE TRIGGER trigger_application_pipelines_updated_at
   BEFORE UPDATE ON application_pipelines FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
+-- Single-default enforcement, mirroring ensure_single_default_deal_pipeline()
+-- (047_deal_pipelines.sql). Without this, PATCH /api/v1/application-pipelines/[id]
+-- (reachable from the pipeline settings modal's "Set as default" checkbox) can leave
+-- a tenant with 0 or 2+ pipelines flagged is_default — and every .eq("is_default",
+-- true).maybeSingle() lookup in pipeline-resolution.ts errors on 2+ rows, which the
+-- caller silently treats as "no default pipeline found" (new country pipelines then
+-- get zero cloned stages; the zero-declared-destination fallback stops resolving).
+CREATE OR REPLACE FUNCTION ensure_single_default_application_pipeline()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.is_default = true THEN
+    UPDATE application_pipelines
+    SET is_default = false
+    WHERE tenant_id = NEW.tenant_id
+      AND id != NEW.id
+      AND is_default = true;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_ensure_single_default_application_pipeline ON application_pipelines;
+CREATE TRIGGER trigger_ensure_single_default_application_pipeline
+  BEFORE INSERT OR UPDATE OF is_default ON application_pipelines
+  FOR EACH ROW
+  WHEN (NEW.is_default = true)
+  EXECUTE FUNCTION ensure_single_default_application_pipeline();
+
 ALTER TABLE application_stages ADD COLUMN IF NOT EXISTS pipeline_id
   UUID REFERENCES application_pipelines(id) ON DELETE CASCADE;
 
