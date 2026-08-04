@@ -28,6 +28,7 @@ interface Enrollment {
   class_id: string;
   fee_paid: boolean;
   fee_amount: number | null;
+  status: "active" | "inactive" | "completed";
   created_at: string;
   classes?: {
     id: string;
@@ -35,6 +36,12 @@ interface Enrollment {
     default_fee: number | null;
   } | null;
 }
+
+const STATUS_STYLES: Record<Enrollment["status"], string> = {
+  active: "bg-green-50 text-green-700 border-green-200",
+  completed: "bg-blue-50 text-blue-700 border-blue-200",
+  inactive: "bg-muted text-muted-foreground",
+};
 
 interface ClassesCardProps {
   leadId: string;
@@ -166,6 +173,14 @@ export function ClassesCard({ leadId, canManage }: ClassesCardProps) {
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{className}</p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 capitalize ${STATUS_STYLES[enrollment.status]}`}>
+                          {enrollment.status}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          Started {new Date(enrollment.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1.5 mt-1">
                         {enrollment.fee_paid ? (
                           <Badge variant="secondary" className="text-[10px] px-1.5 py-0 bg-green-50 text-green-700 border-green-200">
