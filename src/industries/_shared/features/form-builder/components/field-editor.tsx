@@ -32,7 +32,7 @@ interface FieldEditorProps {
 }
 
 // Reserved field names locked to real `leads` columns (see field-type-picker.tsx)
-const RESERVED_FIELD_NAMES = new Set(["destinations", "field_of_study"]);
+const RESERVED_FIELD_NAMES = new Set(["destinations", "field_of_study", "degree_level"]);
 
 const WIDTH_OPTIONS = [
   { value: "full", label: "Full width" },
@@ -215,17 +215,29 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
             </>
           )}
 
-          {/* Options for select/radio */}
+          {/* Options for select/radio — read-only for reserved fields (Study Destination /
+              Field of Study / Degree Level): the whole point of a reserved field is that its
+              answers land in leads.destinations/field_of_study/degree_level with predictable
+              values. Free-editable options defeated that — an admin could still type a flag
+              emoji or a one-off wording into a "reserved" field's option list. */}
           {isOptionField && (
             <>
               <Separator />
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label>Options</Label>
-                  <Button variant="outline" size="sm" onClick={addOption}>
-                    <Plus className="h-3.5 w-3.5 mr-1" /> Add
-                  </Button>
+                  {!RESERVED_FIELD_NAMES.has(draft.name) && (
+                    <Button variant="outline" size="sm" onClick={addOption}>
+                      <Plus className="h-3.5 w-3.5 mr-1" /> Add
+                    </Button>
+                  )}
                 </div>
+                {RESERVED_FIELD_NAMES.has(draft.name) && (
+                  <p className="text-xs text-muted-foreground">
+                    Options are fixed for this reserved field so every submission stores the
+                    same values.
+                  </p>
+                )}
                 <div className="space-y-2">
                   {(draft.options ?? []).map((opt, i) => (
                     <div key={i} className="flex gap-2 items-center">
@@ -234,21 +246,25 @@ export function FieldEditor({ field, open, onClose, onSave }: FieldEditorProps) 
                         onChange={(e) => updateOption(i, "label", e.target.value)}
                         placeholder="Label"
                         className="flex-1"
+                        disabled={RESERVED_FIELD_NAMES.has(draft.name)}
                       />
                       <Input
                         value={opt.value}
                         onChange={(e) => updateOption(i, "value", e.target.value)}
                         placeholder="Value"
                         className="flex-1 font-mono text-xs"
+                        disabled={RESERVED_FIELD_NAMES.has(draft.name)}
                       />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive shrink-0"
-                        onClick={() => removeOption(i)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {!RESERVED_FIELD_NAMES.has(draft.name) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive shrink-0"
+                          onClick={() => removeOption(i)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   ))}
                 </div>

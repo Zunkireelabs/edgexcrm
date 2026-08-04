@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 import type { FormField } from "@/types/database";
 import { toFieldName } from "../lib/validation";
-import { DESTINATIONS, FIELDS_OF_STUDY } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { DESTINATIONS, FIELDS_OF_STUDY, DEGREE_LEVELS } from "@/industries/_shared/features/lead-lists/taxonomies";
 
 type FieldType = FormField["type"];
 
@@ -37,6 +37,7 @@ const FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
 const RESERVED_FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
   { type: "checkbox", label: "Study Destination", description: "Preferred country/countries to study in (multi-select)" },
   { type: "select", label: "Field of Study", description: "Area of academic interest" },
+  { type: "select", label: "Degree Level", description: "Undergraduate / Postgraduate / PhD" },
 ];
 
 interface FieldTypePickerProps {
@@ -52,6 +53,12 @@ const RESERVED: Record<string, { name: string; options: { label: string; value: 
   "Field of Study": {
     name: "field_of_study",
     options: FIELDS_OF_STUDY.map((f) => ({ label: f, value: f })),
+  },
+  // value === label (full text, e.g. "Undergraduate"), not DEGREE_LEVELS' short code
+  // ("UG") — matches how useEduTaxonomy()/leads.degree_level already store this field.
+  "Degree Level": {
+    name: "degree_level",
+    options: DEGREE_LEVELS.map((d) => ({ label: d.label, value: d.label })),
   },
 };
 

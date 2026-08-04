@@ -10,6 +10,7 @@ import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import { AssigneeSelector, AssigneeChip } from "@/components/dashboard/leads/assignee-selector";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
+import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 // Fixed cap for the mobile card-style sub-block (not part of desktop column resize).
 export const EMAIL_MOBILE_WIDTH = 140;
@@ -518,15 +519,18 @@ const STATIC_COLUMNS: LeadColumn[] = [
         Destination
       </th>
     ),
-    renderTd: (lead) => (
-      <td key="destinations" className="px-3 py-1.5 hidden md:table-cell">
-        {(lead.destinations && lead.destinations.length > 0) ? (
-          <span className="text-sm text-[#787871]">{lead.destinations.join(", ")}</span>
-        ) : (
-          <span className="text-gray-400">—</span>
-        )}
-      </td>
-    ),
+    renderTd: (lead) => {
+      const clean = lead.destinations ? normalizeDestinations(lead.destinations) : [];
+      return (
+        <td key="destinations" className="px-3 py-1.5 hidden md:table-cell">
+          {clean.length > 0 ? (
+            <span className="text-sm text-[#787871]">{clean.join(", ")}</span>
+          ) : (
+            <span className="text-gray-400">—</span>
+          )}
+        </td>
+      );
+    },
   },
 
   // ── form_source (which page lead came from — education_consultancy only)

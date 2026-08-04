@@ -25,6 +25,7 @@ import {
   hasProspectQualification,
   canBypassProspectQualification,
 } from "@/lib/leads/prospect-qualification";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import type { Lead } from "@/types/database";
 
 const UPDATABLE_FIELDS = [
@@ -560,6 +561,19 @@ export async function applyLeadPatch(
   }
   if (typeof updatePayload.phone === "string") {
     updatePayload.phone = normalizePhoneForStorage(updatePayload.phone as string);
+  }
+  // Same normalization as the two lead-creation paths (leads/route.ts POST,
+  // public submit route) — this is the manual-edit path (lead detail page's
+  // Study Interest panel Save button), a fourth place these fields could be
+  // written with a flag emoji / off-canon casing if left alone.
+  if (Array.isArray(updatePayload.destinations)) {
+    updatePayload.destinations = normalizeDestinations(updatePayload.destinations as string[]);
+  }
+  if (updatePayload.field_of_study !== undefined) {
+    updatePayload.field_of_study = normalizeFieldOfStudy(updatePayload.field_of_study as string | null);
+  }
+  if (updatePayload.degree_level !== undefined) {
+    updatePayload.degree_level = normalizeDegreeLevel(updatePayload.degree_level as string | null);
   }
   Object.assign(updatePayload, coerceAcademicPayload(body));
 
