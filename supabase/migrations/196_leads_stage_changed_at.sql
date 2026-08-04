@@ -17,7 +17,13 @@ BEGIN
   ) THEN
     ALTER TABLE leads ADD COLUMN stage_changed_at TIMESTAMPTZ NOT NULL DEFAULT now();
     -- Backfill: best guess is current updated_at, since we have no history of past stage moves.
+    -- trigger_leads_updated_at fires on ANY UPDATE and unconditionally sets NEW.updated_at =
+    -- NOW() — must be disabled for this statement or the backfill itself clobbers every row's
+    -- real updated_at with the migration's run time (shipped this bug on stage 2026-08-03,
+    -- lost the true last-edited timestamp for all leads; do not repeat on prod).
+    ALTER TABLE leads DISABLE TRIGGER trigger_leads_updated_at;
     UPDATE leads SET stage_changed_at = updated_at;
+    ALTER TABLE leads ENABLE TRIGGER trigger_leads_updated_at;
   END IF;
 END $$;
 
