@@ -113,6 +113,7 @@ function makeLead(overrides: Partial<Lead>): Lead {
     archived_from_list_id: null,
     archived_from_status: null,
     last_activity_at: THIS_WEEK_TS,
+    stage_changed_at: THIS_WEEK_TS,
     created_at: THIS_WEEK_TS,
     updated_at: THIS_WEEK_TS,
   };

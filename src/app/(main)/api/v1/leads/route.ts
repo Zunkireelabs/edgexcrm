@@ -92,7 +92,7 @@ bachelor_gpa,bachelor_institution,bachelor_passed_year,\
 masters_gpa,masters_institution,masters_passed_year,\
 ielts_score,pte_score,toefl_score,sat_score,gre_gmat_score,\
 archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_status,\
-last_activity_at,created_at,updated_at";
+last_activity_at,stage_changed_at,created_at,updated_at";
 
 // Sort allow-list — never interpolate a client-supplied column name into the query.
 // Only "created_at" is covered by an index (idx_leads_tenant_created_active); the

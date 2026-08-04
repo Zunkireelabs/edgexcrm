@@ -154,6 +154,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .maybeSingle();
         if (target) {
           updatePayload.list_id = target.id;
+          updatePayload.stage_changed_at = new Date().toISOString();
           if (targetSlug === "prospects") updatePayload.lead_type = "prospect";
           if (target.pipeline_id) {
             const landing = await getPipelineLandingStage(supabase, target.pipeline_id);
@@ -279,6 +280,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           const promotePayload: Record<string, unknown> = {
             list_id: target.id,
             updated_at: new Date().toISOString(),
+            stage_changed_at: new Date().toISOString(),
             ...extraPayload,
           };
 

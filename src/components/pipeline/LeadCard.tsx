@@ -62,8 +62,8 @@ const PRIORITY_STYLES: Record<string, { label: string; icon: typeof Flame; bg: s
   cold: { label: "Cold", icon: Snowflake, bg: "bg-sky-100 dark:bg-sky-900/30", text: "text-sky-700 dark:text-sky-400" },
 };
 
-function getDaysInStage(updatedAt: string): number {
-  const diff = Date.now() - new Date(updatedAt).getTime();
+function getDaysInStage(dateString: string): number {
+  const diff = Date.now() - new Date(dateString).getTime();
   return Math.floor(diff / (1000 * 60 * 60 * 24));
 }
 
@@ -79,7 +79,7 @@ function getInitials(firstName: string | null, lastName: string | null): string 
   return first + last || "?";
 }
 
-/** Relative "1m / 30m / 2h / 5d" — same grain as the reference design's activity chip. */
+/** Relative "1m / 30m / 2h / 5d" — last-changed (any field), distinct from the stage-age badge. */
 function formatRelativeTime(dateString: string): string {
   const diffMs = Date.now() - new Date(dateString).getTime();
   const minutes = Math.floor(diffMs / (1000 * 60));
@@ -112,7 +112,7 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
 
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown";
   const subtitleParts = [lead.country, lead.phone].filter(Boolean);
-  const days = getDaysInStage(lead.updated_at);
+  const days = getDaysInStage(lead.stage_changed_at);
   const urgencyStyles = getUrgencyStyles(days);
   const avatarColors = colorFor(fullName);
   const priority = lead.ai_priority ? PRIORITY_STYLES[lead.ai_priority] : null;
@@ -282,8 +282,8 @@ export function LeadCard({ lead, disabled, pipelineId, onMovedToPipeline, assign
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          <span className="text-muted-foreground" title={new Date(lead.last_activity_at).toLocaleString()}>
-            {formatRelativeTime(lead.last_activity_at)}
+          <span className="text-muted-foreground" title={`Last changed ${new Date(lead.updated_at).toLocaleString()}`}>
+            {formatRelativeTime(lead.updated_at)}
           </span>
           <div
             className={`h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-bold ${
