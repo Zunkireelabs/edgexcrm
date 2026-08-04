@@ -457,7 +457,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                       Take attendance
                     </Button>
                   )}
-                  {detailTab === "roster" && canEnroll && (
+                  {canEnroll && (
                     <Button size="sm" variant="outline" onClick={() => setEnrollOpen(true)}>
                       <Plus className="h-3.5 w-3.5 mr-1" />
                       Enroll
