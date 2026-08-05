@@ -57,10 +57,26 @@ export default async function ClassesRoute() {
     : null;
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null, poolSlug);
 
+  // Attendance markers need the full class roster to mark attendance — own-scope
+  // lead filtering (built for the leads list) would otherwise hide classmates
+  // they aren't personally assigned to. Compute this before the roster query so
+  // it can bypass the own-scope restriction below.
+  const canMarkAttendance =
+    tenantData.role === "owner" ||
+    tenantData.role === "admin" ||
+    !!(
+      await supabase
+        .from("class_attendance_markers")
+        .select("user_id")
+        .eq("tenant_id", tenantData.tenant.id)
+        .eq("user_id", tenantData.userId)
+        .maybeSingle()
+    ).data;
+
   let leadIds: string[] | null = null;
   let teamMemberIds: string[] | null = null;
 
-  if (scope.restrictToSelf && scope.userId) {
+  if (scope.restrictToSelf && scope.userId && !canMarkAttendance) {
     // Visibility-scoped (uncapped; migration 179) — includes collaborator-visible leads,
     // not just direct assignments.
     const { data, error } = await visibleLeadsBase({ user: userClient, service: supabase }, tenantData.tenant.id, scope).is("deleted_at", null);
@@ -104,18 +120,6 @@ export default async function ClassesRoute() {
     is_active: boolean;
     end_date: string | null;
   }>;
-
-  const canMarkAttendance =
-    tenantData.role === "owner" ||
-    tenantData.role === "admin" ||
-    !!(
-      await supabase
-        .from("class_attendance_markers")
-        .select("user_id")
-        .eq("tenant_id", tenantData.tenant.id)
-        .eq("user_id", tenantData.userId)
-        .maybeSingle()
-    ).data;
 
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
