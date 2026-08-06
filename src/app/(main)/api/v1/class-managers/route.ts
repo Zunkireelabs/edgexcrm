@@ -107,6 +107,12 @@ export async function PATCH(request: NextRequest) {
     .maybeSingle();
   if (!member) return apiError("NOT_FOUND", "User is not a member of this tenant", 404);
 
+  const { data: existing } = await db
+    .from("class_managers")
+    .select("enroll_students, mark_attendance, view_roster")
+    .eq("user_id", userId)
+    .maybeSingle() as { data: Pick<ClassManagerRow, "enroll_students" | "mark_attendance" | "view_roster"> | null };
+
   const { data: upserted, error } = await db
     .from("class_managers")
     .upsert(
@@ -136,7 +142,13 @@ export async function PATCH(request: NextRequest) {
       entityId: userId,
       changes: {
         grant: {
-          old: null,
+          old: existing
+            ? {
+                enrollStudents: existing.enroll_students,
+                markAttendance: existing.mark_attendance,
+                viewRoster: existing.view_roster,
+              }
+            : null,
           new: { enrollStudents, markAttendance, viewRoster },
         },
       },

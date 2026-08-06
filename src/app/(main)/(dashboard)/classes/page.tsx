@@ -120,6 +120,42 @@ export default async function ClassesRoute() {
     end_date: string | null;
   }>;
 
+  // Fees totals (aggregate amount + per-class collection %) are owner-only —
+  // computed here, not in the client, so a non-owner is never handed a
+  // precomputed total to read off props/devtools. Per-student fee_amount still
+  // ships in `enrollments` regardless of role — that's the explicit, separate
+  // "individual fee stays visible to roster viewers" requirement — so this
+  // narrows the specific gap (a ready-made aggregate on a platter), it does not
+  // make the aggregate unreconstructable by someone who can already see every
+  // student's fee (summing what they're allowed to see was never in scope to
+  // prevent).
+  const canSeeFeesTotals = tenantData.role === "owner";
+  let feesCollected: number | null = null;
+  let classFeePct: Record<string, number | null> | null = null;
+  if (canSeeFeesTotals) {
+    let total = 0;
+    const byClass: Record<string, { paid: number; payable: number }> = {};
+    for (const e of enrollments) {
+      const feePaid = e.fee_paid as boolean;
+      const feeAmount = e.fee_amount as number | null;
+      const status = e.status as string;
+      const classId = e.class_id as string;
+      if (feePaid && feeAmount != null) total += feeAmount;
+      if (status !== "inactive") {
+        const entry = byClass[classId] ?? { paid: 0, payable: 0 };
+        entry.payable += 1;
+        if (feePaid) entry.paid += 1;
+        byClass[classId] = entry;
+      }
+    }
+    feesCollected = total;
+    classFeePct = {};
+    for (const cls of classes) {
+      const entry = byClass[cls.id];
+      classFeePct[cls.id] = entry && entry.payable > 0 ? Math.round((entry.paid / entry.payable) * 100) : null;
+    }
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-90px)]">
       <ClassesWorkspace
@@ -129,7 +165,9 @@ export default async function ClassesRoute() {
         canEnroll={canEnroll}
         canMarkAttendance={canMarkAttendance}
         tenantId={tenantData.tenant.id}
-        role={tenantData.role}
+        canSeeFeesTotals={canSeeFeesTotals}
+        feesCollected={feesCollected}
+        classFeePct={classFeePct}
       />
     </div>
   );

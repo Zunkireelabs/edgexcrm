@@ -72,15 +72,13 @@ interface ClassesWorkspaceProps {
   canEnroll: boolean;
   canMarkAttendance: boolean;
   tenantId: string;
-  role: string;
+  /** Owner-only, computed server-side in page.tsx — see comment there for why. */
+  canSeeFeesTotals: boolean;
+  feesCollected: number | null;
+  classFeePct: Record<string, number | null> | null;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance, role }: ClassesWorkspaceProps) {
-  // Fees totals (workspace-wide "Fees collected" stat + per-class collection % / progress
-  // bar) are owner-only — strict, not admin. Explicit product decision: per-student fee
-  // amounts on the roster stay visible to anyone who can see the roster; it's only the
-  // aggregate totals that are hidden.
-  const canSeeFeesTotals = role === "owner";
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance, canSeeFeesTotals, feesCollected, classFeePct }: ClassesWorkspaceProps) {
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
@@ -154,13 +152,11 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     const activeLeadIds = new Set<string>();
     let demoCount = 0;
     let demoConvertedCount = 0;
-    let feesCollected = 0;
     let unpaidActiveCount = 0;
     const byLeadClass = new Map<string, { demo: boolean; actual: boolean }>();
 
     for (const e of enrollments) {
       if (e.status === "active") activeLeadIds.add(e.lead_id);
-      if (e.fee_paid && e.fee_amount != null) feesCollected += e.fee_amount;
       if (e.status === "active" && !e.fee_paid) unpaidActiveCount++;
 
       const key = `${e.lead_id}:${e.class_id}`;
@@ -179,21 +175,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     return {
       activeStudents: activeLeadIds.size,
       conversionRate: demoCount > 0 ? Math.round((demoConvertedCount / demoCount) * 100) : null,
-      feesCollected,
       unpaidActiveCount,
     };
   }, [enrollments]);
 
   const classStats = useMemo(() => {
-    const map: Record<string, { count: number; paidCount: number; payableCount: number }> = {};
+    const map: Record<string, { count: number }> = {};
     for (const cls of classes) {
       const list = enrollmentsByClass[cls.id] ?? [];
-      const active = list.filter((e) => e.status !== "inactive");
-      map[cls.id] = {
-        count: new Set(list.map((e) => e.lead_id)).size,
-        paidCount: active.filter((e) => e.fee_paid).length,
-        payableCount: active.length,
-      };
+      map[cls.id] = { count: new Set(list.map((e) => e.lead_id)).size };
     }
     return map;
   }, [classes, enrollmentsByClass]);
@@ -328,7 +318,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
               <Wallet className="h-3 w-3" /> Fees collected
             </div>
             <div className="text-xl font-semibold tabular-nums">
-              {workspaceStats.feesCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              {(feesCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
             </div>
           </div>
         )}
@@ -362,8 +352,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           ) : (
             classes.map((cls) => {
               const count = classStats[cls.id]?.count ?? 0;
-              const { paidCount, payableCount } = classStats[cls.id] ?? { paidCount: 0, payableCount: 0 };
-              const feePct = payableCount > 0 ? Math.round((paidCount / payableCount) * 100) : null;
+              const feePct = classFeePct?.[cls.id] ?? null;
               const isActive = cls.id === selectedClassId;
               const badge = endDateBadge(cls.end_date);
               return (

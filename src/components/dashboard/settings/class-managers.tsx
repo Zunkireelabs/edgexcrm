@@ -100,9 +100,18 @@ export function ClassManagers() {
 
   async function handleToggle(row: ManagerRow, field: GrantField, checked: boolean) {
     const key = `${row.userId}:${field}`;
-    const next = { ...row, [field]: checked };
+    const previousValue = row[field];
+    let next: ManagerRow = { ...row, [field]: checked };
 
-    setRows((prev) => prev.map((r) => (r.userId === row.userId ? next : r)));
+    // Read the current row (not the closure's stale `row`) so two rapid toggles
+    // on the same user don't clobber each other's optimistic update on revert.
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.userId !== row.userId) return r;
+        next = { ...r, [field]: checked };
+        return next;
+      })
+    );
     setSavingKey(key);
 
     try {
@@ -119,8 +128,11 @@ export function ClassManagers() {
       if (!res.ok) throw new Error("Failed to update grant");
       toast.success("Class manager access updated");
     } catch {
-      // Revert on failure
-      setRows((prev) => prev.map((r) => (r.userId === row.userId ? row : r)));
+      // Revert only this field to its pre-toggle value, not the whole row —
+      // avoids clobbering a concurrent toggle on a different field.
+      setRows((prev) =>
+        prev.map((r) => (r.userId === row.userId ? { ...r, [field]: previousValue } : r))
+      );
       toast.error("Failed to update class manager access");
     } finally {
       setSavingKey(null);
