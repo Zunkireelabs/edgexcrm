@@ -72,9 +72,15 @@ interface ClassesWorkspaceProps {
   canEnroll: boolean;
   canMarkAttendance: boolean;
   tenantId: string;
+  role: string;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance }: ClassesWorkspaceProps) {
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance, role }: ClassesWorkspaceProps) {
+  // Fees totals (workspace-wide "Fees collected" stat + per-class collection % / progress
+  // bar) are owner-only — strict, not admin. Explicit product decision: per-student fee
+  // amounts on the roster stay visible to anyone who can see the roster; it's only the
+  // aggregate totals that are hidden.
+  const canSeeFeesTotals = role === "owner";
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
@@ -296,7 +302,12 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-4 gap-px bg-border border rounded-lg overflow-hidden shrink-0">
+      <div
+        className={cn(
+          "grid gap-px bg-border border rounded-lg overflow-hidden shrink-0",
+          canSeeFeesTotals ? "grid-cols-4" : "grid-cols-3"
+        )}
+      >
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
             <Users className="h-3 w-3" /> Active students
@@ -311,14 +322,16 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
             {workspaceStats.conversionRate == null ? "—" : `${workspaceStats.conversionRate}%`}
           </div>
         </div>
-        <div className="bg-card px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-            <Wallet className="h-3 w-3" /> Fees collected
+        {canSeeFeesTotals && (
+          <div className="bg-card px-4 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
+              <Wallet className="h-3 w-3" /> Fees collected
+            </div>
+            <div className="text-xl font-semibold tabular-nums">
+              {workspaceStats.feesCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </div>
           </div>
-          <div className="text-xl font-semibold tabular-nums">
-            {workspaceStats.feesCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
+        )}
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
             <CircleDollarSign className="h-3 w-3" /> Unpaid (active)
@@ -382,16 +395,20 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                       <> · {cls.default_fee.toLocaleString(undefined, { maximumFractionDigits: 0 })} fee</>
                     )}
                   </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-green-600 transition-all"
-                      style={{ width: feePct != null ? `${feePct}%` : "0%" }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>Fees collected</span>
-                    <span>{feePct != null ? `${feePct}%` : "—"}</span>
-                  </div>
+                  {canSeeFeesTotals && (
+                    <>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-green-600 transition-all"
+                          style={{ width: feePct != null ? `${feePct}%` : "0%" }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                        <span>Fees collected</span>
+                        <span>{feePct != null ? `${feePct}%` : "—"}</span>
+                      </div>
+                    </>
+                  )}
                 </button>
               );
             })

@@ -3,7 +3,8 @@ import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { leadQueryScope } from "@/lib/api/permissions";
+import { canEnrollStudents, canMarkClassAttendance, canViewFullRoster } from "@/lib/api/class-attendance";
 import { branchMemberIds } from "@/lib/leads/branch-membership";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
@@ -57,26 +58,24 @@ export default async function ClassesRoute() {
     : null;
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId, tenantData.branchId ?? null, poolSlug);
 
-  // Attendance markers need the full class roster to mark attendance — own-scope
-  // lead filtering (built for the leads list) would otherwise hide classmates
-  // they aren't personally assigned to. Compute this before the roster query so
-  // it can bypass the own-scope restriction below.
-  const canMarkAttendance =
-    tenantData.role === "owner" ||
-    tenantData.role === "admin" ||
-    !!(
-      await supabase
-        .from("class_attendance_markers")
-        .select("user_id")
-        .eq("tenant_id", tenantData.tenant.id)
-        .eq("user_id", tenantData.userId)
-        .maybeSingle()
-    ).data;
+  const authSubject = { role: tenantData.role, userId: tenantData.userId, tenantId: tenantData.tenant.id };
+
+  // Roster-view bypass: class_managers.view_roster grants full-roster visibility
+  // independent of attendance-marking capability — own-scope lead filtering (built
+  // for the leads list) would otherwise hide classmates the viewer isn't personally
+  // assigned to. Compute this before the roster query so it can bypass the
+  // own-scope restriction below. canMarkAttendance below is the separate
+  // capability that gates the "Take attendance" button.
+  const [canViewRoster, canMarkAttendance, canEnroll] = await Promise.all([
+    canViewFullRoster(authSubject),
+    canMarkClassAttendance(authSubject),
+    canEnrollStudents(authSubject),
+  ]);
 
   let leadIds: string[] | null = null;
   let teamMemberIds: string[] | null = null;
 
-  if (scope.restrictToSelf && scope.userId && !canMarkAttendance) {
+  if (scope.restrictToSelf && scope.userId && !canViewRoster) {
     // Visibility-scoped (uncapped; migration 179) — includes collaborator-visible leads,
     // not just direct assignments.
     const { data, error } = await visibleLeadsBase({ user: userClient, service: supabase }, tenantData.tenant.id, scope).is("deleted_at", null);
@@ -127,9 +126,10 @@ export default async function ClassesRoute() {
         classes={classes}
         enrollments={enrollments}
         canManage={tenantData.permissions.canManageClasses}
-        canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
+        canEnroll={canEnroll}
         canMarkAttendance={canMarkAttendance}
         tenantId={tenantData.tenant.id}
+        role={tenantData.role}
       />
     </div>
   );

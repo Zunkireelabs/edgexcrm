@@ -13,7 +13,8 @@ import {
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
 import { LeadDetailV2 } from "@/components/dashboard/lead/lead-detail-v2";
-import { canSeeNav, canAccessList, leadQueryScope, canEnrollStudents } from "@/lib/api/permissions";
+import { canSeeNav, canAccessList, leadQueryScope } from "@/lib/api/permissions";
+import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { canCreateOrReorderApplications } from "@/lib/api/applications";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
@@ -311,7 +312,7 @@ export default async function LeadDetailPage({
       stageAssigneeMap={stageAssigneeMap}
       canManageApplications={tenantData.permissions.canManageApplications}
       canManageApplicationPanel={canCreateOrReorderApplications(tenantData, lead)}
-      canEnroll={canEnrollStudents(tenantData.permissions, tenantData.positionSlug)}
+      canEnroll={await canEnrollStudents({ role: tenantData.role, userId: tenantData.userId, tenantId: tenantData.tenant.id })}
       leadLists={accessibleLists}
       activeLeadLists={activeLeadLists}
       classesActive={classesActive}
