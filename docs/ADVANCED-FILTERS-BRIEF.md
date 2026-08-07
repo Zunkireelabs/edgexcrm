@@ -727,6 +727,82 @@ Fix only the branch that matches, and say in the PR which one it was.
 
 ---
 
+# PHASE 3.5 — Enable the flag on STAGE only, then prove the counts at real volume
+
+**Branch:** `feature/advanced-filters-stage-flag` from latest `origin/stage`
+**Migration:** none. **Small change — two files.** The value is the verification it unlocks.
+
+Phases 0–3 are merged and deployed (`d3841a63`). But `NEXT_PUBLIC_ADVANCED_FILTERS` is not wired
+into the image build, so the deployed bundle has it `undefined` and stage still renders the **legacy**
+toolbar. The new bar exists only on local dev.
+
+`NEXT_PUBLIC_*` is **inlined at build time** (the Dockerfile says so at line 15). A container restart
+or an `.env.local` edit on the VPS will NOT turn it on — it has to be a build arg.
+
+## The change
+
+**1. `Dockerfile`** — add alongside the existing `NEXT_PUBLIC_*` pairs (ARGs ~L11-23, ENVs ~L25-32):
+
+```dockerfile
+ARG NEXT_PUBLIC_ADVANCED_FILTERS
+ENV NEXT_PUBLIC_ADVANCED_FILTERS=$NEXT_PUBLIC_ADVANCED_FILTERS
+```
+
+**2. `.github/workflows/deploy-staging.yml`** — add one line to `build-args` (~L55-63):
+
+```yaml
+NEXT_PUBLIC_ADVANCED_FILTERS=1
+```
+
+A **literal `1`, not a secret** — matching how `NEXT_PUBLIC_SENTRY_ENVIRONMENT=staging` is done. It
+should be readable in the workflow file that staging has this on.
+
+**3. Do NOT touch `.github/workflows/deploy.yml`.** Prod stays off. With no ARG value passed, the
+Dockerfile ARG resolves empty and the flag is `undefined` — the legacy toolbar. Say explicitly in the
+PR that prod is unaffected, and confirm you did not edit `deploy.yml`.
+
+`docker-compose.yml` needs no change — it pulls the prebuilt image
+(`image: ghcr.io/zunkireelabs/edgexcrm:stage`) and has no build section.
+
+## The verification this unlocks — the actual point of the PR
+
+Local dev has 33 leads, so it cannot prove the Assigned To counts moved off the old 25-row page cap.
+Stage's Admizz tenant has ~16.7k. **This is the outstanding gate before any prod promotion of Phases 0–3.**
+
+After the deploy is green, on **stage** (`dymeudcddasqpomfpjvt`):
+
+1. Open `dev-lead-crm.zunkireelabs.com` → Leads → **+ Add filter → Assigned to**. Screenshot the counts.
+2. For 2–3 counselors, compare the facet count against the DB directly:
+   ```sql
+   SELECT count(*) FROM leads
+   WHERE tenant_id = '<admizz>' AND assigned_to = '<user_id>'
+     AND deleted_at IS NULL AND converted_at IS NULL
+     AND NOT (tags @> ARRAY['other']::text[]);
+   ```
+   They must match **exactly**. A number ≤25 that looks suspiciously like a page size means the facet
+   didn't move server-side and the whole A/B/C change is not doing what it claims.
+3. Apply the filter and confirm the row count and the chip agree.
+4. Confirm counts still render with a second filter stacked (the `treeToAggregateParams` path), and are
+   **absent** (no badge, never a zero) for a tree it can't express.
+5. Sanity-check page-1 perf is not worse than the legacy toolbar on a 16.7k tenant.
+
+**Stage lead data is real customer PII** — screenshots for the PR are fine (it's our own stage), but do
+not paste raw rows anywhere else, and do not point any third-party service at it.
+
+## Proof required in the PR body
+
+Both screenshots (stage Assigned To counts; the filter applied), the `SELECT count(*)` outputs beside
+the facet numbers, and an explicit line confirming `deploy.yml` was not modified.
+
+## Rollback
+
+Remove the one build-arg line and redeploy — next stage build goes back to the legacy toolbar. No
+migration, no data change.
+
+Stop at the review gate.
+
+---
+
 ## Non-negotiables for all phases
 
 - Branch from **latest `origin/stage`**; rebase again right before merge. Squash-merge to `stage`.
