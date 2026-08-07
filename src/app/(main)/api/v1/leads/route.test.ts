@@ -814,13 +814,89 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(res.status).toBe(422);
   });
 
-  it("?facets=source with ?f= present skips getSourceFacet entirely and returns counts:null, never partial/wrong counts", async () => {
+  // ADVANCED-FILTERS-BRIEF Phase 3 addendum §E: treeToAggregateParams() pulled the
+  // Phase 5 downgrade forward — a pure-AND, fully-expressible ?f= tree now DOES drive
+  // real facet counts (superseding Phase 2's blanket counts:null-whenever-?f=-present
+  // behavior below, which is now only a fallback for the non-expressible case).
+  it("?facets=source with an EXPRESSIBLE ?f= tree computes real counts via treeToAggregateParams — not counts:null", async () => {
+    createClientMock.mockResolvedValue({ rpc: () => Promise.resolve({ data: [], error: null }) });
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
     const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }) }));
     const body = await res.json();
     expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [] });
+  });
+
+  it("?facets=source with a NON-expressible ?f= tree (OR group) skips getSourceFacet entirely and returns counts:null, never partial/wrong counts", async () => {
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const orTree = {
+      conjunction: "and" as const,
+      conditions: [],
+      groups: [
+        {
+          conjunction: "or" as const,
+          conditions: [
+            { id: "c1", field: "status", op: "is" as const, value: "contacted" },
+            { id: "c2", field: "status", op: "is" as const, value: "new" },
+          ],
+        },
+      ],
+    };
+    const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodeFilterTree(orTree) }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
     expect(body.data).toEqual({ facet: "source", options: [], counts: null });
+  });
+
+  it("?facets=source,assignee with a NON-expressible ?f= tree returns the multi-facet counts:null shape (no badge, never a zero)", async () => {
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const containsTree = {
+      conjunction: "and" as const,
+      conditions: [{ id: "c1", field: "search", op: "contains" as const, value: "jane" }],
+    };
+    const res = await GET(fakeReq({ facets: "source,assignee", [FILTER_PARAM]: encodeFilterTree(containsTree) }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facets: null, counts: null });
+  });
+
+  it("?facets=source,assignee returns the new multi-facet shape, one RPC round-trip, unassigned sentinel translated", async () => {
+    const rpcCalls: unknown[] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown) => {
+        rpcCalls.push([name, params]);
+        return Promise.resolve({
+          data: [
+            { dimension: "intake_source", key: "Facebook", bucket: "all", cnt: 3 },
+            { dimension: "counselor", key: "(unassigned)", bucket: "all", cnt: 2 },
+            { dimension: "counselor", key: "user-1", bucket: "all", cnt: 5 },
+          ],
+          error: null,
+        });
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source,assignee" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      facets: {
+        source: { options: [{ name: "Facebook", count: 3 }] },
+        assignee: {
+          options: [
+            { name: "user-1", count: 5 },
+            { name: "unassigned", count: 2 },
+          ],
+        },
+      },
+    });
+    // One HTTP round-trip from the client; two RPC calls server-side is fine — each
+    // dimension needs its OWN filter set (assignee must not filter on itself).
+    expect(rpcCalls.length).toBe(2);
   });
 
   it("?facets=source WITHOUT ?f= is completely unaffected — still returns the legacy {facet,options} shape", async () => {

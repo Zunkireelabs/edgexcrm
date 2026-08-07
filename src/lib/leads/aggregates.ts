@@ -282,7 +282,10 @@ export interface SourceFacetParams {
   dimension?: "intake_source" | "intake_source_part";
 }
 
-export async function getSourceFacet(params: SourceFacetParams): Promise<SourceFacetOption[]> {
+/** Shared RPC call behind getSourceFacet/getAssigneeFacet — same lead_aggregates()
+ * round-trip, every dimension of which is computed unconditionally by the SQL
+ * (see migration 194) regardless of which one the caller actually reads. */
+async function fetchFacetRows(params: SourceFacetParams): Promise<AggregateRow[]> {
   const supabase = await createClient();
 
   // Week boundaries are required params on lead_aggregates but irrelevant to the
@@ -324,14 +327,47 @@ export async function getSourceFacet(params: SourceFacetParams): Promise<SourceF
 
   const { data, error } = await supabase.rpc("lead_aggregates", rpcParams);
   if (error) {
-    // Same reasoning as getLeadAggregates: an empty dropdown reads as "no sources
+    // Same reasoning as getLeadAggregates: an empty dropdown reads as "no options
     // exist" rather than "the RPC failed" — throw so it fails visibly instead.
     throw new Error(`lead_aggregates source facet failed for tenant ${params.tenantId}: ${error.message}`);
   }
 
+  return data as AggregateRow[];
+}
+
+export async function getSourceFacet(params: SourceFacetParams): Promise<SourceFacetOption[]> {
+  const rows = await fetchFacetRows(params);
   const dimension = params.dimension ?? "intake_source";
-  return (data as AggregateRow[])
+  return rows
     .filter((row) => row.dimension === dimension)
     .map((row) => ({ name: row.key, count: Number(row.cnt) }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export interface AssigneeFacetOption {
+  /** A tenant_users.user_id, or the "unassigned" sentinel — translated from the
+   * RPC's "(unassigned)" key so callers never see the raw SQL sentinel string. */
+  name: string;
+  count: number;
+}
+
+/**
+ * Assigned-To facet — ADVANCED-FILTERS-BRIEF Phase 3 addendum §C. Same
+ * lead_aggregates() `counselor` dimension that already feeds LeadsByCounselorChart,
+ * reused here so the /leads Assigned To dropdown gets an exact, tenant-wide count
+ * instead of leads-table.tsx's old client-side `counselorCounts` (computed from
+ * `localLeads`, i.e. the current 25-row server page only — see the brief).
+ *
+ * `params.assigneesAny`/`params.includeUnassigned` must be omitted by the caller —
+ * the assignee axis is the one being faceted, so (per the same "every filter
+ * except the one being faceted" rule getSourceFacet already follows for source)
+ * it must not filter itself. Every other axis (status/tag/form/source/…) still
+ * cross-filters normally.
+ */
+export async function getAssigneeFacet(params: SourceFacetParams): Promise<AssigneeFacetOption[]> {
+  const rows = await fetchFacetRows(params);
+  return rows
+    .filter((row) => row.dimension === "counselor")
+    .map((row) => ({ name: row.key === "(unassigned)" ? "unassigned" : row.key, count: Number(row.cnt) }))
     .sort((a, b) => b.count - a.count);
 }

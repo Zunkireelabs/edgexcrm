@@ -9,6 +9,11 @@ import {
 } from "@/components/ui/popover";
 import { FilterOptionList, type FilterOption } from "./filter-dropdown";
 
+/** @deprecated Superseded by the field/operator/value advanced-filter bar —
+ * see src/components/filters/advanced-filter-bar.tsx and
+ * docs/ADVANCED-FILTERS-BRIEF.md (Phase 3). Kept alive behind
+ * NEXT_PUBLIC_ADVANCED_FILTERS as the flag-off fallback; do not add new
+ * consumers. */
 export interface FilterDef {
   id: string;
   label: string;
@@ -60,6 +65,8 @@ function clearFilter(filter: FilterDef) {
   }
 }
 
+/** @deprecated Superseded by AdvancedFilterBar (src/components/filters/) — see
+ * docs/ADVANCED-FILTERS-BRIEF.md Phase 3. Flag-off fallback only. */
 export function FilterMenu({ filters, activeCount, onClearAll }: FilterMenuProps) {
   const [open, setOpen] = useState(false);
   const [drilledId, setDrilledId] = useState<string | null>(null);
@@ -179,6 +186,8 @@ export function FilterMenu({ filters, activeCount, onClearAll }: FilterMenuProps
   );
 }
 
+/** @deprecated Superseded by AdvancedFilterBar's own inline FilterChipRow —
+ * see docs/ADVANCED-FILTERS-BRIEF.md Phase 3. Flag-off fallback only. */
 export function FilterChips({ filters, onClearAll }: { filters: FilterDef[]; onClearAll: () => void }) {
   const active = filters.filter(isFilterActive);
   if (active.length === 0) return null;

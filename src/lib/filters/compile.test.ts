@@ -120,6 +120,21 @@ const registry: FieldRegistry = {
     filterable: true,
   },
   hidden: { key: "hidden", label: "Hidden", type: "text", source: { kind: "column", column: "secret" }, group: "Basic", filterable: false },
+  // §0 fix fixture: a virtual field whose compile() can legitimately return
+  // null — "contributes nothing" — for a specific value, mirroring
+  // registry/leads.ts's compileAssignees("garbage").
+  maybe_noop: {
+    key: "maybe_noop",
+    label: "Maybe no-op",
+    type: "select",
+    source: {
+      kind: "virtual",
+      compile: (c: FilterCondition) => (c.value === "noop" ? null : `some_col.eq.${String(c.value)}`),
+    },
+    operators: ["is"],
+    group: "Basic",
+    filterable: true,
+  },
 };
 
 const ctx: CompileCtx = { tz: "UTC", now: new Date("2026-01-15T12:00:00.000Z"), industryId: null, permissions: {} };
@@ -383,6 +398,34 @@ describe("virtual field source", () => {
   it("delegates entirely to the field's own compile() function", () => {
     const b = compile(andTree(cond("c1", "status", "is", "new")));
     expect(b.calls[0]).toBe("or(or(stage_id.eq.new,and(stage_id.is.null,status.eq.new)))");
+  });
+});
+
+// ── §0 fix — a condition that compiles to null is DROPPED, never emitted as
+// a tautology. This is the carried-forward correctness fix from Phase 3: a
+// tautology inside an OR group would make the whole group match every row.
+describe("no-op condition dropping (§0 fix)", () => {
+  it("a null-compiling condition inside AND makes zero .or() calls (not a tautology call)", () => {
+    const b = compile(andTree(cond("c1", "maybe_noop", "is", "noop")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("or(<dropped>, X) compiles to just X — not to something matching every row", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "maybe_noop", "is", "noop"), cond("c2", "industry", "is", "engineering")],
+    };
+    const b = compile(tree);
+    expect(b.calls).toEqual(["or(prospect_industry.eq.engineering)"]);
+  });
+
+  it("if every leg of an OR group drops, the group contributes nothing — no .or() call at all", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "maybe_noop", "is", "noop"), cond("c2", "maybe_noop", "is", "noop")],
+    };
+    const b = compile(tree);
+    expect(b.calls).toEqual([]);
   });
 });
 

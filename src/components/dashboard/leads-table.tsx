@@ -15,6 +15,15 @@ import {
 } from "@/components/ui/select";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
+// Advanced filters (Phase 3, docs/ADVANCED-FILTERS-BRIEF.md) — flag-gated via
+// NEXT_PUBLIC_ADVANCED_FILTERS. The legacy FilterMenu/FilterChips imports above
+// stay as the flag-off fallback; see their @deprecated JSDoc.
+import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
+import type { FilterOption } from "@/components/filters/types";
+import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
+import { leadFields } from "@/lib/filters/registry/leads";
+import { encodeFilterTree, isEmptyTree } from "@/lib/filters/serialize";
+import type { CompileCtx } from "@/lib/filters/types";
 
 // Shared list/page title style — keep every leads-family heading (All Leads, Pre-qualified,
 // New Leads (Unrouted), Contacts, Leads Organise, ...) on one consistent size.
@@ -322,13 +331,6 @@ export function LeadsTable({
   // uses filtered.length instead, since `leads` there already holds everything.
   const [total, setTotal] = useState(initialTotal ?? leads.length);
   const [tableLoading, setTableLoading] = useState(false);
-  // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
-  // switch, router.refresh() after a bulk action) — the page's own SSR query already
-  // did the work; this is a prop sync, not a client fetch.
-  useEffect(() => {
-    setLocalLeads(leads);
-    setTotal(initialTotal ?? leads.length);
-  }, [leads, initialTotal]);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -357,6 +359,36 @@ export function LeadsTable({
   const [tagFilter, setTagFilter] = useState<string>("all");
   const [createdFilter, setCreatedFilter] = useState<string>("all");
   const [prospectIndustryFilter, setProspectIndustryFilter] = useState<string>("all");
+
+  // Advanced filters (Phase 3) — the field registry doesn't read `ctx` today
+  // (see registry/leads.ts's `void ctx`), so a fixed stub is safe and keeps
+  // this memo stable across renders regardless of wall-clock time.
+  const advancedFilterRegistry = useMemo(
+    () => leadFields({ tz: "UTC", now: new Date(0), industryId: industryId ?? null, permissions: {} } satisfies CompileCtx),
+    [industryId]
+  );
+  const advancedFilters = useAdvancedFilters(advancedFilterRegistry);
+  const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
+  const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
+
+  // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
+  // switch, router.refresh() after a bulk action) — the page's own SSR query already
+  // did the work; this is a prop sync, not a client fetch.
+  //
+  // Skipped while an advanced filter is active: writing `?f=` to the URL (via
+  // advancedFilters.setTree -> router.replace) triggers Next.js to re-run this
+  // route's Server Component (page.tsx), which does NOT parse `f` (that's Phase
+  // 2b's getLeadsPage mirror, out of scope here) — its SSR props are always the
+  // unfiltered first page. Resyncing from them here would silently revert the
+  // client-fetched filtered result out from under the user right after Apply.
+  // The client fetch effect below is the sole source of truth for localLeads
+  // while an advanced filter is active.
+  useEffect(() => {
+    if (advancedFilterActive) return;
+    setLocalLeads(leads);
+    setTotal(initialTotal ?? leads.length);
+  }, [leads, initialTotal, advancedFilterActive]);
+
   const [sortField, setSortField] = useState<SortField>("activity");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -475,17 +507,26 @@ export function LeadsTable({
       if (debouncedSearch) params.set("search", debouncedSearch);
       if (activeListSlug) params.set("list", activeListSlug);
       else if (activeFunnelKey) params.set("funnel", activeFunnelKey);
-      if (formFilter !== "all") params.set("form", formFilter);
-      if (counselorFilter.length > 0) params.set("assignees", counselorFilter.join(","));
-      if (collaboratorFilter.length > 0) params.set("collaborators", collaboratorFilter.join(","));
-      if (sourceFilter.length > 0) params.set("source", sourceFilter.join(","));
-      if (tagFilter !== "all") params.set("tag", tagFilter);
-      if (createdFilter !== "all") params.set("created", createdFilter);
-      if (prospectIndustryFilter !== "all") params.set("industry", prospectIndustryFilter);
+      // Advanced filters ON: send the encoded tree and stop setting the 8 legacy
+      // filter params (form/assignees/collaborators/source/tag/created/industry —
+      // status/search/list/funnel above are scope/primary, not toolbar filters,
+      // and stay either way). Advanced filters OFF: byte-identical to before.
+      if (advancedFiltersEnabled) {
+        if (!isEmptyTree(advancedFilters.tree)) params.set("f", encodeFilterTree(advancedFilters.tree));
+      } else {
+        if (formFilter !== "all") params.set("form", formFilter);
+        if (counselorFilter.length > 0) params.set("assignees", counselorFilter.join(","));
+        if (collaboratorFilter.length > 0) params.set("collaborators", collaboratorFilter.join(","));
+        if (sourceFilter.length > 0) params.set("source", sourceFilter.join(","));
+        if (tagFilter !== "all") params.set("tag", tagFilter);
+        if (createdFilter !== "all") params.set("created", createdFilter);
+        if (prospectIndustryFilter !== "all") params.set("industry", prospectIndustryFilter);
+      }
       return params;
     },
     [
       sortField, sortDirection, statusFilter, debouncedSearch, activeListSlug, activeFunnelKey,
+      advancedFiltersEnabled, advancedFilters.tree,
       formFilter, counselorFilter, collaboratorFilter, sourceFilter, tagFilter, createdFilter,
       prospectIndustryFilter,
     ],
@@ -493,20 +534,34 @@ export function LeadsTable({
 
   // Everything that should reset to page 1 and force a fresh exact count (§3) when it
   // changes. itemsPerPage is included — a page-size change reshapes every page boundary.
+  // Advanced-filter changes must also refetch — fetchSignature includes the encoded
+  // tree (not the tree object itself, which is a fresh reference every render).
   const fetchSignature = JSON.stringify([
     activeListSlug, activeFunnelKey, statusFilter, debouncedSearch, sortField, sortDirection, itemsPerPage,
-    formFilter, counselorFilter, collaboratorFilter, sourceFilter, tagFilter, createdFilter, prospectIndustryFilter,
+    advancedFiltersEnabled ? advancedFilters.encoded : null,
+    advancedFiltersEnabled ? null : formFilter,
+    advancedFiltersEnabled ? null : counselorFilter,
+    advancedFiltersEnabled ? null : collaboratorFilter,
+    advancedFiltersEnabled ? null : sourceFilter,
+    advancedFiltersEnabled ? null : tagFilter,
+    advancedFiltersEnabled ? null : createdFilter,
+    advancedFiltersEnabled ? null : prospectIndustryFilter,
   ]);
 
   useEffect(() => {
     if (!serverPaginated) return; // legacy consumers (Contacts, leads-organise) never fetch here
 
     if (isFirstFetchRef.current) {
-      // Page 1 is already SSR-seeded via the `leads`/`initialTotal` props — skip the
-      // redundant fetch on mount.
       isFirstFetchRef.current = false;
       prevSignatureRef.current = fetchSignature;
-      return;
+      // Page 1 is already SSR-seeded via the `leads`/`initialTotal` props — skip the
+      // redundant fetch on mount. EXCEPT when an advanced filter is already active
+      // on mount (e.g. a shared `?f=` link opened fresh): page.tsx's SSR query
+      // doesn't parse `f` (Phase 2b territory), so its seed is the unfiltered first
+      // page — fall through to fetch the real filtered result (and its real count)
+      // instead of trusting the SSR seed.
+      if (!advancedFilterActive) return;
+      needsCountRef.current = true;
     }
 
     const signatureChanged = fetchSignature !== prevSignatureRef.current;
@@ -546,7 +601,7 @@ export function LeadsTable({
       });
 
     return () => controller.abort();
-  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams]);
+  }, [serverPaginated, fetchSignature, currentPage, itemsPerPage, buildFetchParams, advancedFilterActive]);
 
   const { counts } = useBadgeCounts();
   const unreadLeadIds = useMemo(() => new Set(counts.unread_lead_ids), [counts.unread_lead_ids]);
@@ -620,13 +675,17 @@ export function LeadsTable({
     return m;
   }, [localLeads, isStagingView, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter]);
 
-  // Server-computed Source facet (serverPaginated only) — replaces the localLeads-only
-  // (current 25-row page) computation above, which is what made the option list and
-  // its counts wrong once #332 shipped narrow server pages (see
-  // docs/DASHBOARD-AGGREGATES-BRIEF.md addendum). Reuses buildFetchParams' exact same
-  // filter params minus `source`/pagination/sort, so this reflects every OTHER active
-  // filter — matching current cross-filter behavior — via one extra opt-in round-trip.
+  // Server-computed Source + Assigned-To facets (serverPaginated only) — replaces the
+  // localLeads-only (current 25-row page) computation above/below, which is what made
+  // the option lists and their counts wrong once #332 shipped narrow server pages (see
+  // docs/DASHBOARD-AGGREGATES-BRIEF.md addendum + ADVANCED-FILTERS-BRIEF Phase 3
+  // addendum §B/§C for the Assigned-To half). Reuses buildFetchParams' exact same
+  // filter params minus pagination/sort, so this reflects every OTHER active filter —
+  // matching current cross-filter behavior — via ONE extra opt-in round-trip that asks
+  // for both dimensions at once (?facets=source,assignee) rather than two.
+  const wantsAssigneeFacet = isAdmin || isTeamScoped;
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -636,30 +695,50 @@ export function LeadsTable({
     params.delete("sort");
     params.delete("order");
     params.delete("count");
-    params.set("facets", "source");
+    // A single "source" stays the pre-existing single-dimension request (and response
+    // shape) byte-for-byte — see route.ts's legacySingleSourceFacet branch.
+    params.set("facets", wantsAssigneeFacet ? "source,assignee" : "source");
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet]);
 
   useEffect(() => {
     if (!facetFetchParams) {
       setServerSourceFacet(null);
+      setServerAssigneeFacet(null);
       return;
     }
     const controller = new AbortController();
     fetch(`/api/v1/leads?${facetFetchParams.toString()}`, { signal: controller.signal })
       .then((res) => res.json())
-      .then((body: { data?: { options?: { name: string; count: number }[] } }) => {
+      .then((body: {
+        data?: {
+          // Legacy single-dimension shape (facets=source alone).
+          facet?: string;
+          options?: { name: string; count: number }[];
+          // New multi-dimension shape (facets=source,assignee or facets=assignee).
+          facets?: {
+            source?: { options: { name: string; count: number }[] } | null;
+            assignee?: { options: { name: string; count: number }[] } | null;
+          } | null;
+        };
+      }) => {
         if (controller.signal.aborted) return;
-        setServerSourceFacet(body.data?.options ?? []);
+        if (body.data?.facet === "source") {
+          setServerSourceFacet(body.data.options ?? []);
+          setServerAssigneeFacet(null);
+        } else {
+          setServerSourceFacet(body.data?.facets?.source?.options ?? []);
+          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data?.facets?.assignee?.options ?? []) : null);
+        }
       })
       .catch((err: unknown) => {
         if (controller.signal.aborted) return;
         // Keep the previous facet (if any) rather than blanking the dropdown on a
         // transient failure — the leads page itself already surfaced the error.
-        console.error("Failed to load source facet", err);
+        console.error("Failed to load lead facets", err);
       });
     return () => controller.abort();
-  }, [facetFetchParams]);
+  }, [facetFetchParams, wantsAssigneeFacet]);
 
   const sources = useMemo(
     () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
@@ -670,8 +749,12 @@ export function LeadsTable({
     return new Map(serverSourceFacet.map((o) => [o.name, o.count]));
   }, [serverSourceFacet, clientSourceCounts]);
 
-  // Per-counselor counts — cross-filtered: reflects all active filters except counselor itself
-  const counselorCounts = useMemo(() => {
+  // Per-counselor counts — cross-filtered: reflects all active filters except counselor
+  // itself. Client-side fallback for surfaces that aren't serverPaginated (Contacts,
+  // leads-organise — see the comment on the block above) and computed from `localLeads`
+  // only, so it is page-scoped exactly like the old `counselorCounts` used to be —
+  // that's the bug §B of the Phase 3 addendum fixes for the serverPaginated table.
+  const clientCounselorCounts = useMemo(() => {
     const m = new Map<string, number>();
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -697,6 +780,14 @@ export function LeadsTable({
     });
     return m;
   }, [localLeads, sourceFilter, tagFilter, statusFilter, formFilter, createdFilter]);
+
+  // Server-computed Assigned-To facet takes priority when available (serverPaginated +
+  // isAdmin/isTeamScoped) — exact, tenant-wide counts via lead_aggregates()'s `counselor`
+  // dimension (ADVANCED-FILTERS-BRIEF Phase 3 addendum §C), not the 25-row page above.
+  const counselorCounts = useMemo(() => {
+    if (!serverAssigneeFacet) return clientCounselorCounts;
+    return new Map(serverAssigneeFacet.map((o) => [o.name, o.count]));
+  }, [serverAssigneeFacet, clientCounselorCounts]);
 
   // Get unique counselors (assigned_to users)
   const counselors = useMemo(() => {
@@ -1819,6 +1910,65 @@ export function LeadsTable({
       : []),
   ];
 
+  // Advanced filters (Phase 3) — field list + option lists, gated identically to
+  // filterDefs above so the two toolbars offer the same axes to the same users.
+  const advancedVisibleFieldKeys = useMemo(() => {
+    const hide = new Set<string>();
+    if (!(isAdmin || isTeamScoped)) {
+      hide.add("assignees");
+      hide.add("collaborators");
+    }
+    if (!showItAgencyFields) hide.add("industry");
+    if (!showTags) hide.add("tags");
+    if (!hasMultipleForms) hide.add("form");
+    return hide;
+  }, [isAdmin, isTeamScoped, showItAgencyFields, showTags, hasMultipleForms]);
+
+  const advancedVisibleFields = useMemo(
+    () => Object.values(advancedFilterRegistry).filter((f) => !advancedVisibleFieldKeys.has(f.key)),
+    [advancedFilterRegistry, advancedVisibleFieldKeys]
+  );
+
+  // Reuses the exact option arrays the legacy filterDefs above compute — same
+  // counselors/sources/forms/tags lists, just fed to a different UI. ADVANCED-FILTERS-
+  // BRIEF Phase 3 addendum §A: assignees/collaborators must carry counts AND hide
+  // zero-count people, matching the legacy filterDefs' "counselor"/"collaborator"
+  // entries above byte-for-byte — the bar must not ship with a visible count
+  // regression against the toolbar it replaces.
+  const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(
+    () => ({
+      status: statusFilterOptions,
+      source: sources.map((s) => ({ value: s, label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})` })),
+      assignees: [
+        ...((counselorCounts.get("unassigned") ?? 0) > 0
+          ? [{ value: "unassigned", label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})` }]
+          : []),
+        ...counselors
+          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
+          .map(([userId, email]) => ({
+            value: userId,
+            label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
+          })),
+      ],
+      // Collaborator counts stay client-side, computed from `localLeads` (the current
+      // server page only) — deliberately, not silently: `lead_collaborators` is a join
+      // table with no existing `lead_aggregates()` dimension, and adding one is a
+      // bigger change than this addendum covers (ADVANCED-FILTERS-BRIEF Phase 3
+      // addendum §C). Being explicitly page-scoped-and-labelled beats shipping a
+      // second, silently different meaning of the same-looking number.
+      collaborators: counselors
+        .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0 && memberRoleMap[userId] !== "owner" && memberRoleMap[userId] !== "admin")
+        .map(([userId, email]) => ({
+          value: userId,
+          label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
+        })),
+      tags: [{ value: "student", label: "Student" }],
+      industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
+      form: formEntries.map(([id, name]) => ({ value: id, label: name })),
+    }),
+    [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries]
+  );
+
   return (
     <div className="flex flex-1 min-h-0 gap-0">
       {/* Main Table Section - shrinks when preview is open */}
@@ -1883,8 +2033,20 @@ export function LeadsTable({
 
           <div className="flex-1" />
 
-          {/* Filters */}
-          <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
+          {/* Filters — advanced bar (field->operator->value, stacked chips) behind the
+              flag; legacy FilterMenu dropdown otherwise. Both paths must keep working. */}
+          {advancedFiltersEnabled ? (
+            <AdvancedFilterBar
+              entity="leads"
+              fields={advancedVisibleFields}
+              value={advancedFilters.tree}
+              onChange={advancedFilters.setTree}
+              allowGroups={false}
+              optionOverrides={advancedFilterOptionOverrides}
+            />
+          ) : (
+            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
+          )}
 
           {/* Sort */}
           <Popover>
@@ -1969,8 +2131,10 @@ export function LeadsTable({
           )}
         </div>
 
-        {/* Chips row — active filters only, replaces the old always-visible pill row */}
-        {activeFiltersCount > 0 && (
+        {/* Chips row — active filters only, replaces the old always-visible pill row.
+            Advanced mode renders its own chips inline in the toolbar row above
+            (AdvancedFilterBar's FilterChipRow) — this legacy row is flag-off only. */}
+        {!advancedFiltersEnabled && activeFiltersCount > 0 && (
           <>
             <div className="h-px bg-border" />
             <FilterChips filters={filterDefs} onClearAll={clearFilters} />

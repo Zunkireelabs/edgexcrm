@@ -14,8 +14,31 @@ export const MAX_ENCODED_LEN = 4096;
 
 export type DecodeResult = { ok: true; tree: FilterTree } | { ok: false; errors: Record<string, string[]> };
 
+// Isomorphic base64url codec — Buffer.from(...).toString("base64url") is Node-only
+// (the browser's Buffer shim throws "Unknown encoding: base64url"), and this module
+// runs in BOTH runtimes: the browser encodes (use-advanced-filters.ts -> setTree ->
+// router.replace), the server decodes (route.ts). TextEncoder/TextDecoder + btoa/atob
+// are the one codec both runtimes actually implement — Node has had global btoa/atob
+// since v16, browsers since forever. See the Phase 3 addendum's "Apply bug" postmortem:
+// this exact call threw mid-handleApply, before setOpen(false) ever ran, so the
+// popover never closed and the URL never gained ?f=.
+function toBase64Url(bytes: Uint8Array): string {
+  let binary = "";
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromBase64Url(b64url: string): Uint8Array {
+  let base64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
+  while (base64.length % 4 !== 0) base64 += "=";
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
 export function encodeFilterTree(tree: FilterTree): string {
-  return Buffer.from(JSON.stringify(tree), "utf8").toString("base64url");
+  return toBase64Url(new TextEncoder().encode(JSON.stringify(tree)));
 }
 
 export function decodeFilterTree(raw: string): DecodeResult {
@@ -32,7 +55,7 @@ export function decodeFilterTree(raw: string): DecodeResult {
 
   let json: string;
   try {
-    json = Buffer.from(raw, "base64url").toString("utf8");
+    json = new TextDecoder().decode(fromBase64Url(raw));
   } catch {
     return { ok: false, errors: { f: ["not valid base64url"] } };
   }
