@@ -17,7 +17,8 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
-import { shouldRestrictToSelf, canEnrollStudents } from "@/lib/api/permissions";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { canEnrollStudents } from "@/lib/api/class-attendance";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
 
 export async function GET(request: NextRequest) {
@@ -82,7 +83,7 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
-  if (!canEnrollStudents(auth.permissions, auth.positionSlug)) return apiForbidden();
+  if (!(await canEnrollStudents(auth))) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {

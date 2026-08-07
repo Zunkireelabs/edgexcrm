@@ -136,10 +136,9 @@ export function canManageClasses(p: ResolvedPermissions): boolean {
 export function canManageHR(p: ResolvedPermissions): boolean {
   return p.canManageHR;
 }
-const CLASS_ENROLL_POSITIONS = new Set(["branch-manager", "lead-executive", "counselor", "application-executive"]);
-export function canEnrollStudents(p: ResolvedPermissions, positionSlug: string | null | undefined): boolean {
-  return p.baseTier === "owner" || p.baseTier === "admin" || CLASS_ENROLL_POSITIONS.has(positionSlug ?? "");
-}
+// canEnrollStudents moved to src/lib/api/class-attendance.ts — it now reads the
+// class_managers grant table (admin-managed, per-user) instead of this hardcoded
+// position-slug allowlist. See that file's docstring.
 export function canAccessPipeline(p: ResolvedPermissions, pipelineId: string): boolean {
   return p.pipelineAccess === "all" || p.pipelineAccess.ids.has(pipelineId);
 }

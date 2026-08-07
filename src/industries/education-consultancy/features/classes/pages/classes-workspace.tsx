@@ -72,9 +72,13 @@ interface ClassesWorkspaceProps {
   canEnroll: boolean;
   canMarkAttendance: boolean;
   tenantId: string;
+  /** Owner-only, computed server-side in page.tsx — see comment there for why. */
+  canSeeFeesTotals: boolean;
+  feesCollected: number | null;
+  classFeePct: Record<string, number | null> | null;
 }
 
-export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance }: ClassesWorkspaceProps) {
+export function ClassesWorkspace({ classes, enrollments: initialEnrollments, canManage, canEnroll, canMarkAttendance, canSeeFeesTotals, feesCollected, classFeePct }: ClassesWorkspaceProps) {
   const router = useRouter();
   const { openSettings } = useSettingsModal();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(classes[0]?.id ?? null);
@@ -148,13 +152,11 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     const activeLeadIds = new Set<string>();
     let demoCount = 0;
     let demoConvertedCount = 0;
-    let feesCollected = 0;
     let unpaidActiveCount = 0;
     const byLeadClass = new Map<string, { demo: boolean; actual: boolean }>();
 
     for (const e of enrollments) {
       if (e.status === "active") activeLeadIds.add(e.lead_id);
-      if (e.fee_paid && e.fee_amount != null) feesCollected += e.fee_amount;
       if (e.status === "active" && !e.fee_paid) unpaidActiveCount++;
 
       const key = `${e.lead_id}:${e.class_id}`;
@@ -173,21 +175,15 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
     return {
       activeStudents: activeLeadIds.size,
       conversionRate: demoCount > 0 ? Math.round((demoConvertedCount / demoCount) * 100) : null,
-      feesCollected,
       unpaidActiveCount,
     };
   }, [enrollments]);
 
   const classStats = useMemo(() => {
-    const map: Record<string, { count: number; paidCount: number; payableCount: number }> = {};
+    const map: Record<string, { count: number }> = {};
     for (const cls of classes) {
       const list = enrollmentsByClass[cls.id] ?? [];
-      const active = list.filter((e) => e.status !== "inactive");
-      map[cls.id] = {
-        count: new Set(list.map((e) => e.lead_id)).size,
-        paidCount: active.filter((e) => e.fee_paid).length,
-        payableCount: active.length,
-      };
+      map[cls.id] = { count: new Set(list.map((e) => e.lead_id)).size };
     }
     return map;
   }, [classes, enrollmentsByClass]);
@@ -296,7 +292,12 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
       </div>
 
       {/* Stat strip */}
-      <div className="grid grid-cols-4 gap-px bg-border border rounded-lg overflow-hidden shrink-0">
+      <div
+        className={cn(
+          "grid gap-px bg-border border rounded-lg overflow-hidden shrink-0",
+          canSeeFeesTotals ? "grid-cols-4" : "grid-cols-3"
+        )}
+      >
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
             <Users className="h-3 w-3" /> Active students
@@ -311,14 +312,16 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
             {workspaceStats.conversionRate == null ? "—" : `${workspaceStats.conversionRate}%`}
           </div>
         </div>
-        <div className="bg-card px-4 py-3">
-          <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
-            <Wallet className="h-3 w-3" /> Fees collected
+        {canSeeFeesTotals && (
+          <div className="bg-card px-4 py-3">
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
+              <Wallet className="h-3 w-3" /> Fees collected
+            </div>
+            <div className="text-xl font-semibold tabular-nums">
+              {(feesCollected ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+            </div>
           </div>
-          <div className="text-xl font-semibold tabular-nums">
-            {workspaceStats.feesCollected.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </div>
-        </div>
+        )}
         <div className="bg-card px-4 py-3">
           <div className="text-[11px] uppercase tracking-wide text-muted-foreground font-medium mb-1 flex items-center gap-1.5">
             <CircleDollarSign className="h-3 w-3" /> Unpaid (active)
@@ -349,8 +352,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
           ) : (
             classes.map((cls) => {
               const count = classStats[cls.id]?.count ?? 0;
-              const { paidCount, payableCount } = classStats[cls.id] ?? { paidCount: 0, payableCount: 0 };
-              const feePct = payableCount > 0 ? Math.round((paidCount / payableCount) * 100) : null;
+              const feePct = classFeePct?.[cls.id] ?? null;
               const isActive = cls.id === selectedClassId;
               const badge = endDateBadge(cls.end_date);
               return (
@@ -382,16 +384,20 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
                       <> · {cls.default_fee.toLocaleString(undefined, { maximumFractionDigits: 0 })} fee</>
                     )}
                   </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-green-600 transition-all"
-                      style={{ width: feePct != null ? `${feePct}%` : "0%" }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
-                    <span>Fees collected</span>
-                    <span>{feePct != null ? `${feePct}%` : "—"}</span>
-                  </div>
+                  {canSeeFeesTotals && (
+                    <>
+                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-green-600 transition-all"
+                          style={{ width: feePct != null ? `${feePct}%` : "0%" }}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+                        <span>Fees collected</span>
+                        <span>{feePct != null ? `${feePct}%` : "—"}</span>
+                      </div>
+                    </>
+                  )}
                 </button>
               );
             })
