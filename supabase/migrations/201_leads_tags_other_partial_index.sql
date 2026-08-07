@@ -1,10 +1,10 @@
--- Migration 200: partial index so the "exclude tags @> {other}" predicate stops
+-- Migration 201: partial index so the "exclude tags @> {other}" predicate stops
 -- forcing a seq scan on every /api/v1/leads request.
 --
 -- Additive only (index-only, no table rewrite). Expected before/after row counts:
 --   leads: 0 rows touched (index creation does not modify data).
 -- Rollback: DROP INDEX CONCURRENTLY IF EXISTS idx_leads_tenant_created_active_nonother;
--- Applied: stage <YYYY-MM-DD> / prod HELD (promotion gate).
+-- Applied: stage 2026-08-07 / prod HELD (promotion gate).
 --
 -- NOT in a transaction: CREATE INDEX CONCURRENTLY cannot run inside BEGIN/COMMIT
 -- (see supabase/migrations/085_unique_display_id.sql for the precedent).
@@ -26,5 +26,5 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_leads_tenant_created_active_nonother
   ON public.leads (tenant_id, created_at DESC, id DESC)
   WHERE deleted_at IS NULL AND converted_at IS NULL AND NOT (tags @> ARRAY['other']::text[]);
 
-INSERT INTO public.schema_migrations (version) VALUES ('200_leads_tags_other_partial_index.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('201_leads_tags_other_partial_index.sql')
   ON CONFLICT (version) DO NOTHING;
