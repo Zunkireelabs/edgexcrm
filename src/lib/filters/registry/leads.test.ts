@@ -116,7 +116,19 @@ describe("leads registry — legacy value-shape equivalence", () => {
 
   it("assignees: every token invalid and no 'unassigned' falls through to no filter, matching route.ts's silent no-op", () => {
     const b = compile(andTree(cond("c1", "assignees", "is_any_of", ["garbage"])));
-    expect(b.calls).toEqual(["or(id.not.is.null)"]);
+    // §0 fix: dropped, not compiled to the tautology "id.not.is.null" — see
+    // compile.test.ts's "or(<dropped>, X)" coverage for why that matters once
+    // this condition can land inside an OR group.
+    expect(b.calls).toEqual([]);
+  });
+
+  it("assignees: every token invalid, inside an OR group, drops out rather than making the group match every row (§0 fix)", () => {
+    const b = compile({
+      conjunction: "and",
+      conditions: [],
+      groups: [{ conjunction: "or", conditions: [cond("c1", "assignees", "is_any_of", ["garbage"]), cond("c2", "status", "is", "contacted")] }],
+    });
+    expect(b.calls).toEqual(["or(status.eq.contacted)"]);
   });
 
   it("collaborators is embed-kind and is planned as the exact !inner select route.ts's selectColumns ternary builds today", () => {
