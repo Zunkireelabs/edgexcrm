@@ -35,6 +35,11 @@ import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
 import { getSourceFacet } from "@/lib/leads/aggregates";
+import { compileFilter, planFilter } from "@/lib/filters/compile";
+import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
+import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
+import { leadFields } from "@/lib/filters/registry";
+import type { CompileCtx, FilterTree, ResolvedPermissions as FilterResolvedPermissions } from "@/lib/filters/types";
 import {
   normalizeEmail,
   normalizePhone,
@@ -95,17 +100,12 @@ archive_reason,archived_by,archived_at,archived_from_list_id,archived_from_statu
 last_activity_at,stage_changed_at,created_at,updated_at";
 
 // Sort allow-list — never interpolate a client-supplied column name into the query.
-// Only "created_at" is covered by an index (idx_leads_tenant_created_active); the
-// others page-table already offered client-side and are kept for parity, at the
-// cost of an in-memory sort node over the tenant's active row set (bounded by
-// tenant size, not full-table — see PR report for measured cost).
-const SORT_COLUMNS: Record<string, string[]> = {
-  created_at: ["created_at"],
-  last_activity_at: ["last_activity_at"],
-  updated_at: ["updated_at"],
-  first_name: ["first_name", "last_name"],
-  email: ["email"],
-};
+// Folded into the lead field registry's FieldDef.sortColumns (src/lib/filters/registry/leads.ts)
+// as of the advanced-filters Phase 2 rewrite — see the sort-key resolution below. Only
+// "created_at" is covered by an index (idx_leads_tenant_created_active); the others
+// page-table already offered client-side and are kept for parity, at the cost of an
+// in-memory sort node over the tenant's active row set (bounded by tenant size, not
+// full-table — see PR report for measured cost).
 
 // Only UUID-shaped tokens are ever interpolated into a raw `.or()` filter string
 // (the `assignees` filter below) — anything else is dropped rather than trusted.
@@ -156,25 +156,28 @@ export async function GET(request: NextRequest) {
   const wantCount = searchParams.get("count") !== "0";
 
   // Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
-  // prospect industry) — applied server-side against the FULL matching set, not just
-  // the loaded page. All values below are passed through supabase-js's parameterized
-  // filter methods (.eq/.in/.contains/.gte), never string-interpolated into a raw
-  // filter, except `assignees` — its UUID-validated ids are interpolated into an
-  // `.or()` string below because that's the only way to express "unassigned OR in
-  // this list"; validation happens right before that interpolation.
+  // prospect industry) — raw values are still read here because the facets=source
+  // branch further below (legacy path only — see the ?f= check there) recomputes
+  // counts from these exact params, mirroring getSourceFacet's existing contract.
+  // The actual PAGE query no longer applies these directly: they (or an equivalent
+  // ?f= tree) are compiled once via compileFilter() below (ADVANCED-FILTERS-BRIEF
+  // Phase 2) — see filterTree/filterPlan.
   const formFilter = searchParams.get("form");
   // Pipeline-board column identity (KANBAN-PAGINATION-BRIEF Phase 1 / stage filter) — a
   // pipeline column is a stage_id, unlike the list-Kanban's (list,status) columns. Only
   // a UUID-shaped value is ever applied; anything else is dropped silently (same
   // never-interpolate-untrusted-input posture as `assignees`/`collaborators` above,
-  // though this one goes through .eq(), never a raw string).
+  // though this one goes through .eq(), never a raw string). This is SCOPE, not a
+  // toolbar filter — it never enters the filter tree.
   const stageFilterRaw = searchParams.get("stage");
   const stageFilter = stageFilterRaw && UUID_RE.test(stageFilterRaw) ? stageFilterRaw : null;
   const tagFilter = searchParams.get("tag");
   const createdFilter = searchParams.get("created"); // today | week | month
   const industryFilter = searchParams.get("industry"); // prospect_industry value, or "__none__"
-  const sourceFilter = (searchParams.get("source") || "")
-    .split(",").map((s) => s.trim()).filter(Boolean);
+  // NOTE: no `sourceFilter` variable here — the facets=source branch below computes
+  // source's OWN facet, so it (like the pre-Phase-2 code) never needs source's value
+  // for anything other than building the filter tree, which legacyLeadsParamsToTree
+  // reads directly off searchParams itself.
   const assigneesTokens = (searchParams.get("assignees") || "")
     .split(",").map((s) => s.trim()).filter(Boolean);
   // Collaborator filter is user ids only (never leaked into a raw string — see below),
@@ -182,10 +185,46 @@ export async function GET(request: NextRequest) {
   const collaboratorIds = (searchParams.get("collaborators") || "")
     .split(",").map((s) => s.trim()).filter(Boolean);
 
-  // Sort — allow-listed against SORT_COLUMNS, never interpolated. id is always the
+  // ADVANCED-FILTERS-BRIEF Phase 2: build the filter tree from ?f= if present,
+  // else from the legacy toolbar params above — both compile through the SAME
+  // compileFilter() call further below, which is the whole point (the existing
+  // route.test.ts suite is a full-fidelity regression harness for the compiler
+  // against real production semantics precisely because the legacy path routes
+  // through it too). `tz` is fixed at "UTC" for now — no legacy toolbar param
+  // needs tz-aware day boundaries (they all use rolling within_last windows or
+  // plain column comparisons), and per-tenant timezone wiring for the real
+  // date-picker UI is Phase 3+ work.
+  const compileCtx: CompileCtx = {
+    tz: "UTC",
+    now: new Date(),
+    industryId: auth.industryId,
+    // src/lib/filters/types.ts deliberately does not import the real ResolvedPermissions
+    // (zero-imports-from-the-rest-of-the-app invariant — see its own doc comment); this
+    // structural cast is the seam. No field on it is currently read by any FieldDef's
+    // visibleTo in this registry, so this is a type-level bridge only, not a behavior gap.
+    permissions: auth.permissions as unknown as FilterResolvedPermissions,
+  };
+  const filterRegistry = leadFields(compileCtx);
+
+  const rawFilterParam = searchParams.get(FILTER_PARAM);
+  let filterTree: FilterTree;
+  if (rawFilterParam !== null) {
+    const decoded = decodeFilterTree(rawFilterParam);
+    if (!decoded.ok) return apiValidationError(decoded.errors);
+    filterTree = decoded.tree;
+  } else {
+    filterTree = legacyLeadsParamsToTree(searchParams);
+  }
+
+  const filterPlan = planFilter(filterTree, filterRegistry, compileCtx);
+  if (!filterPlan.ok) return apiValidationError(filterPlan.errors);
+
+  // Sort — allow-listed against the field registry's sortColumns (folded in from
+  // the former standalone SORT_COLUMNS map), never interpolated. id is always the
   // final tiebreaker so a paginated sort never reshuffles rows between pages.
   const sortKey = searchParams.get("sort") || "created_at";
-  const sortColumns = SORT_COLUMNS[sortKey];
+  const sortField = filterRegistry[sortKey];
+  const sortColumns = sortField?.sortable ? sortField.sortColumns : undefined;
   if (!sortColumns) {
     return apiValidationError({ sort: [`Unknown sort key "${sortKey}"`] });
   }
@@ -297,9 +336,15 @@ export async function GET(request: NextRequest) {
   // collapses inference to `ParserError` (see the LEADS_LIST_COLUMNS comment above).
   // The `data as Lead[]` / `Record<string, unknown>` casts below already carry the
   // real typing, same as every other dynamically-shaped query in this route.
-  const selectColumns: string = collaboratorIds.length > 0
-    ? `${LEADS_LIST_COLUMNS},lead_collaborators!inner(user_id)`
-    : LEADS_LIST_COLUMNS;
+  //
+  // Which embeds are needed is now planFilter's job (filterPlan.embeds), not a
+  // direct collaboratorIds.length check — planFilter already validated the tree
+  // (422'd above if bad), so by the time we're here every embed it names is safe
+  // to add to the select. `.select()` must be called before compileFilter (which
+  // itself never calls .select() — see compile.ts's module doc comment), hence
+  // filterPlan is computed above, before the query is even built.
+  const hasCollaboratorsEmbed = filterPlan.embeds.includes("lead_collaborators!inner(user_id)");
+  const selectColumns: string = filterPlan.embeds.length > 0 ? `${LEADS_LIST_COLUMNS},${filterPlan.embeds.join(",")}` : LEADS_LIST_COLUMNS;
   let query = useVisibilityRpc
     ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, countOpts).select(selectColumns)
     : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
@@ -366,89 +411,27 @@ export async function GET(request: NextRequest) {
     query = query.eq("assigned_to", assignedTo);
   }
 
-  if (status) {
-    query = query.eq("status", status);
-  }
-
   if (stageFilter) {
     query = query.eq("stage_id", stageFilter);
   }
 
-  if (search) {
-    // Sanitize search input to prevent PostgREST filter injection
-    const sanitized = search.replace(/[,().]/g, "");
-    if (sanitized) {
-      const orClauses = [
-        `first_name.ilike.%${sanitized}%`,
-        `last_name.ilike.%${sanitized}%`,
-        `email.ilike.%${sanitized}%`,
-        `phone.ilike.%${sanitized}%`,
-      ];
-
-      // Full-name search: "John Smith" won't match first_name/last_name
-      // individually since PostgREST can't filter on a concatenated
-      // expression — match token pairs against first/last in either order.
-      const tokens = sanitized.trim().split(/\s+/).filter(Boolean);
-      if (tokens.length >= 2) {
-        const [t1, t2] = tokens;
-        orClauses.push(
-          `and(first_name.ilike.%${t1}%,last_name.ilike.%${t2}%)`,
-          `and(first_name.ilike.%${t2}%,last_name.ilike.%${t1}%)`
-        );
-      }
-
-      query = query.or(orClauses.join(","));
-    }
-  }
-
-  // ── Toolbar secondary filters (form/counselor/collaborators/source/tag/created/
-  // prospect industry) — composed with every filter above via AND, same as status/
-  // search. These used to be applied client-side over whichever page happened to be
-  // loaded, which silently narrowed a "300 matching leads" filter down to "2, because
-  // that's all that fit on this page" (LEADS-SERVER-PAGINATION-BRIEF review). ──
-  if (formFilter && formFilter !== "all") {
-    query = query.eq("form_config_id", formFilter);
-  }
-
-  if (assigneesTokens.length > 0) {
-    const wantsUnassigned = assigneesTokens.includes("unassigned");
-    const ids = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
-    if (wantsUnassigned && ids.length > 0) {
-      query = query.or(`assigned_to.is.null,assigned_to.in.(${ids.join(",")})`);
-    } else if (wantsUnassigned) {
-      query = query.is("assigned_to", null);
-    } else if (ids.length > 0) {
-      query = query.in("assigned_to", ids);
-    }
-  }
-
-  if (collaboratorIds.length > 0) {
-    query = query.in("lead_collaborators.user_id", collaboratorIds);
-  }
-
-  if (sourceFilter.length > 0) {
-    query = query.in("intake_source", sourceFilter);
-  }
-
-  if (tagFilter && tagFilter !== "all") {
-    query = query.contains("tags", [tagFilter]);
-  }
-
-  if (industryFilter && industryFilter !== "all") {
-    query = industryFilter === "__none__"
-      ? query.is("prospect_industry", null)
-      : query.eq("prospect_industry", industryFilter);
-  }
+  // ADVANCED-FILTERS-BRIEF Phase 2: every toolbar filter that used to be a
+  // hand-written .eq/.in/.or/.contains/.gte chain here (status, search, form,
+  // assignees, collaborators, source, tag, industry, created) now compiles
+  // through the SAME compileFilter() call whether it came from ?f= or from
+  // the legacy params via legacyLeadsParamsToTree — see filterTree/filterPlan
+  // above. compileFilter never touches .select()/.from()/.rpc() (see its
+  // module doc comment), so it's safe to call on `query` at this point
+  // regardless of which branch (visibleLeadsBase RPC vs plain service query)
+  // built it. `stage`/`list`/`funnel`/branch/pipeline/shared-pool SCOPE
+  // filters above and below this call are deliberately untouched.
+  query = compileFilter(query, filterTree, filterRegistry, compileCtx);
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CREATED_WINDOW_MS: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
   const createdAfter = createdFilter && createdFilter !== "all" && CREATED_WINDOW_MS[createdFilter]
     ? new Date(Date.now() - CREATED_WINDOW_MS[createdFilter])
     : null;
-
-  if (createdAfter) {
-    query = query.gte("created_at", createdAfter.toISOString());
-  }
 
   // Opt-in Source facet (?facets=source) — same "opt-in, separate round-trip" shape
   // as ?counts=1 (lead-lists route). Computed via lead_aggregates() (migration 194's
@@ -465,6 +448,17 @@ export async function GET(request: NextRequest) {
   // gets a facet computed WITHOUT the stage restriction — flagged, not silently fixed;
   // closing it needs a migration (out of this PR's additive-only-locally scope).
   if (searchParams.get("facets") === "source" && !onlyDeleted) {
+    // ADVANCED-FILTERS-BRIEF Phase 2: a ?f= tree has no lead_aggregates() mirror yet
+    // (that's the treeToAggregateParams() downgrade landing in Phase 5) — passing a
+    // PARTIAL translation of the tree into lead_aggregates would produce a facet with
+    // subtly WRONG counts (missing whatever the tree expresses that the RPC's fixed
+    // param list can't), which is worse than no counts at all. Skip getSourceFacet()
+    // entirely and say so explicitly via counts: null. Legacy callers (?facets=source
+    // without ?f=) are completely unaffected — this branch only short-circuits for ?f=.
+    if (rawFilterParam !== null) {
+      return apiSuccess({ facet: "source", options: [], counts: null });
+    }
+
     // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
     // means the page returns zero leads, so the facet must be empty too. aggregates.ts
     // omits an empty p_pipeline_ids (→ NULL → no restriction), which would otherwise
@@ -563,7 +557,7 @@ export async function GET(request: NextRequest) {
   // Strip the lead_collaborators embed — it only existed to filter (see selectColumns
   // above), it is not part of the Lead shape the client expects. `data`'s inferred type
   // is the widened-string fallback (see selectColumns above), hence the `unknown` hop.
-  const strippedData: Array<Record<string, unknown>> = collaboratorIds.length > 0
+  const strippedData: Array<Record<string, unknown>> = hasCollaboratorsEmbed
     ? (data as unknown as Array<Record<string, unknown>>).map((row) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { lead_collaborators, ...rest } = row;

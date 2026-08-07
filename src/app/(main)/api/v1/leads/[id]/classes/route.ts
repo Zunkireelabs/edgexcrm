@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { authenticateRequest, requireLeadBranchAccess } from "@/lib/api/auth";
 import { getLeadMembership } from "@/lib/leads/branch-membership";
-import { shouldRestrictToSelf, canEnrollStudents } from "@/lib/api/permissions";
+import { shouldRestrictToSelf } from "@/lib/api/permissions";
+import { canEnrollStudents } from "@/lib/api/class-attendance";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.CLASSES)) return apiForbidden();
-  if (!canEnrollStudents(auth.permissions, auth.positionSlug)) return apiForbidden();
+  if (!(await canEnrollStudents(auth))) return apiForbidden();
 
   const supabase = await createServiceClient();
 
