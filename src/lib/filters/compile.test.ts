@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { compileFilter, type QueryBuilder } from "./compile";
+import { compileFilter, planFilter, type QueryBuilder } from "./compile";
 import { FilterCompileError, type CompileCtx, type FieldRegistry, type FilterCondition, type FilterTree } from "./types";
 
 // ── Fake builder ─────────────────────────────────────────────────────────
@@ -539,5 +539,84 @@ describe("dates — tz-aware boundaries with a frozen ctx.now", () => {
     expect(() =>
       compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "within_last", "bogus")), registry, onCtx("UTC"))
     ).toThrow(FilterCompileError);
+  });
+});
+
+// ── planFilter: validate-everything-up-front + embed collection ──────────
+
+describe("planFilter", () => {
+  it("returns ok:true with an empty embeds list for a tree with no embed-kind conditions", () => {
+    const result = planFilter(andTree(cond("c1", "first_name", "is", "Jane")), registry, ctx);
+    expect(result).toEqual({ ok: true, embeds: [] });
+  });
+
+  it("collects the embedSelect string for an embed-kind condition", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])), registry, ctx);
+    expect(result).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("dedupes the same embed across multiple conditions on the same relation", () => {
+    const result = planFilter(
+      { conjunction: "and", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"])], groups: [{ conjunction: "and", conditions: [cond("c2", "collaborators", "is_any_of", ["u2"])] }] },
+      registry,
+      ctx
+    );
+    expect(result).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("reports an unknown field as an error keyed by the condition's field, not a throw", () => {
+    const result = planFilter(andTree(cond("c1", "nope", "is", "x")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.nope?.[0]).toMatch(/unknown filter field/);
+  });
+
+  it("reports a not-filterable field as an error, not a throw", () => {
+    const result = planFilter(andTree(cond("c1", "hidden", "is", "x")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.hidden?.[0]).toMatch(/not filterable/);
+  });
+
+  it("reports a disallowed operator as an error", () => {
+    const result = planFilter(andTree(cond("c1", "age", "contains", "5")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.age?.[0]).toMatch(/operator contains is not allowed/);
+  });
+
+  it("reports is_none_of on a relation field as an error, matching compileFilter's rejection", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["u1"])), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.collaborators?.[0]).toMatch(/is_none_of is not allowed|is_none_of is not supported/);
+  });
+
+  it("reports an empty list value for is_any_of as an error rather than a silent no-op", () => {
+    const result = planFilter(andTree(cond("c1", "tags", "is_any_of", [])), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.tags?.[0]).toMatch(/requires at least one value/);
+  });
+
+  it("collects EVERY error across multiple bad conditions in one pass, not just the first", () => {
+    const result = planFilter(andTree(cond("c1", "nope", "is", "x"), cond("c2", "hidden", "is", "y")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(Object.keys(result.errors).sort()).toEqual(["hidden", "nope"]);
+    }
+  });
+
+  it("denies a field whose visibleTo predicate rejects the caller's permissions", () => {
+    const gatedRegistry: FieldRegistry = {
+      ...registry,
+      gated: {
+        key: "gated",
+        label: "Gated",
+        type: "text",
+        source: { kind: "column", column: "secret2" },
+        group: "Basic",
+        filterable: true,
+        visibleTo: () => false,
+      },
+    };
+    const result = planFilter(andTree(cond("c1", "gated", "is", "x")), gatedRegistry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.gated?.[0]).toMatch(/not accessible/);
   });
 });
