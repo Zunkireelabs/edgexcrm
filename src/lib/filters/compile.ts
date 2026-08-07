@@ -514,3 +514,67 @@ export function compileFilter<B extends QueryBuilder>(builder: B, tree: FilterTr
 
   return out;
 }
+
+export type PlanFilterResult = { ok: true; embeds: string[] } | { ok: false; errors: Record<string, string[]> };
+
+// planFilter() validates every condition in a tree UP FRONT and collects every
+// error, instead of compileFilter's throw-on-first-bad-condition — a caller
+// building a route response needs every validation problem in a single 422,
+// not just the first one. It also answers the ordering question a caller like
+// the leads route has: `.select()` must know about any `embed`-kind condition
+// (to add the `!inner(...)` join) BEFORE compileFilter ever runs, since
+// compileFilter itself never calls .select() (see the module doc comment).
+function checkCondition(
+  cond: FilterCondition,
+  registry: FieldRegistry,
+  ctx: CompileCtx,
+  errors: Record<string, string[]>,
+  embeds: Set<string>
+): void {
+  const push = (msg: string) => (errors[cond.field] ??= []).push(msg);
+
+  const field = registry[cond.field];
+  if (!field) {
+    push(`unknown filter field: ${JSON.stringify(cond.field)}`);
+    return;
+  }
+  if (!field.filterable) {
+    push(`field is not filterable: ${JSON.stringify(cond.field)}`);
+    return;
+  }
+  if (field.visibleTo && !field.visibleTo(ctx.permissions)) {
+    push(`field is not accessible: ${JSON.stringify(cond.field)}`);
+    return;
+  }
+  if (!isOperatorAllowed(field, cond.op)) {
+    push(`operator ${cond.op} is not allowed on field ${field.key}`);
+    return;
+  }
+  if (field.source.kind === "embed" && cond.op === "is_none_of") {
+    push("is_none_of is not supported on relation fields");
+    return;
+  }
+  if (
+    (cond.op === "is_any_of" || cond.op === "is_none_of" || cond.op === "has_all") &&
+    Array.isArray(cond.value) &&
+    cond.value.length === 0
+  ) {
+    push(`${cond.op} requires at least one value`);
+    return;
+  }
+
+  if (field.source.kind === "embed") embeds.add(field.source.embedSelect);
+}
+
+export function planFilter(tree: FilterTree, registry: FieldRegistry, ctx: CompileCtx): PlanFilterResult {
+  const errors: Record<string, string[]> = {};
+  const embeds = new Set<string>();
+
+  for (const cond of tree.conditions) checkCondition(cond, registry, ctx, errors, embeds);
+  for (const group of tree.groups ?? []) {
+    for (const cond of group.conditions) checkCondition(cond, registry, ctx, errors, embeds);
+  }
+
+  if (Object.keys(errors).length > 0) return { ok: false, errors };
+  return { ok: true, embeds: Array.from(embeds) };
+}

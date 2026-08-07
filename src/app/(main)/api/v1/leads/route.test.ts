@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { NextRequest } from "next/server";
 import type { AuthContext } from "@/lib/api/auth";
 import type { ResolvedPermissions } from "@/lib/api/permissions";
+import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
+import { encodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 
 // --- mocks -----------------------------------------------------------
 //
@@ -106,10 +108,23 @@ function makeLeadsChain(calls: Call[]) {
   const chain: Record<string, unknown> = {
     select: record("select"),
     eq: record("eq"),
+    neq: record("neq"),
     is: record("is"),
     or: record("or"),
     in: record("in"),
     not: record("not"),
+    // gt/gte/lt/lte/ilike/contains/overlaps: unexercised before the Phase 2
+    // ?f=/legacy-toolbar equivalence tests below — those are the first tests
+    // in this file to reach compileFilter's native fast path for these ops
+    // (e.g. .contains() for a tag filter, which route.ts has called directly
+    // since before this phase, just never under a test).
+    gt: record("gt"),
+    gte: record("gte"),
+    lt: record("lt"),
+    lte: record("lte"),
+    ilike: record("ilike"),
+    contains: record("contains"),
+    overlaps: record("overlaps"),
     order: record("order"),
     range: () => Promise.resolve({ data: [], error: null, count: 0 }),
   };
@@ -688,5 +703,133 @@ describe("GET /api/v1/leads — ?stage= filter (pipeline-column-pagination Phase
     expect(res.status).toBe(200);
     expect(calls).toContainEqual(["eq", ["stage_id", VALID_STAGE_ID]]);
     expect(calls.some(([m, a]) => m === "or" && String(a[0]).includes("acme"))).toBe(true);
+  });
+});
+
+// --- ADVANCED-FILTERS-BRIEF Phase 2: ?f= vs legacy toolbar-param equivalence ---
+
+function encodedTreeFor(legacyParams: Record<string, string>): string {
+  return encodeFilterTree(legacyLeadsParamsToTree(new URLSearchParams(legacyParams)));
+}
+
+describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as legacy params (ADVANCED-FILTERS-BRIEF Phase 2)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    createServiceClientMock.mockReset();
+    createClientMock.mockReset();
+    getFeatureAccessMock.mockReset();
+    branchMemberIdsMock.mockReset();
+    getFeatureAccessMock.mockReturnValue(false);
+    branchMemberIdsMock.mockResolvedValue([]);
+    createClientMock.mockResolvedValue(fakeUserClient([]));
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({ userId: "admin-1", role: "owner", permissions: permissions({ leadScope: "all" }) }),
+    );
+  });
+
+  it("?status=contacted and its equivalent ?f= tree produce byte-identical query calls", async () => {
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    const legacyRes = await GET(fakeReq({ status: "contacted" }));
+    expect(legacyRes.status).toBe(200);
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    const fRes = await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }) }));
+    expect(fRes.status).toBe(200);
+
+    expect(fCalls).toEqual(legacyCalls);
+  });
+
+  it("?tag=vip and its equivalent ?f= tree produce byte-identical query calls (native .contains() path)", async () => {
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ tag: "vip" }));
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ tag: "vip" }) }));
+
+    expect(fCalls).toEqual(legacyCalls);
+    expect(legacyCalls).toContainEqual(["contains", ["tags", ["vip"]]]);
+  });
+
+  it("?industry=__none__ and its equivalent ?f= tree produce byte-identical query calls (native .is(null) path)", async () => {
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ industry: "__none__" }));
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ industry: "__none__" }) }));
+
+    expect(fCalls).toEqual(legacyCalls);
+    expect(legacyCalls).toContainEqual(["is", ["prospect_industry", null]]);
+  });
+
+  it("?assignees=unassigned,<uuid> and its equivalent ?f= tree produce byte-identical query calls", async () => {
+    const uuid = "11111111-2222-4333-8444-555555555555";
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ assignees: `unassigned,${uuid}` }));
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ assignees: `unassigned,${uuid}` }) }));
+
+    expect(fCalls).toEqual(legacyCalls);
+  });
+
+  it("?collaborators=<id> and its equivalent ?f= tree both add the lead_collaborators!inner(user_id) embed and strip it from the response", async () => {
+    const legacyCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
+    const { GET } = await import("./route");
+    await GET(fakeReq({ collaborators: "u1" }));
+
+    const fCalls: Call[] = [];
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
+    const fRes = await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ collaborators: "u1" }) }));
+
+    expect(fRes.status).toBe(200);
+    expect(fCalls).toEqual(legacyCalls);
+    expect(legacyCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
+  });
+
+  it("a malformed ?f= (not valid base64url JSON) is a 422, never an unhandled throw", async () => {
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ [FILTER_PARAM]: "not-valid-base64url-json!!" }));
+    expect(res.status).toBe(422);
+  });
+
+  it("an ?f= tree referencing an unknown field is a single 422 with all errors, not a throw mid-compile", async () => {
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const tree = { conjunction: "and" as const, conditions: [{ id: "c1", field: "not_a_real_field", op: "is" as const, value: "x" }] };
+    const res = await GET(fakeReq({ [FILTER_PARAM]: encodeFilterTree(tree) }));
+    expect(res.status).toBe(422);
+  });
+
+  it("?facets=source with ?f= present skips getSourceFacet entirely and returns counts:null, never partial/wrong counts", async () => {
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source", [FILTER_PARAM]: encodedTreeFor({ status: "contacted" }) }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [], counts: null });
+  });
+
+  it("?facets=source WITHOUT ?f= is completely unaffected — still returns the legacy {facet,options} shape", async () => {
+    createClientMock.mockResolvedValue({ rpc: () => Promise.resolve({ data: [], error: null }) });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({ facet: "source", options: [] });
   });
 });
