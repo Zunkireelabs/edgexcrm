@@ -96,7 +96,7 @@ export type FieldSource =
   | { kind: "jsonb"; column: "custom_fields"; path: string }
   | { kind: "promoted"; column: string; jsonb: { column: "custom_fields"; path: string } }
   | { kind: "embed"; relation: string; column: string; embedSelect: string }
-  | { kind: "virtual"; compile: (c: FilterCondition, ctx: CompileCtx) => string };
+  | { kind: "virtual"; compile: (c: FilterCondition, ctx: CompileCtx) => string | null };
 
 // Minimal local mirror of the permission shape a `visibleTo` predicate needs.
 // Deliberately NOT imported from src/lib/api/permissions.ts — that would break

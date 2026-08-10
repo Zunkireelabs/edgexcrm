@@ -341,7 +341,7 @@ function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["so
   return and(...negatedLegs);
 }
 
-function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx): string {
+function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx): string | null {
   currentCtxRef = ctx;
 
   switch (field.source.kind) {
@@ -467,6 +467,11 @@ function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: F
   }
 
   const predicate = renderCondition(field, cond, ctx);
+  // §0 fix: a condition that contributes nothing (e.g. compileAssignees with
+  // no valid tokens) is dropped rather than compiled to a tautology. Inside
+  // AND this is a no-op either way; the drop only matters for applyOrConditions
+  // below, but the rule lives at render time so it's uniform everywhere.
+  if (predicate === null) return builder;
   return builder.or(predicate);
 }
 
@@ -481,10 +486,17 @@ function applyAndConditions<B extends QueryBuilder>(builder: B, registry: FieldR
 // and combined into ONE `.or(...)` call.
 function applyOrConditions<B extends QueryBuilder>(builder: B, registry: FieldRegistry, conditions: FilterCondition[], ctx: CompileCtx): B {
   if (conditions.length === 0) return builder;
-  const parts = conditions.map((cond) => {
-    const field = resolveAndValidate(registry, cond);
-    return renderCondition(field, cond, ctx);
-  });
+  const parts = conditions
+    .map((cond) => {
+      const field = resolveAndValidate(registry, cond);
+      return renderCondition(field, cond, ctx);
+    })
+    // §0 fix: a null leg contributes nothing and must be dropped, never joined
+    // in as a tautology — or(<dropped>, X) must compile to just X, not to
+    // something that matches every row. If every leg drops, the whole group
+    // contributes nothing (no .or() call at all), not `or()` of nothing.
+    .filter((p): p is string => p !== null);
+  if (parts.length === 0) return builder;
   return builder.or(or(...parts));
 }
 

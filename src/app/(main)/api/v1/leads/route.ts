@@ -34,11 +34,12 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
-import { getSourceFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getAssigneeFacet } from "@/lib/leads/aggregates";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
 import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
 import { leadFields } from "@/lib/filters/registry";
+import { treeToAggregateParams, type LeadAggregateFilterParams } from "@/lib/filters/tree-to-aggregate-params";
 import type { CompileCtx, FilterTree, ResolvedPermissions as FilterResolvedPermissions } from "@/lib/filters/types";
 import {
   normalizeEmail,
@@ -433,43 +434,64 @@ export async function GET(request: NextRequest) {
     ? new Date(Date.now() - CREATED_WINDOW_MS[createdFilter])
     : null;
 
-  // Opt-in Source facet (?facets=source) — same "opt-in, separate round-trip" shape
-  // as ?counts=1 (lead-lists route). Computed via lead_aggregates() (migration 194's
-  // ADDENDUM) over every filter above EXCEPT source itself, per the brief: the option
-  // list AND its counts used to come from `localLeads` — the current 25-row server
-  // page — which is what made this facet broken rather than merely incomplete once
-  // #332 shipped 25-row pages. Recycle-bin (onlyDeleted) leads are excluded from
-  // lead_aggregates unconditionally, so this facet is not offered there — a known,
-  // narrow gap (the recycle bin has no source dropdown today).
+  // Opt-in facets (?facets=source | ?facets=source,assignee | …) — same "opt-in,
+  // separate round-trip" shape as ?counts=1 (lead-lists route). Computed via
+  // lead_aggregates() (migration 194 + its ADDENDUM) over every filter above EXCEPT
+  // the dimension being faceted, per the brief. Recycle-bin (onlyDeleted) leads are
+  // excluded from lead_aggregates unconditionally, so no facet is offered there — a
+  // known, narrow gap (the recycle bin has no source/assignee dropdown today).
   //
   // KNOWN GAP (pipeline-column-pagination Phase 1): lead_aggregates() (migration 194)
-  // has no `p_stage_eq` param, so a `?stage=` filter is NOT mirrored into this facet the
-  // way `status`/`list`/etc. are below. A caller combining `stage` with `facets=source`
-  // gets a facet computed WITHOUT the stage restriction — flagged, not silently fixed;
+  // has no `p_stage_eq` param, so a `?stage=` filter is NOT mirrored into these facets
+  // the way `status`/`list`/etc. are below. A caller combining `stage` with `facets=`
+  // gets facets computed WITHOUT the stage restriction — flagged, not silently fixed;
   // closing it needs a migration (out of this PR's additive-only-locally scope).
-  if (searchParams.get("facets") === "source" && !onlyDeleted) {
-    // ADVANCED-FILTERS-BRIEF Phase 2: a ?f= tree has no lead_aggregates() mirror yet
-    // (that's the treeToAggregateParams() downgrade landing in Phase 5) — passing a
-    // PARTIAL translation of the tree into lead_aggregates would produce a facet with
-    // subtly WRONG counts (missing whatever the tree expresses that the RPC's fixed
-    // param list can't), which is worse than no counts at all. Skip getSourceFacet()
-    // entirely and say so explicitly via counts: null. Legacy callers (?facets=source
-    // without ?f=) are completely unaffected — this branch only short-circuits for ?f=.
+  //
+  // ?facets=source ALONE keeps the exact pre-existing single-dimension response shape
+  // (`{facet:"source", options}`) byte-for-byte — KanbanBoard.tsx (Phase 4 territory,
+  // untouched here) depends on it. Any other combination (?facets=assignee,
+  // ?facets=source,assignee, …) uses the new multi-facet shape (`{facets:{…}}`),
+  // introduced by ADVANCED-FILTERS-BRIEF Phase 3 addendum §C to let leads-table.tsx
+  // fetch source + assignee counts in one round-trip.
+  const facetsParam = searchParams.get("facets");
+  const requestedFacets = facetsParam
+    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee">)
+    : [];
+  const legacySingleSourceFacet = requestedFacets.length === 1 && requestedFacets[0] === "source";
+
+  if (requestedFacets.length > 0 && !onlyDeleted) {
+    // ADVANCED-FILTERS-BRIEF Phase 3 addendum §E: pulled forward from Phase 5. A ?f=
+    // tree CAN drive facet counts now, but only when it translates losslessly onto
+    // lead_aggregates()'s fixed param list — treeToAggregateParams() is the single
+    // gate for that. Any tree it can't express (OR groups, `contains`, unknown
+    // fields/ops, …) keeps Phase 2's original counts:null behavior: passing a PARTIAL
+    // translation would produce subtly WRONG counts, which is worse than none.
+    let aggParams: LeadAggregateFilterParams | null = null;
     if (rawFilterParam !== null) {
-      return apiSuccess({ facet: "source", options: [], counts: null });
+      const translated = treeToAggregateParams(filterTree, filterRegistry, compileCtx.now);
+      if (!translated.ok) {
+        log.info(
+          { tenantId: auth.tenantId, reason: translated.reason },
+          "facet counts skipped: ?f= tree not expressible in lead_aggregates()"
+        );
+        return legacySingleSourceFacet
+          ? apiSuccess({ facet: "source", options: [], counts: null })
+          : apiSuccess({ facets: null, counts: null });
+      }
+      aggParams = translated.params;
     }
 
-    // Match route.ts:370's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
-    // means the page returns zero leads, so the facet must be empty too. aggregates.ts
-    // omits an empty p_pipeline_ids (→ NULL → no restriction), which would otherwise
-    // count the whole tenant for a user whose list is empty.
+    // Match route.ts's `.in("pipeline_id", [])` semantics exactly: an empty allowlist
+    // means the page returns zero leads, so every requested facet must be empty too.
+    // aggregates.ts omits an empty p_pipeline_ids (→ NULL → no restriction), which
+    // would otherwise count the whole tenant for a user whose list is empty.
     if (auth.permissions.pipelineAccess !== "all" && auth.permissions.pipelineAccess.ids.size === 0) {
-      return apiSuccess({ facet: "source", options: [] });
+      return legacySingleSourceFacet
+        ? apiSuccess({ facet: "source", options: [] })
+        : apiSuccess({
+            facets: Object.fromEntries(requestedFacets.map((f) => [f, { options: [] }])),
+          });
     }
-
-    const assigneesIds = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
-    const wantsUnassigned = assigneesTokens.includes("unassigned");
-    const validCollaboratorIds = collaboratorIds.filter((id) => UUID_RE.test(id));
 
     if (scope.restrictToSelf && !scope.userId) {
       throw new Error("leads/facets: scope.restrictToSelf requires scope.userId");
@@ -486,47 +508,91 @@ export async function GET(request: NextRequest) {
           ? "branch"
           : "all";
 
-    let options: Awaited<ReturnType<typeof getSourceFacet>>;
+    // Effective per-axis filter values: from the ?f= tree (via treeToAggregateParams)
+    // when ?f= is present, else from the legacy toolbar params — exactly like the page
+    // query's own filterTree/legacyLeadsParamsToTree split above. `search` and the
+    // industry "__none__" sentinel have no tree-translation path (search is always
+    // `contains`, rejected above; is_empty is rejected above too) — both are legacy-only.
+    const effectiveStatus = rawFilterParam !== null ? (aggParams?.status ?? null) : status || null;
+    const assigneesIdsLegacy = assigneesTokens.filter((t) => t !== "unassigned" && UUID_RE.test(t));
+    const wantsUnassignedLegacy = assigneesTokens.includes("unassigned");
+    const effectiveAssigneesAny = rawFilterParam !== null ? (aggParams?.assigneesAny ?? null) : (assigneesIdsLegacy.length > 0 ? assigneesIdsLegacy : null);
+    const effectiveIncludeUnassigned = rawFilterParam !== null ? !!aggParams?.includeUnassigned : wantsUnassignedLegacy;
+    const validCollaboratorIdsLegacy = collaboratorIds.filter((id) => UUID_RE.test(id));
+    const effectiveCollaboratorIds = rawFilterParam !== null ? (aggParams?.collaboratorIds ?? null) : (validCollaboratorIdsLegacy.length > 0 ? validCollaboratorIdsLegacy : null);
+    const effectiveTag = rawFilterParam !== null ? (aggParams?.tag ?? null) : (tagFilter && tagFilter !== "all" ? tagFilter : null);
+    const effectiveProspectIndustry = rawFilterParam !== null ? (aggParams?.prospectIndustry ?? null) : (industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null);
+    const effectiveProspectIndustryNone = rawFilterParam !== null ? false : industryFilter === "__none__";
+    const effectiveFormConfigId = rawFilterParam !== null ? (aggParams?.formConfigId ?? null) : (formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null);
+    const effectiveCreatedAfter = rawFilterParam !== null ? (aggParams?.createdAfter ?? null) : createdAfter;
+    const effectiveSearch = rawFilterParam !== null ? null : (search ? search.replace(/[,().]/g, "") : null);
+
+    const baseFacetParams = {
+      tenantId: auth.tenantId,
+      scope: facetScope,
+      user: facetScope === "own" ? scope.userId : null,
+      userBranchId: scope.userBranchId,
+      crossPoolSlug: scope.crossBranchPoolListSlug,
+      branchId: facetScope === "branch" ? scope.branchId : null,
+      sharedPoolAssignedToAny,
+      pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
+      status: effectiveStatus,
+      collaboratorIds: effectiveCollaboratorIds,
+      tag: effectiveTag,
+      prospectIndustry: effectiveProspectIndustry,
+      prospectIndustryNone: effectiveProspectIndustryNone,
+      formConfigId: effectiveFormConfigId,
+      createdAfter: effectiveCreatedAfter,
+      // Mirror the page query's either/or (route.ts:309-316) exactly: an explicit list
+      // wins outright, a funnel's list set wins next, and the archive/staging exclusion
+      // only applies when neither is present. Passing more than one of these unconditionally
+      // ANDs them in lead_aggregates — for a staging list that becomes `list_id = X AND
+      // list_id NOT IN (…X…)`, an unsatisfiable predicate that zeroed the facet.
+      listIdEq: resolvedListId,
+      listIdAny: !resolvedListId && funnelListIds.length > 0 ? funnelListIds : null,
+      excludeListIds:
+        !resolvedListId && funnelListIds.length === 0 && excludeListIds.length > 0
+          ? excludeListIds
+          : null,
+      search: effectiveSearch,
+      includeConverted,
+    };
+
+    let sourceOptions: Awaited<ReturnType<typeof getSourceFacet>> | undefined;
+    let assigneeOptions: Awaited<ReturnType<typeof getAssigneeFacet>> | undefined;
     try {
-      options = await getSourceFacet({
-        tenantId: auth.tenantId,
-        scope: facetScope,
-        user: facetScope === "own" ? scope.userId : null,
-        userBranchId: scope.userBranchId,
-        crossPoolSlug: scope.crossBranchPoolListSlug,
-        branchId: facetScope === "branch" ? scope.branchId : null,
-        sharedPoolAssignedToAny,
-        pipelineIds: auth.permissions.pipelineAccess !== "all" ? [...auth.permissions.pipelineAccess.ids] : null,
-        status: status || null,
-        assigneesAny: assigneesIds.length > 0 ? assigneesIds : null,
-        includeUnassigned: wantsUnassigned,
-        collaboratorIds: validCollaboratorIds.length > 0 ? validCollaboratorIds : null,
-        tag: tagFilter && tagFilter !== "all" ? tagFilter : null,
-        prospectIndustry: industryFilter && industryFilter !== "all" && industryFilter !== "__none__" ? industryFilter : null,
-        prospectIndustryNone: industryFilter === "__none__",
-        formConfigId: formFilter && formFilter !== "all" && UUID_RE.test(formFilter) ? formFilter : null,
-        createdAfter,
-        // Mirror the page query's either/or (route.ts:309-316) exactly: an explicit list
-        // wins outright, a funnel's list set wins next, and the archive/staging exclusion
-        // only applies when neither is present. Passing more than one of these unconditionally
-        // ANDs them in lead_aggregates — for a staging list that becomes `list_id = X AND
-        // list_id NOT IN (…X…)`, an unsatisfiable predicate that zeroed the facet.
-        listIdEq: resolvedListId,
-        listIdAny: !resolvedListId && funnelListIds.length > 0 ? funnelListIds : null,
-        excludeListIds:
-          !resolvedListId && funnelListIds.length === 0 && excludeListIds.length > 0
-            ? excludeListIds
-            : null,
-        search: search ? search.replace(/[,().]/g, "") : null,
-        includeConverted,
-      });
+      if (requestedFacets.includes("source")) {
+        // Source facet: cross-filtered by the current assignee selection (there's no
+        // "source" axis to exclude — it has no p_source param at all).
+        sourceOptions = await getSourceFacet({
+          ...baseFacetParams,
+          assigneesAny: effectiveAssigneesAny,
+          includeUnassigned: effectiveIncludeUnassigned,
+        });
+      }
+      if (requestedFacets.includes("assignee")) {
+        // Assignee facet: MUST NOT apply the assignees filter to itself (same
+        // "every filter except the one being faceted" rule source already follows) —
+        // assigneesAny/includeUnassigned are deliberately omitted here.
+        assigneeOptions = await getAssigneeFacet(baseFacetParams);
+      }
     } catch (err) {
-      log.error({ err }, "Failed to fetch source facet");
-      return apiServiceUnavailable("Failed to fetch source facet");
+      log.error({ err }, "Failed to fetch lead facets");
+      return apiServiceUnavailable("Failed to fetch lead facets");
     }
 
-    log.info({ tenantId: auth.tenantId, options: options.length }, "Source facet fetched");
-    return apiSuccess({ facet: "source", options });
+    if (legacySingleSourceFacet) {
+      log.info({ tenantId: auth.tenantId, options: sourceOptions?.length ?? 0 }, "Source facet fetched");
+      return apiSuccess({ facet: "source", options: sourceOptions ?? [] });
+    }
+
+    log.info({ tenantId: auth.tenantId, facets: requestedFacets }, "Lead facets fetched");
+    return apiSuccess({
+      facets: {
+        ...(sourceOptions ? { source: { options: sourceOptions } } : {}),
+        ...(assigneeOptions ? { assignee: { options: assigneeOptions } } : {}),
+      },
+    });
   }
 
   const from = (page - 1) * pageSize;

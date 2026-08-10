@@ -492,6 +492,317 @@ Those are Phase 2b. One mirror at a time.
 
 ---
 
+# PHASE 3 — The UI (first visible surface)
+
+**Branch:** `feature/filter-engine-ui` from latest `origin/stage`
+**Migration:** none.
+**⚠️ THIS PHASE HAS A VISIBLE SURFACE — the PR is not acceptable without a screenshot from local dev.**
+
+Phases 0/1/2 are merged and deployed to stage: migration `201`, `src/lib/filters/` core, the lead
+registry, and `?f=` live on `GET /api/v1/leads`. The server already understands advanced filters;
+this phase is the Notion/Twenty-style bar that produces them.
+
+## 0. First — the carried-forward correctness fix
+
+`compileAssignees` in `src/lib/filters/registry/leads.ts` ends with:
+
+```ts
+return "id.not.is.null"; // no valid tokens — legacy applies no filter in this case
+```
+
+That comment is **accurate** — legacy `route.ts`'s tri-branch has no final `else`, so
+`?assignees=garbage` genuinely applies no filter today. It was correct to preserve in Phase 2.
+
+**But it breaks the moment this phase ships OR groups.** A tautology inside `or(...)` makes the entire
+group match every row, and it is reachable via `?f=` with
+`{field:"assignees", op:"is_any_of", value:["garbage"]}` (zod permits it — a non-empty array of strings).
+
+**Fix: let the compiler DROP a no-op condition instead of emitting a tautology.** Have the per-condition
+compile path return `null` for "contributes nothing", and have `compileGroup` filter those out before
+joining. Dropping is identical to a tautology inside AND (so Phase 2's byte-identical contract holds),
+and correct inside OR (the leg simply isn't there). If dropping empties a group entirely, the group
+contributes nothing rather than becoming `or()` of nothing.
+
+Tests: the legacy `?assignees=garbage` equivalence test must still pass, plus a new one proving
+`or(<dropped>, X)` compiles to just `X` — **not** to something matching everything.
+
+## 1. shadcn primitives to add
+
+Both compose from packages already installed — **no new npm dependencies**.
+
+| File | Built from |
+|---|---|
+| `src/components/ui/scroll-area.tsx` | `radix-ui@^1.4.3` unified package — `import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"`, same import style as the existing `popover.tsx` |
+| `src/components/ui/combobox.tsx` | A thin Popover + Command composition (not an upstream shadcn primitive). `popover.tsx` and `command.tsx` (cmdk `^1.1.1`) both already exist. |
+
+**Do not add `react-day-picker` / `calendar.tsx`.** Date editing is native `<input type="date">` inside
+the existing `Input` (two of them for `between`) plus relative presets (Today / Last 7 days / Last 30 days
+/ This month). Zero deps, native mobile pickers, and it covers the operator set. Revisit only if asked.
+
+## 2. Component tree — `src/components/filters/`
+
+```
+AdvancedFilterBar                      advanced-filter-bar.tsx
+├── FilterChipRow → FilterChip         click a chip to edit it in place
+├── ConjunctionToggle                  "Where / and / or" — hand-rolled 2-state, no toggle-group primitive
+└── AddFilterButton  "+ Add filter"
+    └── FilterFieldPicker              Command + CommandInput + grouped items  (reference screenshot 1)
+        └── FilterConditionEditor
+            ├── FilterOperatorPicker   options from isOperatorAllowed()        (reference screenshot 2)
+            └── FilterValueEditor      dispatch on field.type + operator arity
+                ├── text · number (1 or 2 inputs for `between`) · date
+                ├── select · boolean
+                └── multi-select  ← WRAPS the existing FilterOptionList
+```
+
+`MultiSelectValueEditor` must **reuse `FilterOptionList` from `src/components/ui/filter-dropdown.tsx`**
+rather than reimplement it. That component (search + checkbox rows + clear) is the one piece of today's
+filter UI worth keeping verbatim. Do not fork it.
+
+Match the reference screenshots: chips read `Name: brian ✕`, with `+ Add filter` inline after them.
+
+## 3. What the host supplies
+
+```ts
+export interface FilterHostConfig<Row = unknown> {
+  entity: EntityKey;
+  fields: FieldDef<Row>[];            // already industry- and permission-filtered
+  value: FilterTree;
+  onChange: (next: FilterTree) => void;
+  density?: "comfortable" | "compact";   // kanban toolbar is tight
+  showChips?: boolean;
+  allowGroups?: boolean;                 // depth-2 UI; false on narrow toolbars
+  maxConditions?: number;                // default 25
+  optionOverrides?: Partial<Record<OptionLoaderKey, FilterOption[]>>;
+}
+```
+
+Only `fields`/`value`/`onChange` plus three cosmetic flags differ between surfaces — that is what makes
+one component serve table, kanban and board. **Do not add surface-specific branches inside the bar.**
+
+Async option loaders (`members`, `stages`, `lists`, `forms`, `tags`, `sources`, …) go in a single
+`use-filter-options.ts` with caching, so the field picker doesn't fire a request per dropdown open.
+`optionOverrides` exists because Kanban already has `stages` in props.
+
+## 4. State — `src/lib/filters/use-advanced-filters.ts`
+
+URL-backed, modelled on the existing `src/industries/it-agency/features/project-board/hooks/use-workspace-filters.ts`
+(the only URL-backed filter state in the app today — read it first and follow its shape, including
+`router.replace(..., { scroll: false })`).
+
+Reads/writes `?f=` via Phase 1's `encodeFilterTree`/`decodeFilterTree`. A malformed or stale `?f=`
+must **degrade with a toast, never crash** — drop unknown field keys and keep the rest.
+
+Enforce `MAX_ENCODED_LEN` client-side too, with a real message ("too many values — save this as a view"),
+so the user hits a good error rather than a transport failure.
+
+## 5. Wiring into the leads table
+
+`src/components/dashboard/leads-table.tsx` — **a high-conflict shared file. Rebase onto latest
+`origin/stage` immediately before merge and resolve hunk-by-hunk, never "keep my whole file."**
+
+- Render `AdvancedFilterBar` when `NEXT_PUBLIC_ADVANCED_FILTERS === "1"`, else the existing `FilterMenu`.
+  **Both paths must work** — this flag is the kill switch.
+- Flag on: `buildFetchParams` sets `f` and **stops setting** the 8 legacy filter params.
+  `fetchSignature` must include the encoded tree, or the table won't refetch on filter change.
+- Flag off: **pixel-identical to today.** That is the gate.
+- Add `@deprecated` JSDoc to `FilterDef` / `FilterMenu` / `FilterChips` pointing at the new bar.
+- **Kanban is Phase 4** — don't touch `KanbanBoard.tsx` or `kanban-column-params.ts`.
+
+## 6. Proof required in the PR body
+
+- **A screenshot (or short recording) of the filter bar working on local dev.** Non-negotiable. Show at
+  minimum: the field picker open, an operator dropdown open, and two stacked chips filtering real rows.
+- Flag **off** screenshot proving the old toolbar is unchanged.
+- Manual matrix: every operator × every field type actually exercised.
+- `is not` on a field with empty values **includes** the empty rows (the negation rule — verify in the UI,
+  not just in a unit test).
+- A URL with `?f=` copy-pasted into a fresh tab reproduces the same filtered view.
+- `npm run test`, `npm run build`, `npx eslint --max-warnings 50` all clean.
+
+## 7. Stop
+
+PR to `stage`, **stop at the review gate.** Do not start Phase 4 (Kanban) or Phase 5 (saved views).
+
+---
+
+# PHASE 3 ADDENDUM — facet counts (regression fix + server-side move)
+
+Found during Sadin's manual testing of the Phase 3 branch. Fold into the **same** PR — the bar must
+not ship with a visible count regression.
+
+## A. The regression
+
+`origin/stage`'s legacy filter menu shows counts on **Assigned To** and **Collaborators**
+(`Sadin (42)`) and **hides zero-count people** so the list stays short. The new
+`advancedFilterOptionOverrides` in `leads-table.tsx` kept counts on `source` only:
+
+```ts
+source:        `${s} (${sourceCounts.get(s) ?? 0})`          // ✓ counts
+assignees:     memberNames[userId] || email.split("@")[0]     // ✗ dropped
+collaborators: same                                            // ✗ dropped
+```
+
+It also lists every counselor instead of only those with leads. Both must be restored.
+
+## B. Do NOT just port the legacy label — the legacy number is wrong
+
+`counselorCounts` (`leads-table.tsx`) is computed from `localLeads`, which is set from the fetched
+page (`setLocalLeads(body.data)`). Under server pagination that's **25 rows**, so `Sadin (3)` means
+"3 on this page", not "3 in the tenant". It is also a **fifth mirror** of the predicate set — it
+re-implements source/tag/status/form/created matching client-side to cross-filter.
+
+Migration 194 already fixed exactly this for Source by moving it server-side; Assigned To never got
+the same treatment (see 194's own header comment about the "current 25-row page only").
+
+## C. The server-side number already exists
+
+`lead_aggregates()` **already returns a `counselor` dimension** — `assigned_to`-keyed with an
+`"(unassigned)"` sentinel (`LeadAggregates.counselor` in `src/lib/leads/aggregates.ts`). It currently
+feeds `LeadsByCounselorChart`. **No migration needed** — wire it into the facet path the way `source`
+already is (`getSourceFacet()` + the `?facets=source` branch in `route.ts`), then delete the
+client-side `counselorCounts` memo.
+
+Extend the facet param to accept more than one dimension (e.g. `?facets=source,assignee`) so the
+table makes **one** facet round-trip, not two. Keep `?facets=source` alone behaving exactly as today.
+
+Collaborator counts have no existing dimension. **Do not add one in this PR** — collaborators come
+from a join table (`lead_collaborators`) and that's a bigger change. Instead: keep the existing
+client-side collaborator count, and add a code comment saying it is page-scoped and pending the same
+server-side move. Being explicitly inconsistent-and-labelled beats silently shipping two different
+meanings of the same-looking number.
+
+## D. Scope: universal, no industry gate
+
+Assignee counts are not education-specific. The legacy code gates on `isAdmin || isTeamScoped`,
+**never on industry** — keep it that way. This is a Global feature per `CLAUDE.md`'s taxonomy;
+adding an industry gate would be a regression, not a feature.
+
+## E. Pull `treeToAggregateParams()` forward from Phase 5
+
+Phase 2 made the route **skip facets entirely and return `counts: null`** whenever `?f=` is present
+(correctly — a partial translation would give subtly wrong counts). But that means counts would
+disappear the moment a user adds an advanced filter, which is exactly when they want them. The
+client has asked for these counts twice; that regression is not acceptable.
+
+Add `src/lib/filters/tree-to-aggregate-params.ts`:
+
+```ts
+export function treeToAggregateParams(tree: FilterTree, registry: FieldRegistry):
+  | { ok: true; params: LeadAggregateFilterParams }   // expressible in lead_aggregates()'s vocabulary
+  | { ok: false; reason: string };                    // OR group / contains / is_empty / cf:* → caller skips facets
+```
+
+Rules: a **pure-AND** tree whose every condition maps onto an existing `lead_aggregates()` param
+returns `ok: true` and exact counts are preserved. Anything else (any OR group, any operator the RPC
+can't express, any unknown field) returns `ok: false` and the route keeps today's `counts: null`
+behaviour. `pino`-log every fall-back with the reason, so we learn whether Phase 9's SQL-side
+evaluator is ever actually warranted.
+
+**Never emit a partial translation.** Wrong counts are worse than absent counts.
+
+## F. Proof required (in addition to the Phase 3 screenshots)
+
+- Screenshot of Assigned To showing counts, with zero-count people absent.
+- On stage's Admizz tenant (16k+ leads): a counselor's facet count matches
+  `SELECT count(*) FROM leads WHERE assigned_to = … AND deleted_at IS NULL AND converted_at IS NULL`
+  — i.e. **tenant-wide, not 25-capped**. This is the whole point of the change; prove the number moved.
+- Counts still present with an advanced filter active (the §E path), and correctly **absent**
+  (`counts: null`, no badge, never a zero) for an OR-group tree.
+- Unit tests for `treeToAggregateParams`: pure-AND maps; OR group → `ok:false`; `contains` → `ok:false`.
+
+## G. The Apply bug — diagnose before patching
+
+Do **not** shotgun this. The chain `handleApply → onAdd → setTree → router.replace → useSearchParams
+→ buildFetchParams → fetchSignature` is structurally correct on inspection, so the fault is runtime.
+Sadin will report which of these three he observes:
+
+1. URL never gains `?f=` → the bar isn't reaching `setTree`, or the flag is off / the dev server was
+   not restarted after adding `NEXT_PUBLIC_ADVANCED_FILTERS=1` (these are inlined at build time).
+2. URL updates but no `/api/v1/leads?...f=...` request fires → `fetchSignature` isn't changing.
+3. Request fires and returns filtered rows but the table still shows everything → the SSR-prop-sync
+   fix didn't hold.
+
+Fix only the branch that matches, and say in the PR which one it was.
+
+---
+
+# PHASE 3.5 — Enable the flag on STAGE only, then prove the counts at real volume
+
+**Branch:** `feature/advanced-filters-stage-flag` from latest `origin/stage`
+**Migration:** none. **Small change — two files.** The value is the verification it unlocks.
+
+Phases 0–3 are merged and deployed (`d3841a63`). But `NEXT_PUBLIC_ADVANCED_FILTERS` is not wired
+into the image build, so the deployed bundle has it `undefined` and stage still renders the **legacy**
+toolbar. The new bar exists only on local dev.
+
+`NEXT_PUBLIC_*` is **inlined at build time** (the Dockerfile says so at line 15). A container restart
+or an `.env.local` edit on the VPS will NOT turn it on — it has to be a build arg.
+
+## The change
+
+**1. `Dockerfile`** — add alongside the existing `NEXT_PUBLIC_*` pairs (ARGs ~L11-23, ENVs ~L25-32):
+
+```dockerfile
+ARG NEXT_PUBLIC_ADVANCED_FILTERS
+ENV NEXT_PUBLIC_ADVANCED_FILTERS=$NEXT_PUBLIC_ADVANCED_FILTERS
+```
+
+**2. `.github/workflows/deploy-staging.yml`** — add one line to `build-args` (~L55-63):
+
+```yaml
+NEXT_PUBLIC_ADVANCED_FILTERS=1
+```
+
+A **literal `1`, not a secret** — matching how `NEXT_PUBLIC_SENTRY_ENVIRONMENT=staging` is done. It
+should be readable in the workflow file that staging has this on.
+
+**3. Do NOT touch `.github/workflows/deploy.yml`.** Prod stays off. With no ARG value passed, the
+Dockerfile ARG resolves empty and the flag is `undefined` — the legacy toolbar. Say explicitly in the
+PR that prod is unaffected, and confirm you did not edit `deploy.yml`.
+
+`docker-compose.yml` needs no change — it pulls the prebuilt image
+(`image: ghcr.io/zunkireelabs/edgexcrm:stage`) and has no build section.
+
+## The verification this unlocks — the actual point of the PR
+
+Local dev has 33 leads, so it cannot prove the Assigned To counts moved off the old 25-row page cap.
+Stage's Admizz tenant has ~16.7k. **This is the outstanding gate before any prod promotion of Phases 0–3.**
+
+After the deploy is green, on **stage** (`dymeudcddasqpomfpjvt`):
+
+1. Open `dev-lead-crm.zunkireelabs.com` → Leads → **+ Add filter → Assigned to**. Screenshot the counts.
+2. For 2–3 counselors, compare the facet count against the DB directly:
+   ```sql
+   SELECT count(*) FROM leads
+   WHERE tenant_id = '<admizz>' AND assigned_to = '<user_id>'
+     AND deleted_at IS NULL AND converted_at IS NULL
+     AND NOT (tags @> ARRAY['other']::text[]);
+   ```
+   They must match **exactly**. A number ≤25 that looks suspiciously like a page size means the facet
+   didn't move server-side and the whole A/B/C change is not doing what it claims.
+3. Apply the filter and confirm the row count and the chip agree.
+4. Confirm counts still render with a second filter stacked (the `treeToAggregateParams` path), and are
+   **absent** (no badge, never a zero) for a tree it can't express.
+5. Sanity-check page-1 perf is not worse than the legacy toolbar on a 16.7k tenant.
+
+**Stage lead data is real customer PII** — screenshots for the PR are fine (it's our own stage), but do
+not paste raw rows anywhere else, and do not point any third-party service at it.
+
+## Proof required in the PR body
+
+Both screenshots (stage Assigned To counts; the filter applied), the `SELECT count(*)` outputs beside
+the facet numbers, and an explicit line confirming `deploy.yml` was not modified.
+
+## Rollback
+
+Remove the one build-arg line and redeploy — next stage build goes back to the legacy toolbar. No
+migration, no data change.
+
+Stop at the review gate.
+
+---
+
 ## Non-negotiables for all phases
 
 - Branch from **latest `origin/stage`**; rebase again right before merge. Squash-merge to `stage`.

@@ -67,7 +67,7 @@ function compileSource(cond: FilterCondition): string {
 // (surprising but current) fall-through-to-no-filter when every token is
 // invalid and "unassigned" wasn't requested.
 
-function compileAssignees(cond: FilterCondition): string {
+function compileAssignees(cond: FilterCondition): string | null {
   const values = asList(cond.value);
   const wantsUnassigned = values.includes("unassigned");
   const ids = values.filter((v) => v !== "unassigned" && UUID_RE.test(v));
@@ -75,7 +75,12 @@ function compileAssignees(cond: FilterCondition): string {
   if (wantsUnassigned && ids.length > 0) return or("assigned_to.is.null", `assigned_to.in.(${ids.map(pgVal).join(",")})`);
   if (wantsUnassigned) return "assigned_to.is.null";
   if (ids.length > 0) return ids.length === 1 ? `assigned_to.eq.${pgVal(ids[0])}` : `assigned_to.in.(${ids.map(pgVal).join(",")})`;
-  return "id.not.is.null"; // no valid tokens — legacy applies no filter in this case
+  // No valid tokens — legacy applies no filter in this case (route.ts's
+  // tri-branch has no final else). Dropping the condition (rather than
+  // emitting the tautology "id.not.is.null") is identical to a no-op inside
+  // AND, but is ALSO correct inside an OR group — a tautology there would
+  // make the whole group match every row. See §0 of the Phase 3 brief.
+  return null;
 }
 
 // ── location: virtual, city + country combined — no legacy equivalent ──────
@@ -110,9 +115,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
     },
     {
       key: "search",
-      label: "Search (name, email, phone)",
+      label: "Search (name, email, phone, ID)",
       type: "text",
-      source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone"], fullNamePairs: true },
+      source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone", "display_id"], fullNamePairs: true },
       group: "Basic",
       filterable: true,
     },
