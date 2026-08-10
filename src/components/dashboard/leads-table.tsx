@@ -906,6 +906,7 @@ export function LeadsTable({
         lead.email?.toLowerCase().includes(searchLower) ||
         lead.phone?.toLowerCase().includes(searchLower) ||
         lead.city?.toLowerCase().includes(searchLower) ||
+        lead.display_id?.toLowerCase().includes(searchLower) ||
         assignedEmail.toLowerCase().includes(searchLower);
       return matchesStatus && matchesSearch && matchesSecondaryFilters(lead);
     });

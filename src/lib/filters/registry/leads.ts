@@ -115,9 +115,9 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
     },
     {
       key: "search",
-      label: "Search (name, email, phone)",
+      label: "Search (name, email, phone, ID)",
       type: "text",
-      source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone"], fullNamePairs: true },
+      source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone", "display_id"], fullNamePairs: true },
       group: "Basic",
       filterable: true,
     },
