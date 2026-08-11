@@ -14,6 +14,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -113,11 +114,20 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   for (const field of updatable) {
     if (body[field] !== undefined) patch[field] = body[field] ?? null;
   }
+  // Same normalization as leads.destinations/field_of_study/degree_level — strip
+  // decoration, dedupe destinations, never rewrite to a spelling that doesn't match
+  // the tenant's own catalog.
+  if (patch.degree_level !== undefined) {
+    patch.degree_level = normalizeDegreeLevel(patch.degree_level as string | null);
+  }
+  if (patch.field_of_study !== undefined) {
+    patch.field_of_study = normalizeFieldOfStudy(patch.field_of_study as string | null);
+  }
   if (body.countries !== undefined) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {
       return apiValidationError({ countries: ["Must be an array of strings"] });
     }
-    patch.countries = body.countries;
+    patch.countries = normalizeDestinations(body.countries);
   }
 
   if (Object.keys(patch).length === 0) return apiSuccess(existingRow);

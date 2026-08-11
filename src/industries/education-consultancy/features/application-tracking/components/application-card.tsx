@@ -5,6 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Calendar, Clock, MapPin, User } from "lucide-react";
 import type { Application } from "@/types/database";
+import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 interface ApplicationCardProps {
   application: Application;
@@ -146,7 +147,7 @@ export function ApplicationCard({ application, disabled, onOpenDetail, assigneeN
         {application.countries && application.countries.length > 0 && (
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <MapPin className="h-3 w-3 shrink-0" />
-            <span className="truncate">{application.countries.join(", ")}</span>
+            <span className="truncate">{normalizeDestinations(application.countries).join(", ")}</span>
           </div>
         )}
         {application.application_deadline && (
