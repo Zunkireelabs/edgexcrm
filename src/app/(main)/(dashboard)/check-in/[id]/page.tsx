@@ -5,7 +5,7 @@ import {
   getPipelineStages,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CheckInDetailPage } from "@/industries/_shared/features/check-in/detail-ui";
+import { CheckInDetailPage, CheckInNoAccess } from "@/industries/_shared/features/check-in/detail-ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
@@ -22,8 +22,18 @@ export default async function CheckInDetailRoute({
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
   if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
-  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
-  if (!lead) notFound();
+  // Tenant-scoped fetch first to tell "doesn't exist" apart from "exists but
+  // you're not assigned/collaborator" — the latter gets an explanatory screen,
+  // not a 404, since it's reachable from the tenant-wide Check-In history list.
+  const rawLead = await getLead(id, tenantData.tenant.id);
+  if (!rawLead) notFound();
+
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId);
+  const lead = scope.restrictToSelf ? await getLead(id, tenantData.tenant.id, scope) : rawLead;
+  if (!lead) {
+    const leadName = [rawLead.first_name, rawLead.last_name].filter(Boolean).join(" ") || null;
+    return <CheckInNoAccess leadName={leadName} />;
+  }
 
   const serviceClient = await createServiceClient();
 
