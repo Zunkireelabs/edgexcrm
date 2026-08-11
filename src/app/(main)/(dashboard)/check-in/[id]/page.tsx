@@ -9,6 +9,7 @@ import { CheckInDetailPage } from "@/industries/_shared/features/check-in/detail
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { TenantEntity, LeadNote, PipelineStage } from "@/types/database";
 
 export default async function CheckInDetailRoute({
@@ -22,8 +23,14 @@ export default async function CheckInDetailRoute({
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
   if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
-  const lead = await getLead(id, tenantData.tenant.id, leadQueryScope(tenantData.permissions, tenantData.userId));
+  // Check-In detail (visit history) is tenant-wide by design — the list it's
+  // launched from already shows every counselor's check-ins. Only the "View
+  // Full Profile" link below is gated to the current assignee / unrestricted
+  // roles; the check-in view itself is not assignment-scoped.
+  const lead = await getLead(id, tenantData.tenant.id);
   if (!lead) notFound();
+
+  const scope = leadQueryScope(tenantData.permissions, tenantData.userId);
 
   const serviceClient = await createServiceClient();
 
@@ -77,6 +84,13 @@ export default async function CheckInDetailRoute({
     pipelineName = pipeline?.name || null;
   }
 
+  // "View Full Profile" stays gated to current assignee, past collaborator,
+  // or unrestricted role — same bar as the leads list itself uses.
+  const canViewFullProfile =
+    !scope.restrictToSelf ||
+    lead.assigned_to === tenantData.userId ||
+    (await isLeadCollaborator(serviceClient, tenantData.tenant.id, id, tenantData.userId));
+
   return (
     <CheckInDetailPage
       lead={lead}
@@ -86,6 +100,7 @@ export default async function CheckInDetailRoute({
       entityName={entity?.name || null}
       assignedToEmail={lead.assigned_to ? memberMap[lead.assigned_to] || null : null}
       checkInHistory={checkInNotes}
+      canViewFullProfile={canViewFullProfile}
     />
   );
 }
