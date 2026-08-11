@@ -14,36 +14,8 @@ import {
   Calendar,
   Clock,
   User,
-  ShieldAlert,
 } from "lucide-react";
 import type { Lead } from "@/types/database";
-
-export function CheckInNoAccess({ leadName }: { leadName: string | null }) {
-  const router = useRouter();
-  return (
-    <div className="flex flex-col h-full p-6">
-      <div className="shrink-0 mb-6">
-        <Button variant="ghost" size="sm" className="gap-1.5 -ml-2" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4" />
-          Back to Check-In
-        </Button>
-      </div>
-      <div className="flex-1 flex items-center justify-center">
-        <Card className="max-w-md w-full">
-          <CardContent className="p-8 text-center space-y-3">
-            <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto" />
-            <h2 className="text-lg font-semibold">You don&apos;t have access to this lead</h2>
-            <p className="text-sm text-muted-foreground">
-              {leadName ? `${leadName} is` : "This lead is"} not assigned to you and you
-              aren&apos;t a collaborator on it. Ask the assigned counselor or an admin for
-              access if you need to view these details.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
 
 interface CheckInNote {
   id: string;
