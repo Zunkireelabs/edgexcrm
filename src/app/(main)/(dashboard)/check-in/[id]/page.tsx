@@ -5,10 +5,11 @@ import {
   getPipelineStages,
 } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
-import { CheckInDetailPage, CheckInNoAccess } from "@/industries/_shared/features/check-in/detail-ui";
+import { CheckInDetailPage } from "@/industries/_shared/features/check-in/detail-ui";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { TenantEntity, LeadNote, PipelineStage } from "@/types/database";
 
 export default async function CheckInDetailRoute({
@@ -22,18 +23,14 @@ export default async function CheckInDetailRoute({
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN)) notFound();
   if (!canSeeNav(tenantData.permissions, "/check-in")) redirect("/dashboard");
 
-  // Tenant-scoped fetch first to tell "doesn't exist" apart from "exists but
-  // you're not assigned/collaborator" — the latter gets an explanatory screen,
-  // not a 404, since it's reachable from the tenant-wide Check-In history list.
-  const rawLead = await getLead(id, tenantData.tenant.id);
-  if (!rawLead) notFound();
+  // Check-In detail (visit history) is tenant-wide by design — the list it's
+  // launched from already shows every counselor's check-ins. Only the "View
+  // Full Profile" link below is gated to the current assignee / unrestricted
+  // roles; the check-in view itself is not assignment-scoped.
+  const lead = await getLead(id, tenantData.tenant.id);
+  if (!lead) notFound();
 
   const scope = leadQueryScope(tenantData.permissions, tenantData.userId);
-  const lead = scope.restrictToSelf ? await getLead(id, tenantData.tenant.id, scope) : rawLead;
-  if (!lead) {
-    const leadName = [rawLead.first_name, rawLead.last_name].filter(Boolean).join(" ") || null;
-    return <CheckInNoAccess leadName={leadName} />;
-  }
 
   const serviceClient = await createServiceClient();
 
@@ -87,11 +84,12 @@ export default async function CheckInDetailRoute({
     pipelineName = pipeline?.name || null;
   }
 
-  // Reaching this line already means "allowed to see this check-in" (assignee,
-  // collaborator, or unrestricted role) — but the full lead profile is a step
-  // further and stays limited to the current assignee / unrestricted roles, so
-  // a collaborator who only did a past check-in doesn't get the full record.
-  const canViewFullProfile = !scope.restrictToSelf || lead.assigned_to === tenantData.userId;
+  // "View Full Profile" stays gated to current assignee, past collaborator,
+  // or unrestricted role — same bar as the leads list itself uses.
+  const canViewFullProfile =
+    !scope.restrictToSelf ||
+    lead.assigned_to === tenantData.userId ||
+    (await isLeadCollaborator(serviceClient, tenantData.tenant.id, id, tenantData.userId));
 
   return (
     <CheckInDetailPage
