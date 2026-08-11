@@ -344,6 +344,11 @@ export interface FormAttribution {
   // Optional list-routing: send this form's new leads into a specific lead list
   // (a separate bucket) instead of the tenant's default intake list.
   target_list_id?: string | null;
+  // Optional branch-routing: attribute this form's new leads to a specific branch
+  // instead of the tenant's default branch — public submissions carry no session/
+  // cookie branch signal, so a form embedded on a branch-specific landing page
+  // needs its own way to say which branch it belongs to.
+  default_branch_id?: string | null;
 }
 
 export interface UtmLink {

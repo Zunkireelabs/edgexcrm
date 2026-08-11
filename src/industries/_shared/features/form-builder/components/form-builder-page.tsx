@@ -16,6 +16,7 @@ import { AttributionEditor } from "./attribution-editor";
 import { AutoresponderEditor } from "./autoresponder-editor";
 import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { ListRoutingEditor } from "./list-routing-editor";
+import { BranchRoutingEditor } from "./branch-routing-editor";
 import { slugify } from "../lib/validation";
 
 interface FormBuilderPageProps {
@@ -312,6 +313,10 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
                   dispatch={dispatch}
                 />
                 <ListRoutingEditor
+                  attribution={state.attribution}
+                  dispatch={dispatch}
+                />
+                <BranchRoutingEditor
                   attribution={state.attribution}
                   dispatch={dispatch}
                 />
