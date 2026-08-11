@@ -20,6 +20,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -241,7 +242,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
     if (!Array.isArray(body.countries) || !body.countries.every((c) => typeof c === "string")) {
       return apiValidationError({ countries: ["Must be an array of strings"] });
     }
-    insert.countries = body.countries;
+    // Same normalization as leads.destinations — strip decoration, dedupe, never
+    // rewrite to a different spelling than the tenant's own catalog.
+    insert.countries = normalizeDestinations(body.countries);
   }
   if (body.application_deadline) insert.application_deadline = String(body.application_deadline);
   if (body.application_fee_paid !== undefined) insert.application_fee_paid = Boolean(body.application_fee_paid);
@@ -255,8 +258,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (body.agent_id) insert.agent_id = String(body.agent_id);
   if (body.applied_date) insert.applied_date = String(body.applied_date);
   if (body.intake_start_date) insert.intake_start_date = String(body.intake_start_date);
-  if (body.degree_level) insert.degree_level = String(body.degree_level);
-  if (body.field_of_study) insert.field_of_study = String(body.field_of_study);
+  if (body.degree_level) insert.degree_level = normalizeDegreeLevel(String(body.degree_level));
+  if (body.field_of_study) insert.field_of_study = normalizeFieldOfStudy(String(body.field_of_study));
 
   const { data: created, error } = await db
     .from("applications")
