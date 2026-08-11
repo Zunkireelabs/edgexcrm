@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "./status-badge";
 import { AddApplicationToLeadSheet } from "./add-application-to-lead-sheet";
 import type { Application, ApplicationStage } from "@/types/database";
+import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 interface ApplicationsCardProps {
   leadId: string;
@@ -46,7 +47,7 @@ function ApplicationBody({
     (app.application_stages as ApplicationStage | null) ??
     stages.find((s) => s.id === app.stage_id) ??
     null;
-  const countriesLabel = app.countries && app.countries.length > 0 ? app.countries.join(", ") : null;
+  const countriesLabel = app.countries && app.countries.length > 0 ? normalizeDestinations(app.countries).join(", ") : null;
   const intakeCountry = [app.intake_term, countriesLabel].filter(Boolean).join(" · ");
   return (
     <Link

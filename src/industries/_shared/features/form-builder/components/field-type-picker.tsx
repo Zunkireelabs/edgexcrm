@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/popover";
 import type { FormField } from "@/types/database";
 import { toFieldName } from "../lib/validation";
-import { DESTINATIONS, FIELDS_OF_STUDY } from "@/industries/_shared/features/lead-lists/taxonomies";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 type FieldType = FormField["type"];
 
@@ -29,14 +29,15 @@ const FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
 ];
 
 // Reserved presets — map to real `leads` columns (leads.destinations TEXT[],
-// leads.field_of_study TEXT) instead of a free-typed custom_fields key, so
-// forms stop reinventing this question under a new synonym every time
-// (interested_country, dream_destination, preferred_destination, ... — 8
-// different keys were found scattered across prod before this fix).
-// Education-only: DESTINATIONS/FIELDS_OF_STUDY are education vocab.
+// leads.field_of_study TEXT, leads.degree_level TEXT) instead of a free-typed
+// custom_fields key, so forms stop reinventing this question under a new synonym
+// every time (interested_country, dream_destination, preferred_destination, ... —
+// 8 different keys were found scattered across prod before this fix).
+// Education-only vocab.
 const RESERVED_FIELD_TYPES: { type: FieldType; label: string; description: string }[] = [
   { type: "checkbox", label: "Study Destination", description: "Preferred country/countries to study in (multi-select)" },
   { type: "select", label: "Field of Study", description: "Area of academic interest" },
+  { type: "select", label: "Degree Level", description: "Undergraduate / Postgraduate / PhD" },
 ];
 
 interface FieldTypePickerProps {
@@ -44,19 +45,12 @@ interface FieldTypePickerProps {
   industryId?: string | null;
 }
 
-const RESERVED: Record<string, { name: string; options: { label: string; value: string }[] }> = {
-  "Study Destination": {
-    name: "destinations",
-    options: DESTINATIONS.map((d) => ({ label: d, value: d })),
-  },
-  "Field of Study": {
-    name: "field_of_study",
-    options: FIELDS_OF_STUDY.map((f) => ({ label: f, value: f })),
-  },
-};
-
-function buildDefaultField(type: FieldType, label: string): FormField {
-  const reserved = RESERVED[label];
+function buildDefaultField(
+  type: FieldType,
+  label: string,
+  reservedOptions: Record<string, { name: string; options: { label: string; value: string }[] }>
+): FormField {
+  const reserved = reservedOptions[label];
   const base: FormField = {
     name: reserved?.name ?? (toFieldName(label) || type),
     label,
@@ -88,8 +82,33 @@ export function FieldTypePicker({ onSelect, industryId }: FieldTypePickerProps) 
   const fieldTypes =
     industryId === "education_consultancy" ? [...FIELD_TYPES, ...RESERVED_FIELD_TYPES] : FIELD_TYPES;
 
+  // Reserved fields' options are seeded from THIS tenant's own live Settings catalog
+  // (Destination Countries / Courses / Study Levels — same source the admin-facing
+  // DestinationsMultiSelect etc. already fetch from), not a hardcoded list. A prior
+  // version baked in a static list here that didn't match a real tenant's catalog
+  // wording (e.g. "USA" here vs. "United States" in Settings) — a newly-created form
+  // field would then offer applicants options that don't match what the internal
+  // picker shows for the same tenant. useEduTaxonomy() falls back to a reasonable
+  // default set only if the tenant hasn't configured a catalog yet (fetch returns
+  // empty), so a brand-new tenant still gets a usable field, not a blank one.
+  const { destinations, fieldsOfStudy, studyLevels } = useEduTaxonomy();
+  const reservedOptions: Record<string, { name: string; options: { label: string; value: string }[] }> = {
+    "Study Destination": {
+      name: "destinations",
+      options: destinations.map((d) => ({ label: d, value: d })),
+    },
+    "Field of Study": {
+      name: "field_of_study",
+      options: fieldsOfStudy.map((f) => ({ label: f, value: f })),
+    },
+    "Degree Level": {
+      name: "degree_level",
+      options: studyLevels.map((s) => ({ label: s, value: s })),
+    },
+  };
+
   function handleSelect(type: FieldType, label: string) {
-    onSelect(buildDefaultField(type, label));
+    onSelect(buildDefaultField(type, label, reservedOptions));
     setOpen(false);
   }
 

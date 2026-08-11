@@ -114,6 +114,8 @@ export interface IncomingLeadFields {
   file_urls?: Record<string, unknown>;
   tags?: string[];
   destinations?: string[];
+  field_of_study?: string | null;
+  degree_level?: string | null;
 }
 
 // Returns only the keys that would actually change — empty object = no update needed.
@@ -175,6 +177,16 @@ export function applyCanonicalUpdate(
     (!existing.destinations || existing.destinations.length === 0)
   ) {
     patch.destinations = incoming.destinations;
+  }
+
+  // field_of_study / degree_level: fill-empty, same as the other scalars above — these
+  // were previously never passed into this function at all, so a repeat submission on a
+  // different form could never fill in an answer the first submission left blank.
+  if (incoming.field_of_study && !existing.field_of_study) {
+    patch.field_of_study = incoming.field_of_study;
+  }
+  if (incoming.degree_level && !existing.degree_level) {
+    patch.degree_level = incoming.degree_level;
   }
 
   return patch;
