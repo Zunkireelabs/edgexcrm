@@ -52,6 +52,7 @@ import { DestinationsMultiSelect } from "@/components/dashboard/destinations-mul
 import { AddUniversityWithProgramsDialog } from "../components/add-university-with-programs-dialog";
 import type { Application, ApplicationStage, Lead } from "@/types/database";
 import type { LeadActivity } from "@/lib/supabase/queries";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
 // Stages at or beyond conditional_offer where offer_type becomes prominent
 const OFFER_STAGE_POSITIONS = new Set([3, 4, 5, 6, 7, 8]);
@@ -521,7 +522,7 @@ export function ApplicationDetailPage({
                     {application.countries && application.countries.length > 0 && (
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <MapPin className="h-3 w-3" />
-                        {application.countries.join(", ")}
+                        {normalizeDestinations(application.countries).join(", ")}
                       </span>
                     )}
                     {application.application_deadline && (
@@ -645,7 +646,7 @@ export function ApplicationDetailPage({
                     <Label className="text-xs text-muted-foreground">Destination</Label>
                     <p className="text-sm">
                       {application.countries && application.countries.length > 0
-                        ? application.countries.join(", ")
+                        ? normalizeDestinations(application.countries).join(", ")
                         : "—"}
                     </p>
                   </>
@@ -686,7 +687,7 @@ export function ApplicationDetailPage({
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-sm">{application.degree_level ?? "—"}</p>
+                  <p className="text-sm">{normalizeDegreeLevel(application.degree_level) ?? "—"}</p>
                 )}
               </div>
 
@@ -706,7 +707,7 @@ export function ApplicationDetailPage({
                     </SelectContent>
                   </Select>
                 ) : (
-                  <p className="text-sm">{application.field_of_study ?? "—"}</p>
+                  <p className="text-sm">{normalizeFieldOfStudy(application.field_of_study) ?? "—"}</p>
                 )}
               </div>
 

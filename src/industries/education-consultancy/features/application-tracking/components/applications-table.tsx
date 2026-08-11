@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { StatusBadge } from "./status-badge";
 import type { Application, ApplicationStage } from "@/types/database";
+import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 export const APPLICATION_COLUMNS = [
   { key: "university", label: "University" },
@@ -96,7 +97,7 @@ export function ApplicationsTable({
                 )}
                 {show("country") && (
                   <td className="px-4 py-3 text-muted-foreground">
-                    {app.countries && app.countries.length > 0 ? app.countries.join(", ") : "—"}
+                    {app.countries && app.countries.length > 0 ? normalizeDestinations(app.countries).join(", ") : "—"}
                   </td>
                 )}
                 {show("status") && (

@@ -23,6 +23,7 @@ import {
 import { AddApplicationSheet } from "../components/add-application-sheet";
 import { ApplicationPipelineSelector } from "../components/pipeline/application-pipeline-selector";
 import type { Application, ApplicationStage, ApplicationPipelineWithCounts, UserRole } from "@/types/database";
+import { normalizeDestinations } from "@/lib/leads/destination-normalize";
 
 interface ApplicationsWorkspaceTeamMember {
   user_id: string;
@@ -147,7 +148,7 @@ export function ApplicationsWorkspace({
   ], [filteredStages]);
 
   const countryOptions = useMemo(() => {
-    const countries = Array.from(new Set(applications.flatMap((a) => a.countries ?? [])));
+    const countries = normalizeDestinations(applications.flatMap((a) => a.countries ?? []));
     return [
       { value: "all", label: "All countries" },
       ...countries.map((c) => ({ value: c, label: c })),
@@ -161,7 +162,7 @@ export function ApplicationsWorkspace({
     const m = new Map<string, number>();
     applications.forEach((a) => {
       const matchesStage = stageFilter === "all" || a.stage_id === stageFilter;
-      const matchesCountry = countryFilter === "all" || (a.countries ?? []).includes(countryFilter);
+      const matchesCountry = countryFilter === "all" || normalizeDestinations(a.countries ?? []).includes(countryFilter);
       if (matchesStage && matchesCountry) {
         const key = a.created_by ?? "unknown";
         m.set(key, (m.get(key) ?? 0) + 1);
@@ -208,7 +209,7 @@ export function ApplicationsWorkspace({
       );
     }
     if (stageFilter !== "all") result = result.filter((a) => a.stage_id === stageFilter);
-    if (countryFilter !== "all") result = result.filter((a) => (a.countries ?? []).includes(countryFilter));
+    if (countryFilter !== "all") result = result.filter((a) => normalizeDestinations(a.countries ?? []).includes(countryFilter));
     if (createdByFilter.length > 0) {
       result = result.filter((a) => createdByFilter.includes(a.created_by ?? "unknown"));
     }
