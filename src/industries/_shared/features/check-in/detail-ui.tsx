@@ -60,6 +60,7 @@ interface CheckInDetailPageProps {
   entityName: string | null;
   assignedToEmail: string | null;
   checkInHistory: CheckInNote[];
+  canViewFullProfile: boolean;
 }
 
 export function CheckInDetailPage({
@@ -70,6 +71,7 @@ export function CheckInDetailPage({
   entityName,
   assignedToEmail,
   checkInHistory,
+  canViewFullProfile,
 }: CheckInDetailPageProps) {
   const router = useRouter();
   const fullName = [lead.first_name, lead.last_name].filter(Boolean).join(" ") || "Unknown";
@@ -180,10 +182,12 @@ export function CheckInDetailPage({
               </div>
             </div>
 
-            {/* View Full Profile link */}
-            <Button variant="outline" size="sm" asChild className="shrink-0">
-              <Link href={`/leads/${lead.id}`}>View Full Profile</Link>
-            </Button>
+            {/* View Full Profile link — only for the current assignee / unrestricted roles */}
+            {canViewFullProfile && (
+              <Button variant="outline" size="sm" asChild className="shrink-0">
+                <Link href={`/leads/${lead.id}`}>View Full Profile</Link>
+              </Button>
+            )}
           </div>
         </CardContent>
       </Card>

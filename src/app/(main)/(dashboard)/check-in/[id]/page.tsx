@@ -87,6 +87,12 @@ export default async function CheckInDetailRoute({
     pipelineName = pipeline?.name || null;
   }
 
+  // Reaching this line already means "allowed to see this check-in" (assignee,
+  // collaborator, or unrestricted role) — but the full lead profile is a step
+  // further and stays limited to the current assignee / unrestricted roles, so
+  // a collaborator who only did a past check-in doesn't get the full record.
+  const canViewFullProfile = !scope.restrictToSelf || lead.assigned_to === tenantData.userId;
+
   return (
     <CheckInDetailPage
       lead={lead}
@@ -96,6 +102,7 @@ export default async function CheckInDetailRoute({
       entityName={entity?.name || null}
       assignedToEmail={lead.assigned_to ? memberMap[lead.assigned_to] || null : null}
       checkInHistory={checkInNotes}
+      canViewFullProfile={canViewFullProfile}
     />
   );
 }
