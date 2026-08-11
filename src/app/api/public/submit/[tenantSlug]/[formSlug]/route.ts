@@ -37,7 +37,12 @@ import { syncOriginMembership } from "@/lib/leads/branch-membership";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
-import { extractDestinationsFromCustomFields } from "@/lib/leads/destination-normalize";
+import {
+  extractDestinationsFromCustomFields,
+  normalizeDestinations,
+  resolveFieldOfStudy,
+  resolveDegreeLevel,
+} from "@/lib/leads/destination-normalize";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -255,12 +260,28 @@ export async function POST(
   // Resolve destinations: prefer an explicit `destinations` array field, else fall back to
   // whatever synonym key this form's destination question actually used (education_consultancy
   // only — see docs/DESTINATION-COLUMN-DISPLAY-FIX-BRIEF.md for why this fallback exists).
+  // Both branches now run through the same normalizeDestinations() cleanup (strip decoration,
+  // canonicalize aliases) — previously only the synonym-key fallback got it, so a form using
+  // the real `destinations` key directly stored whatever raw text (incl. a flag emoji) an
+  // admin had typed into that option's value, unlike a form using an older synonym key.
   const explicitDestinations = Array.isArray(body.destinations) ? (body.destinations as string[]) : [];
   const resolvedDestinations = explicitDestinations.length > 0
-    ? explicitDestinations
+    ? normalizeDestinations(explicitDestinations)
     : tenant.industry_id === "education_consultancy"
       ? extractDestinationsFromCustomFields(body.custom_fields as Record<string, unknown> | undefined)
       : [];
+
+  // Same normalization for field_of_study/degree_level — degree_level was previously never
+  // read at all in this route, so a form using any key name for that question silently lost
+  // the answer at write time.
+  const resolvedFieldOfStudy = resolveFieldOfStudy(
+    body.field_of_study as string | null | undefined,
+    body.custom_fields as Record<string, unknown> | undefined
+  );
+  const resolvedDegreeLevel = resolveDegreeLevel(
+    body.degree_level as string | null | undefined,
+    body.custom_fields as Record<string, unknown> | undefined
+  );
 
   // ── 10. Dedup: resolve identity ──
   const normalizedEmail = normalizeEmail(body.email as string | undefined);
@@ -311,6 +332,8 @@ export async function POST(
       custom_fields: (body.custom_fields as Record<string, unknown>) ?? {},
       file_urls: (body.file_urls as Record<string, unknown>) ?? {},
       destinations: resolvedDestinations,
+      field_of_study: resolvedFieldOfStudy,
+      degree_level: resolvedDegreeLevel,
       tags: Array.isArray(body.tags) ? (body.tags as string[]) : [],
     });
     if (Object.keys(patch).length > 0) {
@@ -436,7 +459,8 @@ export async function POST(
     city: body.city || null,
     country: body.country || null,
     destinations: resolvedDestinations,
-    field_of_study: (body.field_of_study as string | null | undefined) || null,
+    field_of_study: resolvedFieldOfStudy,
+    degree_level: resolvedDegreeLevel,
     custom_fields: body.custom_fields || {},
     file_urls: body.file_urls || {},
     entity_id: body.entity_id || null,

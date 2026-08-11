@@ -52,6 +52,7 @@ import { MemberAvatar } from "@/components/ui/member-avatar";
 import { cn } from "@/lib/utils";
 import type { Lead, LeadList, PipelineStage, TenantEntity, Industry } from "@/types/database";
 import { getDistinctFormValues, type LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 import { BranchesBlock } from "./branches-block";
 import { CollaboratorsBlock } from "./collaborators-block";
 import { ListStepper } from "@/components/dashboard/leads/list-stepper";
@@ -774,14 +775,25 @@ function StudyInterestPanel({ lead, isAdmin, isEditor, onSave, submissionHistory
 
   // Fall back to every distinct answer this lead has given across repeat form
   // submissions when the dedicated column is empty (form-submitted leads).
-  const distinctFieldOfStudy = getDistinctFormValues(cf, submissionHistory, "field_of_study");
-  const distinctDegreeLevel = getDistinctFormValues(cf, submissionHistory, "education_level");
+  // Every value here is run through the same normalizeX() cleanup the write paths use
+  // (strip decoration, canonicalize) — this is display-only (no DB write), so it also
+  // cleans up leads that were stored before that write-time fix existed, with no backfill.
+  const distinctFieldOfStudy = [...new Set(
+    getDistinctFormValues(cf, submissionHistory, "field_of_study")
+      .map((v) => normalizeFieldOfStudy(v))
+      .filter((v): v is string => !!v)
+  )];
+  const distinctDegreeLevel = [...new Set(
+    getDistinctFormValues(cf, submissionHistory, "education_level")
+      .map((v) => normalizeDegreeLevel(v))
+      .filter((v): v is string => !!v)
+  )];
   const effectiveDestinations: string[] =
     (leadWithEdu.destinations?.length ?? 0) > 0
-      ? (leadWithEdu.destinations ?? [])
-      : getDistinctFormValues(cf, submissionHistory, "countries");
-  const effectiveFieldOfStudy = leadWithEdu.field_of_study || distinctFieldOfStudy.join(", ") || null;
-  const effectiveDegreeLevel = leadWithEdu.degree_level || distinctDegreeLevel.join(", ") || null;
+      ? normalizeDestinations(leadWithEdu.destinations ?? [])
+      : normalizeDestinations(getDistinctFormValues(cf, submissionHistory, "countries"));
+  const effectiveFieldOfStudy = normalizeFieldOfStudy(leadWithEdu.field_of_study) || distinctFieldOfStudy.join(", ") || null;
+  const effectiveDegreeLevel = normalizeDegreeLevel(leadWithEdu.degree_level) || distinctDegreeLevel.join(", ") || null;
 
   const { destinations: destOptions, fieldsOfStudy, studyLevels } = useEduTaxonomy();
   const [editing, setEditing] = useState(false);

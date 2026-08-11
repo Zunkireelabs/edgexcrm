@@ -53,12 +53,14 @@ import {
   touchLastActivity,
 } from "@/lib/leads/dedup";
 import { resolveLeadPipelineAndStage } from "@/lib/leads/pipeline-resolution";
+import { resolveLeadBranch } from "@/lib/leads/branch-resolution";
 import { getPipelineLandingStage } from "@/lib/leads/pipeline-stage";
 import { STAGE_TEAM_MAP } from "@/industries/education-consultancy/lead-assignment-by-stage";
 import { processEmailForwardRules } from "@/lib/email/email-forward";
 import { processFormAutoresponder } from "@/lib/email/form-autoresponder";
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { coerceAcademicPayload, hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
+import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -723,6 +725,26 @@ async function handlePost(request: NextRequest) {
 
   if (!tenant) return apiNotFound("Tenant");
 
+  // Fetch form config early — feeds both branch resolution below and pipeline
+  // resolution/schema validation further down (phone-parsing IIFE fetches steps
+  // separately).
+  let formConfig: {
+    id: string;
+    target_pipeline_id?: string | null;
+    steps?: FormStep[] | null;
+    attribution?: { default_branch_id?: string | null } | null;
+    autoresponder?: FormConfig["autoresponder"];
+  } | null = null;
+  if (body.form_config_id) {
+    const { data: fc } = await supabase
+      .from("form_configs")
+      .select("id, target_pipeline_id, steps, attribution, autoresponder")
+      .eq("id", body.form_config_id as string)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    formConfig = fc ?? null;
+  }
+
   // ── Branch resolution (insert path only) ────────────────────────────────
   // Read active-branch cookie from the header switcher.
   // "all" / "overall" / empty = Overall view → treat as no active branch.
@@ -743,23 +765,13 @@ async function handlePost(request: NextRequest) {
       : [];
   const cookieBranchId = dashAuth ? resolveEffectiveBranch(edgexBranchVal, validBranchIds) : null;
 
-  // Precedence: 1. explicit body branch_id  2. active branch cookie  3. creator's branch
-  //             4. tenant default branch (is_default = true)
-  const explicitBranchId = (body.branch_id as string | null | undefined) || null;
-  const step123BranchId = explicitBranchId ?? cookieBranchId ?? (dashAuth?.branchId ?? null);
-
-  // Step 4: fall back to the tenant's default branch when none of steps 1–3 resolved.
-  let creationBranchId = step123BranchId;
-  if (!creationBranchId) {
-    const { data: defaultBranch } = await supabase
-      .from("branches")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("is_default", true)
-      .limit(1)
-      .maybeSingle();
-    creationBranchId = defaultBranch?.id ?? null;
-  }
+  const creationBranchId = await resolveLeadBranch(supabase, {
+    tenantId,
+    explicitBranchId: (body.branch_id as string | null | undefined) || null,
+    cookieBranchId,
+    callerBranchId: dashAuth?.branchId ?? null,
+    formDefaultBranchId: formConfig?.attribution?.default_branch_id || null,
+  });
   // ── End branch resolution ────────────────────────────────────────────────
 
   // Validate assigned_to: must belong to this tenant if provided
@@ -813,22 +825,7 @@ async function handlePost(request: NextRequest) {
   // Resolve status
   const resolvedStatus = (body.status as string) || (body.is_final ? "new" : "partial");
 
-  // Fetch form config for routing + schema validation (phone-parsing IIFE fetches steps separately)
-  let formConfig: {
-    id: string;
-    target_pipeline_id?: string | null;
-    steps?: FormStep[] | null;
-    autoresponder?: FormConfig["autoresponder"];
-  } | null = null;
-  if (body.form_config_id) {
-    const { data: fc } = await supabase
-      .from("form_configs")
-      .select("id, target_pipeline_id, steps, autoresponder")
-      .eq("id", body.form_config_id as string)
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-    formConfig = fc ?? null;
-  }
+  // formConfig was already fetched above (feeds branch resolution too).
 
   const resolved = await resolveLeadPipelineAndStage(supabase, {
     tenantId,
@@ -921,10 +918,11 @@ async function handlePost(request: NextRequest) {
     owner_id: body.owner_id || null,
     salutation: body.salutation || null,
     company_email: body.company_email || null,
-    // Education-only structured fields
-    destinations: Array.isArray(body.destinations) ? body.destinations : [],
-    field_of_study: (body.field_of_study as string | null | undefined) || null,
-    degree_level: (body.degree_level as string | null | undefined) || null,
+    // Education-only structured fields — normalized the same way as the public
+    // submit route so every ingestion path produces identical, clean values.
+    destinations: Array.isArray(body.destinations) ? normalizeDestinations(body.destinations) : [],
+    field_of_study: normalizeFieldOfStudy(body.field_of_study as string | null | undefined),
+    degree_level: normalizeDegreeLevel(body.degree_level as string | null | undefined),
     ...coerceAcademicPayload(body),
     ...(idempotencyKey && { idempotency_key: idempotencyKey }),
   };
