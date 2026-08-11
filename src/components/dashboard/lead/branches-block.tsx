@@ -35,6 +35,15 @@ interface Branch {
   name: string;
 }
 
+interface RosterMember {
+  user_id: string;
+  branch_id: string | null;
+  name: string | null;
+  email: string;
+}
+
+const UNASSIGNED_SENTINEL = "__unassigned__";
+
 interface BranchesBlockProps {
   leadId: string;
   isAdmin: boolean;
@@ -45,9 +54,11 @@ interface BranchesBlockProps {
 export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: BranchesBlockProps) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [allBranches, setAllBranches] = useState<Branch[]>([]);
+  const [roster, setRoster] = useState<RosterMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("");
+  const [selectedAssignee, setSelectedAssignee] = useState("");
   const [sending, setSending] = useState(false);
   const [savingRow, setSavingRow] = useState<string | null>(null);
 
@@ -58,12 +69,19 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
     return isAdmin && !r.is_origin;
   }
 
+  // Mirrors the PATCH route's own authorization exactly: admin can reassign any
+  // branch row; a branch manager only the row matching their own branch.
+  function canAssign(r: Membership) {
+    return isAdmin || (isBranchManager && r.branch_id === userBranchId);
+  }
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [membRes, branchRes] = await Promise.all([
+      const [membRes, branchRes, teamRes] = await Promise.all([
         fetch(`/api/v1/leads/${leadId}/branches`),
         fetch("/api/v1/branches"),
+        fetch("/api/v1/team"),
       ]);
       if (membRes.ok) {
         const json = await membRes.json();
@@ -73,6 +91,13 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
         const json = await branchRes.json();
         setAllBranches((json.data ?? []) as Branch[]);
       }
+      if (teamRes.ok) {
+        const json = await teamRes.json();
+        setRoster((json.data ?? []) as RosterMember[]);
+      }
+      // teamRes 403 (e.g. a branch manager without /team nav or canAssignLeads)
+      // is swallowed here same as the others — roster just stays empty and the
+      // assignee controls render with no options, non-critical degradation.
     } catch {
       // silent — block is non-critical
     } finally {
@@ -94,18 +119,42 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
       const res = await fetch(`/api/v1/leads/${leadId}/branches`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ branch_ids: [selectedBranch] }),
+        body: JSON.stringify({
+          branch_ids: [selectedBranch],
+          ...(selectedAssignee && { assigned_to: selectedAssignee }),
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error?.message || "Failed to share lead");
       toast.success("Lead shared to branch");
       setSendDialogOpen(false);
       setSelectedBranch("");
+      setSelectedAssignee("");
       await fetchData();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to share lead");
     } finally {
       setSending(false);
+    }
+  }
+
+  async function handleAssigneeChange(branchId: string, value: string) {
+    const assignedTo = value === UNASSIGNED_SENTINEL ? null : value;
+    setSavingRow(branchId);
+    try {
+      const res = await fetch(`/api/v1/leads/${leadId}/branches/${branchId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assigned_to: assignedTo }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error?.message || "Failed to update assignee");
+      toast.success(assignedTo ? "Assignee updated" : "Unassigned");
+      await fetchData();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update assignee");
+    } finally {
+      setSavingRow(null);
     }
   }
 
@@ -153,6 +202,7 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
           <div className="space-y-2">
             {memberships.map((m) => {
               const isSaving = savingRow === m.branch_id;
+              const branchMembers = roster.filter((r) => r.branch_id === m.branch_id);
 
               return (
                 <div key={m.branch_id} className="flex items-start gap-2 min-w-0">
@@ -166,10 +216,30 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                       )}
                     </div>
 
-                    {(m.assigned_to_name || m.assigned_to_email) && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {m.assigned_to_name || m.assigned_to_email}
-                      </p>
+                    {canAssign(m) ? (
+                      <Select
+                        value={m.assigned_to ?? UNASSIGNED_SENTINEL}
+                        onValueChange={(value) => handleAssigneeChange(m.branch_id, value)}
+                        disabled={isSaving}
+                      >
+                        <SelectTrigger className="h-6 mt-1 text-xs w-full max-w-[220px]">
+                          <SelectValue placeholder="Unassigned" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={UNASSIGNED_SENTINEL}>Unassigned</SelectItem>
+                          {branchMembers.map((r) => (
+                            <SelectItem key={r.user_id} value={r.user_id}>
+                              {r.name || r.email}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      (m.assigned_to_name || m.assigned_to_email) && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {m.assigned_to_name || m.assigned_to_email}
+                        </p>
+                      )
                     )}
                   </div>
 
@@ -195,7 +265,10 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
         open={sendDialogOpen}
         onOpenChange={(open) => {
           setSendDialogOpen(open);
-          if (!open) setSelectedBranch("");
+          if (!open) {
+            setSelectedBranch("");
+            setSelectedAssignee("");
+          }
         }}
       >
         <DialogContent>
@@ -205,8 +278,14 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
               Add this lead to a branch. It stays in its current branches.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Select value={selectedBranch} onValueChange={setSelectedBranch}>
+          <div className="py-4 space-y-3">
+            <Select
+              value={selectedBranch}
+              onValueChange={(value) => {
+                setSelectedBranch(value);
+                setSelectedAssignee(""); // candidate list changes with the branch
+              }}
+            >
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select branch…" />
               </SelectTrigger>
@@ -218,6 +297,23 @@ export function BranchesBlock({ leadId, isAdmin, userBranchId, leadScope }: Bran
                 ))}
               </SelectContent>
             </Select>
+
+            {selectedBranch && (
+              <Select value={selectedAssignee} onValueChange={setSelectedAssignee}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Assign to (optional)…" />
+                </SelectTrigger>
+                <SelectContent>
+                  {roster
+                    .filter((r) => r.branch_id === selectedBranch)
+                    .map((r) => (
+                      <SelectItem key={r.user_id} value={r.user_id}>
+                        {r.name || r.email}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <DialogFooter>
             <Button
