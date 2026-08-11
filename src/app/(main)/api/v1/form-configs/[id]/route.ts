@@ -118,13 +118,33 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   if (body.branding !== undefined) updatePayload.branding = body.branding as FormBranding;
   if (body.redirect_url !== undefined) updatePayload.redirect_url = body.redirect_url ?? null;
   if (body.attribution !== undefined) {
-    // Normalize: only persist the 3 known keys, coerce to string|null, skip empties
+    // Normalize: only persist the known keys, coerce to string|null, skip empties
     const raw = (body.attribution ?? {}) as Record<string, unknown>;
     const normalized: FormAttribution = {};
     for (const key of ["default_source", "default_medium", "default_campaign"] as const) {
       const v = raw[key];
       if (typeof v === "string" && v.trim()) normalized[key] = v.trim();
       else if (v === null || v === undefined || v === "") normalized[key] = null;
+    }
+    // Branch-routing: attributes this form's public leads to a specific branch
+    // instead of the tenant default (public submissions carry no session/cookie
+    // branch signal). Validated against this tenant's branches, not just coerced
+    // like the string fields above — an invalid id here would silently misroute
+    // every future lead from this form.
+    if (raw.default_branch_id !== undefined) {
+      const bid = raw.default_branch_id;
+      if (bid === null || bid === "") {
+        normalized.default_branch_id = null;
+      } else {
+        const { data: b } = await supabase
+          .from("branches")
+          .select("id")
+          .eq("id", String(bid))
+          .eq("tenant_id", auth.tenantId)
+          .maybeSingle();
+        if (!b) return apiValidationError({ default_branch_id: ["Branch not found for this tenant"] });
+        normalized.default_branch_id = String(bid);
+      }
     }
     updatePayload.attribution = normalized;
   }
