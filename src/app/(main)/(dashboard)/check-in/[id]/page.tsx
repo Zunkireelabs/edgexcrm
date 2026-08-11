@@ -9,6 +9,7 @@ import { CheckInDetailPage } from "@/industries/_shared/features/check-in/detail
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
+import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { TenantEntity, LeadNote, PipelineStage } from "@/types/database";
 
 export default async function CheckInDetailRoute({
@@ -83,11 +84,12 @@ export default async function CheckInDetailRoute({
     pipelineName = pipeline?.name || null;
   }
 
-  // Reaching this line already means "allowed to see this check-in" (assignee,
-  // collaborator, or unrestricted role) — but the full lead profile is a step
-  // further and stays limited to the current assignee / unrestricted roles, so
-  // a collaborator who only did a past check-in doesn't get the full record.
-  const canViewFullProfile = !scope.restrictToSelf || lead.assigned_to === tenantData.userId;
+  // "View Full Profile" stays gated to current assignee, past collaborator,
+  // or unrestricted role — same bar as the leads list itself uses.
+  const canViewFullProfile =
+    !scope.restrictToSelf ||
+    lead.assigned_to === tenantData.userId ||
+    (await isLeadCollaborator(serviceClient, tenantData.tenant.id, id, tenantData.userId));
 
   return (
     <CheckInDetailPage
