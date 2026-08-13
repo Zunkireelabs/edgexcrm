@@ -411,6 +411,11 @@ export interface FormField {
   placeholder?: string;
   options?: { label: string; value: string; dial_code?: string }[];
   width?: "half" | "third" | "two-thirds" | "full";
+  // Legacy link from a `tel` field to a `select` field whose options carry a
+  // per-country `dial_code` — a handful of real forms (seeded outside the
+  // builder UI, which never exposed this) still use it. The tel field's own
+  // dial-code picker defers to this when the visitor hasn't touched it
+  // directly, so those forms keep their existing single-control UX.
   country_field?: string;
   terms_url?: string;
   conditional?: { field: string; values: string[] };
