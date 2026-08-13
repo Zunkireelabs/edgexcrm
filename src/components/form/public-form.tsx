@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EntitySelectField } from "@/components/form/entity-select-field";
+import { Combobox } from "@/components/ui/combobox";
 import {
   isValidPhoneForCountry,
   parseStoredPhone,
@@ -22,7 +23,7 @@ import {
   normalizePhoneForStorage,
 } from "@/lib/phone-utils";
 import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "@/lib/country-codes";
-import { CheckCircle, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
+import { CheckCircle, Loader2, ChevronRight, ChevronLeft, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 
 function toTitleCase(str: string): string {
@@ -37,6 +38,11 @@ for (const cc of COUNTRY_CODES) {
 function findPhoneCountryValue(dialCode: string): string {
   return COUNTRY_CODES.find((cc) => cc.dialCode === dialCode)?.value || "nepal";
 }
+
+const PHONE_COUNTRY_OPTIONS = COUNTRY_CODES.map((cc) => ({
+  value: cc.value,
+  label: `${cc.dialCode} ${cc.label}`,
+}));
 
 interface PublicFormProps {
   tenant: Tenant;
@@ -552,7 +558,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       <SelectContent>
                         {field.options?.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {toTitleCase(opt.label)}
+                            {toTitleCase(opt.label)}{opt.dial_code ? ` (${opt.dial_code})` : ""}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -627,9 +633,27 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                   {field.type === "tel" && (() => {
                     const parsedPhone = parseStoredPhone(String(formData[field.name] || ""));
                     const derivedCountry = findPhoneCountryValue(parsedPhone.dialCode || DEFAULT_DIAL_CODE);
+
+                    // Legacy link: a separate "Country" select field whose
+                    // options carry a dial_code (real forms seeded before the
+                    // builder UI existed). Drives the default dial code only
+                    // when the visitor hasn't typed a number or touched the
+                    // phone field's own picker directly.
+                    let linkedCountry: string | undefined;
+                    if (field.country_field) {
+                      const linkedField = step.fields.find((f) => f.name === field.country_field);
+                      const linkedValue = linkedField ? formData[linkedField.name] : undefined;
+                      const linkedOption = linkedValue
+                        ? linkedField?.options?.find((o) => o.value === linkedValue)
+                        : undefined;
+                      if (linkedOption?.dial_code) {
+                        linkedCountry = findPhoneCountryValue(linkedOption.dial_code);
+                      }
+                    }
+
                     const selectedCountry = parsedPhone.localNumber
                       ? derivedCountry
-                      : (phoneCountryOverride[field.name] ?? derivedCountry);
+                      : (phoneCountryOverride[field.name] ?? linkedCountry ?? derivedCountry);
                     const currentDialCode = phoneCodeMap[selectedCountry] || DEFAULT_DIAL_CODE;
 
                     function handleCountryChange(countryValue: string) {
@@ -652,21 +676,23 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
 
                     return (
                       <div className="flex" style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
-                        <Select value={selectedCountry} onValueChange={handleCountryChange}>
-                          <SelectTrigger
-                            className={`w-[92px] shrink-0 rounded-r-none border-r-0 font-normal ${hideLabels ? compactSelect : "bg-white"}`}
-                            style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
-                          >
-                            <SelectValue>{currentDialCode}</SelectValue>
-                          </SelectTrigger>
-                          <SelectContent className="max-h-[300px]">
-                            {COUNTRY_CODES.map((cc) => (
-                              <SelectItem key={cc.value} value={cc.value}>
-                                {cc.dialCode} {cc.label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                        <Combobox
+                          value={selectedCountry}
+                          onChange={handleCountryChange}
+                          options={PHONE_COUNTRY_OPTIONS}
+                          searchPlaceholder="Search country..."
+                          emptyText="No country found."
+                          trigger={
+                            <button
+                              type="button"
+                              className={`border-input flex w-[92px] shrink-0 items-center justify-between gap-1 rounded-md rounded-r-none border border-r-0 bg-transparent px-2.5 py-2 text-sm font-normal outline-none ${hideLabels ? compactSelect : "bg-white"}`}
+                              style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
+                            >
+                              {currentDialCode}
+                              <ChevronDown className="size-4 shrink-0 opacity-50" />
+                            </button>
+                          }
+                        />
                         <Input
                           id={field.name}
                           type="tel"
