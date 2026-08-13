@@ -114,3 +114,27 @@ export function validateSubmissionAgainstForm(
 
   return { valid: Object.keys(errors).length === 0, errors };
 }
+
+/**
+ * Builds the values object passed to validateSubmissionAgainstForm() from a
+ * raw submission body — was duplicated inline (and drifted incomplete) in
+ * both /api/v1/leads and /api/public/submit/[tenantSlug]/[formSlug]. Must
+ * list every field a form can mark `required` that isn't carried inside
+ * `custom_fields` — currently: first_name, last_name, email, phone, city,
+ * country, destinations, field_of_study. A field missing from this list is
+ * invisible to validation: present in the real submission, but reported as
+ * "required" and missing regardless of what the visitor actually entered.
+ */
+export function buildSchemaValidationValues(body: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...((body.custom_fields as Record<string, unknown>) || {}),
+    first_name: body.first_name,
+    last_name: body.last_name,
+    email: body.email,
+    phone: body.phone,
+    city: body.city,
+    country: body.country,
+    destinations: body.destinations,
+    field_of_study: body.field_of_study,
+  };
+}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getClientIp } from "@/lib/api/auth";
 import { authenticateIntegrationRequest } from "@/lib/api/integration-auth";
-import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { validateSubmissionAgainstForm, buildSchemaValidationValues } from "@/lib/leads/form-validation";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import type { FormStep, FormConfig, Lead } from "@/types/database";
 import {
@@ -223,18 +223,9 @@ export async function POST(
 
   // ── Mode B schema validation — log-only, never rejects ──
   if (formConfig.steps && (formConfig.steps as unknown[]).length > 0) {
-    const schemaValues = {
-      ...((body.custom_fields as Record<string, unknown>) || {}),
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone: body.phone,
-      city: body.city,
-      country: body.country,
-    };
     const schemaResult = validateSubmissionAgainstForm(
       formConfig.steps as FormStep[],
-      schemaValues
+      buildSchemaValidationValues(body)
     );
     if (!schemaResult.valid) {
       log.warn(

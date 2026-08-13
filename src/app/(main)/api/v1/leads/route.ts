@@ -29,7 +29,7 @@ import {
   NotificationTypes,
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
-import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { validateSubmissionAgainstForm, buildSchemaValidationValues } from "@/lib/leads/form-validation";
 import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
@@ -845,16 +845,7 @@ async function handlePost(request: NextRequest) {
 
   // Mode A schema validation — enforce on final submissions only
   if (body.is_final === true && formConfig?.steps && formConfig.steps.length > 0) {
-    const schemaValues = {
-      ...((body.custom_fields as Record<string, unknown>) || {}),
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone: body.phone,
-      city: body.city,
-      country: body.country,
-    };
-    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, schemaValues);
+    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, buildSchemaValidationValues(body));
     if (!schemaResult.valid) return apiValidationError(schemaResult.errors);
   }
 
