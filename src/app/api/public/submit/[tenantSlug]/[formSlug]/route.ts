@@ -43,6 +43,7 @@ import {
   resolveFieldOfStudy,
   resolveDegreeLevel,
 } from "@/lib/leads/destination-normalize";
+import { normalizePhoneForStorage } from "@/lib/phone-utils";
 
 const CORS_STATIC_HEADERS = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
@@ -214,25 +215,11 @@ export async function POST(
     return cors(apiServiceUnavailable("Pipeline stage not configured"));
   }
 
-  // ── 9. Build phone with country code ──
-  let phone = String(body.phone || "").trim() || null;
-  // Normalize: replace spaces between country code and number with hyphen
-  if (phone?.startsWith("+")) phone = phone.replace(/^(\+\d+)\s+/, "$1-");
-  if (phone && !phone.startsWith("+") && body.country && formConfig.steps) {
-    try {
-      for (const step of formConfig.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
-        const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
-        if (phoneField?.country_field) {
-          const countryField = step.fields.find((f) => f.name === phoneField.country_field);
-          const opt = countryField?.options?.find((o) => o.value === body.country);
-          if (opt?.dial_code) {
-            phone = `${opt.dial_code}-${phone}`;
-            break;
-          }
-        }
-      }
-    } catch { /* fall through to raw phone */ }
-  }
+  // ── 9. Normalize phone — the public-form widget now sends the
+  // country-code-prefixed string directly (picked via the phone field's own
+  // country dropdown); this is a server-side backstop for that and for
+  // integration callers that post a bare local number.
+  const phone = normalizePhoneForStorage(String(body.phone || "").trim() || null);
 
   // ── Mode B schema validation — log-only, never rejects ──
   if (formConfig.steps && (formConfig.steps as unknown[]).length > 0) {

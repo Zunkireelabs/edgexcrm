@@ -15,12 +15,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { EntitySelectField } from "@/components/form/entity-select-field";
-import { isValidPhoneForCountry } from "@/lib/phone-utils";
+import {
+  isValidPhoneForCountry,
+  parseStoredPhone,
+  formatPhoneForStorage,
+  normalizePhoneForStorage,
+} from "@/lib/phone-utils";
+import { COUNTRY_CODES, DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 import { CheckCircle, Loader2, ChevronRight, ChevronLeft } from "lucide-react";
 import { toast } from "sonner";
 
 function toTitleCase(str: string): string {
   return str.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const phoneCodeMap: Record<string, string> = {};
+for (const cc of COUNTRY_CODES) {
+  phoneCodeMap[cc.value] = cc.dialCode;
+}
+
+function findPhoneCountryValue(dialCode: string): string {
+  return COUNTRY_CODES.find((cc) => cc.dialCode === dialCode)?.value || "nepal";
 }
 
 interface PublicFormProps {
@@ -73,26 +88,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
     return new URLSearchParams(window.location.search).get("ref_code");
   });
 
-  // Auto-select the first option for country fields linked to a phone field,
-  // so the displayed dial code matches the actual form state.
-  useEffect(() => {
-    for (const step of steps) {
-      for (const field of step.fields) {
-        if (field.type === "tel" && field.country_field) {
-          const countryField = step.fields.find(
-            (f) => f.name === field.country_field
-          );
-          if (countryField?.options?.length && !formData[countryField.name]) {
-            setFormData((d) => {
-              if (d[countryField.name]) return d;
-              return { ...d, [countryField.name]: countryField.options![0].value };
-            });
-          }
-        }
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Remembers the picked country for a phone field while its number box is
+  // still empty — formData can't encode "dial code, no digits yet", so the
+  // choice would otherwise be silently dropped on the next render (same
+  // problem the dashboard's <PhoneInput> solves the same way).
+  const [phoneCountryOverride, setPhoneCountryOverride] = useState<Record<string, string>>({});
 
   const steps: FormStep[] = formConfig.steps || [];
   const branding = formConfig.branding || {};
@@ -195,7 +195,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         }
       }
       if (field.type === "tel" && val && isEducation) {
-        if (!isValidPhoneForCountry(formatPhoneWithCode(val) || "")) {
+        if (!isValidPhoneForCountry(val)) {
           newErrors[field.name] = "Please enter a valid phone number for the selected country";
         }
       }
@@ -215,27 +215,6 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
   const entitySelectFields = steps.flatMap((s) =>
     s.fields.filter((f) => f.type === "entity_select").map((f) => f.name)
   );
-
-  // Format phone with country code from linked country field
-  function formatPhoneWithCode(rawPhone: string | undefined | null): string | null {
-    const raw = String(rawPhone || "").trim();
-    if (!raw) return null;
-    if (raw.startsWith("+")) return raw;
-    let dialCode = "";
-    for (const step of steps) {
-      const phoneField = step.fields.find((f: { type: string; country_field?: string }) => f.type === "tel" && f.country_field);
-      if (phoneField?.country_field) {
-        const countryValue = formData[phoneField.country_field];
-        const countryField = step.fields.find((f: { name: string }) => f.name === phoneField.country_field);
-        const selectedOption = countryValue
-          ? countryField?.options?.find((o: { value: string }) => o.value === countryValue)
-          : countryField?.options?.[0];
-        dialCode = selectedOption?.dial_code || "";
-        break;
-      }
-    }
-    return dialCode ? `${dialCode}-${raw}` : raw;
-  }
 
   // Get entity_id from the first entity_select field that has a value
   function getEntityId(): string | null {
@@ -259,7 +238,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
       first_name: (formData.first_name as string) || null,
       last_name: (formData.last_name as string) || null,
       email: (formData.email as string) || null,
-      phone: formatPhoneWithCode(formData.phone as string),
+      phone: normalizePhoneForStorage(formData.phone as string),
       city: (formData.city as string) || null,
       country: (formData.country as string) || null,
       destinations: (formData.destinations as string[]) || [],
@@ -370,7 +349,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
         first_name: formData.first_name || null,
         last_name: formData.last_name || null,
         email: formData.email || null,
-        phone: formatPhoneWithCode(formData.phone as string),
+        phone: normalizePhoneForStorage(formData.phone as string),
         city: formData.city || null,
         country: formData.country || null,
         destinations: (formData.destinations as string[]) || [],
@@ -573,7 +552,7 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       <SelectContent>
                         {field.options?.map((opt) => (
                           <SelectItem key={opt.value} value={opt.value}>
-                            {toTitleCase(opt.label)}{opt.dial_code ? ` (${opt.dial_code})` : ""}
+                            {toTitleCase(opt.label)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -646,40 +625,56 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                   )}
 
                   {field.type === "tel" && (() => {
-                    let dialCode = "";
-                    if (field.country_field) {
-                      const countryValue = formData[field.country_field];
-                      const countryField = step.fields.find(
-                        (f) => f.name === field.country_field
-                      );
-                      const selectedOption = countryValue
-                        ? countryField?.options?.find((o) => o.value === countryValue)
-                        : countryField?.options?.[0];
-                      dialCode = selectedOption?.dial_code || "";
+                    const parsedPhone = parseStoredPhone(String(formData[field.name] || ""));
+                    const derivedCountry = findPhoneCountryValue(parsedPhone.dialCode || DEFAULT_DIAL_CODE);
+                    const selectedCountry = parsedPhone.localNumber
+                      ? derivedCountry
+                      : (phoneCountryOverride[field.name] ?? derivedCountry);
+                    const currentDialCode = phoneCodeMap[selectedCountry] || DEFAULT_DIAL_CODE;
+
+                    function handleCountryChange(countryValue: string) {
+                      setPhoneCountryOverride((o) => ({ ...o, [field.name]: countryValue }));
+                      const newDialCode = phoneCodeMap[countryValue] || DEFAULT_DIAL_CODE;
+                      if (parsedPhone.localNumber) {
+                        setFormData((d) => ({
+                          ...d,
+                          [field.name]: formatPhoneForStorage(newDialCode, parsedPhone.localNumber),
+                        }));
+                      }
                     }
+
+                    function handleNumberChange(num: string) {
+                      setFormData((d) => ({
+                        ...d,
+                        [field.name]: num ? formatPhoneForStorage(currentDialCode, num) : "",
+                      }));
+                    }
+
                     return (
                       <div className="flex" style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
-                        {dialCode && (
-                          <span
-                            className={`inline-flex items-center border border-r-0 text-muted-foreground whitespace-nowrap ${hideLabels ? `rounded-l-[10px] ${fieldBg}` : "rounded-l-md bg-white"} ${compact ? "px-3 text-[12px]" : "px-4 text-xs"}`}
-                            style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
+                        <Select value={selectedCountry} onValueChange={handleCountryChange}>
+                          <SelectTrigger
+                            className={`w-[92px] shrink-0 rounded-r-none border-r-0 font-normal ${hideLabels ? compactSelect : "bg-white"}`}
+                            style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
                           >
-                            {dialCode}
-                          </span>
-                        )}
+                            <SelectValue>{currentDialCode}</SelectValue>
+                          </SelectTrigger>
+                          <SelectContent className="max-h-[300px]">
+                            {COUNTRY_CODES.map((cc) => (
+                              <SelectItem key={cc.value} value={cc.value}>
+                                {cc.dialCode} {cc.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Input
                           id={field.name}
                           type="tel"
                           placeholder={field.placeholder ? toTitleCase(field.placeholder) : undefined}
-                          value={String(formData[field.name] || "")}
-                          className={`${compactInput} ${dialCode ? (hideLabels ? "rounded-l-none rounded-r-[10px]" : "rounded-l-none") : ""}`}
+                          value={parsedPhone.localNumber}
+                          className={`${compactInput} rounded-l-none ${hideLabels ? "rounded-r-[10px]" : ""}`}
                           style={hideLabels ? { height: compact ? 32 : 40 } : undefined}
-                          onChange={(e) =>
-                            setFormData((d) => ({
-                              ...d,
-                              [field.name]: e.target.value,
-                            }))
-                          }
+                          onChange={(e) => handleNumberChange(e.target.value)}
                         />
                       </div>
                     );
