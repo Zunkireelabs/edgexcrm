@@ -1,7 +1,12 @@
 # ADVANCED FILTERS — Sonnet execution brief
 
-> Full design + all 10 phases + risk register: `~/.claude/plans/today-lets-work-on-humble-avalanche.md`
-> This brief covers **Phase 0 and Phase 1 only**. Do not start Phase 2 — stop at the review gate.
+> ⚠️ **HISTORICAL — Phases 0, 1, 2, 3 and 3.5 below are all merged to `stage` and promoted to `main`.**
+> Keep this file for the design rationale and the Phase 3.5 verification steps, which are still owed.
+>
+> **If you are picking this project up, start at
+> [`ADVANCED-FILTERS-HANDOVER-BRIEF.md`](./ADVANCED-FILTERS-HANDOVER-BRIEF.md)** — current state,
+> the blocking Phase 3.5 gate, and the Phase 2b / Phase 4 briefs.
+> Full design + all 10 phases + risk register: [`ADVANCED-FILTERS-PLAN.md`](./ADVANCED-FILTERS-PLAN.md).
 
 ## Why this exists (read before touching anything)
 
