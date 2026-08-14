@@ -11,6 +11,7 @@ import {
 } from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
 import { optionalFilterString, optionalString, optionalUuid } from "./lib/sanitize";
+import { excludeListIds } from "@/lib/leads/list-scope";
 
 const DISPLAY_ID_RE = /^[A-Z]{2,5}-\d+$/i;
 
@@ -96,7 +97,7 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
     if (resolvedListId) {
       query = query.eq("list_id", resolvedListId);
     } else if (archiveListIds.length > 0) {
-      query = query.or(`list_id.is.null,list_id.not.in.(${archiveListIds.join(",")})`);
+      query = excludeListIds(query, archiveListIds);
     }
 
     const visibilityPlan = await resolveLeadVisibilityPlan(db, auth, resolvedListId);
