@@ -29,7 +29,7 @@ import {
   NotificationTypes,
 } from "@/lib/notifications";
 import type { Lead, FormStep, FormConfig } from "@/types/database";
-import { validateSubmissionAgainstForm } from "@/lib/leads/form-validation";
+import { validateSubmissionAgainstForm, buildSchemaValidationValues } from "@/lib/leads/form-validation";
 import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-membership";
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
@@ -845,16 +845,7 @@ async function handlePost(request: NextRequest) {
 
   // Mode A schema validation — enforce on final submissions only
   if (body.is_final === true && formConfig?.steps && formConfig.steps.length > 0) {
-    const schemaValues = {
-      ...((body.custom_fields as Record<string, unknown>) || {}),
-      first_name: body.first_name,
-      last_name: body.last_name,
-      email: body.email,
-      phone: body.phone,
-      city: body.city,
-      country: body.country,
-    };
-    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, schemaValues);
+    const schemaResult = validateSubmissionAgainstForm(formConfig.steps, buildSchemaValidationValues(body));
     if (!schemaResult.valid) return apiValidationError(schemaResult.errors);
   }
 
@@ -870,34 +861,11 @@ async function handlePost(request: NextRequest) {
     first_name: body.first_name || null,
     last_name: body.last_name || null,
     email: body.email || null,
-    phone: normalizePhoneForStorage(await (async () => {
-      const rawPhone = String(body.phone || "").trim();
-      if (!rawPhone) return null;
-      // Normalize: replace spaces between country code and number with hyphen
-      if (rawPhone.startsWith("+")) return rawPhone.replace(/^(\+\d+)\s+/, "$1-");
-      // Look up dial code from form config's country field options
-      if (body.form_config_id && body.country) {
-        try {
-          const { data: fc } = await supabase
-            .from("form_configs")
-            .select("steps")
-            .eq("id", body.form_config_id)
-            .eq("tenant_id", tenantId)
-            .single();
-          if (fc?.steps) {
-            for (const step of fc.steps as Array<{ fields: Array<{ type: string; name: string; country_field?: string; options?: Array<{ value: string; dial_code?: string }> }> }>) {
-              const phoneField = step.fields.find((f) => f.type === "tel" && f.country_field);
-              if (phoneField?.country_field) {
-                const countryField = step.fields.find((f) => f.name === phoneField.country_field);
-                const opt = countryField?.options?.find((o) => o.value === body.country);
-                if (opt?.dial_code) return `${opt.dial_code}-${rawPhone}`;
-              }
-            }
-          }
-        } catch { /* fall through to raw phone */ }
-      }
-      return rawPhone || null;
-    })()),
+    // The public-form widget's phone field sends its own country-code
+    // prefix directly (picked via its country dropdown); this is a
+    // server-side backstop for that and for any caller posting a bare
+    // local number.
+    phone: normalizePhoneForStorage(String(body.phone || "").trim() || null),
     city: body.city || null,
     country: body.country || null,
     custom_fields: body.custom_fields || {},
