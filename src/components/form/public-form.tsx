@@ -547,7 +547,27 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                     <Select
                       value={String(formData[field.name] || "")}
                       onValueChange={(val) =>
-                        setFormData((d) => ({ ...d, [field.name]: val }))
+                        setFormData((d) => {
+                          const next = { ...d, [field.name]: val };
+                          // If a phone field elsewhere in this step is linked to
+                          // this select (field.country_field), its dial code is
+                          // driven entirely by this value now — keep the stored
+                          // number's dial code in sync immediately, so a change
+                          // here is never silently lost if the visitor doesn't
+                          // type another digit afterward.
+                          for (const f of step.fields) {
+                            if (f.type === "tel" && f.country_field === field.name) {
+                              const opt = field.options?.find((o) => o.value === val);
+                              if (opt?.dial_code) {
+                                const parsed = parseStoredPhone(String(d[f.name] || ""));
+                                if (parsed.localNumber) {
+                                  next[f.name] = formatPhoneForStorage(opt.dial_code, parsed.localNumber);
+                                }
+                              }
+                            }
+                          }
+                          return next;
+                        })
                       }
                     >
                       <SelectTrigger className={`w-full font-normal ${compactSelect}`} style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}>
@@ -636,10 +656,15 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
 
                     // Legacy link: a separate "Country" select field whose
                     // options carry a dial_code (real forms seeded before the
-                    // builder UI existed). Drives the default dial code only
-                    // when the visitor hasn't typed a number or touched the
-                    // phone field's own picker directly.
+                    // builder UI existed — Enquiry Form, Test Prep Form). When
+                    // linked, the phone's dial code is fully driven by that
+                    // field: the picker below becomes a read-only display, not
+                    // a second independent control, so there's exactly one
+                    // place to change country and it can never drift out of
+                    // sync with what's actually stored (see the select
+                    // handler above, which keeps the stored value in step).
                     let linkedCountry: string | undefined;
+                    const isLinked = Boolean(field.country_field);
                     if (field.country_field) {
                       const linkedField = step.fields.find((f) => f.name === field.country_field);
                       const linkedValue = linkedField ? formData[linkedField.name] : undefined;
@@ -651,9 +676,11 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                       }
                     }
 
-                    const selectedCountry = parsedPhone.localNumber
-                      ? derivedCountry
-                      : (phoneCountryOverride[field.name] ?? linkedCountry ?? derivedCountry);
+                    const selectedCountry = isLinked
+                      ? (linkedCountry ?? derivedCountry)
+                      : (parsedPhone.localNumber
+                          ? derivedCountry
+                          : (phoneCountryOverride[field.name] ?? derivedCountry));
                     const currentDialCode = phoneCodeMap[selectedCountry] || DEFAULT_DIAL_CODE;
 
                     function handleCountryChange(countryValue: string) {
@@ -676,23 +703,32 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
 
                     return (
                       <div className="flex" style={hideLabels ? { height: compact ? 32 : 40 } : undefined}>
-                        <Combobox
-                          value={selectedCountry}
-                          onChange={handleCountryChange}
-                          options={PHONE_COUNTRY_OPTIONS}
-                          searchPlaceholder="Search country..."
-                          emptyText="No country found."
-                          trigger={
-                            <button
-                              type="button"
-                              className={`border-input flex w-[92px] shrink-0 items-center justify-between gap-1 rounded-md rounded-r-none border border-r-0 bg-transparent px-2.5 py-2 text-sm font-normal outline-none ${hideLabels ? compactSelect : "bg-white"}`}
-                              style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
-                            >
-                              {currentDialCode}
-                              <ChevronDown className="size-4 shrink-0 opacity-50" />
-                            </button>
-                          }
-                        />
+                        {isLinked ? (
+                          <div
+                            className={`border-input flex w-[92px] shrink-0 items-center rounded-md rounded-r-none border border-r-0 bg-transparent px-2.5 py-2 text-sm font-normal ${hideLabels ? compactSelect : "bg-white"}`}
+                            style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
+                          >
+                            {currentDialCode}
+                          </div>
+                        ) : (
+                          <Combobox
+                            value={selectedCountry}
+                            onChange={handleCountryChange}
+                            options={PHONE_COUNTRY_OPTIONS}
+                            searchPlaceholder="Search country..."
+                            emptyText="No country found."
+                            trigger={
+                              <button
+                                type="button"
+                                className={`border-input flex w-[92px] shrink-0 items-center justify-between gap-1 rounded-md rounded-r-none border border-r-0 bg-transparent px-2.5 py-2 text-sm font-normal outline-none ${hideLabels ? compactSelect : "bg-white"}`}
+                                style={{ color: "#6b7280", ...(hideLabels ? { height: compact ? 32 : 40 } : {}) }}
+                              >
+                                {currentDialCode}
+                                <ChevronDown className="size-4 shrink-0 opacity-50" />
+                              </button>
+                            }
+                          />
+                        )}
                         <Input
                           id={field.name}
                           type="tel"
