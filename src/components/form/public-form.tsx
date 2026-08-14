@@ -664,12 +664,19 @@ export function PublicForm({ tenant, formConfig }: PublicFormProps) {
                     // sync with what's actually stored (see the select
                     // handler above, which keeps the stored value in step).
                     let linkedCountry: string | undefined;
-                    const isLinked = Boolean(field.country_field);
-                    if (field.country_field) {
-                      const linkedField = step.fields.find((f) => f.name === field.country_field);
-                      const linkedValue = linkedField ? formData[linkedField.name] : undefined;
+                    const linkedField = field.country_field
+                      ? step.fields.find((f) => f.name === field.country_field)
+                      : undefined;
+                    // Only treat this as linked if the target field can actually
+                    // supply a dial code — a country_field pointing at a select
+                    // with no dial_code options (misconfigured) would otherwise
+                    // lock the chip to DEFAULT_DIAL_CODE with no way to override
+                    // it. Falls back to the normal interactive picker instead.
+                    const isLinked = Boolean(linkedField?.options?.some((o) => o.dial_code));
+                    if (linkedField) {
+                      const linkedValue = formData[linkedField.name];
                       const linkedOption = linkedValue
-                        ? linkedField?.options?.find((o) => o.value === linkedValue)
+                        ? linkedField.options?.find((o) => o.value === linkedValue)
                         : undefined;
                       if (linkedOption?.dial_code) {
                         linkedCountry = findPhoneCountryValue(linkedOption.dial_code);
