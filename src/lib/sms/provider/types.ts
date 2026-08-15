@@ -13,6 +13,7 @@ export interface SmsSendResultValid {
   credit: number;
   network: string;
   status: string;
+  shortcode?: string | null;
 }
 
 export interface SmsSendResultInvalid {

@@ -12,6 +12,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for the public SMS opt-out link — no session needed. Carrier
+  // link-scanners fetch this before any human does; it must never redirect
+  // to /login.
+  if (request.nextUrl.pathname.startsWith("/u/")) {
+    return NextResponse.next();
+  }
+
   // Skip auth for public proposal share links — no session needed
   if (request.nextUrl.pathname.startsWith("/proposals/share")) {
     return NextResponse.next();

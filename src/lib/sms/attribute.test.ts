@@ -27,9 +27,9 @@ describe("attributeProviderResults", () => {
 
     expect(unmatched).toEqual([]);
     expect(attributions).toEqual([
-      { messageId: "m1", outcome: "submitted", providerMessageId: "p1", credit: 1, network: "ntc", providerStatus: "queued" },
-      { messageId: "m2", outcome: "submitted", providerMessageId: "p2", credit: 1, network: "ncell", providerStatus: "queued" },
-      { messageId: "m3", outcome: "submitted", providerMessageId: "p3", credit: 1, network: "ntc", providerStatus: "queued" },
+      { messageId: "m1", outcome: "submitted", providerMessageId: "p1", credit: 1, network: "ntc", providerStatus: "queued", shortcode: null },
+      { messageId: "m2", outcome: "submitted", providerMessageId: "p2", credit: 1, network: "ncell", providerStatus: "queued", shortcode: null },
+      { messageId: "m3", outcome: "submitted", providerMessageId: "p3", credit: 1, network: "ntc", providerStatus: "queued", shortcode: null },
     ]);
     expect(totalCreditsCharged).toBe(3);
   });
@@ -66,6 +66,7 @@ describe("attributeProviderResults", () => {
       credit: 1,
       network: "ntc",
       providerStatus: "queued",
+      shortcode: null,
     });
     expect(m3).toEqual({
       messageId: "m3",
@@ -74,6 +75,7 @@ describe("attributeProviderResults", () => {
       credit: 1,
       network: "ntc",
       providerStatus: "queued",
+      shortcode: null,
     });
     expect(m2).toEqual({
       messageId: "m2",
@@ -153,8 +155,8 @@ describe("attributeProviderResults", () => {
     });
 
     expect(attributions).toEqual([
-      { messageId: "m1", outcome: "submitted", providerMessageId: "p1", credit: 5, network: "ntc", providerStatus: "queued" },
-      { messageId: "m2", outcome: "submitted", providerMessageId: "p1", credit: 5, network: "ntc", providerStatus: "queued" },
+      { messageId: "m1", outcome: "submitted", providerMessageId: "p1", credit: 5, network: "ntc", providerStatus: "queued", shortcode: null },
+      { messageId: "m2", outcome: "submitted", providerMessageId: "p1", credit: 5, network: "ntc", providerStatus: "queued", shortcode: null },
     ]);
     expect(totalCreditsCharged).toBe(5);
   });

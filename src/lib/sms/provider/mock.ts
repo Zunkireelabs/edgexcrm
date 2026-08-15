@@ -45,7 +45,7 @@ export function mockProvider(): SmsProvider {
 
       const { credits } = countSegments(text);
 
-      const validList: { id: string; mobile: string; credit: number; network: string; status: string }[] = [];
+      const validList: { id: string; mobile: string; credit: number; network: string; status: string; shortcode: string }[] = [];
       const invalidList: { mobile: string; message: string }[] = [];
 
       to.forEach((mobile, i) => {
@@ -57,7 +57,7 @@ export function mockProvider(): SmsProvider {
         }
         const network = hashToUnit(`net:${mobile}`) < 0.5 ? "ntc" : "ncell";
         const id = `mock-${randomUUID()}`;
-        validList.push({ id, mobile, credit: credits, network, status: "queued" });
+        validList.push({ id, mobile, credit: credits, network, status: "queued", shortcode: "AT_Alert" });
         console.log(`[sms:mock]   ${mobile} -> queued (credit=${credits}, network=${network}, id=${id})`);
       });
 
