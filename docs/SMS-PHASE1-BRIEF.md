@@ -46,6 +46,7 @@ dead end isn't re-explored.
 | Base URL | `https://sms.aakashsms.com` |
 | Token | id **4366**, ACTIVE, Follow-IP-rule **YES** |
 | Allowed IP | **`94.136.189.213`** (the Zunkiree VPS) |
+| Token lives in | **prod `.env.local` only** — deliberately *not* stage |
 | Credits at token creation | 100,000 |
 | Credits after preflight sends | 99,996 |
 | DNS | `sms.aakashsms.com` has **no AAAA record** — IPv4 only |
@@ -58,6 +59,9 @@ the heartbeat (deferred to Phase 4).
 
 Confirmed en route: the container's egress is IPv4 `94.136.189.213`, and since the host has no
 AAAA record to reach, the box's default IPv6 egress can never be used against it.
+
+**The token is not on stage, and must not be put there.** Stage shares the prod IP, so a token
+there would actually send — against a database holding real, un-anonymized Admizz student PII.
 
 ### Send — `POST /sms/v3/send`
 
@@ -103,19 +107,31 @@ the token as an **`auth-token` header**, not a body field.
 
 - `GET /sms/v4/available-credit` → `{"available_credit": 100000, "response_code": 200}`.
   The balance field is **`available_credit`** — ~~`credit`~~, ~~`balance`~~.
+  Note the sibling endpoint `/sms/v4/credit` returns **HTTP 202** on success — never test
+  `status === 200` against it.
 - `POST /sms/v4/api-report` (form fields `start_date`, `end_date`) → rows nested at
   **`data.result.data`** — ~~top-level `data`~~. This is the delivery-report path; there is **no
   webhook**, so delivery status is poll-only (Phase 4).
+  **The report's `id` (e.g. `107644461`) has no relationship whatsoever to the send response's `id`
+  (`"13421_178679570267557"`).** There is no join key. Phase 4 must reconcile on
+  recipient + body + timestamp instead — this is the single most consequential finding for that
+  phase and it invalidates the obvious design. Also in the report rows: `credit` comes back as a
+  **string**, and `updated_at` can be the MySQL zero date `"0000-00-00 00:00:00"`.
 - v4's send path is **`/sms/v4/send`** — ~~`/sms/v4/send-user`~~ was a plan-stage guess and is
-  wrong. Irrelevant to this phase since v3 ships, but recorded so it isn't rediscovered.
+  wrong (it 500s with an HTML page). Irrelevant to this phase since v3 ships, but recorded so it
+  isn't rediscovered.
+- **Malformed requests return HTML, not JSON.** Always guard `JSON.parse` / `res.json()` — the
+  `aakash.ts` client does, and any new call site must too.
 
 ### Credits, encoding, and the cost nobody expects
 
 GSM-7: 160 chars = 1 credit, 153/segment when concatenated.
 **Unicode/Devanagari: 70 chars = 1 credit, 67/segment.**
 
-A 200-character Nepali message costs **3 credits, not 2** — Devanagari burns the pool roughly 2.3×
-faster than users intuit. One Devanagari character anywhere forces the *entire* message to Unicode
+Confirmed empirically during preflight: an 80-codepoint Devanagari message was charged **2
+credits**, so the 70-per-credit rule is real and not a documentation artifact. A 200-character
+Nepali message costs **3 credits, not 2** — Devanagari burns the pool roughly 2.3× faster than
+users intuit. One Devanagari character anywhere forces the *entire* message to Unicode
 segmentation. The GSM-7 extension characters `^ { } \ [ ] ~ | €` each cost **2** characters, which
 is the single most commonly botched part of every SMS counter ever written.
 

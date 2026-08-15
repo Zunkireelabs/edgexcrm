@@ -115,11 +115,15 @@ silently misaligns. Concretely, on a 100-recipient batch where recipient #3 is i
 - `totalCreditsCharged` counts a charge for a message that was never sent, so the settle
   over-reports and the balance drifts against the provider.
 
+The misattributed `provider_message_id` is worse than it first looks, because there is **no second
+source of truth to repair it from**: preflight established that the `api-report` row `id`
+(`107644461`) bears no relationship to the send response `id` (`"13421_178679570267557"`), so
+Phase 4 has to reconcile on recipient + body + timestamp. If `to_phone` and `provider_message_id`
+disagree on the same row, that reconciliation has nothing solid to anchor to.
+
 At the ~3% invalid rate the mock provider itself simulates, a 4,000-recipient blast would mark
 roughly 120 people as successfully texted who were not, and corrupt the provider-id mapping for
-essentially the entire blast after the first failure. It also breaks Phase 4 before it is written:
-the delivery poller joins on `provider_message_id`, and duplicated ids across rows make that join
-ambiguous.
+essentially the entire blast after the first failure.
 
 **Fix:** match on `mobile`, which is returned on both `valid[]` and `invalid[]` rows. Build a map
 from the response, look each message up by its `to_phone`, mark rows found in `invalid[]` as
