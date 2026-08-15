@@ -24,6 +24,7 @@ export type Attribution =
       credit: number;
       network: string;
       providerStatus: string;
+      shortcode: string | null;
     }
   | { messageId: string; outcome: "failed"; errorCode: string; errorMessage: string };
 
@@ -70,6 +71,7 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
         credit: providerResult.credit,
         network: providerResult.network,
         providerStatus: providerResult.status,
+        shortcode: providerResult.shortcode ?? null,
       });
     }
 
@@ -96,6 +98,7 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
         credit: validRow.credit,
         network: validRow.network,
         providerStatus: validRow.status,
+        shortcode: validRow.shortcode ?? null,
       });
       continue;
     }

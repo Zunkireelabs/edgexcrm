@@ -2,6 +2,8 @@ import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getSmsProvider } from "./provider";
 import { applyEnvGuard } from "./env-guard";
 import { attributeProviderResults } from "./attribute";
+import { loadSuppressedPhones } from "./suppression";
+import { providerMsisdnToE164 } from "./phone";
 import { logger } from "@/lib/logger";
 
 // The single orchestration path every future caller (blast sends in Phase 3,
@@ -44,7 +46,40 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
     .in("status", ["queued", "deferred"]);
 
   if (error) throw new Error(`sendQueuedBatch: failed to load messages: ${error.message}`);
-  const messages = (rows ?? []) as unknown as QueuedMessageRow[];
+  const loadedMessages = (rows ?? []) as unknown as QueuedMessageRow[];
+  if (loadedMessages.length === 0) return { sent: 0, failed: 0, totalCreditsCharged: 0 };
+
+  // Safety net (§2d, SMS-PHASE2-BRIEF.md): Phase 3's audience materialization
+  // is the product-facing suppression filter; this is the redundant check that
+  // sits on the single line of code every send in the system passes through.
+  // It should never fire — if it does, we want a loud warning, not a silent
+  // text to someone who opted out. One query for the whole batch, never one
+  // per recipient (loadSuppressedPhones' contract).
+  const phoneByMessageId = new Map(loadedMessages.map((m) => [m.id, providerMsisdnToE164(m.to_phone)]));
+  const suppressed = await loadSuppressedPhones(db, tenantId, [...new Set(phoneByMessageId.values())]);
+
+  const messages: QueuedMessageRow[] = [];
+  const suppressedMessages: QueuedMessageRow[] = [];
+  for (const msg of loadedMessages) {
+    if (suppressed.has(phoneByMessageId.get(msg.id)!)) suppressedMessages.push(msg);
+    else messages.push(msg);
+  }
+
+  if (suppressedMessages.length > 0) {
+    logger.warn(
+      { tenantId, suppressedCount: suppressedMessages.length, suppressedIds: suppressedMessages.map((m) => m.id) },
+      "sendQueuedBatch: recipient(s) found on the suppression list at send time — dropped. This safety net should rarely fire; " +
+        "if it does often, the Phase 3 audience-materialization filter is not doing its job."
+    );
+    await db
+      .from("sms_messages")
+      .update({ status: "suppressed" })
+      .in(
+        "id",
+        suppressedMessages.map((m) => m.id)
+      );
+  }
+
   if (messages.length === 0) return { sent: 0, failed: 0, totalCreditsCharged: 0 };
 
   // Group message ids by identical rendered body — batches boilerplate,
@@ -120,6 +155,7 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
             provider_credit: attribution.credit,
             provider_network: attribution.network,
             provider_status: attribution.providerStatus,
+            shortcode: attribution.shortcode,
             sent_at: new Date().toISOString(),
             attempt_count: 1,
           })

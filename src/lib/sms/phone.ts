@@ -20,3 +20,12 @@ export function toProviderRecipient(stored: string | null | undefined): ToProvid
 
   return { ok: true, msisdn: digits };
 }
+
+// The inverse direction: sms_messages.to_phone (bare 10-digit MSISDN, always
+// Nepal — v3 rejects anything else, see toProviderRecipient above) back to the
+// normalized E.164 shape sms_suppressions.phone_e164 is keyed on. Safe because
+// every row in sms_messages.to_phone was produced by toProviderRecipient and
+// is therefore already confirmed +977.
+export function providerMsisdnToE164(msisdn: string): string {
+  return `+977${msisdn}`;
+}

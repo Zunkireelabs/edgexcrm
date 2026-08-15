@@ -28,7 +28,9 @@ describe("aakashProvider.send", () => {
       error: false,
       message: "1 messages has been queued for delivery.",
       data: {
-        valid: [{ id: 2673160, mobile: "9779818000000", text: "hi", credit: 1, network: "ncell", status: "queued" }],
+        valid: [
+          { id: "2673160", mobile: "9779818000000", text: "hi", credit: 1, network: "ncell", status: "queued", shortcode: "AT_Alert" },
+        ],
         invalid: [{ mobile: "988585584", text: "hi", credit: 0, network: "N/A", status: "aborted" }],
       },
     });
@@ -38,7 +40,7 @@ describe("aakashProvider.send", () => {
     expect(outcome.ok).toBe(true);
     if (outcome.ok) {
       expect(outcome.result.valid).toEqual([
-        { id: "2673160", mobile: "9779818000000", credit: 1, network: "ncell", status: "queued" },
+        { id: "2673160", mobile: "9779818000000", credit: 1, network: "ncell", status: "queued", shortcode: "AT_Alert" },
       ]);
       expect(outcome.result.invalid).toEqual([{ mobile: "988585584", message: "aborted" }]);
     }

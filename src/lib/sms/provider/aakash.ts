@@ -17,12 +17,13 @@ const SEND_TIMEOUT_MS = 20_000;
 export const MAX_RECIPIENTS_PER_CALL = 100;
 
 interface AakashSendResponseValid {
-  id: number;
+  id: string; // Observed "13421_178679570267557" — a string, not a number (L-2, SMS-PHASE1-REVIEW.md).
   mobile: string;
   text: string;
   credit: number;
   network: string;
   status: string;
+  shortcode?: string;
 }
 
 interface AakashSendResponseInvalid {
@@ -121,6 +122,7 @@ export function aakashProvider(): SmsProvider {
             credit: v.credit,
             network: v.network,
             status: v.status,
+            shortcode: v.shortcode ?? null,
           })),
           invalid: (json.data?.invalid ?? []).map((v) => ({
             mobile: v.mobile,
