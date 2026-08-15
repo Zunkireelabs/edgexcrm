@@ -1,6 +1,8 @@
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getSmsProvider } from "./provider";
 import { applyEnvGuard } from "./env-guard";
+import { attributeProviderResults } from "./attribute";
+import { logger } from "@/lib/logger";
 
 // The single orchestration path every future caller (blast sends in Phase 3,
 // 1:1 sends in Phase 5, sequence steps in Phase 6+) goes through. Loads the
@@ -86,32 +88,54 @@ export async function sendQueuedBatch(tenantId: string, messageIds: string[]): P
       continue;
     }
 
-    // Sandboxed sends route to SMS_TEST_RECIPIENTS, which won't line up 1:1
-    // with intended recipients by position/count — write back provider
-    // results in order against however many messages this group has, best
-    // effort, rather than trying to re-match by phone number.
-    const byIndex = outcome.result.valid;
-    for (let i = 0; i < groupMessages.length; i++) {
-      const msg = groupMessages[i];
-      const providerResult = byIndex[i] ?? byIndex[byIndex.length - 1];
-      if (!providerResult) {
+    // Attribute provider results by phone number, not array position —
+    // Aakash returns valid[] and invalid[] as separate arrays, so a single
+    // invalid recipient shifts every later positional match onto the wrong
+    // row. The positional path survives only for sandboxed sends, where
+    // SMS_TEST_RECIPIENTS redirection makes 1:1 phone matching genuinely
+    // impossible and accuracy doesn't matter.
+    const { attributions, totalCreditsCharged: groupCredits, unmatched } = attributeProviderResults({
+      messages: groupMessages,
+      result: outcome.result,
+      sandboxed: guarded.sandboxed,
+    });
+
+    if (unmatched.length > 0) {
+      logger.warn(
+        { tenantId, unmatchedCount: unmatched.length, unmatchedIds: unmatched },
+        "sendQueuedBatch: recipient(s) found in neither provider valid[] nor invalid[] — provider-contract violation"
+      );
+    }
+
+    totalCreditsCharged += groupCredits;
+
+    for (const attribution of attributions) {
+      if (attribution.outcome === "submitted") {
+        sent += 1;
+        await db
+          .from("sms_messages")
+          .update({
+            status: "submitted",
+            provider_message_id: attribution.providerMessageId,
+            provider_credit: attribution.credit,
+            provider_network: attribution.network,
+            provider_status: attribution.providerStatus,
+            sent_at: new Date().toISOString(),
+            attempt_count: 1,
+          })
+          .eq("id", attribution.messageId);
+      } else {
         failed += 1;
-        continue;
+        await db
+          .from("sms_messages")
+          .update({
+            status: "failed",
+            error_code: attribution.errorCode,
+            error_message: attribution.errorMessage,
+            attempt_count: 1,
+          })
+          .eq("id", attribution.messageId);
       }
-      totalCreditsCharged += providerResult.credit;
-      sent += 1;
-      await db
-        .from("sms_messages")
-        .update({
-          status: "submitted",
-          provider_message_id: providerResult.id,
-          provider_credit: providerResult.credit,
-          provider_network: providerResult.network,
-          provider_status: providerResult.status,
-          sent_at: new Date().toISOString(),
-          attempt_count: 1,
-        })
-        .eq("id", msg.id);
     }
   }
 
