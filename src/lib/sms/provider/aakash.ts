@@ -1,8 +1,10 @@
 import type { ProviderReportRow, SmsErrorCode, SmsProvider, SmsSendOutcome } from "./types";
 
 // Aakash SMS v3 send + v4 read endpoints. v3 send is the only send path this
-// phase ships (see the brief: v4 send-user's undocumented body fields are
-// captured in a future preflight, not guessed here).
+// phase ships. The v4 send endpoint is `/sms/v4/send` (confirmed by preflight
+// against the live API — the brief's `/sms/v4/send-user` guess was wrong);
+// doesn't matter for Phase 1 since v3 ships, but noted here so the next
+// person doesn't repeat the dead end.
 //
 // CRITICAL: Aakash returns HTTP 200 even on failure — the error is only in the
 // JSON body's `error` field. Never branch on res.ok.
@@ -43,7 +45,10 @@ interface AakashSendResponse {
 function mapErrorMessage(message: string): { code: SmsErrorCode; retryable: boolean } {
   const normalized = message.trim().toLowerCase();
   if (normalized.includes("not enough balance")) return { code: "insufficient_balance", retryable: false };
-  if (normalized.includes("auth token") && normalized.includes("not valid")) return { code: "invalid_token", retryable: false };
+  // Covers both the v3 "The provided Auth Token is not valid." and the v4
+  // "Authentication token is invalid or expired." messages.
+  if (normalized.includes("token") && (normalized.includes("invalid") || normalized.includes("not valid") || normalized.includes("expired")))
+    return { code: "invalid_token", retryable: false };
   if (normalized.includes("no valid recipients")) return { code: "no_valid_recipients", retryable: false };
   if (normalized.includes("all messages encountered errors")) return { code: "all_failed", retryable: false };
   return { code: "unknown", retryable: false };
@@ -132,8 +137,8 @@ export function aakashProvider(): SmsProvider {
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
         if (!res.ok) return null;
-        const json = (await res.json()) as { credit?: number; balance?: number };
-        return json.credit ?? json.balance ?? null;
+        const json = (await res.json()) as { available_credit?: number };
+        return json.available_credit ?? null;
       } catch {
         return null;
       }
@@ -151,8 +156,8 @@ export function aakashProvider(): SmsProvider {
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
         if (!res.ok) return [];
-        const json = (await res.json()) as { data?: ProviderReportRow[] };
-        return json.data ?? [];
+        const json = (await res.json()) as { data?: { result?: { data?: ProviderReportRow[] } } };
+        return json.data?.result?.data ?? [];
       } catch {
         return [];
       }

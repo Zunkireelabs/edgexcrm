@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS sms_credit_ledger (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id      UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   delta          INTEGER NOT NULL,
-  reason         TEXT NOT NULL CHECK (reason IN ('grant', 'reserve', 'settle_overage', 'refund', 'adjustment', 'reconcile_note')),
+  reason         TEXT NOT NULL CHECK (reason IN ('grant', 'reserve', 'settle', 'settle_overage', 'refund', 'adjustment', 'reconcile_note')),
   balance_after  INTEGER NOT NULL,
   ref_type       TEXT,
   ref_id         UUID,
@@ -102,11 +102,16 @@ CREATE INDEX IF NOT EXISTS idx_sms_credit_ledger_tenant_time
   ON sms_credit_ledger (tenant_id, created_at DESC);
 
 -- Idempotency guard: makes a retried caller (e.g. a re-run Inngest step) of
--- reserve/refund/settle_overage a safe no-op via ON CONFLICT DO NOTHING in the
--- RPCs below, rather than double-booking the same ref_id.
+-- reserve/settle a safe no-op via ON CONFLICT DO NOTHING in the RPCs below,
+-- rather than double-booking (or, for a diff=0 settle, double-debiting) the
+-- same ref_id. The RPCs write the ledger row FIRST and gate the account
+-- mutation on whether that insert actually happened — see sms_credits_reserve
+-- and sms_credits_settle. 'settle' covers both diff>0 and diff<0 outcomes
+-- (previously split into 'refund'/'settle_overage', which left the diff=0
+-- case with no ledger row for this index to catch a replay against).
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sms_ledger_reserve_ref
   ON sms_credit_ledger (tenant_id, ref_type, ref_id, reason)
-  WHERE reason IN ('reserve', 'refund', 'settle_overage');
+  WHERE reason IN ('reserve', 'settle', 'refund', 'settle_overage');
 
 ALTER TABLE sms_credit_ledger ENABLE ROW LEVEL SECURITY;
 
@@ -136,8 +141,9 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_balance  INT;
-  v_reserved INT;
+  v_balance   INT;
+  v_reserved  INT;
+  v_ledger_id UUID;
 BEGIN
   SELECT balance, reserved INTO v_balance, v_reserved
   FROM sms_credit_accounts
@@ -152,16 +158,26 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'balance', v_balance, 'reserved', v_reserved, 'shortfall', p_amount - v_balance);
   END IF;
 
+  -- Write the ledger row FIRST — the unique index decides whether this is a
+  -- replay of an already-applied reserve. Only mutate the account if the
+  -- insert actually inserted, so a retried call (same ref_id) can't debit
+  -- twice while the ledger only ever gets one row for it.
+  INSERT INTO sms_credit_ledger (tenant_id, delta, reason, balance_after, ref_type, ref_id)
+  VALUES (p_tenant_id, -p_amount, 'reserve', v_balance - p_amount, p_ref_type, p_ref_id)
+  ON CONFLICT DO NOTHING
+  RETURNING id INTO v_ledger_id;
+
+  IF v_ledger_id IS NULL THEN
+    -- Replay of an already-applied reserve: return current state, mutate nothing.
+    RETURN jsonb_build_object('ok', true, 'balance', v_balance, 'reserved', v_reserved, 'shortfall', 0, 'replayed', true);
+  END IF;
+
   UPDATE sms_credit_accounts
   SET balance = balance - p_amount,
       reserved = reserved + p_amount,
       updated_at = now()
   WHERE tenant_id = p_tenant_id
   RETURNING balance, reserved INTO v_balance, v_reserved;
-
-  INSERT INTO sms_credit_ledger (tenant_id, delta, reason, balance_after, ref_type, ref_id)
-  VALUES (p_tenant_id, -p_amount, 'reserve', v_balance, p_ref_type, p_ref_id)
-  ON CONFLICT DO NOTHING;
 
   RETURN jsonb_build_object('ok', true, 'balance', v_balance, 'reserved', v_reserved, 'shortfall', 0);
 END;
@@ -184,9 +200,10 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 DECLARE
-  v_balance  INT;
-  v_reserved INT;
-  v_diff     INT;
+  v_balance   INT;
+  v_reserved  INT;
+  v_diff      INT;
+  v_ledger_id UUID;
 BEGIN
   SELECT balance, reserved INTO v_balance, v_reserved
   FROM sms_credit_accounts
@@ -199,6 +216,21 @@ BEGIN
 
   v_diff := p_reserved - p_actual;
 
+  -- Always write exactly one ledger row per settle — including when diff = 0
+  -- (our estimate was exactly right), so a retried call always has a row for
+  -- the unique index to catch as a replay. Write it FIRST and gate the
+  -- mutation on whether the insert actually inserted, same shape as reserve.
+  INSERT INTO sms_credit_ledger (tenant_id, delta, reason, balance_after, ref_type, ref_id, notes)
+  VALUES (p_tenant_id, v_diff, 'settle', v_balance + v_diff, 'sms_blast', p_ref_id,
+          format('reserved %s, actual %s', p_reserved, p_actual))
+  ON CONFLICT DO NOTHING
+  RETURNING id INTO v_ledger_id;
+
+  IF v_ledger_id IS NULL THEN
+    -- Replay of an already-applied settle: return current state, mutate nothing.
+    RETURN jsonb_build_object('ok', true, 'balance', v_balance, 'reserved', v_reserved, 'diff', v_diff, 'replayed', true);
+  END IF;
+
   UPDATE sms_credit_accounts
   SET reserved = reserved - p_reserved,
       balance = balance + v_diff,
@@ -206,18 +238,6 @@ BEGIN
       updated_at = now()
   WHERE tenant_id = p_tenant_id
   RETURNING balance, reserved INTO v_balance, v_reserved;
-
-  IF v_diff > 0 THEN
-    INSERT INTO sms_credit_ledger (tenant_id, delta, reason, balance_after, ref_type, ref_id, notes)
-    VALUES (p_tenant_id, v_diff, 'refund', v_balance, 'sms_blast', p_ref_id,
-            format('reserved %s, actual %s', p_reserved, p_actual))
-    ON CONFLICT DO NOTHING;
-  ELSIF v_diff < 0 THEN
-    INSERT INTO sms_credit_ledger (tenant_id, delta, reason, balance_after, ref_type, ref_id, notes)
-    VALUES (p_tenant_id, v_diff, 'settle_overage', v_balance, 'sms_blast', p_ref_id,
-            format('reserved %s, actual %s', p_reserved, p_actual))
-    ON CONFLICT DO NOTHING;
-  END IF;
 
   RETURN jsonb_build_object('ok', true, 'balance', v_balance, 'reserved', v_reserved, 'diff', v_diff);
 END;

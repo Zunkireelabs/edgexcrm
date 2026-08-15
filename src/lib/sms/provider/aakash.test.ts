@@ -113,4 +113,63 @@ describe("aakashProvider.send", () => {
     delete process.env.AAKASH_SMS_TOKEN;
     await expect(aakashProvider().send({ to: ["9818000000"], text: "hi" })).rejects.toThrow();
   });
+
+  it('treats the v4 "Authentication token is invalid or expired." message as invalid_token', async () => {
+    mockFetchOnce({ error: true, message: "Authentication token is invalid or expired." });
+
+    const outcome = await aakashProvider().send({ to: ["9818000000"], text: "hi" });
+
+    expect(outcome.ok).toBe(false);
+    if (!outcome.ok) expect(outcome.code).toBe("invalid_token");
+  });
+});
+
+describe("aakashProvider.availableCredit", () => {
+  beforeEach(() => {
+    process.env.AAKASH_SMS_TOKEN = "test-token";
+    process.env.AAKASH_SMS_BASE_URL = "https://sms.aakashsms.com";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("reads the live `available_credit` field, not `credit`/`balance`", async () => {
+    mockFetchOnce({ available_credit: 100000, response_code: 200 });
+
+    const credit = await aakashProvider().availableCredit();
+
+    expect(credit).toBe(100000);
+  });
+});
+
+describe("aakashProvider.report", () => {
+  beforeEach(() => {
+    process.env.AAKASH_SMS_TOKEN = "test-token";
+    process.env.AAKASH_SMS_BASE_URL = "https://sms.aakashsms.com";
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("reads rows from the live nested shape data.result.data, not data", async () => {
+    mockFetchOnce({
+      status: "success",
+      data: {
+        userJobFirstRow: null,
+        result: {
+          current_page: 1,
+          data: [{ id: "1", recipient: "9779818000000", network: "ncell", body: "hi", credit: "1", created_at: "2026-08-01 00:00:00", status: "delivered" }],
+        },
+      },
+    });
+
+    const rows = await aakashProvider().report("2026-08-01", "2026-08-15");
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0].status).toBe("delivered");
+  });
 });
