@@ -58,7 +58,7 @@ function fakeDb(opts: { blastStatus: string; reservedCredits?: number; chargedRo
               },
             }),
           }),
-          select: (_cols: string) => ({
+          select: () => ({
             eq: () => ({
               in: () => Promise.resolve({ data: chargedRows, error: null }),
             }),
