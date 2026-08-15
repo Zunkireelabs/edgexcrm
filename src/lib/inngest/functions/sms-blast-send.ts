@@ -47,19 +47,39 @@ async function batchErrorCodes(tenantId: string, ids: string[]): Promise<string[
   return Array.from(codes);
 }
 
+interface BlastStatusRow {
+  status: string;
+}
+
 // Cancels any remaining queued/deferred rows, settles reserved vs. actual
 // credits (p_ref_type passed EXPLICITLY — §8 L-1: relying on the default is
-// how mislabeled ledger rows come back in Phase 5), and stamps the blast's
-// final status + counters.
-async function finalizeBlast(
+// how mislabeled ledger rows come back in Phase 5; idempotent on ref_id, so
+// this is a safe no-op if /cancel already settled — SMS-PHASE3A-FIXES-BRIEF.md
+// F-2), and stamps the blast's final status + counters.
+//
+// F-1: a blast the user already cancelled (via /cancel, before this run woke
+// up) must NEVER be transitioned out of 'cancelled' — not to 'failed', not
+// to 'partially_failed'. Rows left 'cancelled' (by /cancel, or by this
+// function's own cleanup on an insufficient_balance/invalid_token stop) are
+// counted SEPARATELY from 'failed': recipients_failed means "we tried and it
+// failed", not "we never got to it".
+export async function finalizeBlast(
   tenantId: string,
   blastId: string,
   reservedCredits: number,
-  actualCredits: number
-): Promise<{ finalStatus: string; sent: number; failed: number; suppressed: number }> {
+  actualCredits: number,
+  stopReason: "invalid_token" | "insufficient_balance" | null
+): Promise<{ finalStatus: string; sent: number; failed: number; cancelled: number; suppressed: number }> {
   const db = await scopedClientForTenant(tenantId);
 
-  await db.from("sms_messages").update({ status: "cancelled" }).eq("blast_id", blastId).in("status", ["queued", "deferred"]);
+  const { data: currentBlast } = await db.from("sms_blasts").select("status").eq("id", blastId).maybeSingle();
+  const wasCancelled = (currentBlast as unknown as BlastStatusRow | null)?.status === "cancelled";
+
+  // /cancel already did this cleanup for a user-cancelled blast; only needed
+  // here for the insufficient_balance/invalid_token stop paths.
+  if (!wasCancelled) {
+    await db.from("sms_messages").update({ status: "cancelled" }).eq("blast_id", blastId).in("status", ["queued", "deferred"]);
+  }
 
   const { error: settleError } = await db.rpc("sms_credits_settle", {
     p_ref_id: blastId,
@@ -74,10 +94,24 @@ async function finalizeBlast(
   const { data: statusRows } = await db.from("sms_messages").select("status").eq("blast_id", blastId);
   const rows = (statusRows ?? []) as unknown as MessageStatusRow[];
   const sent = rows.filter((r) => r.status === "submitted" || r.status === "delivered").length;
-  const failed = rows.filter((r) => r.status === "failed" || r.status === "cancelled").length;
+  const failed = rows.filter((r) => r.status === "failed").length;
+  const cancelled = rows.filter((r) => r.status === "cancelled").length;
   const suppressed = rows.filter((r) => r.status === "suppressed").length;
 
-  const finalStatus = failed === 0 ? "sent" : sent === 0 ? "failed" : "partially_failed";
+  let finalStatus: string;
+  if (wasCancelled) {
+    finalStatus = "cancelled";
+  } else if (stopReason === "insufficient_balance") {
+    // SMS-PHASE3A-BRIEF.md §7: always partially_failed on this stop, even if
+    // nothing was sent yet — it's a mid-blast stop, not a clean failure.
+    finalStatus = "partially_failed";
+  } else if (failed === 0 && cancelled === 0) {
+    finalStatus = "sent";
+  } else if (sent === 0) {
+    finalStatus = "failed";
+  } else {
+    finalStatus = "partially_failed";
+  }
 
   await db
     .from("sms_blasts")
@@ -91,7 +125,7 @@ async function finalizeBlast(
     })
     .eq("id", blastId);
 
-  return { finalStatus, sent, failed, suppressed };
+  return { finalStatus, sent, failed, cancelled, suppressed };
 }
 
 export const smsBlastSend = inngest.createFunction(
@@ -178,7 +212,7 @@ export const smsBlastSend = inngest.createFunction(
     }
 
     const outcome = await step.run("finalize", () =>
-      finalizeBlast(tenantId, blastId, blast.reserved_credits ?? totalActualCredits, totalActualCredits)
+      finalizeBlast(tenantId, blastId, blast.reserved_credits ?? totalActualCredits, totalActualCredits, stopReason)
     );
 
     if (stopReason === "insufficient_balance") {
