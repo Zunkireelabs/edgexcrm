@@ -58,6 +58,10 @@ export const FEATURES = {
   AFFILIATES: "affiliates",
   // Industry-scoped (it_agency) — email sequencing / cadence engine
   OUTREACH: "outreach",
+  // Shared (education_consultancy today; other tenants buy this later — see
+  // docs/SMS-PHASE3A-BRIEF.md §2). Never call this "campaigns" — that name is
+  // already taken by the education referral/leaderboard feature.
+  SMS: "sms",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

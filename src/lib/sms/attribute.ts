@@ -50,10 +50,17 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
     const byIndex = result.valid;
     const attributions: Attribution[] = [];
     let totalCreditsCharged = 0;
+    // §8 (SMS-PHASE3A-BRIEF.md): SMS_TEST_RECIPIENTS redirection means many
+    // message rows can legitimately attribute to the SAME provider result
+    // (index wrap-around below). Summing per-message-row here would inflate
+    // the sandbox settle against a real balance once 3A actually calls
+    // sms_credits_settle — count each DISTINCT provider result once.
+    const countedResultIndices = new Set<number>();
 
     for (let i = 0; i < messages.length; i++) {
       const msg = messages[i];
-      const providerResult = byIndex[i] ?? byIndex[byIndex.length - 1];
+      const resultIndex = i < byIndex.length ? i : byIndex.length - 1;
+      const providerResult = byIndex[resultIndex];
       if (!providerResult) {
         attributions.push({
           messageId: msg.id,
@@ -63,7 +70,10 @@ export function attributeProviderResults(input: AttributionInput): AttributionRe
         });
         continue;
       }
-      totalCreditsCharged += providerResult.credit;
+      if (!countedResultIndices.has(resultIndex)) {
+        countedResultIndices.add(resultIndex);
+        totalCreditsCharged += providerResult.credit;
+      }
       attributions.push({
         messageId: msg.id,
         outcome: "submitted",

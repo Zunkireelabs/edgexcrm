@@ -197,6 +197,30 @@ describe("attributeProviderResults", () => {
 
     expect(attributions).toHaveLength(3);
     expect(attributions.every((a) => a.outcome === "submitted")).toBe(true);
-    expect(totalCreditsCharged).toBe(6);
+    // §8 (SMS-PHASE3A-BRIEF.md): all 3 messages wrap onto the SAME single
+    // provider result (index-clamped) under SMS_TEST_RECIPIENTS redirection —
+    // the credit must be counted once (2), not once per message row (6).
+    // Before the fix this asserted 6, which would inflate a sandbox settle
+    // against the tenant's real balance.
+    expect(totalCreditsCharged).toBe(2);
+  });
+
+  it("counts credit once per distinct provider result even when several message rows attribute to different results (sandboxed)", () => {
+    const messages = [
+      { id: "m1", to_phone: "9800000001" },
+      { id: "m2", to_phone: "9800000002" },
+    ];
+    const providerResult = result([
+      { id: "p1", mobile: "9700000000", credit: 3, network: "ntc", status: "queued" },
+      { id: "p2", mobile: "9700000001", credit: 4, network: "ncell", status: "queued" },
+    ]);
+
+    const { totalCreditsCharged } = attributeProviderResults({
+      messages,
+      result: providerResult,
+      sandboxed: true,
+    });
+
+    expect(totalCreditsCharged).toBe(7);
   });
 });
