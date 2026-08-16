@@ -215,6 +215,14 @@ export const smsBlastSend = inngest.createFunction(
       finalizeBlast(tenantId, blastId, blast.reserved_credits ?? totalActualCredits, totalActualCredits, stopReason)
     );
 
+    // SMS-PHASE4-FIX-F7-BRIEF.md item 1: hand off to the event-driven
+    // delivery poller (sms-delivery-poll.ts) instead of relying on its
+    // */10 sweep. Only when something actually sent — a blast with nothing
+    // in `submitted` has nothing to poll for.
+    if (outcome.sent > 0) {
+      await step.run("emit-poll-receipts-event", () => inngest.send({ name: "sms/blast.poll-receipts", data: { tenantId, blastId } }));
+    }
+
     if (stopReason === "insufficient_balance") {
       await step.run("notify-low-credits", async () => {
         const db = await scopedClientForTenant(tenantId);

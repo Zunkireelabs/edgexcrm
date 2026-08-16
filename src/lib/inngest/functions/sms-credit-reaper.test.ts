@@ -9,9 +9,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const createServiceClientMock = vi.fn();
 const scopedClientForTenantMock = vi.fn();
+const isSmsEnabledMock = vi.fn();
 
 vi.mock("@/lib/supabase/server", () => ({ createServiceClient: createServiceClientMock }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClientForTenant: scopedClientForTenantMock }));
+vi.mock("@/lib/sms/flag", () => ({ isSmsEnabled: isSmsEnabledMock }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { createFunction: vi.fn((_cfg, handler) => handler) } }));
 
 interface FakeBlast {
@@ -88,6 +90,19 @@ describe("smsCreditReaper", () => {
   beforeEach(() => {
     createServiceClientMock.mockReset();
     scopedClientForTenantMock.mockReset();
+    isSmsEnabledMock.mockReset().mockReturnValue(true);
+  });
+
+  it("skips before any step.run when SMS is disabled", async () => {
+    isSmsEnabledMock.mockReturnValue(false);
+    const { smsCreditReaper } = await import("./sms-credit-reaper");
+    const stepRun = vi.fn();
+
+    const result = await (smsCreditReaper as unknown as (ctx: unknown) => Promise<unknown>)({ step: { run: stepRun } });
+
+    expect(result).toEqual({ skipped: true, reason: "sms disabled" });
+    expect(stepRun).not.toHaveBeenCalled();
+    expect(createServiceClientMock).not.toHaveBeenCalled();
   });
 
   it("settles a cancelled blast with no settle ledger row, passing p_ref_type explicitly and matching sum(provider_credit)", async () => {

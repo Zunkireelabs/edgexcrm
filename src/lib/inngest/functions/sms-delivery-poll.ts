@@ -3,6 +3,7 @@ import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getSmsProvider } from "@/lib/sms/provider";
 import { matchDeliveryReports, type CandidateMessage } from "@/lib/sms/delivery-match";
+import { isSmsEnabled } from "@/lib/sms/flag";
 import { logger } from "@/lib/logger";
 
 // Durable delivery-receipt poller — docs/SMS-PHASE4-BRIEF.md item 1. Aakash
@@ -16,9 +17,21 @@ import { logger } from "@/lib/logger";
 // prepaid pool — docs/SMS-PHASE1-BRIEF.md §2), so this fetches the report
 // once per run and reconciles across every tenant with rows still awaiting
 // receipt, not once per tenant.
+//
+// Two pollers share the constants and helpers below (docs/SMS-PHASE4-FIX-F7-
+// BRIEF.md): smsBlastPollReceipts (below) is the primary path — event-driven,
+// fired by sms-blast-send right after finalize, walking POLL_BACKOFF_DELAYS
+// for the one blast that just sent. smsDeliveryPoll is a daily fallback drain
+// for anything whose event was lost, same role ops-inbox-process's poll plays.
 
-const MAX_POLL_ATTEMPTS = 12; // ~2h of coverage at a 10-minute cadence before giving up
-const MAX_AGE_HOURS = 72; // stop polling messages older than 3 days — permanently unresolvable by then
+// The 8 rungs of the per-blast backoff ladder — sums to ~27h50m, so an
+// attempt cap of 8 lets the ladder alone exhaust a healthy blast without ever
+// needing the daily fallback. MAX_AGE_HOURS gives ~2h of slack past that sum
+// so the daily fallback still has a window to catch a blast whose
+// sms/blast.poll-receipts event never fired at all (0 attempts consumed).
+export const POLL_BACKOFF_DELAYS = ["5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h"];
+const MAX_POLL_ATTEMPTS = POLL_BACKOFF_DELAYS.length;
+const MAX_AGE_HOURS = 30;
 const REPORT_WINDOW_DAYS = 3;
 
 export interface SubmittedRow {
@@ -46,6 +59,25 @@ export async function loadAwaitingReceipt(): Promise<SubmittedRow[]> {
     .order("sent_at", { ascending: true })
     .limit(5000);
   if (error) throw new Error(`sms-delivery-poll: failed to load submitted rows: ${error.message}`);
+  return (data ?? []) as unknown as SubmittedRow[];
+}
+
+// Same shape as loadAwaitingReceipt but scoped to one blast — what the
+// event-driven poller below walks on each backoff rung, instead of the
+// account-wide sweep the daily fallback does.
+export async function loadAwaitingReceiptForBlast(tenantId: string, blastId: string): Promise<SubmittedRow[]> {
+  const db = await scopedClientForTenant(tenantId);
+  const cutoff = new Date(Date.now() - MAX_AGE_HOURS * 60 * 60 * 1000).toISOString();
+  const { data, error } = await db
+    .from("sms_messages")
+    .select("id, tenant_id, to_phone, body, sent_at, delivery_poll_attempts")
+    .eq("blast_id", blastId)
+    .eq("status", "submitted")
+    .lt("delivery_poll_attempts", MAX_POLL_ATTEMPTS)
+    .gte("sent_at", cutoff)
+    .order("sent_at", { ascending: true })
+    .limit(5000);
+  if (error) throw new Error(`sms-delivery-poll: failed to load blast ${blastId} submitted rows: ${error.message}`);
   return (data ?? []) as unknown as SubmittedRow[];
 }
 
@@ -101,8 +133,10 @@ export async function reconcileTenant(
 }
 
 export const smsDeliveryPoll = inngest.createFunction(
-  { id: "sms-delivery-poll", triggers: [{ cron: "*/10 * * * *" }] },
+  { id: "sms-delivery-poll", triggers: [{ cron: "0 3 * * *" }] },
   async ({ step }) => {
+    if (!isSmsEnabled()) return { skipped: true, reason: "sms disabled" };
+
     const submitted = await step.run("load-awaiting-receipt", loadAwaitingReceipt);
     if (submitted.length === 0) return { polled: 0, matched: 0, stillAwaiting: 0, gaveUp: 0 };
 
@@ -138,5 +172,40 @@ export const smsDeliveryPoll = inngest.createFunction(
     }
 
     return { polled: submitted.length, matched: matchedTotal, stillAwaiting: stillAwaitingTotal, gaveUp: gaveUpTotal };
+  }
+);
+
+// Event-driven primary poller (docs/SMS-PHASE4-FIX-F7-BRIEF.md item 1) —
+// fired by sms-blast-send right after its finalize step, one event per blast
+// that actually sent something. Walks POLL_BACKOFF_DELAYS, reconciling just
+// this blast's still-awaiting rows on each rung, and exits the moment
+// nothing is left awaiting a receipt instead of burning the rest of the
+// ladder. sms-delivery-poll (above) is only a daily fallback drain for a
+// blast whose event never arrived.
+export const smsBlastPollReceipts = inngest.createFunction(
+  { id: "sms-blast-poll-receipts", triggers: [{ event: "sms/blast.poll-receipts" }] },
+  async ({ event, step }) => {
+    if (!isSmsEnabled()) return { skipped: true, reason: "sms disabled" };
+
+    const { tenantId, blastId } = event.data as { tenantId: string; blastId: string };
+
+    for (let i = 0; i < POLL_BACKOFF_DELAYS.length; i++) {
+      await step.sleep(`wait-${i}`, POLL_BACKOFF_DELAYS[i]);
+
+      const rows = await step.run(`load-blast-rows-${i}`, () => loadAwaitingReceiptForBlast(tenantId, blastId));
+      if (rows.length === 0) return { attempts: i + 1, exitedEarly: true, blastId };
+
+      const reportRows = await step.run(`fetch-provider-report-${i}`, async () => {
+        const provider = getSmsProvider();
+        const end = new Date();
+        const start = new Date(end.getTime() - REPORT_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        return provider.report(formatDate(start), formatDate(end));
+      });
+
+      const outcome = await step.run(`reconcile-${i}`, () => reconcileTenant(tenantId, rows, reportRows));
+      if (outcome.stillAwaiting === 0) return { attempts: i + 1, exitedEarly: true, blastId, ...outcome };
+    }
+
+    return { attempts: POLL_BACKOFF_DELAYS.length, exitedEarly: false, blastId };
   }
 );

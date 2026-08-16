@@ -1,6 +1,7 @@
 import { inngest } from "@/lib/inngest/client";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { isSmsEnabled } from "@/lib/sms/flag";
 import { logger } from "@/lib/logger";
 
 // Reserved-credit reaper — docs/SMS-PHASE4-BRIEF.md item 5, the accepted F-5
@@ -87,8 +88,13 @@ export async function reapBlast(blast: TerminalBlastRow): Promise<{ blastId: str
 }
 
 export const smsCreditReaper = inngest.createFunction(
-  { id: "sms-credit-reaper", triggers: [{ cron: "0 * * * *" }] },
+  // SMS-PHASE4-FIX-F7-BRIEF.md item 2: hourly was 24x more often than the F-5
+  // residual it guards against warrants — it's a safety net for a rare
+  // Inngest-run-died-mid-blast case, not a hot path.
+  { id: "sms-credit-reaper", triggers: [{ cron: "0 4 * * *" }] },
   async ({ step }) => {
+    if (!isSmsEnabled()) return { skipped: true, reason: "sms disabled" };
+
     const candidates = await step.run("find-unsettled-terminal-blasts", findUnsettledTerminalBlasts);
     if (candidates.length === 0) return { reaped: 0 };
 
