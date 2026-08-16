@@ -34,6 +34,8 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/api/v1/lead-lists/route.ts": "rpc-only", // visibleLeadsBase() count-only call site
   "src/app/(main)/(dashboard)/classes/page.tsx": "rpc-only", // visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/applications/page.tsx": "rpc-only", // visibleLeadsBase() call site
+  "src/app/(main)/api/v1/sms/blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/sms/blasts/[id]/send/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   // auth-only: the createClient() binding is only ever used for `.auth.*` calls —
   // never a table read, so there is nothing for RLS-vs-app-filter to protect.
   "src/lib/supabase/server.ts": "auth-only", // getCachedUser() -> supabase.auth.getClaims()

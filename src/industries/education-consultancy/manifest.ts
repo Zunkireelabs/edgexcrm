@@ -10,6 +10,7 @@ import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
 import { affiliatesMeta } from "./features/affiliates/meta";
+import { smsMeta } from "../_shared/features/sms/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -25,6 +26,9 @@ export const manifest: IndustryManifest = {
     { meta: leadListsMeta },
     { meta: classesMeta },
     { meta: affiliatesMeta },
+    // No sidebar entry yet — the /sms route doesn't exist until Phase 3B
+    // (docs/SMS-PHASE3A-BRIEF.md §2).
+    { meta: smsMeta },
   ],
   sidebar: [
     // Intelligence section

@@ -23,6 +23,7 @@ describe("resolvePermissions", () => {
     canManageClasses: true,
     canManageHR: true,
     canExport: false,
+    canSendSms: false,
     dashboard: { widgets: { mode: "allow", keys: ["widget-1"] } },
   };
 
@@ -132,6 +133,7 @@ function resolved(overrides: Partial<ResolvedPermissions> = {}): ResolvedPermiss
     canManageClasses: false,
     canManageHR: false,
     canExport: false,
+    canSendSms: false,
     dashboardWidgets: null,
     ...overrides,
   };

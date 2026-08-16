@@ -13,6 +13,7 @@ export interface PositionPermissions {
   canManageClasses?: boolean;                                      // controls write access to the Classes feature. Absent ⇒ default per resolver.
   canManageHR?: boolean;                                           // controls org-wide HR access (all employee_profiles/departments/skills/allocations). Absent ⇒ default per resolver (self/direct-reports only).
   canExport?: boolean;                                            // controls access to the leads Export button. Absent => default per resolver (owner/admin only).
+  canSendSms?: boolean;                                           // controls write access to the SMS blast feature. Absent => default per resolver (owner/admin only).
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -30,6 +31,7 @@ export interface ResolvedPermissions {
   canManageClasses: boolean;
   canManageHR: boolean;
   canExport: boolean;
+  canSendSms: boolean;
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
@@ -55,6 +57,7 @@ export function resolvePermissions(
       canManageClasses: true,
       canManageHR: true,
       canExport: true,
+      canSendSms: true,
       dashboardWidgets: null,
     };
   }
@@ -75,6 +78,7 @@ export function resolvePermissions(
       canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
       canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
+      canSendSms: false, // only owner/admin send SMS blasts by default
       dashboardWidgets: null,
     };
   }
@@ -94,6 +98,7 @@ export function resolvePermissions(
     canManageClasses: p.canManageClasses === true,
     canManageHR: p.canManageHR === true,
     canExport: false, // export is owner/admin only; position config cannot grant it
+    canSendSms: false, // sending SMS is owner/admin only; position config cannot grant it
     dashboardWidgets:
       p.dashboard && p.dashboard.widgets && p.dashboard.widgets.mode === "allow"
         ? new Set(p.dashboard.widgets.keys)
@@ -314,6 +319,11 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canExport (optional)
   if (p.canExport !== undefined && typeof p.canExport !== "boolean") {
     return "permissions.canExport must be a boolean";
+  }
+
+  // canSendSms (optional)
+  if (p.canSendSms !== undefined && typeof p.canSendSms !== "boolean") {
+    return "permissions.canSendSms must be a boolean";
   }
 
   // dashboard

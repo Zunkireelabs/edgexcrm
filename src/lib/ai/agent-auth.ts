@@ -35,6 +35,7 @@ const MOST_RESTRICTIVE_PERMISSIONS: ResolvedPermissions = {
   canManageClasses: false,
   canManageHR: false,
   canExport: false,
+  canSendSms: false,
   dashboardWidgets: new Set(),
 };
 
