@@ -3,7 +3,7 @@
 //      body: { content: string, approve_draft_id?: string }
 
 import { NextRequest } from "next/server";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, type AuthContext } from "@/lib/api/auth";
 import {
   apiUnauthorized,
   apiForbidden,
@@ -11,15 +11,16 @@ import {
   apiSuccess,
   apiError,
 } from "@/lib/api/response";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendMessage } from "@/lib/inbox/send-message";
+import { canAccessConversationLead, type InboxScopeClients } from "@/lib/inbox/scope";
 
 async function checkConversationAccess(
-  supabase: Awaited<ReturnType<typeof createServiceClient>>,
-  auth: Awaited<ReturnType<typeof authenticateRequest>> & object,
+  clients: InboxScopeClients,
+  auth: AuthContext,
   conversationId: string
 ): Promise<{ ok: true; conv: { id: string; tenant_id: string } } | { ok: false; response: ReturnType<typeof apiForbidden> }> {
-  const { data: conv } = await supabase
+  const { data: conv } = await clients.service
     .from("conversations")
     .select("id, tenant_id, lead_id")
     .eq("id", conversationId)
@@ -28,19 +29,8 @@ async function checkConversationAccess(
 
   if (!conv) return { ok: false, response: apiNotFound("Conversation") as ReturnType<typeof apiForbidden> };
 
-  if (auth.role === "counselor") {
-    const leadId = (conv as { lead_id: string | null }).lead_id;
-    if (!leadId) return { ok: false, response: apiForbidden() };
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("assigned_to")
-      .eq("id", leadId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
-    if (!lead || (lead as { assigned_to: string | null }).assigned_to !== auth.userId) {
-      return { ok: false, response: apiForbidden() };
-    }
-  }
+  const canAccess = await canAccessConversationLead(clients, auth, (conv as { lead_id: string | null }).lead_id);
+  if (!canAccess) return { ok: false, response: apiForbidden() };
 
   return { ok: true, conv: conv as { id: string; tenant_id: string } };
 }
@@ -54,8 +44,9 @@ export async function GET(
 
   const { id } = await params;
   const supabase = await createServiceClient();
+  const userClient = await createClient();
 
-  const access = await checkConversationAccess(supabase, auth, id);
+  const access = await checkConversationAccess({ user: userClient, service: supabase }, auth, id);
   if (!access.ok) return access.response;
 
   const { searchParams } = new URL(request.url);
@@ -96,8 +87,9 @@ export async function POST(
 
   const { id } = await params;
   const supabase = await createServiceClient();
+  const userClient = await createClient();
 
-  const access = await checkConversationAccess(supabase, auth, id);
+  const access = await checkConversationAccess({ user: userClient, service: supabase }, auth, id);
   if (!access.ok) return access.response;
 
   const body = await request.json().catch(() => ({})) as { content?: string; approve_draft_id?: string };
