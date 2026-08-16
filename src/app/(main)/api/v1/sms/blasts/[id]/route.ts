@@ -31,7 +31,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "PATCH", path: "/api/v1/sms/blasts/[id]" });
 
-  const guard = await requireSmsAccess({ requireSend: true });
+  const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
   const { db } = guard;
   const { id } = await params;
@@ -85,7 +85,7 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "DELETE", path: "/api/v1/sms/blasts/[id]" });
 
-  const guard = await requireSmsAccess({ requireSend: true });
+  const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
   const { db } = guard;
   const { id } = await params;

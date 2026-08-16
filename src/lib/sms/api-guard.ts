@@ -8,15 +8,17 @@ import { scopedClient, type ScopedClient } from "@/lib/supabase/scoped";
 // The single gate every /api/v1/sms/* route runs through, per
 // docs/SMS-PHASE3A-BRIEF.md §4:
 //   authenticateRequest() -> getFeatureAccess(FEATURES.SMS) -> apiForbidden()
-//   -> isSmsEnabledForTenant() -> apiForbidden() -> scopedClient(auth)
-// Write routes additionally pass requireSend: true to also require
-// auth.permissions.canSendSms.
+//   -> isSmsEnabledForTenant() -> apiForbidden() -> auth.permissions.canSendSms
+//   -> apiForbidden() -> scopedClient(auth)
+// canSendSms gates reads as well as writes: the tenant-wide DNC list, blast
+// history, and credit balance are not scoped to a counselor's assigned leads,
+// so this is an owner/admin (or position-granted) surface end to end.
 
 export type SmsGuardResult =
   | { ok: true; auth: AuthContext; db: ScopedClient }
   | { ok: false; response: Response };
 
-export async function requireSmsAccess(opts: { requireSend?: boolean } = {}): Promise<SmsGuardResult> {
+export async function requireSmsAccess(): Promise<SmsGuardResult> {
   const auth = await authenticateRequest();
   if (!auth) return { ok: false, response: apiUnauthorized() };
 
@@ -28,8 +30,8 @@ export async function requireSmsAccess(opts: { requireSend?: boolean } = {}): Pr
     return { ok: false, response: apiForbidden() };
   }
 
-  if (opts.requireSend && !auth.permissions.canSendSms) {
-    return { ok: false, response: apiForbidden("SMS send access is required") };
+  if (!auth.permissions.canSendSms) {
+    return { ok: false, response: apiForbidden("SMS access is required") };
   }
 
   const db = await scopedClient(auth);

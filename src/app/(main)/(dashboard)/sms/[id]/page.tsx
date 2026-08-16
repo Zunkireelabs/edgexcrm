@@ -19,6 +19,7 @@ export default async function SmsBlastRoute({ params }: RouteParams) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.SMS)) notFound();
+  if (!tenantData.permissions.canSendSms) notFound();
 
   return (
     <div className="flex flex-col gap-6 p-6">
