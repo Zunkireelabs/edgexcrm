@@ -53,6 +53,22 @@ export interface SmsMessageRow {
   created_at: string;
 }
 
+// Row shape returned by GET /api/v1/sms/blasts/[id]/messages — a narrower
+// projection than SmsMessageRow (docs/SMS-PHASE4-BRIEF.md item 2).
+export interface SmsBlastRecipientRow {
+  id: string;
+  lead_id: string | null;
+  to_phone: string;
+  status: SmsMessageStatus;
+  error_code: string | null;
+  error_message: string | null;
+  provider_network: string | null;
+  provider_status: string | null;
+  delivered_at: string | null;
+  sent_at: string | null;
+  delivery_poll_attempts: number;
+}
+
 export interface SmsPreviewResponse {
   audience: {
     matched: number;

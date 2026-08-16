@@ -35,12 +35,12 @@ interface ReserveResult {
   shortfall?: number;
 }
 
-function fakeDb(opts: { blastStatus?: string; maxRecipients?: number } = {}) {
+function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: string } = {}) {
   const messages: Record<string, unknown>[] = [];
   let insertCallCount = 0;
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
   let reserveResult: ReserveResult = { ok: true, balance: 1000, reserved: 0 };
-  const blastRow = { id: "blast-1", body: "Hi {{first_name}}", audience_filter: null, status: opts.blastStatus ?? "draft" };
+  const blastRow = { id: "blast-1", body: opts.body ?? "Hi {{first_name}}", audience_filter: null, status: opts.blastStatus ?? "draft" };
 
   const db = {
     from(table: string) {
@@ -210,6 +210,20 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
     expect(fake.messages).toHaveLength(2);
     // Cap check happens BEFORE reserve — no RPC call, no event.
     expect(fake.rpcCalls).toHaveLength(0);
+    expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  it("rejects a whitespace-only body — 3B's ' ' draft placeholder must never be sendable", async () => {
+    const fake = fakeDb({ body: "   " });
+    requireSmsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    const { POST } = await import("./route");
+
+    const res = await POST(fakeReq(), { params });
+    const json = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(json.error.code).toBe("VALIDATION_ERROR");
+    expect(resolveAudienceMock).not.toHaveBeenCalled();
     expect(inngestSendMock).not.toHaveBeenCalled();
   });
 

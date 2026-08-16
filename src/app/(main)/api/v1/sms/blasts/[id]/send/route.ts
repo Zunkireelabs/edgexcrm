@@ -1,10 +1,11 @@
 import { NextRequest } from "next/server";
 import { requireSmsAccess } from "@/lib/sms/api-guard";
-import { apiSuccess, apiNotFound, apiConflict, apiError, apiServiceUnavailable } from "@/lib/api/response";
+import { apiSuccess, apiNotFound, apiConflict, apiError, apiValidationError, apiServiceUnavailable } from "@/lib/api/response";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveAudience, type AudienceRow } from "@/lib/sms/audience";
 import { loadTenantSmsSettings } from "@/lib/sms/settings";
 import { composeRecipientMessage } from "@/lib/sms/compose";
+import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { inngest } from "@/lib/inngest/client";
 import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
@@ -42,6 +43,16 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   if (blastRow.status !== "draft") {
     return apiConflict(`Blast is "${blastRow.status}" — only a draft blast can be sent`);
+  }
+
+  // 3B creates drafts via POST /blasts with a " " placeholder body (the
+  // create route requires a non-empty body, and the draft exists before any
+  // text does) — autosave overwrites it on the first keystroke, but an
+  // abandoned draft keeps the space. Sending it wastes one credit per
+  // recipient on a blank SMS. The create route's placeholder stays as-is;
+  // only sending an empty-after-trim body is rejected.
+  if (blastRow.body.trim().length === 0) {
+    return apiValidationError({ body: ["Blast body is empty — add message text before sending"] });
   }
 
   // 1. Re-resolve the audience server-side. Never trust a client-supplied count.
@@ -101,9 +112,16 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   const newSendable = audience.sendable.filter((r) => !alreadyMaterialized.has(r.leadId));
   const newSuppressed = audience.suppressed.filter((r) => !alreadyMaterialized.has(r.leadId));
 
+  // Bounded concurrency, not a raw Promise.all — composeRow's
+  // getOrCreateOptOutToken call is an insert+select round trip per recipient,
+  // and an unbounded fan-out took down local Supabase at 249 recipients
+  // during 3B testing (TypeError: fetch failed). Admizz's real audience is
+  // ~16,000, so this is on the real send path, not a local-only edge case.
+  // See docs/SMS-PHASE4-BRIEF.md item 4.
+  const COMPOSE_CONCURRENCY = 25;
   const [queuedRows, suppressedRows] = await Promise.all([
-    Promise.all(newSendable.map((r) => composeRow(r, "queued"))),
-    Promise.all(newSuppressed.map((r) => composeRow(r, "suppressed"))),
+    mapWithConcurrency(newSendable, COMPOSE_CONCURRENCY, (r) => composeRow(r, "queued")),
+    mapWithConcurrency(newSuppressed, COMPOSE_CONCURRENCY, (r) => composeRow(r, "suppressed")),
   ]);
   const newRows = [...queuedRows, ...suppressedRows];
 
