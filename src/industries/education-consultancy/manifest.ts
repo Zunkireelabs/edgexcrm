@@ -26,8 +26,6 @@ export const manifest: IndustryManifest = {
     { meta: leadListsMeta },
     { meta: classesMeta },
     { meta: affiliatesMeta },
-    // No sidebar entry yet — the /sms route doesn't exist until Phase 3B
-    // (docs/SMS-PHASE3A-BRIEF.md §2).
     { meta: smsMeta },
   ],
   sidebar: [
@@ -40,6 +38,7 @@ export const manifest: IndustryManifest = {
     // Marketing section
     { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
     { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },
+    { featureId: FEATURES.SMS, href: "/sms", label: "SMS", icon: "MessageSquare", minRoles: ["owner", "admin"] },
   ],
   ai: aiConfig,
 };

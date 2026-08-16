@@ -43,7 +43,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "POST", path: "/api/v1/sms/blasts/[id]/cancel" });
 
-  const guard = await requireSmsAccess({ requireSend: true });
+  const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
   const { db } = guard;
   const { id } = await params;

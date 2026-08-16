@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "POST", path: "/api/v1/sms/suppressions" });
 
-  const guard = await requireSmsAccess({ requireSend: true });
+  const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
   const { auth, db } = guard;
 
@@ -79,7 +79,7 @@ export async function DELETE(request: NextRequest) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "DELETE", path: "/api/v1/sms/suppressions" });
 
-  const guard = await requireSmsAccess({ requireSend: true });
+  const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
   const { db } = guard;
 
