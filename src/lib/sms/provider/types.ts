@@ -34,6 +34,15 @@ export interface ProviderReportRow {
   id: string;
   mobile: string;
   status: string;
+  // Best-effort fields, not fully documented by Aakash — see
+  // docs/SMS-PHASE1-BRIEF.md §2 for what preflight actually confirmed
+  // (`id` has no relationship to the send response's id; `credit` is a
+  // STRING; `updated_at` can be the MySQL zero-date "0000-00-00 00:00:00").
+  // `message` (the rendered body) is used by delivery-match.ts as the second
+  // half of its recipient+body match key when present; guard its absence.
+  credit?: string;
+  updated_at?: string;
+  message?: string;
   [key: string]: unknown;
 }
 

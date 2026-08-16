@@ -13,6 +13,8 @@ import { agentFollowUpDrafter } from "@/lib/inngest/functions/agent-follow-up-dr
 import { agentDailyDigest } from "@/lib/inngest/functions/agent-daily-digest";
 import { agentMcpWriteGate } from "@/lib/inngest/functions/agent-mcp-write-gate";
 import { smsBlastSend } from "@/lib/inngest/functions/sms-blast-send";
+import { smsDeliveryPoll } from "@/lib/inngest/functions/sms-delivery-poll";
+import { smsCreditReaper } from "@/lib/inngest/functions/sms-credit-reaper";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -30,5 +32,7 @@ export const { GET, POST, PUT } = serve({
     agentDailyDigest,
     agentMcpWriteGate,
     smsBlastSend,
+    smsDeliveryPoll,
+    smsCreditReaper,
   ],
 });

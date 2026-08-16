@@ -4,12 +4,12 @@
 // `suppressed` and `failed` with the provider's reason (SMS-PHASE3B-BRIEF.md §4).
 // Polls while queued/sending so Send's caller lands on a live view.
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { smsSend, SmsApiError } from "../lib/api-client";
-import type { SmsBlastRow, SmsBlastStatus } from "../lib/types";
+import { smsGet, smsSend, SmsApiError } from "../lib/api-client";
+import type { SmsBlastRecipientRow, SmsBlastRow, SmsBlastStatus } from "../lib/types";
 
 interface BlastDetailProps {
   blast: SmsBlastRow;
@@ -31,18 +31,66 @@ const STATUS_BADGE: Record<SmsBlastStatus, "default" | "secondary" | "outline" |
 const POLLING_STATUSES = new Set<SmsBlastStatus>(["queued", "sending", "scheduled"]);
 const CANCELLABLE_STATUSES = new Set<SmsBlastStatus>(["scheduled", "queued", "sending"]);
 const POLL_INTERVAL_MS = 4000;
+const RECIPIENTS_PAGE_SIZE = 50;
+
+const RECIPIENT_STATUS_BADGE: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
+  queued: "outline",
+  deferred: "outline",
+  sending: "secondary",
+  submitted: "secondary",
+  delivered: "default",
+  failed: "destructive",
+  suppressed: "outline",
+  cancelled: "outline",
+};
 
 export function BlastDetail({ blast, canSendSms, onRefresh }: BlastDetailProps) {
   const [cancelling, setCancelling] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  const [recipients, setRecipients] = useState<SmsBlastRecipientRow[]>([]);
+  const [recipientsPage, setRecipientsPage] = useState(1);
+  const [recipientsTotalPages, setRecipientsTotalPages] = useState(1);
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+
+  const loadRecipients = useCallback(
+    async (page: number) => {
+      setRecipientsLoading(true);
+      try {
+        const { data, meta } = await smsGet<SmsBlastRecipientRow[]>(
+          `/api/v1/sms/blasts/${blast.id}/messages?page=${page}&pageSize=${RECIPIENTS_PAGE_SIZE}`
+        );
+        setRecipients(data);
+        setRecipientsTotalPages(meta?.totalPages ?? 1);
+      } catch (e) {
+        toast.error(e instanceof SmsApiError ? e.message : "Failed to load recipients.");
+      } finally {
+        setRecipientsLoading(false);
+      }
+    },
+    [blast.id]
+  );
+
+  useEffect(() => {
+    loadRecipients(recipientsPage);
+    // blast.id changing (navigating to a different blast) resets to page 1 via the effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recipientsPage, blast.id]);
+
+  useEffect(() => {
+    setRecipientsPage(1);
+  }, [blast.id]);
+
   useEffect(() => {
     if (!POLLING_STATUSES.has(blast.status)) return;
-    pollRef.current = setInterval(onRefresh, POLL_INTERVAL_MS);
+    pollRef.current = setInterval(() => {
+      onRefresh();
+      loadRecipients(recipientsPage);
+    }, POLL_INTERVAL_MS);
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, [blast.status, onRefresh]);
+  }, [blast.status, onRefresh, loadRecipients, recipientsPage]);
 
   async function handleCancel() {
     setCancelling(true);
@@ -109,20 +157,67 @@ export function BlastDetail({ blast, canSendSms, onRefresh }: BlastDetailProps) 
       </div>
 
       <div>
-        <p className="text-sm font-medium mb-2">Recipients</p>
-        {/* SMS-PHASE3B-BRIEF.md §4 asks for "per-recipient rows with their real
-            status, including suppressed and failed with the provider's reason."
-            The 3A API surface (docs/SMS-PHASE3A-BRIEF.md §4) has no GET route
-            that lists sms_messages rows for a blast — only the aggregate counters
-            on sms_blasts itself are reachable from any merged endpoint. Per the
-            brief's own instruction not to invent an endpoint, this view shows
-            the aggregate counts above and stops there; the missing route is
-            called out explicitly in the PR report as a 3A contract gap for 3C. */}
-        <p className="text-sm text-muted-foreground py-6 text-center max-w-lg mx-auto">
-          Per-recipient rows aren&apos;t available yet — the 3A API has no endpoint that lists
-          individual sms_messages rows for a blast (only the aggregate counters above). See the PR
-          report: this needs a small follow-up route, not invented here.
-        </p>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-sm font-medium">Recipients</p>
+          {recipientsTotalPages > 1 && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={recipientsPage <= 1 || recipientsLoading}
+                onClick={() => setRecipientsPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {recipientsPage} of {recipientsTotalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={recipientsPage >= recipientsTotalPages || recipientsLoading}
+                onClick={() => setRecipientsPage((p) => Math.min(recipientsTotalPages, p + 1))}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {recipientsLoading && recipients.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">Loading recipients…</p>
+        ) : recipients.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No recipients materialized for this blast yet.</p>
+        ) : (
+          <div className="rounded-md border overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50 text-left text-xs text-muted-foreground">
+                  <th className="px-3 py-2 font-medium">Phone</th>
+                  <th className="px-3 py-2 font-medium">Status</th>
+                  <th className="px-3 py-2 font-medium">Network</th>
+                  <th className="px-3 py-2 font-medium">Reason</th>
+                  <th className="px-3 py-2 font-medium">Delivered at</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recipients.map((r) => (
+                  <tr key={r.id} className="border-b last:border-0">
+                    <td className="px-3 py-2 tabular-nums">{r.to_phone}</td>
+                    <td className="px-3 py-2">
+                      <Badge variant={RECIPIENT_STATUS_BADGE[r.status] ?? "outline"}>{r.status.replace(/_/g, " ")}</Badge>
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.provider_network ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.error_message ?? r.error_code ?? "—"}</td>
+                    <td className="px-3 py-2 text-muted-foreground">
+                      {r.delivered_at ? new Date(r.delivered_at).toLocaleString() : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
