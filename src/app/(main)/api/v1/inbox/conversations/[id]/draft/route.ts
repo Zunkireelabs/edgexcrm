@@ -11,8 +11,9 @@ import {
   apiSuccess,
   apiError,
 } from "@/lib/api/response";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { sendMessage } from "@/lib/inbox/send-message";
+import { canAccessConversationLead } from "@/lib/inbox/scope";
 
 export async function POST(
   request: NextRequest,
@@ -34,19 +35,13 @@ export async function POST(
 
   if (!conv) return apiNotFound("Conversation");
 
-  if (auth.role === "counselor") {
-    const leadId = (conv as { lead_id: string | null }).lead_id;
-    if (!leadId) return apiForbidden();
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("assigned_to")
-      .eq("id", leadId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
-    if (!lead || (lead as { assigned_to: string | null }).assigned_to !== auth.userId) {
-      return apiForbidden();
-    }
-  }
+  const userClient = await createClient();
+  const canAccess = await canAccessConversationLead(
+    { user: userClient, service: supabase },
+    auth,
+    (conv as { lead_id: string | null }).lead_id
+  );
+  if (!canAccess) return apiForbidden();
 
   const body = await request.json().catch(() => ({})) as { draft_message_id?: string };
   if (!body.draft_message_id) {
