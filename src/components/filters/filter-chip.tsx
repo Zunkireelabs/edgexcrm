@@ -37,12 +37,14 @@ export function FilterChip({ field, condition, options, onChange, onRemove }: Fi
   // Same tinted-background/colored-text/tinted-border technique already used
   // for stage badges elsewhere in the app (columns-registry.tsx) — reusing
   // one real color, not inventing a new palette.
-  const color = resolveChipColor(field, condition, options);
+  const color = resolveChipColor(condition, options);
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
       <div
-        className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-md border pl-2.5 pr-1 text-xs ${color ? "" : "border-input bg-background"}`}
+        // rounded-[4px] matches the Tag pill and Stage badge elsewhere in the
+        // app exactly (columns-registry.tsx, stage-selector.tsx) — not rounded-md.
+        className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-[4px] border pl-2.5 pr-1 text-xs ${color ? "" : "border-input bg-background"}`}
         style={color ? { backgroundColor: `${color}20`, borderColor: `${color}66` } : undefined}
       >
         <PopoverTrigger asChild>

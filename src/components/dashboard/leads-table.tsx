@@ -2164,19 +2164,9 @@ export function LeadsTable({
           {/* Filter trigger — stays in row 1 in both modes, matching where it's
               always lived. Legacy: the FilterMenu button itself. Advanced: just
               the "+ Add filter" trigger — the resulting chips render in row 2's
-              AdvancedFilterBar (hideAddButton), not here. Sort stays with it in
-              both modes too. */}
+              AdvancedFilterBar (hideAddButton), not here. */}
           {!advancedFiltersEnabled ? (
-            <>
-              <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
-              <SortPopover
-                sortField={sortField}
-                sortDirection={sortDirection}
-                setSortField={setSortField}
-                setSortDirection={setSortDirection}
-                align="end"
-              />
-            </>
+            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
           ) : (
             <AddFilterButton
               fields={advancedVisibleFields}
@@ -2185,6 +2175,15 @@ export function LeadsTable({
               disabled={advancedFilters.tree.conditions.length >= DEFAULT_MAX_CONDITIONS}
             />
           )}
+
+          {/* Sort — row 1 in both modes, next to the filter trigger. */}
+          <SortPopover
+            sortField={sortField}
+            sortDirection={sortDirection}
+            setSortField={setSortField}
+            setSortDirection={setSortDirection}
+            align="end"
+          />
 
           {/* Export — owner/admin always; members only if their position grants it */}
           {canExport && (
@@ -2211,21 +2210,14 @@ export function LeadsTable({
           )}
         </div>
 
-        {/* Filters + Sort row — advanced mode only. Its own dedicated row below a
-            divider, always rendered (not conditional on activeFiltersCount) since
-            "+ Add filter" lives here now and needs a permanent home — matches
-            Notion's own filter-bar layout: sort + chips + add-filter together,
-            separated from the primary action row above by a divider line. */}
-        {advancedFiltersEnabled && (
+        {/* Chips row — advanced mode, active filters only. Sort moved back to row 1;
+            this row now only ever holds chips + Clear all, so — like the legacy
+            chips row below — it stays hidden entirely until there's something to
+            show, rather than sitting there empty with just a divider line. */}
+        {advancedFilterActive && (
           <>
             <div className="h-px bg-border" />
             <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
-              <SortPopover
-                sortField={sortField}
-                sortDirection={sortDirection}
-                setSortField={setSortField}
-                setSortDirection={setSortDirection}
-              />
               <AdvancedFilterBar
                 entity="leads"
                 fields={advancedVisibleFields}

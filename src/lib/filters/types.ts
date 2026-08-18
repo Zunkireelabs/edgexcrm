@@ -127,12 +127,6 @@ export interface FieldDef {
   group: string; // UI grouping label ("Basic", "Dates", "Custom", …)
   icon?: string; // lucide icon name as a STRING (never a component import)
   filterable: boolean;
-  // Fixed hex color every chip for THIS FIELD gets, regardless of which value
-  // is selected — for fields with no per-value color meaning of their own
-  // (unlike "status", where each stage has its own real color; see
-  // FilterOption.color for that case, which takes priority when present).
-  // Purely a scannability aid for stacked filter chips, not semantic.
-  chipColor?: string;
   // Exists for compilation/compat only (e.g. the legacy `?created=` URL path)
   // — never offered in FilterFieldPicker. Still fully filterable/compilable;
   // this only affects manual "+ Add filter" selection.

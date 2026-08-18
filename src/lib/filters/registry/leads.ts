@@ -104,22 +104,6 @@ function compileLocation(cond: FilterCondition): string {
   return and(or("city.is.null", `city.not.ilike.${pattern}`), or("country.is.null", `country.not.ilike.${pattern}`));
 }
 
-// Fixed per-field chip colors — a scannability aid for stacked filter chips,
-// grouped by concept, drawn from the app's validated 8-hue categorical
-// palette (dataviz skill), using 6 of the 8 slots and skipping green/red
-// (reserved elsewhere for success/error status, would send the wrong signal
-// here). Status and Tags don't use this — they carry their own real,
-// meaningful per-VALUE color (FilterOption.color) instead, which takes
-// priority over this when both are present.
-const CHIP_FAMILY = {
-  identity: "#2a78d6", // blue — search, name, email, phone: "who"
-  people: "#1baf7a", // aqua — assignees, collaborators: people/ownership
-  place: "#4a3aa7", // violet — city, country, location: "where"
-  time: "#eb6834", // orange — created/updated/last-activity: "when"
-  origin: "#eda100", // yellow — source, form: how the lead came in
-  profile: "#e87ba4", // magenta — industry, field of study, destinations
-} as const;
-
 // `ctx` is accepted (not yet read) so a future industry/permission-filtered
 // registry — e.g. hiding field_of_study for a non-education tenant — is a
 // change inside this function, not a signature change at every call site.
@@ -144,7 +128,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "columns", columns: ["first_name", "last_name", "email", "phone", "display_id"], fullNamePairs: true },
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.identity,
     },
     {
       key: "form",
@@ -153,7 +136,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "column", column: "form_config_id" },
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.origin,
     },
     {
       key: "tags",
@@ -175,7 +157,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       // resolve. Hidden from the picker so users see one "Created" option,
       // not two identical ones.
       hiddenFromPicker: true,
-      chipColor: CHIP_FAMILY.time,
     },
     {
       key: "industry",
@@ -185,7 +166,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: false,
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.profile,
     },
     {
       key: "source",
@@ -195,7 +175,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["is", "is_not", "is_any_of", "is_none_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.origin,
     },
     {
       key: "assignees",
@@ -205,7 +184,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["is_any_of"],
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.people,
     },
     {
       key: "collaborators",
@@ -215,7 +193,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["is_any_of"],
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.people,
     },
 
     // ── promoted legacy custom_fields dual-read ──────────────────────────
@@ -227,7 +204,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Education",
       filterable: true,
-      chipColor: CHIP_FAMILY.profile,
     },
     {
       key: "destinations",
@@ -236,7 +212,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "promoted", column: "destinations", jsonb: { column: "custom_fields", path: "countries" } },
       group: "Education",
       filterable: true,
-      chipColor: CHIP_FAMILY.profile,
     },
 
     // ── obvious first-class columns (also folds SORT_COLUMNS in) ─────────
@@ -249,7 +224,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       sortable: true,
       sortColumns: ["created_at"],
-      chipColor: CHIP_FAMILY.time,
     },
     {
       key: "last_activity_at",
@@ -260,7 +234,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       sortable: true,
       sortColumns: ["last_activity_at"],
-      chipColor: CHIP_FAMILY.time,
     },
     {
       key: "updated_at",
@@ -271,7 +244,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       sortable: true,
       sortColumns: ["updated_at"],
-      chipColor: CHIP_FAMILY.time,
     },
     {
       key: "first_name",
@@ -283,7 +255,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       sortable: true,
       sortColumns: ["first_name", "last_name"],
-      chipColor: CHIP_FAMILY.identity,
     },
     {
       key: "email",
@@ -295,7 +266,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       filterable: true,
       sortable: true,
       sortColumns: ["email"],
-      chipColor: CHIP_FAMILY.identity,
     },
     {
       key: "phone",
@@ -305,7 +275,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.identity,
     },
     {
       key: "city",
@@ -315,7 +284,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.place,
     },
     {
       key: "country",
@@ -325,7 +293,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.place,
     },
     {
       key: "location",
@@ -335,7 +302,6 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       operators: ["contains", "not_contains", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
-      chipColor: CHIP_FAMILY.place,
     },
 
     // ── explicitly not filterable in Phase 2 ─────────────────────────────
