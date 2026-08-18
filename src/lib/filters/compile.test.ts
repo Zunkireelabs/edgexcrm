@@ -713,4 +713,54 @@ describe("planFilter", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.gated?.[0]).toMatch(/not accessible/);
   });
+
+  // Gap 4 (production-readiness audit, same session as migration 207/208):
+  // field.industries existed on FieldDef from Phase 1 but nothing ever read it —
+  // every tenant's registry offered every field regardless of industry_id.
+  describe("field.industries — industry-scoped fields", () => {
+    const eduOnlyRegistry: FieldRegistry = {
+      ...registry,
+      destinations: {
+        key: "destinations",
+        label: "Destinations",
+        type: "text",
+        source: { kind: "column", column: "destinations" },
+        group: "Education",
+        filterable: true,
+        industries: ["education_consultancy"],
+      },
+    };
+
+    it("denies the condition when ctx.industryId does not match the field's allow-list", () => {
+      const result = planFilter(
+        andTree(cond("c1", "destinations", "is", "UK")),
+        eduOnlyRegistry,
+        { ...ctx, industryId: "it_agency" }
+      );
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.destinations?.[0]).toMatch(/not accessible/);
+    });
+
+    it("denies the condition when ctx.industryId is null — an explicit allow-list is never satisfied by 'no industry'", () => {
+      const result = planFilter(andTree(cond("c1", "destinations", "is", "UK")), eduOnlyRegistry, { ...ctx, industryId: null });
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.errors.destinations?.[0]).toMatch(/not accessible/);
+    });
+
+    it("allows the condition when ctx.industryId matches the field's allow-list", () => {
+      const result = planFilter(
+        andTree(cond("c1", "destinations", "is", "UK")),
+        eduOnlyRegistry,
+        { ...ctx, industryId: "education_consultancy" }
+      );
+      expect(result.ok).toBe(true);
+    });
+
+    it("never restricts a field with no industries key (undefined = all industries)", () => {
+      // `registry`'s ordinary fields (e.g. first_name) carry no `industries` — must
+      // stay reachable from every ctx.industryId, including null.
+      const result = planFilter(andTree(cond("c1", "first_name", "is", "x")), registry, { ...ctx, industryId: null });
+      expect(result.ok).toBe(true);
+    });
+  });
 });

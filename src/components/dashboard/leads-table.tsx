@@ -772,9 +772,13 @@ export function LeadsTable({
   // for someone who can't see the dropdown.
   const wantsAssigneeFacet = isAdmin || isTeamScoped;
   const wantsCollaboratorFacet = isAdmin || isTeamScoped;
+  // Destinations only exists as a field for education_consultancy (registry/leads.ts
+  // Gap 4) — no point requesting a fourth dimension every other tenant can't pick.
+  const wantsDestinationFacet = industryId === "education_consultancy";
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverDestinationFacet, setServerDestinationFacet] = useState<{ name: string; count: number }[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -786,16 +790,22 @@ export function LeadsTable({
     params.delete("count");
     // A single "source" stays the pre-existing single-dimension request (and response
     // shape) byte-for-byte — see route.ts's legacySingleSourceFacet branch.
-    const dims = ["source", wantsAssigneeFacet && "assignee", wantsCollaboratorFacet && "collaborator"].filter(Boolean);
+    const dims = [
+      "source",
+      wantsAssigneeFacet && "assignee",
+      wantsCollaboratorFacet && "collaborator",
+      wantsDestinationFacet && "destination",
+    ].filter(Boolean);
     params.set("facets", dims.join(","));
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
   useEffect(() => {
     if (!facetFetchParams) {
       setServerSourceFacet(null);
       setServerAssigneeFacet(null);
       setServerCollaboratorFacet(null);
+      setServerDestinationFacet(null);
       return;
     }
     const controller = new AbortController();
@@ -806,11 +816,12 @@ export function LeadsTable({
           // Legacy single-dimension shape (facets=source alone).
           facet?: string;
           options?: { name: string; count: number }[];
-          // New multi-dimension shape (facets=source,assignee,collaborator or a subset).
+          // New multi-dimension shape (facets=source,assignee,collaborator,destination or a subset).
           facets?: {
             source?: { options: { name: string; count: number }[] } | null;
             assignee?: { options: { name: string; count: number }[] } | null;
             collaborator?: { options: { name: string; count: number }[] } | null;
+            destination?: { options: { name: string; count: number }[] } | null;
           } | null;
         };
       }) => {
@@ -819,10 +830,29 @@ export function LeadsTable({
           setServerSourceFacet(body.data.options ?? []);
           setServerAssigneeFacet(null);
           setServerCollaboratorFacet(null);
+          setServerDestinationFacet(null);
+        } else if (body.data?.facets === null || body.data?.facets === undefined) {
+          // route.ts returns `facets: null` when the active ?f= tree isn't losslessly
+          // expressible into lead_aggregates() (treeToAggregateParams §E — e.g. any
+          // `contains`/`starts_with` text filter, a field outside its narrow param
+          // list, or the top-level AND/OR toggle set to OR). That is NOT "zero people
+          // match" — it's "no server number for this tree at all." Setting the facet
+          // states to `[]` here (as if the server had answered) would make sources/
+          // counselorCounts/collaboratorCounts below treat an EMPTY-BUT-TRUTHY array as
+          // authoritative and permanently blank the Source/Assigned-To/Collaborators
+          // pickers for as long as that condition stays in the tree — you couldn't even
+          // add a new filter on those axes. `null` is the one value those memos already
+          // treat as "no server answer, use the client-computed (page-scoped) fallback"
+          // — the same path they take before the very first fetch resolves.
+          setServerSourceFacet(null);
+          setServerAssigneeFacet(null);
+          setServerCollaboratorFacet(null);
+          setServerDestinationFacet(null);
         } else {
-          setServerSourceFacet(body.data?.facets?.source?.options ?? []);
-          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data?.facets?.assignee?.options ?? []) : null);
-          setServerCollaboratorFacet(wantsCollaboratorFacet ? (body.data?.facets?.collaborator?.options ?? []) : null);
+          setServerSourceFacet(body.data.facets.source?.options ?? []);
+          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data.facets.assignee?.options ?? []) : null);
+          setServerCollaboratorFacet(wantsCollaboratorFacet ? (body.data.facets.collaborator?.options ?? []) : null);
+          setServerDestinationFacet(wantsDestinationFacet ? (body.data.facets.destination?.options ?? []) : null);
         }
       })
       .catch((err: unknown) => {
@@ -832,7 +862,7 @@ export function LeadsTable({
         console.error("Failed to load lead facets", err);
       });
     return () => controller.abort();
-  }, [facetFetchParams, wantsAssigneeFacet, wantsCollaboratorFacet]);
+  }, [facetFetchParams, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
   const sources = useMemo(
     () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
@@ -940,6 +970,30 @@ export function LeadsTable({
     if (!serverCollaboratorFacet) return clientCollaboratorCounts;
     return new Map(serverCollaboratorFacet.map((o) => [o.name, o.count]));
   }, [serverCollaboratorFacet, clientCollaboratorCounts]);
+
+  // Per-destination counts — client-side fallback for non-serverPaginated surfaces
+  // (and the brief moment before the first facet fetch resolves), computed straight
+  // off `l.destinations` (no separate map to join, unlike collaborators). Page-scoped
+  // like every client-side fallback above — migration 208's `destination` dimension
+  // (see destinationCounts below) is what actually matters for the /leads picker.
+  const clientDestinationCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    localLeads.forEach((l) => {
+      (l.destinations ?? []).forEach((dest) => {
+        if (!dest) return;
+        m.set(dest, (m.get(dest) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [localLeads]);
+
+  // Server-computed Destinations facet (serverPaginated + education_consultancy only,
+  // migration 208) — closes the gap where "Destinations" had NO option source at all
+  // (registry/leads.ts Gap 3): nothing previously fed this field's picker any values.
+  const destinationCounts = useMemo(() => {
+    if (!serverDestinationFacet) return clientDestinationCounts;
+    return new Map(serverDestinationFacet.map((o) => [o.name, o.count]));
+  }, [serverDestinationFacet, clientDestinationCounts]);
 
   // Secondary toolbar filters (form/counselor/collaborator/source/tag/created/
   // prospect industry). serverPaginated mode sends these as query params (buildFetchParams
@@ -2065,8 +2119,11 @@ export function LeadsTable({
   }, [isAdmin, isTeamScoped, showItAgencyFields, showTags, hasMultipleForms]);
 
   const advancedVisibleFields = useMemo(
-    () => Object.values(advancedFilterRegistry).filter((f) => !advancedVisibleFieldKeys.has(f.key)),
-    [advancedFilterRegistry, advancedVisibleFieldKeys]
+    () =>
+      Object.values(advancedFilterRegistry).filter(
+        (f) => !advancedVisibleFieldKeys.has(f.key) && (!f.industries || (!!industryId && f.industries.includes(industryId)))
+      ),
+    [advancedFilterRegistry, advancedVisibleFieldKeys, industryId]
   );
 
   // Reuses the exact option arrays the legacy filterDefs above compute — same
@@ -2090,12 +2147,13 @@ export function LeadsTable({
             label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
           })),
       ],
-      // Collaborator counts stay client-side, computed from `localLeads` (the current
-      // server page only) — deliberately, not silently: `lead_collaborators` is a join
-      // table with no existing `lead_aggregates()` dimension, and adding one is a
-      // bigger change than this addendum covers (ADVANCED-FILTERS-BRIEF Phase 3
-      // addendum §C). Being explicitly page-scoped-and-labelled beats shipping a
-      // second, silently different meaning of the same-looking number.
+      // Collaborator counts: server-computed, tenant-wide (migration 207's
+      // `collaborator` dimension on lead_aggregates()) when serverPaginated, falling
+      // back to the page-scoped client computation otherwise — see collaboratorCounts
+      // above. Was purely client-side/page-scoped until this was closed as a
+      // production-readiness gap; kept the owner/admin exclusion, an independent
+      // product decision (they're not offered as assignable collaborators) unrelated
+      // to where the count comes from.
       collaborators: counselors
         .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0 && memberRoleMap[userId] !== "owner" && memberRoleMap[userId] !== "admin")
         .map(([userId, email]) => ({
@@ -2107,8 +2165,16 @@ export function LeadsTable({
       tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],
       industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
       form: formEntries.map(([id, name]) => ({ value: id, label: name })),
+      // Destinations: server-computed, tenant-wide (migration 208's `destination`
+      // dimension) when serverPaginated + education_consultancy, else the client
+      // fallback. Previously had NO entry here at all — this key didn't exist, so
+      // the field's value picker rendered permanently empty (see destinationCounts).
+      destinations: Array.from(destinationCounts.entries())
+        .filter(([, count]) => count > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
     }),
-    [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries]
+    [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries, destinationCounts]
   );
 
   // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while

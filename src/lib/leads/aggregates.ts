@@ -396,3 +396,26 @@ export async function getCollaboratorFacet(params: SourceFacetParams): Promise<C
     .map((row) => ({ name: row.key, count: Number(row.cnt) }))
     .sort((a, b) => b.count - a.count);
 }
+
+export interface DestinationFacetOption {
+  /** A destination country string from leads.destinations (TEXT[]). */
+  name: string;
+  count: number;
+}
+
+/**
+ * Destinations facet — migration 208's `destination` dimension. Closes a total
+ * (not partial) gap: the Advanced Filters "Destinations" field had NO option
+ * source anywhere — no static FieldDef.options, no optionOverrides entry — so
+ * picking it in "Add filter" rendered a permanently empty checklist. Same shape
+ * as getCollaboratorFacet; no self-exclusion param exists on this axis (lead_
+ * aggregates() has no p_destination filter param, same as `source`), so unlike
+ * collaborator/assignee there is nothing to omit from `params` here.
+ */
+export async function getDestinationFacet(params: SourceFacetParams): Promise<DestinationFacetOption[]> {
+  const rows = await fetchFacetRows(params);
+  return rows
+    .filter((row) => row.dimension === "destination")
+    .map((row) => ({ name: row.key, count: Number(row.cnt) }))
+    .sort((a, b) => b.count - a.count);
+}

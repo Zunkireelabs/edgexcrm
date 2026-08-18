@@ -204,6 +204,12 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Education",
       filterable: true,
+      // Education-only — these two fields are meaningless outside education_consultancy
+      // tenants (it_agency/travel_agency leads never populate them). Previously shown
+      // in every tenant's "Add filter" picker regardless of industry (this `industries`
+      // field on FieldDef existed but nothing read it yet — see compile.ts's
+      // checkCondition + leads-table.tsx's advancedVisibleFields for enforcement).
+      industries: ["education_consultancy"],
     },
     {
       key: "destinations",
@@ -212,6 +218,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "promoted", column: "destinations", jsonb: { column: "custom_fields", path: "countries" } },
       group: "Education",
       filterable: true,
+      industries: ["education_consultancy"],
     },
 
     // ── obvious first-class columns (also folds SORT_COLUMNS in) ─────────

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { Lead, PipelineStage } from "@/types/database";
-import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates, getSourceFacet, getCollaboratorFacet, listStatusKey } from "./aggregates";
+import { reshapeLeadAggregateRows, resolveSourceCounts, emptyAggregates, getLeadAggregates, getSourceFacet, getCollaboratorFacet, getDestinationFacet, listStatusKey } from "./aggregates";
 import { resolveStageBucketCounts } from "@/components/dashboard/stats-cards";
 
 const { rpcMock, createClientMock } = vi.hoisted(() => {
@@ -542,6 +542,47 @@ describe("getCollaboratorFacet — migration 207 'collaborator' dimension", () =
   it("throws (not an empty option list) when the RPC errors — same fail-loud contract as getSourceFacet", async () => {
     rpcMock.mockResolvedValue({ data: null, error: { message: "connection refused" } });
     await expect(getCollaboratorFacet({ tenantId: "tenant-1", scope: "all" })).rejects.toThrow(
+      /lead_aggregates source facet failed for tenant tenant-1/,
+    );
+  });
+});
+
+// Migration 208: 'destination' dimension on lead_aggregates(), closing the total
+// (not partial) gap where the Advanced Filters "Destinations" field had NO option
+// source anywhere — the picker rendered permanently empty, with no path to select
+// any value at all.
+describe("getDestinationFacet — migration 208 'destination' dimension", () => {
+  beforeEach(() => {
+    rpcMock.mockReset();
+    createClientMock.mockClear();
+  });
+
+  it("maps 'destination' rows to {name, count}, ignoring other dimensions in the same RPC response, sorted by count desc", async () => {
+    rpcMock.mockResolvedValue({
+      data: [
+        { dimension: "counselor", key: "UK", bucket: "all", cnt: 99 }, // must be ignored — coincidental key collision
+        { dimension: "destination", key: "UK", bucket: "all", cnt: 4 },
+        { dimension: "destination", key: "Canada", bucket: "all", cnt: 9 },
+      ],
+      error: null,
+    });
+    const result = await getDestinationFacet({ tenantId: "tenant-1", scope: "all" });
+    expect(result).toEqual([
+      { name: "Canada", count: 9 },
+      { name: "UK", count: 4 },
+    ]);
+  });
+
+  it("still forwards every other active filter axis (cross-filtering) — e.g. status — with no self-filter param to omit (unlike collaborator/assignee)", async () => {
+    rpcMock.mockResolvedValue({ data: [], error: null });
+    await getDestinationFacet({ tenantId: "tenant-1", scope: "all", status: "new" });
+    const [, params] = rpcMock.mock.calls[0];
+    expect(params).toMatchObject({ p_status_eq: "new" });
+  });
+
+  it("throws (not an empty option list) when the RPC errors — same fail-loud contract as getSourceFacet", async () => {
+    rpcMock.mockResolvedValue({ data: null, error: { message: "connection refused" } });
+    await expect(getDestinationFacet({ tenantId: "tenant-1", scope: "all" })).rejects.toThrow(
       /lead_aggregates source facet failed for tenant tenant-1/,
     );
   });

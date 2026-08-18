@@ -581,6 +581,14 @@ function checkCondition(
     push(`field is not accessible: ${JSON.stringify(cond.field)}`);
     return;
   }
+  // field.industries existed on FieldDef since Phase 1 ("undefined = all industries")
+  // but nothing ever read it — every tenant's registry offered every field regardless
+  // of industry_id. Mirrors the visibleTo check above: a null ctx.industryId does not
+  // satisfy an explicit allow-list.
+  if (field.industries && !(ctx.industryId && field.industries.includes(ctx.industryId))) {
+    push(`field is not accessible: ${JSON.stringify(cond.field)}`);
+    return;
+  }
   if (!isOperatorAllowed(field, cond.op)) {
     push(`operator ${cond.op} is not allowed on field ${field.key}`);
     return;
