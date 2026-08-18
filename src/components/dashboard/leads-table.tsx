@@ -408,6 +408,8 @@ export function LeadsTable({
   const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
   const [isMoveList, setIsMoveList] = useState(false);
   const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
+  // Required only in staging view — leaving Leads Organise must tag a branch (§4.2 fix).
+  const [moveBranchId, setMoveBranchId] = useState<string>("");
   // it_agency: Fit-Qualified → Sales Leads graduation reuses the move-to-list dialog/API.
   const [isGraduateMove, setIsGraduateMove] = useState(false);
 
@@ -1294,6 +1296,22 @@ export function LeadsTable({
       toast.error("Archive reason is required");
       return;
     }
+    if (isStagingView && !moveBranchId) {
+      toast.error("Please select a branch");
+      return;
+    }
+    // Staging: leaving without an explicit assignee falls back to the selected
+    // branch's manager (§4.2 fix) rather than "keep current assignee" — a
+    // staging lead's current assignee, if any, isn't necessarily in-branch.
+    let resolvedAssignTo = moveAssignTo;
+    if (isStagingView && moveAssignTo === "keep") {
+      const branch = branches.find((b) => b.id === moveBranchId);
+      if (!branch?.manager_user_id) {
+        toast.error("Selected branch has no manager set — pick an assignee manually");
+        return;
+      }
+      resolvedAssignTo = branch.manager_user_id;
+    }
 
     setIsMoveList(true);
     const chunks: string[][] = [];
@@ -1313,9 +1331,10 @@ export function LeadsTable({
           body: JSON.stringify({
             ids: chunks[i],
             list_id: moveListId,
+            ...(isStagingView && moveBranchId && { branch_id: moveBranchId }),
             ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
-            ...(moveAssignTo !== "keep" && {
-              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
+            ...(resolvedAssignTo !== "keep" && {
+              assigned_to: resolvedAssignTo === "unassign" ? null : resolvedAssignTo,
             }),
             ...(isGraduateMove && { graduate: true }),
           }),
@@ -1334,7 +1353,7 @@ export function LeadsTable({
               routeMemoryKey,
               JSON.stringify({
                 list_id: moveListId,
-                assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
+                assigned_to: resolvedAssignTo === "keep" ? null : resolvedAssignTo === "unassign" ? null : resolvedAssignTo,
               }),
             );
           }
@@ -1343,8 +1362,8 @@ export function LeadsTable({
         }
       }
       const assignedName =
-        moveAssignTo !== "keep" && moveAssignTo !== "unassign"
-          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.name
+        resolvedAssignTo !== "keep" && resolvedAssignTo !== "unassign"
+          ? teamMembers.find((m) => m.user_id === resolvedAssignTo)?.name
           : null;
       const toastMsg = [
         isGraduateMove
@@ -1361,6 +1380,7 @@ export function LeadsTable({
       setMoveListId("");
       setMoveArchiveReason("");
       setMoveAssignTo("keep");
+      setMoveBranchId("");
       setIsGraduateMove(false);
       router.refresh();
     } catch (error) {
@@ -2194,7 +2214,7 @@ export function LeadsTable({
                 Assign
               </button>
             )}
-            {isAdmin && showBranches && branches.length > 0 && (
+            {isAdmin && !isStagingView && showBranches && branches.length > 0 && (
               <button
                 onClick={() => setBranchAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
@@ -2608,7 +2628,7 @@ export function LeadsTable({
       {/* Bulk Move to List Dialog */}
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
-        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setMoveBranchId(""); setIsGraduateMove(false); }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -2682,6 +2702,21 @@ export function LeadsTable({
                 </Select>
               </div>
             )}
+            {isStagingView && (
+              <div className="space-y-1.5">
+                <p className="text-sm font-medium text-gray-700">Branch (required)</p>
+                <Select value={moveBranchId} onValueChange={setMoveBranchId}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select branch..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branches.map((b) => (
+                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {(isStagingView || isGraduateMove) && (
               <>
                 {isStagingView && selectionAssignmentHint && (
@@ -2689,6 +2724,11 @@ export function LeadsTable({
                 )}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
+                  {isStagingView && (
+                    <p className="text-xs text-muted-foreground">
+                      Left blank, leads go to the selected branch&apos;s manager.
+                    </p>
+                  )}
                   <Select
                     value={moveAssignTo}
                     onValueChange={(v) => {
@@ -2729,14 +2769,19 @@ export function LeadsTable({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }}
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setMoveBranchId(""); setIsGraduateMove(false); }}
               disabled={isMoveList}
             >
               Cancel
             </Button>
             <Button
               onClick={handleBulkMove}
-              disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
+              disabled={
+                isMoveList ||
+                !moveListId ||
+                (moveTargetIsArchive && !moveArchiveReason) ||
+                (isStagingView && !moveBranchId)
+              }
             >
               {isMoveList
                 ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")

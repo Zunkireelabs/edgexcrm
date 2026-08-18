@@ -505,7 +505,8 @@ export async function applyLeadPatch(
     if (touchingBranchFields) {
       const leadInManagerBranch =
         existingLead.branch_id === auth.branchId ||
-        patchMembership.some((m) => m.branch_id === auth.branchId);
+        patchMembership.some((m) => m.branch_id === auth.branchId) ||
+        (existingLead.assigned_to !== null && auth.branchMemberIds.includes(existingLead.assigned_to));
       if (!auth.branchId || !leadInManagerBranch) {
         return { kind: "forbidden" };
       }
