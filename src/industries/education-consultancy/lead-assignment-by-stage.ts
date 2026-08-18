@@ -42,7 +42,7 @@ export interface StageAssigneeCandidate {
  *   1. branch-manager(s) of the lead's branch
  *   2. the line position tenant-wide (ignore branch)
  *
- * Admins are always a valid assignee at any stage — appended last, after the above.
+ * Admin/owner are always a valid assignee at any stage — appended last, after the above.
  */
 export function stageAssigneeCandidates(
   roster: RosterMemberForStage[],
@@ -67,6 +67,6 @@ export function stageAssigneeCandidates(
         : roster.filter((m) => m.position_slug != null && lineSlugs.includes(m.position_slug));
 
   const seen = new Set(candidates.map((m) => m.user_id));
-  const admins = roster.filter((m) => m.role === "admin" && !seen.has(m.user_id));
+  const admins = roster.filter((m) => (m.role === "admin" || m.role === "owner") && !seen.has(m.user_id));
   return [...candidates, ...admins];
 }

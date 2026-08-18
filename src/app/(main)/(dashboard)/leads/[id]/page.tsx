@@ -190,12 +190,18 @@ export default async function LeadDetailPage({
           (tenantData.branchId == null || m.branch_id === tenantData.branchId),
       )
     : [];
-  // Admins are always a valid "send to next" target, appended after the position-chain team.
+  // Admin/owner and the scoped branch-manager are always a valid "send to next" target,
+  // appended after the position-chain team.
   const nextPositionMembers = nextSlug
     ? [
         ...nextPositionLineTeam,
         ...roster.filter(
-          (m) => m.role === "admin" && !nextPositionLineTeam.some((t) => t.user_id === m.user_id),
+          (m) =>
+            !nextPositionLineTeam.some((t) => t.user_id === m.user_id) &&
+            (m.role === "admin" ||
+              m.role === "owner" ||
+              (m.position_slug === "branch-manager" &&
+                (tenantData.branchId == null || m.branch_id === tenantData.branchId))),
         ),
       ]
     : [];
