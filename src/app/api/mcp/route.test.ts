@@ -148,6 +148,7 @@ function fixtureAgentAuth(overrides: Partial<AgentAuthContext> = {}): AgentAuthC
       canManageClasses: false,
       canManageHR: false,
       canExport: false,
+      canSendSms: false,
       dashboardWidgets: new Set(),
     },
     role: "agent",

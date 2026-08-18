@@ -80,6 +80,7 @@ function agentAuth(overrides: Partial<AgentAuthContext> = {}): AgentAuthContext 
       canManageClasses: false,
       canManageHR: false,
       canExport: false,
+      canSendSms: false,
       dashboardWidgets: null,
     },
     role: "agent",

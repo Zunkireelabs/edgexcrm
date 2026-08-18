@@ -9,8 +9,9 @@ import {
   apiNotFound,
   apiSuccess,
 } from "@/lib/api/response";
-import { createServiceClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { createNotification, NotificationTypes } from "@/lib/notifications";
+import { canAccessConversationLead } from "@/lib/inbox/scope";
 
 export async function GET(
   _request: NextRequest,
@@ -32,21 +33,13 @@ export async function GET(
   if (error || !data) return apiNotFound("Conversation");
 
   const conv = data as Record<string, unknown>;
-
-  // Counselor scoping
-  if (auth.role === "counselor") {
-    const leadId = conv.lead_id as string | null;
-    if (!leadId) return apiForbidden();
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("assigned_to")
-      .eq("id", leadId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
-    if (!lead || (lead as { assigned_to: string | null }).assigned_to !== auth.userId) {
-      return apiForbidden();
-    }
-  }
+  const userClient = await createClient();
+  const canAccess = await canAccessConversationLead(
+    { user: userClient, service: supabase },
+    auth,
+    conv.lead_id as string | null
+  );
+  if (!canAccess) return apiForbidden();
 
   return apiSuccess(data);
 }
@@ -61,7 +54,7 @@ export async function PATCH(
   const { id } = await params;
   const supabase = await createServiceClient();
 
-  // Access check (tenant + counselor scoping) must run before any mutation —
+  // Access check (tenant + branch/counselor scoping) must run before any mutation —
   // editing must match viewing (same check as the GET handler above).
   const { data: conv } = await supabase
     .from("conversations")
@@ -72,19 +65,13 @@ export async function PATCH(
 
   if (!conv) return apiNotFound("Conversation");
 
-  if (auth.role === "counselor") {
-    const leadId = (conv as { lead_id: string | null }).lead_id;
-    if (!leadId) return apiForbidden();
-    const { data: lead } = await supabase
-      .from("leads")
-      .select("assigned_to")
-      .eq("id", leadId)
-      .eq("tenant_id", auth.tenantId)
-      .maybeSingle();
-    if (!lead || (lead as { assigned_to: string | null }).assigned_to !== auth.userId) {
-      return apiForbidden();
-    }
-  }
+  const userClient = await createClient();
+  const canAccess = await canAccessConversationLead(
+    { user: userClient, service: supabase },
+    auth,
+    (conv as { lead_id: string | null }).lead_id
+  );
+  if (!canAccess) return apiForbidden();
 
   const body = await request.json().catch(() => ({})) as Record<string, unknown>;
 

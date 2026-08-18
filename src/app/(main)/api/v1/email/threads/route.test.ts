@@ -27,6 +27,7 @@ function permissions(overrides: Partial<ResolvedPermissions> = {}): ResolvedPerm
     canManageClasses: false,
     canManageHR: false,
     canExport: false,
+    canSendSms: false,
     dashboardWidgets: null,
     ...overrides,
   };

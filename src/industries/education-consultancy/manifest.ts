@@ -10,6 +10,7 @@ import { applicationTrackingMeta } from "./features/application-tracking/meta";
 import { leadListsMeta } from "../_shared/features/lead-lists/meta";
 import { classesMeta } from "./features/classes/meta";
 import { affiliatesMeta } from "./features/affiliates/meta";
+import { smsMeta } from "../_shared/features/sms/meta";
 import { aiConfig } from "./ai/agent";
 
 export const manifest: IndustryManifest = {
@@ -25,6 +26,7 @@ export const manifest: IndustryManifest = {
     { meta: leadListsMeta },
     { meta: classesMeta },
     { meta: affiliatesMeta },
+    { meta: smsMeta },
   ],
   sidebar: [
     // Intelligence section
@@ -36,6 +38,7 @@ export const manifest: IndustryManifest = {
     // Marketing section
     { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
     { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },
+    { featureId: FEATURES.SMS, href: "/sms", label: "SMS", icon: "MessageSquare", minRoles: ["owner", "admin"] },
   ],
   ai: aiConfig,
 };
