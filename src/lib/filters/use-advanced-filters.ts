@@ -136,9 +136,19 @@ export function useAdvancedFilters(registry: FieldRegistry, persistKey?: string 
     [searchParams, router, pathname, persistKey]
   );
 
-  // Restore-from-storage: fires at most once per mount, and only when the
-  // URL had nothing at all on that first check. A ref (not state) so this
-  // can never re-arm mid-session and re-fire after a later explicit clear.
+  // Restore-from-storage: fires at most ONCE, the first time persistKey is
+  // actually truthy — not just once at mount. Depending on persistKey (not
+  // []) matters because restoredRef is only ever set INSIDE the truthy
+  // branch below: if persistKey were still null on the very first render
+  // (e.g. tenantId/currentUserId not resolved yet), a mount-only effect
+  // would return early without ever setting the ref, then never get another
+  // chance to try again once persistKey arrived — permanently, silently
+  // disabling restoration for that page visit. Not reachable today (the
+  // one real call site, leads/page.tsx, resolves tenantId/currentUserId
+  // before this component ever mounts), kept as a guard against that
+  // becoming true under a future loading-state refactor. A ref (not state)
+  // still ensures this can never re-arm mid-session and re-fire after a
+  // later explicit clear, once it HAS successfully run once.
   const restoredRef = useRef(false);
   useEffect(() => {
     if (restoredRef.current || !persistKey) return;
@@ -154,10 +164,13 @@ export function useAdvancedFilters(registry: FieldRegistry, persistKey?: string 
       return;
     }
     setTree(savedTree);
-    // Runs once on mount by design (see restoredRef) — deliberately NOT
-    // re-running on every raw/registry/setTree identity change.
+    // Deliberately keyed on persistKey ONLY, not raw/registry/setTree too —
+    // restoredRef is what actually enforces "only once"; re-running this
+    // effect on every raw/registry/setTree identity change (which happens on
+    // nearly every render) would fight that guard for no benefit, since a
+    // fresh closure over their current values is captured either way.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [persistKey]);
 
   const clear = useCallback(() => setTree(EMPTY_TREE), [setTree]);
 
