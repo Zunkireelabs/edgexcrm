@@ -210,13 +210,18 @@ export async function PATCH(request: NextRequest) {
     log.info({ notFoundIds }, "Some leads not found for bulk update");
   }
 
-  // §4.2: branch manager can only update leads already in their branch
+  // §4.2: branch manager can only update leads already in their branch, or leads
+  // currently assigned to one of their own branch's team members (mirrors the
+  // single-lead requireLeadAccess/§4.2 rule — a stale/missing branch_id on the
+  // lead shouldn't lock its own branch manager out of it).
   let idsToUpdate = body.ids.filter((id) => existingMap.has(id));
   if (isTeamScoped) {
     idsToUpdate = idsToUpdate.filter((id) => {
       const lead = existingMap.get(id);
-      // Allow leads directly in this branch OR with no branch_id (visible via team member assignment)
-      return lead?.branch_id === auth.branchId || lead?.branch_id == null;
+      return (
+        lead?.branch_id === auth.branchId ||
+        (lead?.assigned_to != null && auth.branchMemberIds.includes(lead.assigned_to))
+      );
     });
   }
 
