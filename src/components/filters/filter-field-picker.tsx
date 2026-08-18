@@ -40,7 +40,19 @@ export function FilterFieldPicker({ fields, onSelect }: FilterFieldPickerProps) 
             text-center so this doesn't silently left-align as a side effect. */}
         <CommandEmpty className="py-4 text-center text-xs">No matching fields.</CommandEmpty>
         {grouped.map(([group, groupFields]) => (
-          <CommandGroup key={group} heading={group}>
+          // The default group-heading style (from the shared Command base)
+          // barely differs from a regular row — same size, only slightly
+          // muted — so "Basic"/"Dates"/"Education" read as just more list
+          // items instead of section labels. Strengthened here, scoped to
+          // this picker only: uppercase + letter-spacing is an unambiguous
+          // "this is a category, not a click target" signal, bolder weight,
+          // and extra top padding so it visually detaches from the previous
+          // group's last row instead of running straight into it.
+          <CommandGroup
+            key={group}
+            heading={group}
+            className="[&_[cmdk-group-heading]]:pt-2.5 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wide"
+          >
             {groupFields.map((field) => (
               <CommandItem
                 key={field.key}
