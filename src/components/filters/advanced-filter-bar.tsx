@@ -12,7 +12,7 @@ import { AddFilterButton } from "./add-filter-button";
 import { useFilterOptions } from "./use-filter-options";
 import type { FilterHostConfig } from "./types";
 
-const DEFAULT_MAX_CONDITIONS = 25;
+export const DEFAULT_MAX_CONDITIONS = 25;
 
 export function AdvancedFilterBar({
   fields,
@@ -21,6 +21,7 @@ export function AdvancedFilterBar({
   showChips = true,
   maxConditions = DEFAULT_MAX_CONDITIONS,
   optionOverrides,
+  hideAddButton = false,
 }: FilterHostConfig) {
   const { getOptions } = useFilterOptions(optionOverrides);
 
@@ -67,12 +68,14 @@ export function AdvancedFilterBar({
           onRemoveCondition={handleRemoveCondition}
         />
       )}
-      <AddFilterButton
-        fields={fields}
-        getOptions={getOptions}
-        onAdd={handleAdd}
-        disabled={atCap}
-      />
+      {!hideAddButton && (
+        <AddFilterButton
+          fields={fields}
+          getOptions={getOptions}
+          onAdd={handleAdd}
+          disabled={atCap}
+        />
+      )}
       {showChips && hasAnything && (
         <button
           type="button"

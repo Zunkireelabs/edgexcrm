@@ -9,7 +9,7 @@ import { X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterConditionEditor } from "./filter-condition-editor";
-import { formatChipLabel } from "./chip-label";
+import { formatChipLabel, resolveChipColor } from "./chip-label";
 import type { FilterOption } from "./types";
 
 export interface FilterChipProps {
@@ -34,11 +34,24 @@ export function FilterChip({ field, condition, options, onChange, onRemove }: Fi
     setOpen(false);
   }
 
+  // Same tinted-background/colored-text/tinted-border technique already used
+  // for stage badges elsewhere in the app (columns-registry.tsx) — reusing
+  // one real color, not inventing a new palette.
+  const color = resolveChipColor(condition, options);
+
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
-      <div className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-input bg-background pl-2.5 pr-1 text-xs">
+      <div
+        className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-md border pl-2.5 pr-1 text-xs ${color ? "" : "border-input bg-background"}`}
+        style={color ? { backgroundColor: `${color}20`, borderColor: `${color}66` } : undefined}
+      >
         <PopoverTrigger asChild>
-          <button type="button" data-testid="filter-chip" className="font-medium text-foreground hover:underline">
+          <button
+            type="button"
+            data-testid="filter-chip"
+            className={`font-medium hover:underline ${color ? "" : "text-foreground"}`}
+            style={color ? { color } : undefined}
+          >
             {formatChipLabel(field, condition, options)}
           </button>
         </PopoverTrigger>

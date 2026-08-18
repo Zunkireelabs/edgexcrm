@@ -18,7 +18,10 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 // Advanced filters (Phase 3, docs/ADVANCED-FILTERS-BRIEF.md) — flag-gated via
 // NEXT_PUBLIC_ADVANCED_FILTERS. The legacy FilterMenu/FilterChips imports above
 // stay as the flag-off fallback; see their @deprecated JSDoc.
-import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
+import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
+import { AddFilterButton } from "@/components/filters/add-filter-button";
+import { useFilterOptions } from "@/components/filters/use-filter-options";
+import type { FilterCondition } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/filters/types";
 import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
 import { leadFields } from "@/lib/filters/registry/leads";
@@ -269,6 +272,75 @@ function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNo
   return cloneElement(tdElement as ReactElement<Record<string, unknown>>, {
     style: resizedCellStyle(props.style, width),
   });
+}
+
+// Extracted so the identical popover can render in two different toolbar
+// slots — row 1 (legacy/flag-off) or the new filters+sort row (advanced
+// mode) — without duplicating the JSX.
+function SortPopover({
+  sortField,
+  sortDirection,
+  setSortField,
+  setSortDirection,
+  align = "start",
+}: {
+  sortField: SortField;
+  sortDirection: "asc" | "desc";
+  setSortField: (field: SortField) => void;
+  setSortDirection: (direction: "asc" | "desc") => void;
+  align?: "start" | "end";
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className={TOOLBAR_BTN}>
+          <ArrowUpDown className="h-3 w-3 shrink-0" />
+          Sort
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align={align} className="w-72 p-4">
+        <div className="space-y-4">
+          <p className="text-sm font-medium">Sort by</p>
+          <div className="flex items-center gap-2">
+            {/* Field selector */}
+            <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+              <SelectTrigger className="flex-1 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="activity">Last activity</SelectItem>
+                <SelectItem value="created">Date created</SelectItem>
+                <SelectItem value="updated">Last updated</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Direction toggle */}
+            <div className="flex rounded-md border shrink-0">
+              <button
+                type="button"
+                onClick={() => setSortDirection("desc")}
+                className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                  sortDirection === "desc" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                }`}
+              >
+                Z→A
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortDirection("asc")}
+                className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
+                  sortDirection === "asc" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                }`}
+              >
+                A→Z
+              </button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export function LeadsTable({
@@ -1034,7 +1106,10 @@ export function LeadsTable({
     }
     return [
       { value: "all", label: "All Status", description: "Show all leads" },
-      ...listStages.map((s) => ({ value: s.slug, label: s.name })),
+      // Real stage color, threaded through so the advanced-filter chip can
+      // render the same tinted badge the status column already does
+      // elsewhere — not a new color, the stage's own.
+      ...listStages.map((s) => ({ value: s.slug, label: s.name, color: s.color })),
     ];
   }, [leadLists, activeListSlug, stages]);
 
@@ -1995,12 +2070,24 @@ export function LeadsTable({
           value: userId,
           label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
         })),
-      tags: [{ value: "student", label: "Student" }],
+      // #1d4ed8 matches TAG_CLASSES_BY_VALUE's blue-700 in columns-registry.tsx
+      // (the existing Student/Other tag toggle) — same color, same meaning.
+      tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],
       industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
       form: formEntries.map(([id, name]) => ({ value: id, label: name })),
     }),
     [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries]
   );
+
+  // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while
+  // its resulting chips render in row 2's AdvancedFilterBar (hideAddButton) —
+  // both need the same option-resolving function, so it's hoisted here rather
+  // than left inside AdvancedFilterBar's own internal instance.
+  const { getOptions: advancedGetOptions } = useFilterOptions(advancedFilterOptionOverrides);
+
+  function handleAddAdvancedFilter(condition: FilterCondition) {
+    advancedFilters.setTree({ ...advancedFilters.tree, conditions: [...advancedFilters.tree.conditions, condition] });
+  }
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -2066,78 +2153,30 @@ export function LeadsTable({
 
           <div className="flex-1" />
 
-          {/* Filters — advanced bar (field->operator->value, stacked chips) behind the
-              flag; legacy FilterMenu dropdown otherwise. Both paths must keep working. */}
-          {advancedFiltersEnabled ? (
-            <AdvancedFilterBar
-              entity="leads"
-              fields={advancedVisibleFields}
-              value={advancedFilters.tree}
-              onChange={advancedFilters.setTree}
-              allowGroups={false}
-              optionOverrides={advancedFilterOptionOverrides}
-            />
+          {/* Filter trigger — stays in row 1 in both modes, matching where it's
+              always lived. Legacy: the FilterMenu button itself. Advanced: just
+              the "+ Add filter" trigger — the resulting chips render in row 2's
+              AdvancedFilterBar (hideAddButton), not here. Sort stays with it in
+              both modes too. */}
+          {!advancedFiltersEnabled ? (
+            <>
+              <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
+              <SortPopover
+                sortField={sortField}
+                sortDirection={sortDirection}
+                setSortField={setSortField}
+                setSortDirection={setSortDirection}
+                align="end"
+              />
+            </>
           ) : (
-            <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
+            <AddFilterButton
+              fields={advancedVisibleFields}
+              getOptions={advancedGetOptions}
+              onAdd={handleAddAdvancedFilter}
+              disabled={advancedFilters.tree.conditions.length >= DEFAULT_MAX_CONDITIONS}
+            />
           )}
-
-          {/* Sort */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={TOOLBAR_BTN}
-              >
-                <ArrowUpDown className="h-3 w-3 shrink-0" />
-                Sort
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-4">
-              <div className="space-y-4">
-                <p className="text-sm font-medium">Sort by</p>
-                <div className="flex items-center gap-2">
-                  {/* Field selector */}
-                  <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-                    <SelectTrigger className="flex-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="activity">Last activity</SelectItem>
-                      <SelectItem value="created">Date created</SelectItem>
-                      <SelectItem value="updated">Last updated</SelectItem>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="email">Email</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {/* Direction toggle */}
-                  <div className="flex rounded-md border shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setSortDirection("desc")}
-                      className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                        sortDirection === "desc"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted"
-                      }`}
-                    >
-                      Z→A
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSortDirection("asc")}
-                      className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
-                        sortDirection === "asc"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted"
-                      }`}
-                    >
-                      A→Z
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
 
           {/* Export — owner/admin always; members only if their position grants it */}
           {canExport && (
@@ -2164,9 +2203,36 @@ export function LeadsTable({
           )}
         </div>
 
+        {/* Filters + Sort row — advanced mode only. Its own dedicated row below a
+            divider, always rendered (not conditional on activeFiltersCount) since
+            "+ Add filter" lives here now and needs a permanent home — matches
+            Notion's own filter-bar layout: sort + chips + add-filter together,
+            separated from the primary action row above by a divider line. */}
+        {advancedFiltersEnabled && (
+          <>
+            <div className="h-px bg-border" />
+            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+              <SortPopover
+                sortField={sortField}
+                sortDirection={sortDirection}
+                setSortField={setSortField}
+                setSortDirection={setSortDirection}
+              />
+              <AdvancedFilterBar
+                entity="leads"
+                fields={advancedVisibleFields}
+                value={advancedFilters.tree}
+                onChange={advancedFilters.setTree}
+                allowGroups={false}
+                optionOverrides={advancedFilterOptionOverrides}
+                hideAddButton
+              />
+            </div>
+          </>
+        )}
+
         {/* Chips row — active filters only, replaces the old always-visible pill row.
-            Advanced mode renders its own chips inline in the toolbar row above
-            (AdvancedFilterBar's FilterChipRow) — this legacy row is flag-off only. */}
+            Flag-off (legacy) only — advanced mode's chips render in the row above. */}
         {!advancedFiltersEnabled && activeFiltersCount > 0 && (
           <>
             <div className="h-px bg-border" />
