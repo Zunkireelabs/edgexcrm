@@ -44,31 +44,40 @@ export function filterAssignableMembersByChain<
 ): T[] {
   if (opts.baseTier === "owner" || opts.baseTier === "admin") return members;
 
-  const withAlwaysAdmins = (candidates: T[]): T[] => {
+  // Every chain/branch-scoped dropdown also always offers admin/owner and the
+  // scoped branch's branch-manager(s), so a frontline holder can always escalate
+  // up the chain instead of being limited strictly to same-position peers.
+  const withAlwaysAdminsAndManager = (candidates: T[]): T[] => {
     if (opts.industryId !== "education_consultancy") return candidates;
     const seen = new Set(candidates.map((m) => m.user_id));
-    const admins = members.filter((m) => m.role === "admin" && !seen.has(m.user_id));
-    return [...candidates, ...admins];
+    const extras = members.filter(
+      (m) =>
+        !seen.has(m.user_id) &&
+        (m.role === "admin" ||
+          m.role === "owner" ||
+          (m.position_slug === "branch-manager" && (m.branch_id ?? null) === (opts.branchId ?? null))),
+    );
+    return [...candidates, ...extras];
   };
 
   const sameBranch = (m: T) => (m.branch_id ?? null) === (opts.branchId ?? null);
   if (opts.leadScope === "team") {
-    // Branch managers route leads — exclude themselves from the assignable list
+    // Branch managers route leads to their team, but can also take a lead
+    // themselves — self is a valid target, not excluded.
     const branchMembers = members.filter(sameBranch);
-    const scoped = opts.selfUserId ? branchMembers.filter((m) => m.user_id !== opts.selfUserId) : branchMembers;
-    return withAlwaysAdmins(scoped);
+    return withAlwaysAdminsAndManager(branchMembers);
   }
   const isChain =
     opts.industryId === "education_consultancy" &&
     opts.positionSlug != null &&
     ASSIGN_CHAIN_POSITIONS.has(opts.positionSlug);
   if (isChain) {
-    // Only show same-position peers in the Assigned To dropdown.
+    // Same-position peers, plus admin/owner/scoped branch-manager (see above).
     // Next-position users appear only in the "Send to next" assignment picker.
     const peers = new Set(peerSlugs(opts.positionSlug));
     const byPos = members.filter((m) => peers.has(m.position_slug ?? ""));
     const scoped = opts.branchId == null ? byPos : byPos.filter(sameBranch);
-    return withAlwaysAdmins(scoped);
+    return withAlwaysAdminsAndManager(scoped);
   }
-  return withAlwaysAdmins(filterAssignableMembers(members, opts.leadScope, opts.branchId)); // non-chain fallback
+  return withAlwaysAdminsAndManager(filterAssignableMembers(members, opts.leadScope, opts.branchId)); // non-chain fallback
 }

@@ -1098,6 +1098,41 @@ export function LeadsTable({
   const assignBranchRequired = isStagingView && assignDialogBranches.length > 0;
   const assignDialogPipelineLists = leadLists.filter((l) => !l.is_staging && !l.is_archive);
 
+  // Staging Assign dialog: once a branch + stage are picked, narrow "Assigned to" down
+  // to that stage's frontline position within that branch, plus the branch manager and
+  // admin/owner — mirrors the Assignee facet's allowedAssigneePositionsForStage gate.
+  const assignDialogStageSlug = assignListId
+    ? assignDialogPipelineLists.find((l) => l.id === assignListId)?.slug ?? null
+    : null;
+  const assignDialogAllowedPositions = assignDialogStageSlug
+    ? allowedAssigneePositionsForStage(assignDialogStageSlug, role, currentUserPositionSlug)
+    : null;
+  const assignDialogBranchManagerId = assignBranchId
+    ? assignDialogBranches.find((b) => b.id === assignBranchId)?.manager_user_id ?? null
+    : null;
+  const assignDialogMembers = useMemo(() => {
+    const pool = Array.from(
+      new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values(),
+    );
+    if (!assignBranchRequired || !assignBranchId) return pool;
+    return pool.filter((m) => {
+      if (m.role === "owner" || m.role === "admin") return true;
+      if (m.user_id === assignDialogBranchManagerId) return true;
+      if (memberBranchMap[m.user_id] !== assignBranchId) return false;
+      if (!assignDialogAllowedPositions) return true;
+      const posSlug = positionSlugMap?.[m.user_id] ?? null;
+      return !!posSlug && assignDialogAllowedPositions.has(posSlug);
+    });
+  }, [assignableMembers, teamMembers, assignBranchRequired, assignBranchId, assignDialogBranchManagerId, memberBranchMap, assignDialogAllowedPositions, positionSlugMap]);
+
+  // Narrowing branch/stage can drop the previously-picked assignee out of the list — clear
+  // it so a stale, no-longer-visible selection can't silently ride along on submit.
+  useEffect(() => {
+    if (assignBranchRequired && assignTo && !assignDialogMembers.some((m) => m.user_id === assignTo)) {
+      setAssignTo("");
+    }
+  }, [assignBranchRequired, assignTo, assignDialogMembers]);
+
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds((prev) => {
@@ -1175,20 +1210,9 @@ export function LeadsTable({
       toast.error("No leads selected");
       return;
     }
-    if (assignBranchRequired && (!assignBranchId || !assignListId)) {
-      toast.error("Please select a branch and stage");
+    if (assignBranchRequired && (!assignBranchId || !assignListId || !assignTo)) {
+      toast.error("Please select a branch, stage, and assignee");
       return;
-    }
-    // Staging: blank Assigned To falls back to the selected branch's manager
-    // (§4.2 fix) instead of leaving the lead's existing/no assignee untouched.
-    let resolvedAssignTo = assignTo;
-    if (assignBranchRequired && !assignTo) {
-      const branch = assignDialogBranches.find((b) => b.id === assignBranchId);
-      if (!branch?.manager_user_id) {
-        toast.error("Selected branch has no manager set — pick an assignee manually");
-        return;
-      }
-      resolvedAssignTo = branch.manager_user_id;
     }
 
     setIsAssigning(true);
@@ -1201,7 +1225,7 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunk,
-            ...(resolvedAssignTo && { assigned_to: resolvedAssignTo === "unassign" ? null : resolvedAssignTo }),
+            ...(assignTo && { assigned_to: assignTo === "unassign" ? null : assignTo }),
             ...(assignBranchRequired
               ? { branch_id: assignBranchId, list_id: assignListId }
               : (assignAutoListId ? { list_id: assignAutoListId } : {})),
@@ -1214,7 +1238,7 @@ export function LeadsTable({
         updated += data.data.updated as number;
       }
 
-      const action = resolvedAssignTo === "unassign" ? "Unassigned" : "Assigned";
+      const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
       toast.success(`${action} ${updated} lead${updated !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       setAssignDialogOpen(false);
@@ -2541,7 +2565,7 @@ export function LeadsTable({
             <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""}</DialogTitle>
             <DialogDescription>
               {assignBranchRequired
-                ? "Select a branch and stage. Leaving Assigned To blank sends leads to that branch's manager."
+                ? "Select a branch, stage, and assignee."
                 : "Select a team member to assign the selected leads to, or unassign them."}
             </DialogDescription>
           </DialogHeader>
@@ -2578,17 +2602,19 @@ export function LeadsTable({
             )}
             <div className="space-y-1.5">
               {assignBranchRequired && (
-                <p className="text-sm font-medium text-gray-700">Assigned to (optional)</p>
+                <p className="text-sm font-medium text-gray-700">Assigned to (required)</p>
               )}
               <Select value={assignTo} onValueChange={setAssignTo}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select team member..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="unassign">
-                    <span className="text-muted-foreground">Unassign (remove assignment)</span>
-                  </SelectItem>
-                  {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
+                  {!assignBranchRequired && (
+                    <SelectItem value="unassign">
+                      <span className="text-muted-foreground">Unassign (remove assignment)</span>
+                    </SelectItem>
+                  )}
+                  {(assignBranchRequired ? assignDialogMembers : Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values()))
                     .map((member) => (
                       <SelectItem key={member.user_id} value={member.user_id}>
                         <div className="flex items-center gap-2">
@@ -2623,7 +2649,7 @@ export function LeadsTable({
               onClick={handleBulkAssign}
               disabled={
                 isAssigning ||
-                (assignBranchRequired ? (!assignBranchId || !assignListId) : !assignTo)
+                (assignBranchRequired ? (!assignBranchId || !assignListId || !assignTo) : !assignTo)
               }
             >
               {isAssigning ? "Assigning..." : assignTo === "unassign" ? "Unassign" : "Assign"}

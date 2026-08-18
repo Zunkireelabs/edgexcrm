@@ -190,12 +190,18 @@ export default async function LeadDetailPage({
           (tenantData.branchId == null || m.branch_id === tenantData.branchId),
       )
     : [];
-  // Admins are always a valid "send to next" target, appended after the position-chain team.
+  // Admin/owner and the scoped branch-manager are always a valid "send to next" target,
+  // appended after the position-chain team.
   const nextPositionMembers = nextSlug
     ? [
         ...nextPositionLineTeam,
         ...roster.filter(
-          (m) => m.role === "admin" && !nextPositionLineTeam.some((t) => t.user_id === m.user_id),
+          (m) =>
+            !nextPositionLineTeam.some((t) => t.user_id === m.user_id) &&
+            (m.role === "admin" ||
+              m.role === "owner" ||
+              (m.position_slug === "branch-manager" &&
+                (tenantData.branchId == null || m.branch_id === tenantData.branchId))),
         ),
       ]
     : [];
@@ -204,8 +210,8 @@ export default async function LeadDetailPage({
   // them with an empty roster and ListStepper hides the assignee picker entirely — the lead
   // moves with the assignee unchanged. They get a different control entirely (StageMoveSelector):
   // a dropdown of every active stage (any direction), each coupled to that stage's own assignee
-  // picker — branch line-team, admin/owner also sees the branch-manager, with a
-  // branch-manager → tenant-wide-line-team fallback so the picker is never empty.
+  // picker — branch line-team + the branch's own branch-manager(s) for every viewer,
+  // with a branch-manager → tenant-wide-line-team fallback so the picker is never empty.
   // Sourced from the same list activeLeadLists ?? accessibleLists ListStepper itself uses
   // (key-info-section.tsx's `activeLists`) so the destinations can't diverge from what the
   // control actually moves the lead to (e.g. in a funnel-scoped view).
@@ -222,7 +228,7 @@ export default async function LeadDetailPage({
     const stepperLists = activeLeadLists ?? accessibleLists;
     for (const list of stepperLists) {
       const slug = (list as unknown as { slug: string }).slug;
-      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId, isBranchManagerViewer);
+      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId);
     }
   }
   // Standalone "Assigned To" dropdown (KEY INFORMATION panel, not the stage-move picker):
@@ -233,7 +239,7 @@ export default async function LeadDetailPage({
   const currentStageSlug = currentList ? (currentList as unknown as { slug: string }).slug : null;
   const rawStageScopedAssignees =
     canMoveWithoutChain && currentStageSlug
-      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId, isBranchManagerViewer)
+      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId)
       : null;
   // A staging/off-funnel stage (e.g. migration-qc, new-leads, archived — not in STAGE_TEAM_MAP)
   // has no mapped team, so the candidates call above would return []. Treat that the same as
