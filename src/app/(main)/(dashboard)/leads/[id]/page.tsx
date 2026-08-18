@@ -228,7 +228,7 @@ export default async function LeadDetailPage({
     const stepperLists = activeLeadLists ?? accessibleLists;
     for (const list of stepperLists) {
       const slug = (list as unknown as { slug: string }).slug;
-      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId, isBranchManagerViewer);
+      stageAssigneeMap[list.id] = stageAssigneeCandidates(roster, slug, leadBranchId);
     }
   }
   // Standalone "Assigned To" dropdown (KEY INFORMATION panel, not the stage-move picker):
@@ -239,7 +239,7 @@ export default async function LeadDetailPage({
   const currentStageSlug = currentList ? (currentList as unknown as { slug: string }).slug : null;
   const rawStageScopedAssignees =
     canMoveWithoutChain && currentStageSlug
-      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId, isBranchManagerViewer)
+      ? stageAssigneeCandidates(roster, currentStageSlug, leadBranchId)
       : null;
   // A staging/off-funnel stage (e.g. migration-qc, new-leads, archived — not in STAGE_TEAM_MAP)
   // has no mapped team, so the candidates call above would return []. Treat that the same as

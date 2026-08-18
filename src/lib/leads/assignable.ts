@@ -62,10 +62,10 @@ export function filterAssignableMembersByChain<
 
   const sameBranch = (m: T) => (m.branch_id ?? null) === (opts.branchId ?? null);
   if (opts.leadScope === "team") {
-    // Branch managers route leads — exclude themselves from the assignable list
+    // Branch managers route leads to their team, but can also take a lead
+    // themselves — self is a valid target, not excluded.
     const branchMembers = members.filter(sameBranch);
-    const scoped = opts.selfUserId ? branchMembers.filter((m) => m.user_id !== opts.selfUserId) : branchMembers;
-    return withAlwaysAdminsAndManager(scoped);
+    return withAlwaysAdminsAndManager(branchMembers);
   }
   const isChain =
     opts.industryId === "education_consultancy" &&
