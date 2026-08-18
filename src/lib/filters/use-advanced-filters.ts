@@ -12,11 +12,13 @@
 // decodeFilterTree, so a caller gets a real message ("save this as a view")
 // instead of a silent write that the next page load then rejects.
 
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import { toast } from "sonner";
 import { decodeFilterTree, encodeFilterTree, FILTER_PARAM, isEmptyTree, MAX_ENCODED_LEN } from "./serialize";
 import { EMPTY_TREE, type FieldRegistry, type FilterCondition, type FilterTree } from "./types";
+
+const STORAGE_PREFIX = "edgex:advanced-filters:";
 
 export interface UseAdvancedFiltersResult {
   tree: FilterTree;
@@ -51,7 +53,44 @@ function decodeAndDegrade(raw: string | null, registry: FieldRegistry): { tree: 
   };
 }
 
-export function useAdvancedFilters(registry: FieldRegistry): UseAdvancedFiltersResult {
+// sessionStorage, not localStorage — deliberately: this should survive
+// clicking around the app in one visit (Dashboard -> back to Leads), NOT
+// persist indefinitely across browser restarts days later, which would
+// silently pre-filter a list the user has long since forgotten setting.
+// Wrapped — private browsing / storage-disabled must degrade to
+// "no persistence", never throw and break the filter bar.
+function readPersisted(key: string): string | null {
+  try {
+    return sessionStorage.getItem(STORAGE_PREFIX + key);
+  } catch {
+    return null;
+  }
+}
+
+function writePersisted(key: string, encoded: string | null): void {
+  try {
+    if (encoded === null) sessionStorage.removeItem(STORAGE_PREFIX + key);
+    else sessionStorage.setItem(STORAGE_PREFIX + key, encoded);
+  } catch {
+    // storage full / disabled — filters still work for this session via the URL
+  }
+}
+
+/**
+ * @param persistKey Scopes cross-navigation persistence (e.g.
+ *   `${tenantId}:${userId}:${listSlug}`) — omit/null to opt out entirely
+ *   (e.g. the SMS blast composer, which manages its own tree via useState,
+ *   never calls this hook at all). When set: every setTree call is saved to
+ *   sessionStorage under this key (survives in-app navigation, clears when
+ *   the tab closes — deliberately not indefinite), and if the page ever
+ *   loads with NO `?f=` in
+ *   the URL at all, the last saved filter is restored automatically — once
+ *   per mount only (see restoredRef below), so an explicit "Clear all"
+ *   doesn't get silently un-done by the very save it just triggered. An
+ *   explicit filter link (bookmarked/shared `?f=...`) always wins over a
+ *   saved one — restore only ever fires when the URL is completely bare.
+ */
+export function useAdvancedFilters(registry: FieldRegistry, persistKey?: string | null): UseAdvancedFiltersResult {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -76,6 +115,7 @@ export function useAdvancedFilters(registry: FieldRegistry): UseAdvancedFiltersR
 
       if (isEmptyTree(next)) {
         params.delete(FILTER_PARAM);
+        if (persistKey) writePersisted(persistKey, null);
       } else {
         const encoded = encodeFilterTree(next);
         if (encoded.length > MAX_ENCODED_LEN) {
@@ -83,13 +123,41 @@ export function useAdvancedFilters(registry: FieldRegistry): UseAdvancedFiltersR
           return;
         }
         params.set(FILTER_PARAM, encoded);
+        // Saved unconditionally alongside every real change (not just on
+        // unmount/interval) so storage is never stale relative to the URL —
+        // whichever navigation path brings the user back, it reflects the
+        // last thing they actually set, including an explicit clear above.
+        if (persistKey) writePersisted(persistKey, encoded);
       }
 
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [searchParams, router, pathname]
+    [searchParams, router, pathname, persistKey]
   );
+
+  // Restore-from-storage: fires at most once per mount, and only when the
+  // URL had nothing at all on that first check. A ref (not state) so this
+  // can never re-arm mid-session and re-fire after a later explicit clear.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current || !persistKey) return;
+    restoredRef.current = true;
+    if (raw) return; // an explicit URL filter always wins over a saved one
+
+    const saved = readPersisted(persistKey);
+    if (!saved) return;
+
+    const { tree: savedTree, degrade: savedDegrade } = decodeAndDegrade(saved, registry);
+    if (savedDegrade === "invalid" || isEmptyTree(savedTree)) {
+      writePersisted(persistKey, null); // stale/corrupt — don't keep re-checking it
+      return;
+    }
+    setTree(savedTree);
+    // Runs once on mount by design (see restoredRef) — deliberately NOT
+    // re-running on every raw/registry/setTree identity change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const clear = useCallback(() => setTree(EMPTY_TREE), [setTree]);
 

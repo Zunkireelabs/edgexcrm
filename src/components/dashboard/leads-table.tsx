@@ -439,7 +439,15 @@ export function LeadsTable({
     () => leadFields({ tz: "UTC", now: new Date(0), industryId: industryId ?? null, permissions: {} } satisfies CompileCtx),
     [industryId]
   );
-  const advancedFilters = useAdvancedFilters(advancedFilterRegistry);
+  // Scopes cross-navigation filter persistence (see use-advanced-filters.ts)
+  // per tenant + user + list/funnel, so e.g. a "Prospects" filter doesn't
+  // reappear under "Qualified", and one tenant/user's saved filter can never
+  // leak to another on a shared browser. null (no tenantId/currentUserId yet,
+  // e.g. still loading) opts out of persistence for that render — never
+  // saves/restores under an empty-string key.
+  const advancedFiltersPersistKey =
+    tenantId && currentUserId ? `${tenantId}:${currentUserId}:${activeListSlug ?? activeFunnelKey ?? "all"}` : null;
+  const advancedFilters = useAdvancedFilters(advancedFilterRegistry, advancedFiltersPersistKey);
   const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
   const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
 
