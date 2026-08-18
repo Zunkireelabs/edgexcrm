@@ -35,20 +35,20 @@ export interface StageAssigneeCandidate {
 /**
  * Assignee candidates for moving a lead to `stageSlug`, used by the admin/branch-manager
  * "Move to stage" picker (StageMoveSelector). Picks the stage's line position (e.g.
- * lead-executive for Qualified) in the lead's branch; admin/owner viewers also see the
- * branch's branch-manager(s), branch-manager viewers don't (they delegate down, not to peers).
+ * lead-executive for Qualified) in the lead's branch, plus the branch's own
+ * branch-manager(s) — including the viewer themselves if they're one of them, so a
+ * branch manager can take a lead at any stage instead of only delegating down.
  *
  * Fallback when the base list is empty (keeps the picker from ever being dead-empty):
  *   1. branch-manager(s) of the lead's branch
  *   2. the line position tenant-wide (ignore branch)
  *
- * Admins are always a valid assignee at any stage — appended last, after the above.
+ * Admin/owner are always a valid assignee at any stage — appended last, after the above.
  */
 export function stageAssigneeCandidates(
   roster: RosterMemberForStage[],
   stageSlug: string | null | undefined,
   leadBranchId: string | null,
-  viewerIsBranchManager: boolean,
 ): StageAssigneeCandidate[] {
   const lineSlugs = positionsForStage(stageSlug).filter((s) => s !== "branch-manager");
   const inBranch = (m: RosterMemberForStage) => leadBranchId == null || m.branch_id === leadBranchId;
@@ -58,7 +58,7 @@ export function stageAssigneeCandidates(
   );
   const branchManagersInBranch = roster.filter((m) => m.position_slug === "branch-manager" && inBranch(m));
 
-  const base = viewerIsBranchManager ? lineTeamInBranch : [...lineTeamInBranch, ...branchManagersInBranch];
+  const base = [...lineTeamInBranch, ...branchManagersInBranch];
   const candidates =
     base.length > 0
       ? base
@@ -67,6 +67,6 @@ export function stageAssigneeCandidates(
         : roster.filter((m) => m.position_slug != null && lineSlugs.includes(m.position_slug));
 
   const seen = new Set(candidates.map((m) => m.user_id));
-  const admins = roster.filter((m) => m.role === "admin" && !seen.has(m.user_id));
+  const admins = roster.filter((m) => (m.role === "admin" || m.role === "owner") && !seen.has(m.user_id));
   return [...candidates, ...admins];
 }

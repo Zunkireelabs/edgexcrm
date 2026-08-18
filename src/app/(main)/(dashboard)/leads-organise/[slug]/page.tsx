@@ -188,6 +188,7 @@ export default async function LeadsOrganiseCockpitPage({
         roleMap={roleMap}
         memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
+        currentUserPositionSlug={tenantData.positionSlug}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
         isTeamScoped={isTeamScoped}
