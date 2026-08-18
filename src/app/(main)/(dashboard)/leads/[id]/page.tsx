@@ -210,8 +210,8 @@ export default async function LeadDetailPage({
   // them with an empty roster and ListStepper hides the assignee picker entirely — the lead
   // moves with the assignee unchanged. They get a different control entirely (StageMoveSelector):
   // a dropdown of every active stage (any direction), each coupled to that stage's own assignee
-  // picker — branch line-team, admin/owner also sees the branch-manager, with a
-  // branch-manager → tenant-wide-line-team fallback so the picker is never empty.
+  // picker — branch line-team + the branch's own branch-manager(s) for every viewer,
+  // with a branch-manager → tenant-wide-line-team fallback so the picker is never empty.
   // Sourced from the same list activeLeadLists ?? accessibleLists ListStepper itself uses
   // (key-info-section.tsx's `activeLists`) so the destinations can't diverge from what the
   // control actually moves the lead to (e.g. in a funnel-scoped view).
