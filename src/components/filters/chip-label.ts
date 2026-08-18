@@ -42,17 +42,19 @@ export function formatChipLabel(field: FieldDef, condition: FilterCondition, opt
   return `${field.label}${opPrefix}: ${formatValue(condition, options)}`;
 }
 
-// Resolves a color for the chip's pill — only when the condition has EXACTLY
-// ONE selected value and that value's FilterOption carries real color data
-// (a pipeline stage's own color, or the established tag color scheme).
-// Deliberately returns undefined for multi-value selections rather than
-// picking/blending one — an ambiguous color is worse than the plain neutral
-// chip everything else already uses. Most fields have no color data at all
-// and always fall through to undefined here, by design — this is a Notion
-// match (colors track a VALUE that already has one, not a field type).
-export function resolveChipColor(condition: FilterCondition, options: FilterOption[]): string | undefined {
+// Resolves a color for the chip's pill. Two sources, in priority order:
+//  1. A per-VALUE color (FilterOption.color) — only when the condition has
+//     EXACTLY ONE selected value and that value carries real color data (a
+//     pipeline stage's own color, or the tag color scheme). Deliberately
+//     undefined for multi-value selections rather than picking/blending one —
+//     an ambiguous color is worse than the plain neutral chip.
+//  2. A per-FIELD color (FieldDef.chipColor) — a fixed color for every chip
+//     on this field regardless of value, for fields with no per-value color
+//     meaning of their own (Name, Email, City, dates, …). Pure scannability
+//     aid, not semantic — see CHIP_FAMILY in registry/leads.ts.
+export function resolveChipColor(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string | undefined {
   const { value } = condition;
   const singleValue = typeof value === "string" ? value : Array.isArray(value) && value.length === 1 ? value[0] : undefined;
-  if (singleValue === undefined) return undefined;
-  return options.find((o) => o.value === singleValue)?.color;
+  const valueColor = singleValue === undefined ? undefined : options.find((o) => o.value === singleValue)?.color;
+  return valueColor ?? field.chipColor;
 }

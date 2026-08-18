@@ -37,7 +37,7 @@ export function FilterChip({ field, condition, options, onChange, onRemove }: Fi
   // Same tinted-background/colored-text/tinted-border technique already used
   // for stage badges elsewhere in the app (columns-registry.tsx) — reusing
   // one real color, not inventing a new palette.
-  const color = resolveChipColor(condition, options);
+  const color = resolveChipColor(field, condition, options);
 
   return (
     <Popover open={open} onOpenChange={handleOpenChange}>
