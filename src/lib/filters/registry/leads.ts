@@ -144,6 +144,11 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "column", column: "created_at" },
       group: "Dates",
       filterable: true,
+      // Same column as "created_at" below — this entry exists only so the
+      // legacy `?created=thisweek`-style URLs (legacy-leads-params.ts) still
+      // resolve. Hidden from the picker so users see one "Created" option,
+      // not two identical ones.
+      hiddenFromPicker: true,
     },
     {
       key: "industry",

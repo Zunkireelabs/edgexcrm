@@ -127,6 +127,10 @@ export interface FieldDef {
   group: string; // UI grouping label ("Basic", "Dates", "Custom", …)
   icon?: string; // lucide icon name as a STRING (never a component import)
   filterable: boolean;
+  // Exists for compilation/compat only (e.g. the legacy `?created=` URL path)
+  // — never offered in FilterFieldPicker. Still fully filterable/compilable;
+  // this only affects manual "+ Add filter" selection.
+  hiddenFromPicker?: boolean;
   sortable?: boolean;
   sortColumns?: string[]; // multi-column sort (e.g. first_name -> [first_name, last_name])
   columnKey?: string; // back-reference into a rendering columns-registry

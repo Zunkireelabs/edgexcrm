@@ -24,7 +24,7 @@ function groupFields(fields: FieldDef[]): [string, FieldDef[]][] {
 }
 
 export function FilterFieldPicker({ fields, onSelect }: FilterFieldPickerProps) {
-  const filterable = fields.filter((f) => f.filterable);
+  const filterable = fields.filter((f) => f.filterable && !f.hiddenFromPicker);
   const grouped = groupFields(filterable);
 
   return (
