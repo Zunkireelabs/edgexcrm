@@ -28,14 +28,26 @@ export function FilterFieldPicker({ fields, onSelect }: FilterFieldPickerProps) 
   const grouped = groupFields(filterable);
 
   return (
-    <Command>
-      <CommandInput placeholder="Filter by…" />
+    // w-72 matches FilterConditionEditor's own width (the next screen), so the
+    // "+ Add filter" popover doesn't visibly resize between picking a field
+    // and picking its operator/value.
+    <Command className="w-72">
+      <CommandInput placeholder="Filter by…" className="text-xs" />
       <CommandList>
-        <CommandEmpty>No matching fields.</CommandEmpty>
+        {/* CommandEmpty doesn't merge className via cn() like its siblings — it
+            spreads props after a hardcoded className, so this REPLACES the
+            default entirely rather than extending it. Re-including
+            text-center so this doesn't silently left-align as a side effect. */}
+        <CommandEmpty className="py-4 text-center text-xs">No matching fields.</CommandEmpty>
         {grouped.map(([group, groupFields]) => (
           <CommandGroup key={group} heading={group}>
             {groupFields.map((field) => (
-              <CommandItem key={field.key} value={`${field.label} ${field.key}`} onSelect={() => onSelect(field)}>
+              <CommandItem
+                key={field.key}
+                value={`${field.label} ${field.key}`}
+                onSelect={() => onSelect(field)}
+                className="px-2 py-1 text-xs"
+              >
                 {field.label}
               </CommandItem>
             ))}
