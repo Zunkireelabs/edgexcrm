@@ -1239,6 +1239,13 @@ export function LeadsTable({
 
   const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
   const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
+  // Branch-manager options are locked to their own branch (server rejects any other —
+  // bulk/route.ts §4.2). Tenants without the multi-branch feature have branches=[]; the
+  // Branch field is only required/shown when there's actually something to pick.
+  const moveDialogBranches = isTeamScoped && userBranchId
+    ? branches.filter((b) => b.id === userBranchId)
+    : branches;
+  const moveBranchRequired = isStagingView && moveDialogBranches.length > 0;
   // The "Archived" list, used by the bulk Archive shortcut (opens the move dialog pre-targeted here).
   const archivedList = leadLists.find((l) => l.slug === "archived") ?? leadLists.find((l) => l.is_archive) ?? null;
   // it_agency: "Graduate → Sales Leads" shortcut, enabled only when viewing the Fit-Qualified stage.
@@ -1296,7 +1303,7 @@ export function LeadsTable({
       toast.error("Archive reason is required");
       return;
     }
-    if (isStagingView && !moveBranchId) {
+    if (moveBranchRequired && !moveBranchId) {
       toast.error("Please select a branch");
       return;
     }
@@ -1304,7 +1311,7 @@ export function LeadsTable({
     // branch's manager (§4.2 fix) rather than "keep current assignee" — a
     // staging lead's current assignee, if any, isn't necessarily in-branch.
     let resolvedAssignTo = moveAssignTo;
-    if (isStagingView && moveAssignTo === "keep") {
+    if (moveBranchRequired && moveAssignTo === "keep") {
       const branch = branches.find((b) => b.id === moveBranchId);
       if (!branch?.manager_user_id) {
         toast.error("Selected branch has no manager set — pick an assignee manually");
@@ -2702,7 +2709,7 @@ export function LeadsTable({
                 </Select>
               </div>
             )}
-            {isStagingView && (
+            {isStagingView && moveDialogBranches.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-sm font-medium text-gray-700">Branch (required)</p>
                 <Select value={moveBranchId} onValueChange={setMoveBranchId}>
@@ -2710,7 +2717,7 @@ export function LeadsTable({
                     <SelectValue placeholder="Select branch..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {branches.map((b) => (
+                    {moveDialogBranches.map((b) => (
                       <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -2724,7 +2731,7 @@ export function LeadsTable({
                 )}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
-                  {isStagingView && (
+                  {moveBranchRequired && (
                     <p className="text-xs text-muted-foreground">
                       Left blank, leads go to the selected branch&apos;s manager.
                     </p>
@@ -2780,7 +2787,7 @@ export function LeadsTable({
                 isMoveList ||
                 !moveListId ||
                 (moveTargetIsArchive && !moveArchiveReason) ||
-                (isStagingView && !moveBranchId)
+                (moveBranchRequired && !moveBranchId)
               }
             >
               {isMoveList
