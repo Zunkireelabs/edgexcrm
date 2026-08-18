@@ -398,6 +398,10 @@ export function LeadsTable({
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignTo, setAssignTo] = useState<string>("");
+  // Staging (Leads Organise) only — Branch + Stage are required to leave staging via
+  // Assign; blank Assigned To falls back to the selected branch's manager (§4.2 fix).
+  const [assignBranchId, setAssignBranchId] = useState<string>("");
+  const [assignListId, setAssignListId] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
@@ -408,8 +412,6 @@ export function LeadsTable({
   const [moveArchiveReason, setMoveArchiveReason] = useState<string>("");
   const [isMoveList, setIsMoveList] = useState(false);
   const [moveAssignTo, setMoveAssignTo] = useState<string>("keep");
-  // Required only in staging view — leaving Leads Organise must tag a branch (§4.2 fix).
-  const [moveBranchId, setMoveBranchId] = useState<string>("");
   // it_agency: Fit-Qualified → Sales Leads graduation reuses the move-to-list dialog/API.
   const [isGraduateMove, setIsGraduateMove] = useState(false);
 
@@ -1087,6 +1089,15 @@ export function LeadsTable({
     return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
   }, [assignTo, positionSlugMap, leadLists, allLeadLists]);
 
+  // Branch-manager options are locked to their own branch (server rejects any other —
+  // bulk/route.ts §4.2). Tenants without the multi-branch feature have branches=[]; the
+  // Branch/Stage requirement only applies when there's actually a branch to pick.
+  const assignDialogBranches = isTeamScoped && userBranchId
+    ? branches.filter((b) => b.id === userBranchId)
+    : branches;
+  const assignBranchRequired = isStagingView && assignDialogBranches.length > 0;
+  const assignDialogPipelineLists = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+
   function toggleSelectAll() {
     if (allSelected) {
       setSelectedIds((prev) => {
@@ -1164,6 +1175,21 @@ export function LeadsTable({
       toast.error("No leads selected");
       return;
     }
+    if (assignBranchRequired && (!assignBranchId || !assignListId)) {
+      toast.error("Please select a branch and stage");
+      return;
+    }
+    // Staging: blank Assigned To falls back to the selected branch's manager
+    // (§4.2 fix) instead of leaving the lead's existing/no assignee untouched.
+    let resolvedAssignTo = assignTo;
+    if (assignBranchRequired && !assignTo) {
+      const branch = assignDialogBranches.find((b) => b.id === assignBranchId);
+      if (!branch?.manager_user_id) {
+        toast.error("Selected branch has no manager set — pick an assignee manually");
+        return;
+      }
+      resolvedAssignTo = branch.manager_user_id;
+    }
 
     setIsAssigning(true);
     try {
@@ -1175,8 +1201,10 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunk,
-            assigned_to: assignTo === "unassign" ? null : assignTo,
-            ...(assignAutoListId ? { list_id: assignAutoListId } : {}),
+            ...(resolvedAssignTo && { assigned_to: resolvedAssignTo === "unassign" ? null : resolvedAssignTo }),
+            ...(assignBranchRequired
+              ? { branch_id: assignBranchId, list_id: assignListId }
+              : (assignAutoListId ? { list_id: assignAutoListId } : {})),
           }),
         });
         const data = await response.json();
@@ -1186,11 +1214,13 @@ export function LeadsTable({
         updated += data.data.updated as number;
       }
 
-      const action = assignTo === "unassign" ? "Unassigned" : "Assigned";
+      const action = resolvedAssignTo === "unassign" ? "Unassigned" : "Assigned";
       toast.success(`${action} ${updated} lead${updated !== 1 ? "s" : ""}`);
       setSelectedIds(new Set());
       setAssignDialogOpen(false);
       setAssignTo("");
+      setAssignBranchId("");
+      setAssignListId("");
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign leads");
@@ -1239,13 +1269,6 @@ export function LeadsTable({
 
   const moveTargetList = leadLists.find((l) => l.id === moveListId) ?? null;
   const moveTargetIsArchive = moveTargetList?.is_archive ?? false;
-  // Branch-manager options are locked to their own branch (server rejects any other —
-  // bulk/route.ts §4.2). Tenants without the multi-branch feature have branches=[]; the
-  // Branch field is only required/shown when there's actually something to pick.
-  const moveDialogBranches = isTeamScoped && userBranchId
-    ? branches.filter((b) => b.id === userBranchId)
-    : branches;
-  const moveBranchRequired = isStagingView && moveDialogBranches.length > 0;
   // The "Archived" list, used by the bulk Archive shortcut (opens the move dialog pre-targeted here).
   const archivedList = leadLists.find((l) => l.slug === "archived") ?? leadLists.find((l) => l.is_archive) ?? null;
   // it_agency: "Graduate → Sales Leads" shortcut, enabled only when viewing the Fit-Qualified stage.
@@ -1303,22 +1326,6 @@ export function LeadsTable({
       toast.error("Archive reason is required");
       return;
     }
-    if (moveBranchRequired && !moveBranchId) {
-      toast.error("Please select a branch");
-      return;
-    }
-    // Staging: leaving without an explicit assignee falls back to the selected
-    // branch's manager (§4.2 fix) rather than "keep current assignee" — a
-    // staging lead's current assignee, if any, isn't necessarily in-branch.
-    let resolvedAssignTo = moveAssignTo;
-    if (moveBranchRequired && moveAssignTo === "keep") {
-      const branch = branches.find((b) => b.id === moveBranchId);
-      if (!branch?.manager_user_id) {
-        toast.error("Selected branch has no manager set — pick an assignee manually");
-        return;
-      }
-      resolvedAssignTo = branch.manager_user_id;
-    }
 
     setIsMoveList(true);
     const chunks: string[][] = [];
@@ -1338,10 +1345,9 @@ export function LeadsTable({
           body: JSON.stringify({
             ids: chunks[i],
             list_id: moveListId,
-            ...(isStagingView && moveBranchId && { branch_id: moveBranchId }),
             ...(moveArchiveReason.trim() && { archive_reason: moveArchiveReason.trim() }),
-            ...(resolvedAssignTo !== "keep" && {
-              assigned_to: resolvedAssignTo === "unassign" ? null : resolvedAssignTo,
+            ...(moveAssignTo !== "keep" && {
+              assigned_to: moveAssignTo === "unassign" ? null : moveAssignTo,
             }),
             ...(isGraduateMove && { graduate: true }),
           }),
@@ -1360,7 +1366,7 @@ export function LeadsTable({
               routeMemoryKey,
               JSON.stringify({
                 list_id: moveListId,
-                assigned_to: resolvedAssignTo === "keep" ? null : resolvedAssignTo === "unassign" ? null : resolvedAssignTo,
+                assigned_to: moveAssignTo === "keep" ? null : moveAssignTo === "unassign" ? null : moveAssignTo,
               }),
             );
           }
@@ -1369,8 +1375,8 @@ export function LeadsTable({
         }
       }
       const assignedName =
-        resolvedAssignTo !== "keep" && resolvedAssignTo !== "unassign"
-          ? teamMembers.find((m) => m.user_id === resolvedAssignTo)?.name
+        moveAssignTo !== "keep" && moveAssignTo !== "unassign"
+          ? teamMembers.find((m) => m.user_id === moveAssignTo)?.name
           : null;
       const toastMsg = [
         isGraduateMove
@@ -1387,7 +1393,6 @@ export function LeadsTable({
       setMoveListId("");
       setMoveArchiveReason("");
       setMoveAssignTo("keep");
-      setMoveBranchId("");
       setIsGraduateMove(false);
       router.refresh();
     } catch (error) {
@@ -2529,40 +2534,77 @@ export function LeadsTable({
       {/* Bulk Assign Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={(open) => {
         setAssignDialogOpen(open);
-        if (!open) setAssignTo("");
+        if (!open) { setAssignTo(""); setAssignBranchId(""); setAssignListId(""); }
       }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""}</DialogTitle>
             <DialogDescription>
-              Select a team member to assign the selected leads to, or unassign them.
+              {assignBranchRequired
+                ? "Select a branch and stage. Leaving Assigned To blank sends leads to that branch's manager."
+                : "Select a team member to assign the selected leads to, or unassign them."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Select value={assignTo} onValueChange={setAssignTo}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select team member..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassign">
-                  <span className="text-muted-foreground">Unassign (remove assignment)</span>
-                </SelectItem>
-                {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
-                  .map((member) => (
-                    <SelectItem key={member.user_id} value={member.user_id}>
-                      <div className="flex items-center gap-2">
-                        <span>{member.name}</span>
-                        <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {assignAutoListId && (
-              <p className="mt-2 text-xs text-blue-600 font-medium">
-                → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
-              </p>
+          <div className="py-4 space-y-3">
+            {assignBranchRequired && (
+              <>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Branch (required)</p>
+                  <Select value={assignBranchId} onValueChange={setAssignBranchId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select branch..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignDialogBranches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Stage (required)</p>
+                  <Select value={assignListId} onValueChange={setAssignListId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select stage..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignDialogPipelineLists.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
+            <div className="space-y-1.5">
+              {assignBranchRequired && (
+                <p className="text-sm font-medium text-gray-700">Assigned to (optional)</p>
+              )}
+              <Select value={assignTo} onValueChange={setAssignTo}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="unassign">
+                    <span className="text-muted-foreground">Unassign (remove assignment)</span>
+                  </SelectItem>
+                  {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
+                    .map((member) => (
+                      <SelectItem key={member.user_id} value={member.user_id}>
+                        <div className="flex items-center gap-2">
+                          <span>{member.name}</span>
+                          <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {assignAutoListId && !assignBranchRequired && (
+                <p className="mt-2 text-xs text-blue-600 font-medium">
+                  → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -2570,6 +2612,8 @@ export function LeadsTable({
               onClick={() => {
                 setAssignDialogOpen(false);
                 setAssignTo("");
+                setAssignBranchId("");
+                setAssignListId("");
               }}
               disabled={isAssigning}
             >
@@ -2577,7 +2621,10 @@ export function LeadsTable({
             </Button>
             <Button
               onClick={handleBulkAssign}
-              disabled={isAssigning || !assignTo}
+              disabled={
+                isAssigning ||
+                (assignBranchRequired ? (!assignBranchId || !assignListId) : !assignTo)
+              }
             >
               {isAssigning ? "Assigning..." : assignTo === "unassign" ? "Unassign" : "Assign"}
             </Button>
@@ -2635,7 +2682,7 @@ export function LeadsTable({
       {/* Bulk Move to List Dialog */}
       <Dialog open={moveListDialogOpen} onOpenChange={(open) => {
         setMoveListDialogOpen(open);
-        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setMoveBranchId(""); setIsGraduateMove(false); }
+        if (!open) { setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }
       }}>
         <DialogContent>
           <DialogHeader>
@@ -2709,21 +2756,6 @@ export function LeadsTable({
                 </Select>
               </div>
             )}
-            {isStagingView && moveDialogBranches.length > 0 && (
-              <div className="space-y-1.5">
-                <p className="text-sm font-medium text-gray-700">Branch (required)</p>
-                <Select value={moveBranchId} onValueChange={setMoveBranchId}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Select branch..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {moveDialogBranches.map((b) => (
-                      <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
             {(isStagingView || isGraduateMove) && (
               <>
                 {isStagingView && selectionAssignmentHint && (
@@ -2731,11 +2763,6 @@ export function LeadsTable({
                 )}
                 <div className="space-y-1.5">
                   <p className="text-sm font-medium text-gray-700">Assign to (optional)</p>
-                  {moveBranchRequired && (
-                    <p className="text-xs text-muted-foreground">
-                      Left blank, leads go to the selected branch&apos;s manager.
-                    </p>
-                  )}
                   <Select
                     value={moveAssignTo}
                     onValueChange={(v) => {
@@ -2776,19 +2803,14 @@ export function LeadsTable({
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setMoveBranchId(""); setIsGraduateMove(false); }}
+              onClick={() => { setMoveListDialogOpen(false); setMoveListId(""); setMoveArchiveReason(""); setMoveAssignTo("keep"); setIsGraduateMove(false); }}
               disabled={isMoveList}
             >
               Cancel
             </Button>
             <Button
               onClick={handleBulkMove}
-              disabled={
-                isMoveList ||
-                !moveListId ||
-                (moveTargetIsArchive && !moveArchiveReason) ||
-                (moveBranchRequired && !moveBranchId)
-              }
+              disabled={isMoveList || !moveListId || (moveTargetIsArchive && !moveArchiveReason)}
             >
               {isMoveList
                 ? (isGraduateMove ? "Graduating…" : moveTargetIsArchive ? "Archiving…" : "Moving…")
