@@ -15,23 +15,21 @@
 // operator's real semantics) — wrong counts are worse than absent counts.
 
 import type { FieldRegistry, FilterCondition, FilterTree } from "./types";
+import { addCalendarUnitsUTC, parseRelativeValue } from "./date-math";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// "7d" | "30d" | "3m" | "1y" — same vocabulary the FilterOperator doc comment
-// (types.ts) documents for within_last/within_next.
-const WITHIN_LAST_RE = /^(\d+)(d|m|y)$/;
-
+// Shared with compile.ts's identical within_last/within_next math (via
+// date-math.ts) — this MUST compute the same instant compile.ts does for the
+// same (now, value), or the facet-count badge shown while building a filter
+// silently disagrees with the actual filtered results. Previously this file
+// had its own copy using local-timezone Date methods (setDate/setMonth/
+// setFullYear) while compile.ts used UTC methods — the two could differ by up
+// to a day depending on the server process's timezone.
 function withinLastToDate(raw: string, now: Date): Date | null {
-  const match = WITHIN_LAST_RE.exec(raw);
-  if (!match) return null;
-  const amount = Number(match[1]);
-  const unit = match[2];
-  const result = new Date(now);
-  if (unit === "d") result.setDate(result.getDate() - amount);
-  else if (unit === "m") result.setMonth(result.getMonth() - amount);
-  else result.setFullYear(result.getFullYear() - amount);
-  return result;
+  const parsed = parseRelativeValue(raw);
+  if (!parsed) return null;
+  return addCalendarUnitsUTC(now, -parsed.amount, parsed.unit);
 }
 
 function asList(value: FilterCondition["value"]): string[] {

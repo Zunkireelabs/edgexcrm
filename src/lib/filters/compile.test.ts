@@ -344,6 +344,20 @@ describe("promoted field dual-read (legacy custom_fields trap)", () => {
       "or(and(or(destinations.is.null,destinations.not.ov.{Australia}),or(custom_fields->>countries.is.null,custom_fields->>countries.not.ov.{Australia})))"
     );
   });
+
+  it('"is_empty" ANDs the two legs — truly empty means BOTH the real column and the legacy jsonb fallback are blank (a legacy row with real data only in custom_fields must NOT be reported as empty)', () => {
+    const b = compile(andTree(cond("c1", "field_of_study", "is_empty")));
+    expect(b.calls[0]).toBe(
+      'or(and(or(field_of_study.is.null,field_of_study.eq.""),or(custom_fields->>field_of_study.is.null,custom_fields->>field_of_study.eq."")))'
+    );
+  });
+
+  it('"is_not_empty" still ORs the two legs — correct as-is: has real data in EITHER location', () => {
+    const b = compile(andTree(cond("c1", "field_of_study", "is_not_empty")));
+    expect(b.calls[0]).toBe(
+      'or(or(and(field_of_study.not.is.null,field_of_study.neq.""),and(custom_fields->>field_of_study.not.is.null,custom_fields->>field_of_study.neq."")))'
+    );
+  });
 });
 
 // ── is_any_of [] must throw, never silently no-op ─────────────────────────
@@ -447,6 +461,18 @@ describe("columns-kind field (multi-column search)", () => {
   it("does not add pair legs for a single-token search", () => {
     const b = compile(andTree(cond("c1", "search", "contains", "jane")));
     expect(b.orPayloads()[0]).not.toContain("and(");
+  });
+
+  it('"is_empty" ANDs across every column — the field is empty only if ALL columns are blank, not just one (a lead with first_name="" but a real last_name is NOT an empty name)', () => {
+    const b = compile(andTree(cond("c1", "search", "is_empty")));
+    expect(b.calls[0]).toBe('or(and(or(first_name.is.null,first_name.eq.""),or(last_name.is.null,last_name.eq."")))');
+  });
+
+  it('"is_not_empty" still ORs across columns — correct as-is: has data in ANY column', () => {
+    const b = compile(andTree(cond("c1", "search", "is_not_empty")));
+    expect(b.calls[0]).toBe(
+      'or(or(and(first_name.not.is.null,first_name.neq.""),and(last_name.not.is.null,last_name.neq."")))'
+    );
   });
 });
 
@@ -564,11 +590,36 @@ describe("dates — tz-aware boundaries with a frozen ctx.now", () => {
     expect(b.calls[0]).toBe('or(and(created_at.gte."2025-01-15T12:00:00.000Z",created_at.lte."2026-01-15T12:00:00.000Z"))');
   });
 
-  it('"before" and "after" compile to a direct instant comparison', () => {
-    const b1 = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "before", "2026-01-01T00:00:00.000Z")), registry, onCtx("UTC"));
-    expect(b1.calls[0]).toBe('or(created_at.lt."2026-01-01T00:00:00.000Z")');
-    const b2 = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "after", "2026-01-01T00:00:00.000Z")), registry, onCtx("UTC"));
-    expect(b2.calls[0]).toBe('or(created_at.gt."2026-01-01T00:00:00.000Z")');
+  it('"before" excludes the given day entirely — strictly before its local start', () => {
+    const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "before", "2026-01-01")), registry, onCtx("UTC"));
+    expect(b.calls[0]).toBe('or(created_at.lt."2026-01-01T00:00:00.000Z")');
+  });
+
+  it('"after" excludes the given day entirely too — at/after the NEXT day\'s local start, not a bare .gt on the day\'s own midnight (which would match nearly all of that day, silently meaning "on or after")', () => {
+    const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "after", "2026-01-01")), registry, onCtx("UTC"));
+    expect(b.calls[0]).toBe('or(created_at.gte."2026-01-02T00:00:00.000Z")');
+  });
+
+  it('"before"/"after" are timezone-safe like "on" — a bare YYYY-MM-DD value (what the date-picker UI actually sends) resolves against Asia/Kathmandu\'s local day, not UTC midnight', () => {
+    const before = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "before", "2026-06-15")), registry, onCtx("Asia/Kathmandu"));
+    expect(before.calls[0]).toBe('or(created_at.lt."2026-06-14T18:15:00.000Z")');
+    const after = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "after", "2026-06-15")), registry, onCtx("Asia/Kathmandu"));
+    expect(after.calls[0]).toBe('or(created_at.gte."2026-06-15T18:15:00.000Z")');
+  });
+
+  it("within_last month-unit arithmetic clamps day-of-month instead of overflowing forward (March 31 - 1 month must land on Feb's LAST day, not roll into March)", () => {
+    const mar31Ctx: CompileCtx = { ...ctx, tz: "UTC", now: new Date("2026-03-31T12:00:00.000Z") };
+    const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "within_last", "1m")), registry, mar31Ctx);
+    // Feb 2026 has 28 days (not a leap year) — a naive setUTCMonth(current - 1)
+    // on day 31 would roll forward into March (there's no Feb 31st) instead of
+    // clamping to Feb's actual last day.
+    expect(b.calls[0]).toBe('or(and(created_at.gte."2026-02-28T12:00:00.000Z",created_at.lte."2026-03-31T12:00:00.000Z"))');
+  });
+
+  it("within_next year-unit arithmetic clamps a leap-day Feb 29 to Feb 28 one non-leap year later", () => {
+    const leapDayCtx: CompileCtx = { ...ctx, tz: "UTC", now: new Date("2028-02-29T12:00:00.000Z") };
+    const b = compileFilter(new FakeBuilder(), andTree(cond("c1", "created_at", "within_next", "1y")), registry, leapDayCtx);
+    expect(b.calls[0]).toBe('or(and(created_at.gte."2028-02-29T12:00:00.000Z",created_at.lte."2029-02-28T12:00:00.000Z"))');
   });
 
   it('"is_empty"/"is_not_empty" on a date field', () => {

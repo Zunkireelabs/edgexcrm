@@ -86,8 +86,16 @@ function compileAssignees(cond: FilterCondition): string | null {
 // ── location: virtual, city + country combined — no legacy equivalent ──────
 
 function compileLocation(cond: FilterCondition): string {
-  if (cond.op === "is_empty") return and("city.is.null", "country.is.null");
-  if (cond.op === "is_not_empty") return or("city.not.is.null", "country.not.is.null");
+  // Blank-string-inclusive, matching the sibling "city"/"country" FieldDefs
+  // (both text, both emptyIsBlankString: true) — city/country IS NULL alone
+  // previously disagreed with filtering City or Country directly, which also
+  // treats "" as empty.
+  if (cond.op === "is_empty") {
+    return and(or("city.is.null", `city.eq.${pgVal("")}`), or("country.is.null", `country.eq.${pgVal("")}`));
+  }
+  if (cond.op === "is_not_empty") {
+    return or(and("city.not.is.null", `city.neq.${pgVal("")}`), and("country.not.is.null", `country.neq.${pgVal("")}`));
+  }
   const value = String(cond.value);
   const pattern = pgVal(`%${value.replace(/([\\%_])/g, "\\$1")}%`);
   if (cond.op === "contains") return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);

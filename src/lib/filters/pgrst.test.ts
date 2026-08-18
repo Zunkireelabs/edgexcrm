@@ -51,6 +51,17 @@ describe("pgVal", () => {
     expect(pgVal(longWithComma)).toBe(`"${longWithComma}"`);
   });
 
+  it('quotes a literal value that IS the word "null" (any case) — otherwise Postgres\'s array-literal parser reads a bare null token as SQL NULL, not the 4-character string (e.g. a tag genuinely named "NULL" could never be matched)', () => {
+    expect(pgVal("null")).toBe('"null"');
+    expect(pgVal("NULL")).toBe('"NULL"');
+    expect(pgVal("Null")).toBe('"Null"');
+  });
+
+  it('does not quote a value that merely CONTAINS "null" as a substring', () => {
+    expect(pgVal("nullable")).toBe("nullable");
+    expect(pgVal("annulled")).toBe("annulled");
+  });
+
   describe("injection probes", () => {
     it("cannot break out of the value position with a filter-string payload", () => {
       const payload = "a,tenant_id.neq.x";
