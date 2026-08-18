@@ -46,6 +46,15 @@ export function AdvancedFilterBar({
     onChange({ ...value, conjunction });
   }
 
+  function handleClearAll() {
+    onChange({ conjunction: "and", conditions: [] });
+  }
+
+  // groups[] has no UI path to populate today (allowGroups isn't wired up
+  // anywhere yet), but checking it here too costs nothing and means this
+  // doesn't need revisiting the day it does.
+  const hasAnything = conditions.length > 0 || (value.groups?.length ?? 0) > 0;
+
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {showChips && conditions.length > 1 && <ConjunctionToggle value={value.conjunction} onChange={handleConjunctionChange} />}
@@ -64,6 +73,15 @@ export function AdvancedFilterBar({
         onAdd={handleAdd}
         disabled={atCap}
       />
+      {showChips && hasAnything && (
+        <button
+          type="button"
+          onClick={handleClearAll}
+          className="text-[11px] text-muted-foreground underline hover:text-foreground"
+        >
+          Clear all
+        </button>
+      )}
     </div>
   );
 }
