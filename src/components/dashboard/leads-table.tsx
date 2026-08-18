@@ -2150,22 +2150,55 @@ export function LeadsTable({
     [advancedFilterRegistry, advancedVisibleFieldKeys, industryId]
   );
 
+  // Values currently selected for `fieldKey` across the advanced filter tree (root +
+  // groups). Used below so a Collaborator/Assigned-To chip's label never degrades to
+  // a raw uuid: those two option lists intentionally hide zero-count people (matching
+  // the legacy toolbar), so a filter combination that leaves an already-selected
+  // person at 0 matching leads would otherwise drop them out of `options` entirely —
+  // formatChipLabel's optionLabel() falls back to the raw stored value when a value
+  // isn't found in `options`, and unlike source/tags/destinations (whose raw value is
+  // already a readable string), assignees/collaborators store a uuid. The filter
+  // itself was never wrong — only that one chip's label. Groups have no UI path to
+  // populate yet (advanced-filter-bar.tsx), scanned anyway since it costs nothing.
+  const selectedValuesForField = useCallback(
+    (fieldKey: string): string[] => {
+      const fromConditions = (conds: FilterCondition[]) =>
+        conds
+          .filter((c) => c.field === fieldKey)
+          .flatMap((c): string[] => {
+            if (Array.isArray(c.value)) return c.value.map(String);
+            return c.value !== undefined ? [String(c.value)] : [];
+          });
+      return [
+        ...fromConditions(advancedFilters.tree.conditions),
+        ...(advancedFilters.tree.groups ?? []).flatMap((g) => fromConditions(g.conditions)),
+      ];
+    },
+    [advancedFilters.tree]
+  );
+
   // Reuses the exact option arrays the legacy filterDefs above compute — same
   // counselors/sources/forms/tags lists, just fed to a different UI. ADVANCED-FILTERS-
   // BRIEF Phase 3 addendum §A: assignees/collaborators must carry counts AND hide
   // zero-count people, matching the legacy filterDefs' "counselor"/"collaborator"
   // entries above byte-for-byte — the bar must not ship with a visible count
   // regression against the toolbar it replaces.
-  const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(
-    () => ({
+  const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(() => {
+    const selectedAssignees = new Set(selectedValuesForField("assignees"));
+    const selectedCollaborators = new Set(selectedValuesForField("collaborators"));
+    const unassignedCount = counselorCounts.get("unassigned") ?? 0;
+
+    return {
       status: statusFilterOptions,
       source: sources.map((s) => ({ value: s, label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})` })),
       assignees: [
-        ...((counselorCounts.get("unassigned") ?? 0) > 0
-          ? [{ value: "unassigned", label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})` }]
+        ...(unassignedCount > 0 || selectedAssignees.has("unassigned")
+          ? [{ value: "unassigned", label: `Unassigned (${unassignedCount.toLocaleString()})` }]
           : []),
         ...counselors
-          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
+          // A currently-selected assignee stays offered even at 0 — see
+          // selectedValuesForField above — so its chip keeps a real name.
+          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0 || selectedAssignees.has(userId))
           .map(([userId, email]) => ({
             value: userId,
             label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
@@ -2177,9 +2210,20 @@ export function LeadsTable({
       // above. Was purely client-side/page-scoped until this was closed as a
       // production-readiness gap; kept the owner/admin exclusion, an independent
       // product decision (they're not offered as assignable collaborators) unrelated
-      // to where the count comes from.
+      // to where the count comes from. A currently-selected collaborator stays offered
+      // even at 0 (same reasoning as assignees above) — deliberately NOT exempted from
+      // the owner/admin exclusion though: if an owner/admin id is already selected
+      // (e.g. from a stale/shared filter link), showing their real name here would
+      // contradict "owners/admins are never offered as collaborators" everywhere else
+      // this list is used; the uuid fallback is the lesser inconsistency in that
+      // specific, rare case.
       collaborators: counselors
-        .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0 && memberRoleMap[userId] !== "owner" && memberRoleMap[userId] !== "admin")
+        .filter(
+          ([userId]) =>
+            ((collaboratorCounts.get(userId) ?? 0) > 0 || selectedCollaborators.has(userId)) &&
+            memberRoleMap[userId] !== "owner" &&
+            memberRoleMap[userId] !== "admin"
+        )
         .map(([userId, email]) => ({
           value: userId,
           label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
@@ -2193,13 +2237,27 @@ export function LeadsTable({
       // dimension) when serverPaginated + education_consultancy, else the client
       // fallback. Previously had NO entry here at all — this key didn't exist, so
       // the field's value picker rendered permanently empty (see destinationCounts).
+      // No selected-value carve-out needed here (unlike assignees/collaborators) —
+      // a destination's raw value IS its display string (e.g. "UK"), so falling back
+      // to the raw value on a 0-count exclusion is already readable, not a uuid.
       destinations: Array.from(destinationCounts.entries())
         .filter(([, count]) => count > 0)
         .sort((a, b) => b[1] - a[1])
         .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
-    }),
-    [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries, destinationCounts]
-  );
+    };
+  }, [
+    statusFilterOptions,
+    sources,
+    sourceCounts,
+    counselorCounts,
+    counselors,
+    memberNames,
+    collaboratorCounts,
+    memberRoleMap,
+    formEntries,
+    destinationCounts,
+    selectedValuesForField,
+  ]);
 
   // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while
   // its resulting chips render in row 2's AdvancedFilterBar (hideAddButton) —
