@@ -900,6 +900,60 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(rpcCalls.length).toBe(2);
   });
 
+  // Gap audit (same session as migrations 207/208): Collaborators + Destinations
+  // previously had no server facet at all — this proves the full 4-dimension
+  // round-trip works end to end through the actual route, not just the aggregates.ts
+  // unit tests in isolation.
+  it("?facets=source,assignee,collaborator,destination returns all four dimensions in one round-trip, each from its own RPC call", async () => {
+    const rpcCalls: unknown[] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown) => {
+        rpcCalls.push([name, params]);
+        return Promise.resolve({
+          data: [
+            { dimension: "intake_source", key: "Facebook", bucket: "all", cnt: 3 },
+            { dimension: "counselor", key: "user-1", bucket: "all", cnt: 5 },
+            { dimension: "collaborator", key: "user-2", bucket: "all", cnt: 7 },
+            { dimension: "destination", key: "UK", bucket: "all", cnt: 9 },
+          ],
+          error: null,
+        });
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "source,assignee,collaborator,destination" }));
+    const body = await res.json();
+    expect(res.status).toBe(200);
+    expect(body.data).toEqual({
+      facets: {
+        source: { options: [{ name: "Facebook", count: 3 }] },
+        assignee: { options: [{ name: "user-1", count: 5 }] },
+        collaborator: { options: [{ name: "user-2", count: 7 }] },
+        destination: { options: [{ name: "UK", count: 9 }] },
+      },
+    });
+    // Each dimension gets its own RPC call — assignee/collaborator must not filter on
+    // themselves, so a shared call would be wrong even though it'd "work" here.
+    expect(rpcCalls.length).toBe(4);
+  });
+
+  it("?facets=collaborator omits p_collaborator_ids from its own RPC call even when the URL's ?collaborators= filter is set — the axis being faceted must not filter itself", async () => {
+    const rpcCalls: [string, Record<string, unknown>][] = [];
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown) => {
+        rpcCalls.push([name, params as Record<string, unknown>]);
+        return Promise.resolve({ data: [], error: null });
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ facets: "collaborator", collaborators: "22222222-2222-2222-2222-222222222222" }));
+    expect(res.status).toBe(200);
+    expect(rpcCalls.length).toBe(1);
+    expect(rpcCalls[0][1]).not.toHaveProperty("p_collaborator_ids");
+  });
+
   it("?facets=source WITHOUT ?f= is completely unaffected — still returns the legacy {facet,options} shape", async () => {
     createClientMock.mockResolvedValue({ rpc: () => Promise.resolve({ data: [], error: null }) });
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
