@@ -767,9 +767,14 @@ export function LeadsTable({
   // filter params minus pagination/sort, so this reflects every OTHER active filter —
   // matching current cross-filter behavior — via ONE extra opt-in round-trip that asks
   // for both dimensions at once (?facets=source,assignee) rather than two.
+  // Same gate advancedVisibleFieldKeys uses to hide the assignees/collaborators axes
+  // entirely for non-admin/non-team-scoped users — no point fetching either facet
+  // for someone who can't see the dropdown.
   const wantsAssigneeFacet = isAdmin || isTeamScoped;
+  const wantsCollaboratorFacet = isAdmin || isTeamScoped;
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -781,14 +786,16 @@ export function LeadsTable({
     params.delete("count");
     // A single "source" stays the pre-existing single-dimension request (and response
     // shape) byte-for-byte — see route.ts's legacySingleSourceFacet branch.
-    params.set("facets", wantsAssigneeFacet ? "source,assignee" : "source");
+    const dims = ["source", wantsAssigneeFacet && "assignee", wantsCollaboratorFacet && "collaborator"].filter(Boolean);
+    params.set("facets", dims.join(","));
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet]);
 
   useEffect(() => {
     if (!facetFetchParams) {
       setServerSourceFacet(null);
       setServerAssigneeFacet(null);
+      setServerCollaboratorFacet(null);
       return;
     }
     const controller = new AbortController();
@@ -799,10 +806,11 @@ export function LeadsTable({
           // Legacy single-dimension shape (facets=source alone).
           facet?: string;
           options?: { name: string; count: number }[];
-          // New multi-dimension shape (facets=source,assignee or facets=assignee).
+          // New multi-dimension shape (facets=source,assignee,collaborator or a subset).
           facets?: {
             source?: { options: { name: string; count: number }[] } | null;
             assignee?: { options: { name: string; count: number }[] } | null;
+            collaborator?: { options: { name: string; count: number }[] } | null;
           } | null;
         };
       }) => {
@@ -810,9 +818,11 @@ export function LeadsTable({
         if (body.data?.facet === "source") {
           setServerSourceFacet(body.data.options ?? []);
           setServerAssigneeFacet(null);
+          setServerCollaboratorFacet(null);
         } else {
           setServerSourceFacet(body.data?.facets?.source?.options ?? []);
           setServerAssigneeFacet(wantsAssigneeFacet ? (body.data?.facets?.assignee?.options ?? []) : null);
+          setServerCollaboratorFacet(wantsCollaboratorFacet ? (body.data?.facets?.collaborator?.options ?? []) : null);
         }
       })
       .catch((err: unknown) => {
@@ -822,7 +832,7 @@ export function LeadsTable({
         console.error("Failed to load lead facets", err);
       });
     return () => controller.abort();
-  }, [facetFetchParams, wantsAssigneeFacet]);
+  }, [facetFetchParams, wantsAssigneeFacet, wantsCollaboratorFacet]);
 
   const sources = useMemo(
     () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
@@ -882,8 +892,12 @@ export function LeadsTable({
     return Array.from(c.entries());
   }, [memberMap]);
 
-  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
-  const collaboratorCounts = useMemo(() => {
+  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator
+  // itself. Client-side fallback for surfaces that aren't serverPaginated, computed from
+  // `localLeads` only (the current 25-row server page) — same page-scoping caveat
+  // clientCounselorCounts above carries, and the one migration 207 / getCollaboratorFacet
+  // closes for the serverPaginated table (see collaboratorCounts below).
+  const clientCollaboratorCounts = useMemo(() => {
     const m = new Map<string, number>();
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -916,6 +930,16 @@ export function LeadsTable({
     });
     return m;
   }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
+
+  // Server-computed Collaborators facet (serverPaginated only, migration 207) — exact,
+  // tenant-wide counts via lead_aggregates()'s new `collaborator` dimension, replacing
+  // the 25-row-page-scoped clientCollaboratorCounts above for the surface that matters
+  // (the /leads Collaborators picker in both the Advanced Filter bar and the legacy
+  // toolbar dropdown). Mirrors counselorCounts' server-preferred-with-client-fallback shape.
+  const collaboratorCounts = useMemo(() => {
+    if (!serverCollaboratorFacet) return clientCollaboratorCounts;
+    return new Map(serverCollaboratorFacet.map((o) => [o.name, o.count]));
+  }, [serverCollaboratorFacet, clientCollaboratorCounts]);
 
   // Secondary toolbar filters (form/counselor/collaborator/source/tag/created/
   // prospect industry). serverPaginated mode sends these as query params (buildFetchParams
