@@ -298,7 +298,7 @@ describe("applyLeadPatch — governance branches", () => {
     expect(outcome).toEqual({ kind: "forbidden" });
   });
 
-  it("§4.2 — a team-scoped manager cannot touch a lead that isn't in their branch (even if assigned to a branch member)", async () => {
+  it("§4.2 — a team-scoped manager CAN touch a lead assigned to their own branch member, even if the lead's own branch_id is stale/wrong", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "member-x", branch_id: "branch-other", list_id: null },
       tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "counselor", positions: { slug: "counselor" } } },
@@ -306,6 +306,21 @@ describe("applyLeadPatch — governance branches", () => {
     const auth = fixtureAuth({
       branchId: "branch-mgr",
       branchMemberIds: ["member-x"],
+      permissions: { leadScope: "team", canAssignLeads: true } as ResolvedPermissions,
+    });
+    const { applyLeadPatch } = await import("./apply-lead-patch");
+    const outcome = await applyLeadPatch(auth, "lead-1", { assigned_to: "member-y" }, OPTS);
+    expect(outcome.kind).toEqual("ok");
+  });
+
+  it("§4.2 — a team-scoped manager cannot touch a lead that isn't in their branch and isn't assigned to any of their branch members", async () => {
+    await setFakeDb({
+      leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "member-x", branch_id: "branch-other", list_id: null },
+      tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "counselor", positions: { slug: "counselor" } } },
+    });
+    const auth = fixtureAuth({
+      branchId: "branch-mgr",
+      branchMemberIds: [],
       permissions: { leadScope: "team", canAssignLeads: true } as ResolvedPermissions,
     });
     const { applyLeadPatch } = await import("./apply-lead-patch");
