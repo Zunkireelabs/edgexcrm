@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { treeToAggregateParams } from "./tree-to-aggregate-params";
 import { leadFields } from "./registry/leads";
+import { addCalendarUnitsUTC } from "./date-math";
 import type { CompileCtx, FilterCondition, FilterTree } from "./types";
 
 const ctx: CompileCtx = { tz: "UTC", now: new Date("2026-08-07T00:00:00Z"), industryId: null, permissions: {} };
@@ -116,5 +117,32 @@ describe("treeToAggregateParams", () => {
   it("returns ok:true with empty params for an empty tree", () => {
     const result = treeToAggregateParams(tree([]), registry, NOW);
     expect(result).toEqual({ ok: true, params: {} });
+  });
+
+  it("month/year-unit within_last agrees EXACTLY with compile.ts's shared date-math — the facet-count badge and the actual query must compute the same instant, not just 'close enough'", () => {
+    // Before date-math.ts was extracted and shared, this file computed
+    // within_last in the server process's LOCAL timezone (setMonth/
+    // setFullYear) while compile.ts computed it in UTC (setUTCMonth/
+    // setUTCFullYear) — the two could silently disagree by up to a day.
+    // Asserting equality against date-math.ts directly (not a hardcoded
+    // string) means this test fails the moment the two ever diverge again.
+    const monthResult = treeToAggregateParams(tree([cond("created", "within_last", "3m")]), registry, NOW);
+    expect(monthResult.ok).toBe(true);
+    if (monthResult.ok) {
+      expect(monthResult.params.createdAfter?.toISOString()).toBe(addCalendarUnitsUTC(NOW, -3, "m").toISOString());
+    }
+
+    const yearResult = treeToAggregateParams(tree([cond("created", "within_last", "1y")]), registry, NOW);
+    expect(yearResult.ok).toBe(true);
+    if (yearResult.ok) {
+      expect(yearResult.params.createdAfter?.toISOString()).toBe(addCalendarUnitsUTC(NOW, -1, "y").toISOString());
+    }
+  });
+
+  it("clamps day-of-month on an end-of-month date instead of overflowing (matches compile.ts's guard against the same bug)", () => {
+    const mar31 = new Date("2026-03-31T12:00:00Z");
+    const result = treeToAggregateParams(tree([cond("created", "within_last", "1m")]), registry, mar31);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.params.createdAfter?.toISOString()).toBe("2026-02-28T12:00:00.000Z");
   });
 });

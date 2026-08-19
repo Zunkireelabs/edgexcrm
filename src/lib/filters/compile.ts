@@ -1,5 +1,6 @@
 import { and, arrayLiteral, EMPTY_ARRAY_LITERAL, or, pgCol, pgLike, pgVal } from "./pgrst";
 import { isOperatorAllowed } from "./operators";
+import { addCalendarUnitsUTC, parseRelativeValue } from "./date-math";
 import {
   FilterCompileError,
   NEGATIVE_OPERATORS,
@@ -119,18 +120,14 @@ function dayBoundsInTz(dateStr: string, tz: string): { start: string; end: strin
 }
 
 function parseRelativeWindow(value: string): { amount: number; unit: "d" | "m" | "y" } {
-  const match = /^(\d+)([dmy])$/.exec(value);
-  if (!match) throw new FilterCompileError(`invalid relative date value: ${JSON.stringify(value)}`, "invalid_value");
-  return { amount: Number(match[1]), unit: match[2] as "d" | "m" | "y" };
+  const parsed = parseRelativeValue(value);
+  if (!parsed) throw new FilterCompileError(`invalid relative date value: ${JSON.stringify(value)}`, "invalid_value");
+  return parsed;
 }
 
 function addRelativeWindow(base: Date, value: string): Date {
   const { amount, unit } = parseRelativeWindow(value);
-  const result = new Date(base.getTime());
-  if (unit === "d") result.setUTCDate(result.getUTCDate() + amount);
-  else if (unit === "m") result.setUTCMonth(result.getUTCMonth() + amount);
-  else result.setUTCFullYear(result.getUTCFullYear() + amount);
-  return result;
+  return addCalendarUnitsUTC(base, amount, unit);
 }
 
 // ── Predicate rendering: FieldDef + FilterCondition -> a single pgrst string ─
@@ -221,10 +218,24 @@ function renderDateOpAgainstColumn(col: string, op: FilterCondition["op"], value
       return `${col}.is.null`;
     case "is_not_empty":
       return `${col}.not.is.null`;
-    case "before":
-      return `${col}.lt.${pgVal(new Date(String(value)).toISOString())}`;
-    case "after":
-      return `${col}.gt.${pgVal(new Date(String(value)).toISOString())}`;
+    case "before": {
+      // Timezone-safe, matching "on"/"date_between" below: "before <date>"
+      // excludes <date> entirely — strictly before its LOCAL start. A raw
+      // `new Date(value).toISOString()` (the old implementation) anchors a
+      // bare "YYYY-MM-DD" value — exactly what the date-picker UI sends — to
+      // UTC midnight, which is the same trap dayBoundsInTz exists to avoid.
+      const { start } = dayBoundsInTz(String(value), ctx.tz);
+      return `${col}.lt.${pgVal(start)}`;
+    }
+    case "after": {
+      // "after <date>" excludes <date> entirely too — at/after the NEXT day's
+      // local start. (A bare `.gt` on <date>'s own local midnight would
+      // instead match nearly all of <date> itself, since almost nothing is
+      // created at the exact midnight instant — silently meaning "on or
+      // after," not "after," and asymmetric with "before" above.)
+      const { end } = dayBoundsInTz(String(value), ctx.tz);
+      return `${col}.gte.${pgVal(end)}`;
+    }
     case "on": {
       const { start, end } = dayBoundsInTz(String(value), ctx.tz);
       return and(`${col}.gte.${pgVal(start)}`, `${col}.lt.${pgVal(end)}`);
@@ -250,15 +261,17 @@ function renderDateOpAgainstColumn(col: string, op: FilterCondition["op"], value
 
 function subtractRelativeWindow(base: Date, value: string): Date {
   const { amount, unit } = parseRelativeWindow(value);
-  const result = new Date(base.getTime());
-  if (unit === "d") result.setUTCDate(result.getUTCDate() - amount);
-  else if (unit === "m") result.setUTCMonth(result.getUTCMonth() - amount);
-  else result.setUTCFullYear(result.getUTCFullYear() - amount);
-  return result;
+  return addCalendarUnitsUTC(base, -amount, unit);
 }
 
-function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition): string {
-  const isArrayColumn = field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect";
+// `isArrayColumnOverride` exists for `renderPromotedPredicate`'s jsonLeg: a
+// "promoted" field's legacy jsonb fallback is ALWAYS a scalar (`->>` text
+// extraction), even when the real column and `field.type` (e.g. multiselect)
+// say array — so that leg must render as scalar regardless of field.type, or
+// Postgres rejects the array-overlap operator against a text column
+// ("operator does not exist: text && unknown").
+function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition, isArrayColumnOverride?: boolean): string {
+  const isArrayColumn = isArrayColumnOverride ?? (field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect");
   if (field.type === "date") return renderDateOpAgainstColumn(col, cond.op, cond.value, currentCtxRef);
   if (Array.isArray(cond.value) && (cond.op === "is_any_of" || cond.op === "is_none_of" || cond.op === "has_all")) {
     return renderListOpAgainstColumn(col, cond.op, cond.value as string[], isArrayColumn);
@@ -286,7 +299,29 @@ function renderPromotedPredicate(field: FieldDef & { source: Extract<FieldDef["s
   const realCol = field.source.column;
   const jsonCol = pgCol(field.source.jsonb.column, field.source.jsonb.path);
   const realLeg = renderAgainstColumn(realCol, field, cond);
-  const jsonLeg = renderAgainstColumn(jsonCol, field, cond);
+
+  // has_all's legacy jsonb leg is a scalar (`->>`), so it can only ever hold
+  // ONE value — it structurally can never satisfy "has ALL of" a list with
+  // more than one value. renderListOpAgainstColumn's scalar branch throws for
+  // has_all (registries must not offer it on a non-array field), which is
+  // correct for a genuinely scalar field but wrong here, where the ARRAY-typed
+  // field itself allows has_all and only this one legacy leg is scalar. Skip
+  // the leg for N>1 (real leg alone decides); fall back to direct equality
+  // for N===1, where "has all of [x]" on a scalar column IS just "equals x".
+  if (cond.op === "has_all") {
+    const values = cond.value as string[];
+    if (values.length !== 1) return realLeg;
+    return or(realLeg, `${jsonCol}.eq.${pgVal(values[0])}`);
+  }
+
+  const jsonLeg = renderAgainstColumn(jsonCol, field, cond, false);
+
+  if (cond.op === "is_empty") {
+    // Truly empty means BOTH the real column AND the legacy jsonb fallback
+    // are blank — unlike every other op (including is_not_empty, where "has
+    // data in EITHER location" is the correct, desired OR just below).
+    return and(realLeg, jsonLeg);
+  }
 
   if (!isNegative(cond.op)) {
     // Positive ops OR the two legs — either the real column or the legacy
@@ -314,6 +349,15 @@ function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["so
   // negation of every column" (De Morgan over the whole set) — see the isNeg
   // branch below.
   const legs = columns.map((c) => renderAgainstColumn(c, field, cond));
+
+  if (cond.op === "is_empty") {
+    // "the whole field is empty" means EVERY column is empty, not any one of
+    // them — unlike every other multi-column operator (contains/is_not_empty/
+    // etc. below), which correctly ORs across columns ("matches in ANY
+    // column"). A lead with first_name="" and last_name="Smith" is NOT an
+    // empty name.
+    return and(...legs);
+  }
 
   if (!isNeg && fullNamePairs && columns.length >= 2 && typeof cond.value === "string") {
     // "John Smith" won't match any single column — match token pairs against
@@ -555,6 +599,14 @@ function checkCondition(
     return;
   }
   if (field.visibleTo && !field.visibleTo(ctx.permissions)) {
+    push(`field is not accessible: ${JSON.stringify(cond.field)}`);
+    return;
+  }
+  // field.industries existed on FieldDef since Phase 1 ("undefined = all industries")
+  // but nothing ever read it — every tenant's registry offered every field regardless
+  // of industry_id. Mirrors the visibleTo check above: a null ctx.industryId does not
+  // satisfy an explicit allow-list.
+  if (field.industries && !(ctx.industryId && field.industries.includes(ctx.industryId))) {
     push(`field is not accessible: ${JSON.stringify(cond.field)}`);
     return;
   }

@@ -12,11 +12,18 @@ export function newConditionId(): string {
     : `c_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-export function defaultOperatorForField(field: FieldDef): FilterOperator {
-  return operatorsForField(field)[0];
-}
-
 const RELATIVE_DATE_OPERATORS: readonly FilterOperator[] = ["within_last", "within_next"];
+
+export function defaultOperatorForField(field: FieldDef): FilterOperator {
+  const operators = operatorsForField(field);
+  // OPERATORS_BY_TYPE.date lists "is_empty"/"is_not_empty" first (unlike every
+  // other field type, where index 0 is a value-bearing, commonly-intended
+  // operator) — picking [0] blindly means a brand-new date filter defaults to
+  // "is empty" (almost always zero matches) instead of something useful.
+  // Prefer "on" for date fields specifically; every other type keeps [0].
+  if (field.type === "date" && operators.includes("on")) return "on";
+  return operators[0];
+}
 const TUPLE_OPERATORS: readonly FilterOperator[] = ["between", "date_between"];
 const LIST_OPERATORS: readonly FilterOperator[] = ["is_any_of", "is_none_of", "has_all"];
 const NO_VALUE_OPERATORS: readonly FilterOperator[] = ["is_empty", "is_not_empty", "is_true", "is_false"];
@@ -40,11 +47,23 @@ export function newConditionForField(field: FieldDef): FilterCondition {
 // When the operator changes on an existing condition, the old value's shape
 // is very likely wrong for the new operator's arity (e.g. scalar -> list) —
 // re-derive a fresh default rather than carrying over a mismatched shape.
+function isGenericScalar(op: FilterOperator): boolean {
+  // Everything NOT already bucketed above. Relative-date operators ("within
+  // the last 7d") must NOT fall in here — their value is a strict "7d"-style
+  // token, incompatible with e.g. "before"'s ISO-date-string value, even
+  // though both are technically "a single string." Without carving this out,
+  // switching a date filter from "before" to "within the last" carries the
+  // old date string over verbatim, which then throws when Applied (invalid
+  // relative date value) instead of resetting to a valid default.
+  return !LIST_OPERATORS.includes(op) && !TUPLE_OPERATORS.includes(op) && !NO_VALUE_OPERATORS.includes(op) && !RELATIVE_DATE_OPERATORS.includes(op);
+}
+
 export function reshapeValueForOperator(field: FieldDef, prevOp: FilterOperator, nextOp: FilterOperator, prevValue: FilterValue | undefined): FilterValue | undefined {
   const sameShape =
     (LIST_OPERATORS.includes(prevOp) && LIST_OPERATORS.includes(nextOp)) ||
     (TUPLE_OPERATORS.includes(prevOp) && TUPLE_OPERATORS.includes(nextOp)) ||
-    (!LIST_OPERATORS.includes(prevOp) && !TUPLE_OPERATORS.includes(prevOp) && !NO_VALUE_OPERATORS.includes(prevOp) && !LIST_OPERATORS.includes(nextOp) && !TUPLE_OPERATORS.includes(nextOp) && !NO_VALUE_OPERATORS.includes(nextOp));
+    (RELATIVE_DATE_OPERATORS.includes(prevOp) && RELATIVE_DATE_OPERATORS.includes(nextOp)) ||
+    (isGenericScalar(prevOp) && isGenericScalar(nextOp));
   if (sameShape) return prevValue;
   return defaultValueForOperator(field, nextOp);
 }

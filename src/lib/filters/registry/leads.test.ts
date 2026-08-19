@@ -160,4 +160,29 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(registry.first_name.sortColumns).toEqual(["first_name", "last_name"]);
     expect(registry.email.sortColumns).toEqual(["email"]);
   });
+
+  it('"created" is hidden from the manual picker but stays fully filterable — the legacy ?created= URL path (legacy-leads-params.ts) still resolves through it', () => {
+    expect(registry.created.filterable).toBe(true);
+    expect(registry.created.hiddenFromPicker).toBe(true);
+    expect(registry.created_at.hiddenFromPicker).toBeUndefined();
+  });
+});
+
+describe("location — city+country combined virtual field", () => {
+  it('"is_empty" requires BOTH city and country to be blank (NULL or "") — matches the blank-string-inclusive semantics city/country each have individually', () => {
+    const b = compile(andTree(cond("c1", "location", "is_empty")));
+    expect(b.calls[0]).toBe('or(and(or(city.is.null,city.eq.""),or(country.is.null,country.eq."")))');
+  });
+
+  it('"is_not_empty" matches if EITHER city or country has real (non-null, non-blank) data', () => {
+    const b = compile(andTree(cond("c1", "location", "is_not_empty")));
+    expect(b.calls[0]).toBe('or(or(and(city.not.is.null,city.neq.""),and(country.not.is.null,country.neq."")))');
+  });
+
+  it("a row with city='' (blank string, not NULL) is still reported empty — matches filtering city directly (emptyIsBlankString: true)", () => {
+    const cityEmpty = compile(andTree(cond("c1", "city", "is_empty")));
+    const locationEmpty = compile(andTree(cond("c1", "location", "is_empty")));
+    expect(cityEmpty.calls[0]).toContain('city.eq.""');
+    expect(locationEmpty.calls[0]).toContain('city.eq.""');
+  });
 });

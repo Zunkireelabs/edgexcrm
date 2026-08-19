@@ -17,10 +17,15 @@ import { FilterCompileError } from "./types";
 //    legitimate input like `o'brien@x.co.uk`. Proper quoting replaces deletion.
 
 const NEEDS_QUOTE = /[,.:()"'\\{}[\]\s]/;
+// Postgres's array-literal/value parser reads a bare, unquoted "null" token as
+// SQL NULL, not the 4-character string — a value that IS literally "null"
+// (e.g. a tag named "NULL") must always be quoted, even though it contains
+// none of NEEDS_QUOTE's special characters.
+const RESERVED_WORD_RE = /^null$/i;
 
 export function pgVal(raw: string): string {
   if (raw === "") return '""';
-  if (!NEEDS_QUOTE.test(raw)) return raw;
+  if (!NEEDS_QUOTE.test(raw) && !RESERVED_WORD_RE.test(raw)) return raw;
   return `"${raw.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 

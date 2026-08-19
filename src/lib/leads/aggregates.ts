@@ -371,3 +371,51 @@ export async function getAssigneeFacet(params: SourceFacetParams): Promise<Assig
     .map((row) => ({ name: row.key === "(unassigned)" ? "unassigned" : row.key, count: Number(row.cnt) }))
     .sort((a, b) => b.count - a.count);
 }
+
+export interface CollaboratorFacetOption {
+  /** A tenant_users.user_id — no "unassigned" sentinel; the join is inner (mig 207). */
+  name: string;
+  count: number;
+}
+
+/**
+ * Collaborators facet — migration 207's `collaborator` dimension, added specifically
+ * to close the gap ADVANCED-FILTERS-BRIEF Phase 3 addendum §C deliberately deferred:
+ * leads-table.tsx's collaboratorCounts was computed from `localLeads` (the current
+ * 25-row server page only), so the Collaborators picker listed/counted only whoever
+ * happened to be on the loaded page, not tenant-wide. Same shape as getAssigneeFacet.
+ *
+ * `params.collaboratorIds` must be omitted by the caller — the collaborator axis is
+ * the one being faceted, so (per the "every filter except the one being faceted"
+ * rule getSourceFacet/getAssigneeFacet already follow) it must not filter itself.
+ */
+export async function getCollaboratorFacet(params: SourceFacetParams): Promise<CollaboratorFacetOption[]> {
+  const rows = await fetchFacetRows(params);
+  return rows
+    .filter((row) => row.dimension === "collaborator")
+    .map((row) => ({ name: row.key, count: Number(row.cnt) }))
+    .sort((a, b) => b.count - a.count);
+}
+
+export interface DestinationFacetOption {
+  /** A destination country string from leads.destinations (TEXT[]). */
+  name: string;
+  count: number;
+}
+
+/**
+ * Destinations facet — migration 208's `destination` dimension. Closes a total
+ * (not partial) gap: the Advanced Filters "Destinations" field had NO option
+ * source anywhere — no static FieldDef.options, no optionOverrides entry — so
+ * picking it in "Add filter" rendered a permanently empty checklist. Same shape
+ * as getCollaboratorFacet; no self-exclusion param exists on this axis (lead_
+ * aggregates() has no p_destination filter param, same as `source`), so unlike
+ * collaborator/assignee there is nothing to omit from `params` here.
+ */
+export async function getDestinationFacet(params: SourceFacetParams): Promise<DestinationFacetOption[]> {
+  const rows = await fetchFacetRows(params);
+  return rows
+    .filter((row) => row.dimension === "destination")
+    .map((row) => ({ name: row.key, count: Number(row.cnt) }))
+    .sort((a, b) => b.count - a.count);
+}
