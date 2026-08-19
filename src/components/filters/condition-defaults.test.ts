@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { defaultOperatorForField, defaultValueForOperator, reshapeValueForOperator } from "./condition-defaults";
-import type { FieldDef } from "@/lib/filters/types";
+import { defaultOperatorForField, defaultValueForOperator, reshapeValueForOperator, addOrMergeCondition } from "./condition-defaults";
+import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 
 const dateField: FieldDef = {
   key: "created_at",
@@ -60,5 +60,39 @@ describe("reshapeValueForOperator", () => {
   it("still carries the value over between two list operators (is_any_of <-> is_none_of) — regression", () => {
     const uuidField: FieldDef = { ...textField, type: "uuid" };
     expect(reshapeValueForOperator(uuidField, "is_any_of", "is_none_of", ["u1", "u2"])).toEqual(["u1", "u2"]);
+  });
+});
+
+describe("addOrMergeCondition", () => {
+  const stageA: FilterCondition = { id: "c1", field: "stage", op: "is", value: "list-a" };
+
+  it('picking the same field twice via "is" folds into one is_any_of condition, not two AND-able ones (regression: this used to append a second condition that could never both match — e.g. two Stage picks silently zeroed every result)', () => {
+    const stageB: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-b" };
+    const result = addOrMergeCondition([stageA], stageB);
+    expect(result).toEqual([{ id: "c1", field: "stage", op: "is_any_of", value: ["list-a", "list-b"] }]);
+  });
+
+  it("merges a fresh is_any_of pick into an existing is_any_of condition, deduping repeats", () => {
+    const existing: FilterCondition = { id: "c1", field: "stage", op: "is_any_of", value: ["list-a", "list-b"] };
+    const next: FilterCondition = { id: "c2", field: "stage", op: "is_any_of", value: ["list-b", "list-c"] };
+    const result = addOrMergeCondition([existing], next);
+    expect(result).toEqual([{ id: "c1", field: "stage", op: "is_any_of", value: ["list-a", "list-b", "list-c"] }]);
+  });
+
+  it("appends as a separate condition when no existing condition shares the field", () => {
+    const other: FilterCondition = { id: "c1", field: "source", op: "is", value: "walk-in" };
+    expect(addOrMergeCondition([other], stageA)).toEqual([other, stageA]);
+  });
+
+  it('does NOT merge range-style operators on the same field — "created after X" + "created before Y" is a real, intentional AND, not a duplicate pick', () => {
+    const after: FilterCondition = { id: "c1", field: "created_at", op: "after", value: "2026-01-01" };
+    const before: FilterCondition = { id: "c2", field: "created_at", op: "before", value: "2026-02-01" };
+    expect(addOrMergeCondition([after], before)).toEqual([after, before]);
+  });
+
+  it("does NOT merge into an existing negative condition (is_not) — different intent, left as two AND'd conditions", () => {
+    const isNot: FilterCondition = { id: "c1", field: "stage", op: "is_not", value: "list-a" };
+    const isB: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-b" };
+    expect(addOrMergeCondition([isNot], isB)).toEqual([isNot, isB]);
   });
 });

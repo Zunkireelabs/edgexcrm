@@ -18,9 +18,17 @@ import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry,
 //     authenticated session, not just the toolbar. `?status=<uuid>` today
 //     resolves to `status.eq.<uuid>` -> zero rows (status is a VARCHAR(20)
 //     CHECK-constrained column, so a UUID can never match); dispatching by
-//     shape would silently turn that into a `stage_id.eq.<uuid>` match. Stage
-//     gets its own FieldDef (-> stage_id) in Phase 3, coexisting with this one
-//     exactly like `assigned_to` (scope) coexists with `assignees` (filter).
+//     shape would silently turn that into a `stage_id.eq.<uuid>` match.
+//     CORRECTION (this file previously planned a "Stage" FieldDef -> `stage_id`
+//     here — do not build that): in the live dashboard UI, "Stage" already
+//     means `list_id`/`lead_lists` (the sidebar tabs — Pre-qualified, Qualified,
+//     Prospects, Applications; see CLAUDE.md's "Lead Lists = 'Stage' in UI").
+//     `stage_id`/`pipeline_stages` is what the UI calls "Status" (columns-
+//     registry.tsx), and this "status" field above already covers it via the
+//     `status` mirror column, whose value is kept in lockstep with `stage_id`
+//     (route.ts always writes both together) and is scoped per-list already
+//     (see leads-table.tsx's statusFilterOptions). The real "Stage" FieldDef
+//     (-> list_id) is below, next to this one.
 //   - "source" -> same reasoning, strict single-column targeting
 //     `intake_source` only, matching route.ts's `.in('intake_source', ...)`.
 //     The SEPARATE `form` field below still targets form_config_id directly
@@ -120,6 +128,19 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       group: "Basic",
       filterable: true,
       sortable: false,
+    },
+    {
+      key: "stage",
+      label: "Stage",
+      type: "uuid",
+      source: { kind: "column", column: "list_id" },
+      group: "Basic",
+      filterable: true,
+      // Lead Lists ("Stage" in the UI) is gated to the industries that have
+      // FEATURES.LEAD_LISTS enabled — src/industries/_shared/features/lead-lists/meta.ts.
+      // Literal industry ids here (not a registry import), matching field_of_study/
+      // destinations below — keep in sync with that meta's `industries` if it changes.
+      industries: ["education_consultancy", "travel_agency", "it_agency"],
     },
     {
       key: "search",
