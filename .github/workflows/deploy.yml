@@ -79,6 +79,7 @@ jobs:
             NEXT_PUBLIC_SENTRY_RELEASE=${{ github.sha }}
             SENTRY_ORG=${{ secrets.SENTRY_ORG }}
             SENTRY_PROJECT=${{ secrets.SENTRY_PROJECT }}
+            NEXT_PUBLIC_ADVANCED_FILTERS=1
           # Real credential — mounted as a BuildKit secret so it never lands in
           # the image layer metadata that gets pushed to GHCR.
           secrets: |
