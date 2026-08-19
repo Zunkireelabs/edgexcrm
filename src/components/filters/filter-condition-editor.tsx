@@ -3,6 +3,7 @@
 // The operator + value screen — reached after a field is chosen (either fresh,
 // from FilterFieldPicker, or by clicking an existing chip to edit it in place).
 
+import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { FieldDef, FilterCondition, FilterOperator, FilterValue } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/ui/filter-dropdown";
@@ -17,9 +18,15 @@ export interface FilterConditionEditorProps {
   options: FilterOption[];
   onChange: (condition: FilterCondition) => void;
   onApply: () => void;
+  // Only supplied by the "+ Add filter" flow (AddFilterButton), which has an
+  // actual field list to return to. Editing an existing chip (FilterChip)
+  // never passes this — there's no list to go back to from there, the field
+  // is already fixed. When present, the field label becomes a clickable
+  // "‹ Field" back-navigation header instead of plain text.
+  onBack?: () => void;
 }
 
-export function FilterConditionEditor({ field, condition, options, onChange, onApply }: FilterConditionEditorProps) {
+export function FilterConditionEditor({ field, condition, options, onChange, onApply, onBack }: FilterConditionEditorProps) {
   function handleOperatorChange(nextOp: FilterOperator) {
     onChange({ ...condition, op: nextOp, value: reshapeValueForOperator(field, condition.op, nextOp, condition.value) });
   }
@@ -39,7 +46,18 @@ export function FilterConditionEditor({ field, condition, options, onChange, onA
 
   return (
     <div className="flex w-72 flex-col gap-2 p-2">
-      <p className="px-1 text-xs font-medium text-muted-foreground">{field.label}</p>
+      {onBack ? (
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1 self-start px-1 text-xs font-medium text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-3.5" />
+          {field.label}
+        </button>
+      ) : (
+        <p className="px-1 text-xs font-medium text-muted-foreground">{field.label}</p>
+      )}
       <FilterOperatorPicker field={field} value={condition.op} onChange={handleOperatorChange} />
       <FilterValueEditor field={field} op={condition.op} value={condition.value} options={options} onChange={handleValueChange} />
       <div className="flex justify-end px-1 pt-1">

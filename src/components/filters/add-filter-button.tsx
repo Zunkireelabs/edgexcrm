@@ -36,6 +36,10 @@ export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact }
     setPicked({ field, condition: newConditionForField(field) });
   }
 
+  function handleBack() {
+    setPicked(null);
+  }
+
   function handleApply() {
     if (!picked) return;
     onAdd(picked.condition);
@@ -66,6 +70,7 @@ export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact }
             options={getOptions(picked.field)}
             onChange={(next) => setPicked({ field: picked.field, condition: next })}
             onApply={handleApply}
+            onBack={handleBack}
           />
         ) : (
           <FilterFieldPicker fields={fields} onSelect={handleFieldSelect} />
