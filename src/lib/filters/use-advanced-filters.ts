@@ -22,7 +22,7 @@ const STORAGE_PREFIX = "edgex:advanced-filters:";
 
 export interface UseAdvancedFiltersResult {
   tree: FilterTree;
-  setTree: (next: FilterTree) => void;
+  setTree: (next: FilterTree, opts?: { deleteParams?: string[] }) => void;
   clear: () => void;
   /** Raw `?f=` value currently on the URL, or null if absent. */
   encoded: string | null;
@@ -110,7 +110,7 @@ export function useAdvancedFilters(registry: FieldRegistry, persistKey?: string 
   }, [raw, degrade]);
 
   const setTree = useCallback(
-    (next: FilterTree) => {
+    (next: FilterTree, opts?: { deleteParams?: string[] }) => {
       const params = new URLSearchParams(searchParams.toString());
 
       if (isEmptyTree(next)) {
@@ -129,6 +129,13 @@ export function useAdvancedFilters(registry: FieldRegistry, persistKey?: string 
         // last thing they actually set, including an explicit clear above.
         if (persistKey) writePersisted(persistKey, encoded);
       }
+
+      // For a caller that needs a scope param (e.g. `list`) to move in lockstep
+      // with `f` in ONE navigation — e.g. a Stage filter outgrowing the tab it's
+      // locked to. Doing this as two separate router calls would race (the second
+      // read of `searchParams` may not see the first replace yet); folding it into
+      // this same call is what keeps it atomic.
+      for (const key of opts?.deleteParams ?? []) params.delete(key);
 
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });

@@ -10,6 +10,7 @@ import { FilterChipRow } from "./filter-chip-row";
 import { ConjunctionToggle } from "./conjunction-toggle";
 import { AddFilterButton } from "./add-filter-button";
 import { useFilterOptions } from "./use-filter-options";
+import { addOrMergeCondition } from "./condition-defaults";
 import type { FilterHostConfig } from "./types";
 
 export const DEFAULT_MAX_CONDITIONS = 25;
@@ -32,7 +33,7 @@ export function AdvancedFilterBar({
   const atCap = conditions.length >= maxConditions;
 
   function handleAdd(condition: FilterCondition) {
-    onChange({ ...value, conditions: [...value.conditions, condition] });
+    onChange({ ...value, conditions: addOrMergeCondition(value.conditions, condition) });
   }
 
   function handleChangeCondition(id: string, next: FilterCondition) {

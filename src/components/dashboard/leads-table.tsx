@@ -21,7 +21,8 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
 import { AddFilterButton } from "@/components/filters/add-filter-button";
 import { useFilterOptions } from "@/components/filters/use-filter-options";
-import type { FilterCondition } from "@/lib/filters/types";
+import { newConditionId, addOrMergeCondition } from "@/components/filters/condition-defaults";
+import type { FilterCondition, FilterTree } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/filters/types";
 import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
 import { leadFields } from "@/lib/filters/registry/leads";
@@ -450,6 +451,76 @@ export function LeadsTable({
   const advancedFilters = useAdvancedFilters(advancedFilterRegistry, advancedFiltersPersistKey);
   const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
   const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
+
+  // Stage filter <-> current list-tab sync. `activeListSlug` is route-level SCOPE
+  // (page.tsx's `?list=`), not a `?f=` condition — but it should look and act like
+  // one. While a tab is locked and the tree has no real "stage" condition of its
+  // own yet, `displayFilterTree` shows a synthetic one mirroring the tab; it never
+  // reaches `?f=` unless the user actually edits it into something that isn't
+  // exactly "this one tab" (see handleAdvancedFilterChange below), at which point a
+  // single-list route can no longer represent it and the tab lock is dropped.
+  const SYNTHETIC_STAGE_CONDITION_ID = "synthetic-stage";
+  const activeStageList = useMemo(
+    // Trash/Archive are special cross-cutting views, not part of the Stage
+    // tab-switching model (Pre-qualified/Qualified/…) — no synthetic chip there.
+    () => (viewMode === "normal" && activeListSlug ? (leadLists.find((l) => l.slug === activeListSlug) ?? null) : null),
+    [viewMode, activeListSlug, leadLists]
+  );
+  const realStageCondition = useMemo(
+    () => advancedFilters.tree.conditions.find((c) => c.field === "stage") ?? null,
+    [advancedFilters.tree]
+  );
+  const displayFilterTree: FilterTree = useMemo(() => {
+    if (!activeStageList || realStageCondition) return advancedFilters.tree;
+    return {
+      ...advancedFilters.tree,
+      conditions: [
+        ...advancedFilters.tree.conditions,
+        { id: SYNTHETIC_STAGE_CONDITION_ID, field: "stage", op: "is", value: activeStageList.id },
+      ],
+    };
+  }, [activeStageList, realStageCondition, advancedFilters.tree]);
+  // Row 2 (the chip strip) should show up whenever there's something to show —
+  // a real `?f=` filter OR the synthetic current-tab chip — unlike
+  // `advancedFilterActive` above, which stays narrowly "a real filter is set"
+  // because it also gates the mount-time SSR-resync skip (see the effect below);
+  // broadening that one would wrongly skip the resync on every plain tab visit.
+  const showAdvancedFilterChips = advancedFiltersEnabled && (!isEmptyTree(advancedFilters.tree) || !!activeStageList);
+
+  function stageConditionMatchesActiveList(cond: FilterCondition | undefined, list: LeadList): boolean {
+    if (!cond) return false;
+    if (cond.op === "is") return cond.value === list.id;
+    if (cond.op === "is_any_of" && Array.isArray(cond.value)) return cond.value.length === 1 && cond.value[0] === list.id;
+    return false;
+  }
+
+  // The one handler every filter-tree edit routes through while a tab is locked
+  // (chip edits AND "+ Add filter" both call this — see handleAddAdvancedFilter
+  // below). Anything that isn't EXACTLY "this one tab, single value" can't be
+  // represented by the locked route, so it drops `list` and lands on All Leads,
+  // carrying every condition (the edited Stage one included) forward untouched.
+  // Never auto-enters a different tab on its own — entering a tab is always a
+  // manual sidebar click.
+  function handleAdvancedFilterChange(next: FilterTree) {
+    if (!activeStageList) {
+      advancedFilters.setTree(next);
+      return;
+    }
+    const stageConditions = next.conditions.filter((c) => c.field === "stage");
+    const stillMatchesTab = stageConditions.length === 1 && stageConditionMatchesActiveList(stageConditions[0], activeStageList);
+
+    if (stillMatchesTab) {
+      // Still exactly the current tab — never let the synthetic mirror leak into `?f=`.
+      advancedFilters.setTree({ ...next, conditions: next.conditions.filter((c) => c.id !== SYNTHETIC_STAGE_CONDITION_ID) });
+      return;
+    }
+
+    const persisted: FilterTree = {
+      ...next,
+      conditions: next.conditions.map((c) => (c.id === SYNTHETIC_STAGE_CONDITION_ID ? { ...c, id: newConditionId() } : c)),
+    };
+    advancedFilters.setTree(persisted, { deleteParams: ["list"] });
+  }
 
   // Re-sync when the server sends a fresh lead set via a real navigation (list/funnel
   // switch, router.refresh() after a bulk action) — the page's own SSR query already
@@ -2139,8 +2210,9 @@ export function LeadsTable({
     if (!showItAgencyFields) hide.add("industry");
     if (!showTags) hide.add("tags");
     if (!hasMultipleForms) hide.add("form");
+    if (leadLists.length === 0) hide.add("stage");
     return hide;
-  }, [isAdmin, isTeamScoped, showItAgencyFields, showTags, hasMultipleForms]);
+  }, [isAdmin, isTeamScoped, showItAgencyFields, showTags, hasMultipleForms, leadLists]);
 
   const advancedVisibleFields = useMemo(
     () =>
@@ -2186,10 +2258,23 @@ export function LeadsTable({
   const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(() => {
     const selectedAssignees = new Set(selectedValuesForField("assignees"));
     const selectedCollaborators = new Set(selectedValuesForField("collaborators"));
+    const selectedStages = new Set(selectedValuesForField("stage"));
     const unassignedCount = counselorCounts.get("unassigned") ?? 0;
 
     return {
       status: statusFilterOptions,
+      // Admin-only lists (Migration QC, New Leads, …) hidden from non-admin/owner —
+      // same predicate as leads-table's own visibleLists — plus a currently-selected
+      // stage stays offered even if it'd otherwise be excluded (same reasoning as
+      // assignees/collaborators above: a stale/shared filter link shouldn't degrade
+      // that chip's label to a raw uuid). No per-value `color` here (unlike Status,
+      // whose color mirrors the real kanban stage color shown elsewhere) — a list's
+      // own `color` isn't an established, meaningful color for "Stage" elsewhere in
+      // the app, so every Stage chip shares the one default color like most other
+      // fields (Source, Assigned To, …), not a different hue per list.
+      stage: leadLists
+        .filter((l) => isAdmin || (!l.is_staging && !l.is_archive) || selectedStages.has(l.id))
+        .map((l) => ({ value: l.id, label: l.name })),
       source: sources.map((s) => ({ value: s, label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})` })),
       assignees: [
         ...(unassignedCount > 0 || selectedAssignees.has("unassigned")
@@ -2257,6 +2342,8 @@ export function LeadsTable({
     formEntries,
     destinationCounts,
     selectedValuesForField,
+    leadLists,
+    isAdmin,
   ]);
 
   // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while
@@ -2266,7 +2353,15 @@ export function LeadsTable({
   const { getOptions: advancedGetOptions } = useFilterOptions(advancedFilterOptionOverrides);
 
   function handleAddAdvancedFilter(condition: FilterCondition) {
-    advancedFilters.setTree({ ...advancedFilters.tree, conditions: [...advancedFilters.tree.conditions, condition] });
+    // Routed through handleAdvancedFilterChange (not advancedFilters.setTree
+    // directly) — it needs to see this against displayFilterTree, not the real
+    // tree, so a fresh Stage pick while a tab is locked is correctly detected as
+    // a divergence from that tab, same as editing the synthetic chip in place.
+    // addOrMergeCondition (not a bare append) — picking the same field twice via
+    // "+ Add filter" (e.g. Stage: Pre-qualified, then Stage: Qualified) must fold
+    // into one is_any_of condition, not two AND'd conditions that can never both
+    // match the same lead.
+    handleAdvancedFilterChange({ ...displayFilterTree, conditions: addOrMergeCondition(displayFilterTree.conditions, condition) });
   }
 
   return (
@@ -2344,7 +2439,7 @@ export function LeadsTable({
               fields={advancedVisibleFields}
               getOptions={advancedGetOptions}
               onAdd={handleAddAdvancedFilter}
-              disabled={advancedFilters.tree.conditions.length >= DEFAULT_MAX_CONDITIONS}
+              disabled={displayFilterTree.conditions.length >= DEFAULT_MAX_CONDITIONS}
             />
           )}
 
@@ -2382,19 +2477,20 @@ export function LeadsTable({
           )}
         </div>
 
-        {/* Chips row — advanced mode, active filters only. Sort moved back to row 1;
-            this row now only ever holds chips + Clear all, so — like the legacy
-            chips row below — it stays hidden entirely until there's something to
-            show, rather than sitting there empty with just a divider line. */}
-        {advancedFilterActive && (
+        {/* Chips row — advanced mode, active filters (real OR the synthetic
+            current-tab Stage chip) only. Sort moved back to row 1; this row now
+            only ever holds chips + Clear all, so — like the legacy chips row
+            below — it stays hidden entirely until there's something to show,
+            rather than sitting there empty with just a divider line. */}
+        {showAdvancedFilterChips && (
           <>
             <div className="h-px bg-border" />
             <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
               <AdvancedFilterBar
                 entity="leads"
                 fields={advancedVisibleFields}
-                value={advancedFilters.tree}
-                onChange={advancedFilters.setTree}
+                value={displayFilterTree}
+                onChange={handleAdvancedFilterChange}
                 allowGroups={false}
                 optionOverrides={advancedFilterOptionOverrides}
                 hideAddButton

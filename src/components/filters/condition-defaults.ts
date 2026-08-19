@@ -44,6 +44,35 @@ export function newConditionForField(field: FieldDef): FilterCondition {
   return { id: newConditionId(), field: field.key, op, value: defaultValueForOperator(field, op) };
 }
 
+// Operators where "picking this field again" can only sanely mean "add this
+// value to the set" — a single positive value or an existing OR-list. Range-
+// style pairs (date before/after, number gt/lt) are deliberately excluded:
+// two of those on the same field is a real, intentional AND ("after X AND
+// before Y"), not a duplicate pick to merge.
+const MERGEABLE_ADD_OPERATORS: readonly FilterOperator[] = ["is", "is_any_of"];
+
+function asValueList(value: FilterValue | undefined): string[] {
+  if (Array.isArray(value)) return value.map(String);
+  return value === undefined ? [] : [String(value)];
+}
+
+// Appends `next` to `conditions` — UNLESS a condition for the same field
+// already carries a mergeable operator, in which case `next`'s value is
+// folded into it (upgrading to is_any_of) instead of appending a second,
+// competing condition. Two separate "field is A" / "field is B" conditions
+// AND together to an impossible, silently-zero-row match — this is the one
+// place every "+ Add filter" flow in the app routes through, so fixing it
+// here fixes every field, not just the one that surfaced it.
+export function addOrMergeCondition(conditions: FilterCondition[], next: FilterCondition): FilterCondition[] {
+  if (!MERGEABLE_ADD_OPERATORS.includes(next.op)) return [...conditions, next];
+
+  const existingIndex = conditions.findIndex((c) => c.field === next.field && MERGEABLE_ADD_OPERATORS.includes(c.op));
+  if (existingIndex === -1) return [...conditions, next];
+
+  const merged = Array.from(new Set([...asValueList(conditions[existingIndex].value), ...asValueList(next.value)]));
+  return conditions.map((c, i) => (i === existingIndex ? { ...c, op: "is_any_of", value: merged } : c));
+}
+
 // When the operator changes on an existing condition, the old value's shape
 // is very likely wrong for the new operator's arity (e.g. scalar -> list) —
 // re-derive a fresh default rather than carrying over a mismatched shape.
