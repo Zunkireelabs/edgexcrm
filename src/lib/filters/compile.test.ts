@@ -333,16 +333,26 @@ describe("promoted field dual-read (legacy custom_fields trap)", () => {
     expect(b.calls[0]).toContain("custom_fields->>field_of_study.eq.Nursing");
   });
 
-  it("positive op ORs both legs for a promoted ARRAY field (destinations/countries — path != column name)", () => {
+  it("positive op ORs both legs for a promoted ARRAY field, but the legacy jsonb leg renders as SCALAR (custom_fields->>'countries' is a text extraction, never an array — .ov. against it is invalid Postgres and 503s)", () => {
     const b = compile(andTree(cond("c1", "destinations", "is_any_of", ["Australia", "Canada"])));
-    expect(b.calls[0]).toBe("or(or(destinations.ov.{Australia,Canada},custom_fields->>countries.ov.{Australia,Canada}))");
+    expect(b.calls[0]).toBe("or(or(destinations.ov.{Australia,Canada},custom_fields->>countries.in.(Australia,Canada)))");
   });
 
-  it("negative op ANDs the two negated legs for a promoted ARRAY field (is_none_of)", () => {
+  it("negative op ANDs the two negated legs for a promoted ARRAY field (is_none_of) — real leg stays array (.not.ov.), legacy jsonb leg stays scalar (.not.in.)", () => {
     const b = compile(andTree(cond("c1", "destinations", "is_none_of", ["Australia"])));
     expect(b.calls[0]).toBe(
-      "or(and(or(destinations.is.null,destinations.not.ov.{Australia}),or(custom_fields->>countries.is.null,custom_fields->>countries.not.ov.{Australia})))"
+      "or(and(or(destinations.is.null,destinations.not.ov.{Australia}),or(custom_fields->>countries.is.null,custom_fields->>countries.not.in.(Australia))))"
     );
+  });
+
+  it("has_all with 2+ values on a promoted ARRAY field drops the legacy scalar jsonb leg entirely — a scalar column can never hold ALL of 2+ discrete values, and calling the generic list renderer on it would throw FilterCompileError", () => {
+    const b = compile(andTree(cond("c1", "destinations", "has_all", ["Australia", "Canada"])));
+    expect(b.calls[0]).toBe("or(destinations.cs.{Australia,Canada})");
+  });
+
+  it("has_all with exactly 1 value on a promoted ARRAY field falls back to a direct equality check on the legacy scalar jsonb leg", () => {
+    const b = compile(andTree(cond("c1", "destinations", "has_all", ["Australia"])));
+    expect(b.calls[0]).toBe("or(or(destinations.cs.{Australia},custom_fields->>countries.eq.Australia))");
   });
 
   it('"is_empty" ANDs the two legs — truly empty means BOTH the real column and the legacy jsonb fallback are blank (a legacy row with real data only in custom_fields must NOT be reported as empty)', () => {

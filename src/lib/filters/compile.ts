@@ -264,8 +264,14 @@ function subtractRelativeWindow(base: Date, value: string): Date {
   return addCalendarUnitsUTC(base, -amount, unit);
 }
 
-function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition): string {
-  const isArrayColumn = field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect";
+// `isArrayColumnOverride` exists for `renderPromotedPredicate`'s jsonLeg: a
+// "promoted" field's legacy jsonb fallback is ALWAYS a scalar (`->>` text
+// extraction), even when the real column and `field.type` (e.g. multiselect)
+// say array — so that leg must render as scalar regardless of field.type, or
+// Postgres rejects the array-overlap operator against a text column
+// ("operator does not exist: text && unknown").
+function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition, isArrayColumnOverride?: boolean): string {
+  const isArrayColumn = isArrayColumnOverride ?? (field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect");
   if (field.type === "date") return renderDateOpAgainstColumn(col, cond.op, cond.value, currentCtxRef);
   if (Array.isArray(cond.value) && (cond.op === "is_any_of" || cond.op === "is_none_of" || cond.op === "has_all")) {
     return renderListOpAgainstColumn(col, cond.op, cond.value as string[], isArrayColumn);
@@ -293,7 +299,22 @@ function renderPromotedPredicate(field: FieldDef & { source: Extract<FieldDef["s
   const realCol = field.source.column;
   const jsonCol = pgCol(field.source.jsonb.column, field.source.jsonb.path);
   const realLeg = renderAgainstColumn(realCol, field, cond);
-  const jsonLeg = renderAgainstColumn(jsonCol, field, cond);
+
+  // has_all's legacy jsonb leg is a scalar (`->>`), so it can only ever hold
+  // ONE value — it structurally can never satisfy "has ALL of" a list with
+  // more than one value. renderListOpAgainstColumn's scalar branch throws for
+  // has_all (registries must not offer it on a non-array field), which is
+  // correct for a genuinely scalar field but wrong here, where the ARRAY-typed
+  // field itself allows has_all and only this one legacy leg is scalar. Skip
+  // the leg for N>1 (real leg alone decides); fall back to direct equality
+  // for N===1, where "has all of [x]" on a scalar column IS just "equals x".
+  if (cond.op === "has_all") {
+    const values = cond.value as string[];
+    if (values.length !== 1) return realLeg;
+    return or(realLeg, `${jsonCol}.eq.${pgVal(values[0])}`);
+  }
+
+  const jsonLeg = renderAgainstColumn(jsonCol, field, cond, false);
 
   if (cond.op === "is_empty") {
     // Truly empty means BOTH the real column AND the legacy jsonb fallback
