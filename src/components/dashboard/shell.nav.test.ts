@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
 import { manifest as educationManifest } from "@/industries/education-consultancy/manifest";
+import { getIndustrySidebarItems } from "@/industries/_loader";
 import type { SidebarEntry, SidebarItem } from "@/industries/_types";
 
 // Regression test for F-8: the education branch of shell.tsx renders an
@@ -25,4 +26,33 @@ describe("shell.tsx education nav mirrors the manifest sidebar", () => {
       expect(shellSource).toContain(`eduItem("${item.href}")`);
     });
   }
+});
+
+// Regression test for F-10: SMS's sidebar entry declares `entitlement:
+// "sms_enabled"` but getIndustrySidebarItems() never consulted entitlements,
+// so the nav item rendered for every education owner/admin regardless of
+// whether the tenant actually holds the entitlement — 404 on click.
+describe("getIndustrySidebarItems gates entitlement-scoped items", () => {
+  const hrefsOf = (entries: readonly SidebarEntry[]): readonly string[] =>
+    flatten(entries).map((i) => i.href);
+
+  it("includes /sms when the tenant holds sms_enabled", () => {
+    const items = getIndustrySidebarItems(
+      "education_consultancy",
+      "owner",
+      undefined,
+      { sms_enabled: true },
+    );
+    expect(hrefsOf(items)).toContain("/sms");
+  });
+
+  it("excludes /sms when the tenant does not hold sms_enabled", () => {
+    const items = getIndustrySidebarItems("education_consultancy", "owner", undefined, {});
+    expect(hrefsOf(items)).not.toContain("/sms");
+  });
+
+  it("still includes /campaigns (no entitlement gate) when sms_enabled is absent", () => {
+    const items = getIndustrySidebarItems("education_consultancy", "owner", undefined, {});
+    expect(hrefsOf(items)).toContain("/campaigns");
+  });
 });

@@ -38,7 +38,7 @@ export const manifest: IndustryManifest = {
     // Marketing section
     { featureId: FEATURES.FORM_BUILDER, href: "/forms", label: "Forms", icon: "FileText" },
     { featureId: FEATURES.CAMPAIGNS, href: "/campaigns", label: "Campaigns", icon: "Megaphone", minRoles: ["owner", "admin"] },
-    { featureId: FEATURES.SMS, href: "/sms", label: "SMS", icon: "MessageSquare", minRoles: ["owner", "admin"] },
+    { featureId: FEATURES.SMS, href: "/sms", label: "SMS", icon: "MessageSquare", minRoles: ["owner", "admin"], entitlement: "sms_enabled" },
   ],
   ai: aiConfig,
 };
