@@ -59,6 +59,12 @@ export interface SidebarItem {
    * branch managers (leadScope "team"). All other positions still see it.
    */
   hideForBroadScope?: boolean;
+  /**
+   * If present, only show this item when the tenant's resolved entitlements
+   * have this key set to true. Mirrors minRoles: the real gate lives at the
+   * page/API level, this just hides the nav entry.
+   */
+  entitlement?: string;
 }
 
 /**

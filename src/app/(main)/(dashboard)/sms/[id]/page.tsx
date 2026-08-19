@@ -2,7 +2,7 @@ import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { isSmsSandbox } from "@/lib/sms/flag";
+import { isSmsSandbox, isSmsEnabledForTenant } from "@/lib/sms/flag";
 import { BlastWorkspace } from "@/industries/_shared/features/sms/ui/blast-workspace";
 
 interface RouteParams {
@@ -19,6 +19,7 @@ export default async function SmsBlastRoute({ params }: RouteParams) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.SMS)) notFound();
+  if (!(await isSmsEnabledForTenant(tenantData.tenant.id))) notFound();
   if (!tenantData.permissions.canSendSms) notFound();
 
   return (
