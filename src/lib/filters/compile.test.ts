@@ -50,7 +50,17 @@ class FakeBuilder implements QueryBuilder {
   not(c: string, op: string, v: unknown): this {
     return this.record(`not(${c},${op},${JSON.stringify(v)})`);
   }
-  or(f: string): this {
+  // Parallel to `calls` — one entry per `.or()` call, tracking the
+  // `referencedTable` option (undefined when omitted). A real postgrest-js
+  // builder REQUIRES this option to filter an embedded/joined resource
+  // (e.g. lead_collaborators) — baking the table name into the filter
+  // string instead, with no referencedTable, is the exact bug that shipped
+  // to production (PGRST100 "failed to parse logic tree"). Kept separate
+  // from `calls`/`orPayloads()` so every pre-existing non-embed test's
+  // assertions on the plain filter string stay unchanged.
+  orReferencedTables: (string | undefined)[] = [];
+  or(f: string, opts?: { referencedTable?: string }): this {
+    this.orReferencedTables.push(opts?.referencedTable);
     return this.record(`or(${f})`);
   }
 
@@ -392,7 +402,67 @@ describe("is_none_of on a relation field", () => {
 
   it("is_any_of on the same relation field IS supported", () => {
     const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])));
-    expect(b.calls[0]).toBe('or(lead_collaborators.user_id.in.(u1))');
+    expect(b.calls[0]).toBe('or(user_id.in.(u1))');
+  });
+});
+
+// ── Embed (relation) fields: referencedTable — production incident coverage ─
+//
+// PR #401's own production incident: any filter on Collaborators failed with
+// a real Postgres/PostgREST error (PGRST100 "failed to parse logic tree").
+// The prior version of this exact test file asserted `or(lead_collaborators.
+// user_id.in.(u1))` as the CORRECT expected value — encoding the bug as a
+// passing test, which is exactly why 1527 passing tests + clean build/lint
+// never caught it. Confirmed against a real local Postgres/PostgREST
+// instance (not just this fake builder) before writing these assertions —
+// see the sweep in the PR description.
+describe("embed (relation) fields pass referencedTable to .or() — never bake the table name into the filter string", () => {
+  it("a lone Collaborators condition: filter string has NO table prefix, referencedTable is set", () => {
+    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])));
+    expect(b.orPayloads()).toEqual(["user_id.in.(u1)"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  it("Collaborators ANDed with a native-eligible field (e.g. tags has_all): the tags leg stays a plain native call, only the embed leg carries referencedTable", () => {
+    const b = compile(andTree(cond("c1", "tags", "has_all", ["student"]), cond("c2", "collaborators", "is_any_of", ["u1"])));
+    expect(b.calls).toEqual(["contains(tags,[\"student\"])", "or(user_id.in.(u1))"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  it("Collaborators ANDed with a non-native field (e.g. status is): both legs are separate .or() calls, only the embed one carries referencedTable", () => {
+    const b = compile(andTree(cond("c1", "status", "is", "new"), cond("c2", "collaborators", "is_any_of", ["u1"])));
+    expect(b.orReferencedTables).toEqual([undefined, "lead_collaborators"]);
+  });
+
+  it("OR-toggle: two Collaborators conditions combine into ONE .or() call with referencedTable set once", () => {
+    const b = compileFilter(
+      new FakeBuilder(),
+      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "collaborators", "is_any_of", ["u2"])] },
+      registry,
+      ctx
+    );
+    expect(b.orPayloads()).toEqual(["or(user_id.in.(u1),user_id.in.(u2))"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  it("OR-toggle mixing Collaborators with an unrelated field: compileFilter throws rather than silently produce a query wrong for one side of the OR", () => {
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "status", "is", "new")] };
+    expect(() => compileFilter(new FakeBuilder(), tree, registry, ctx)).toThrow(FilterCompileError);
+  });
+
+  it("planFilter catches the same OR-mix case up front, as a clean per-field error — not just a compileFilter throw", () => {
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "status", "is", "new")] };
+    const result = planFilter(tree, registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.errors.collaborators?.[0]).toMatch(/cannot mix/);
+      expect(result.errors.status?.[0]).toMatch(/cannot mix/);
+    }
+  });
+
+  it("planFilter does NOT flag a single-condition OR-toggle tree (nothing to mix with just one condition)", () => {
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"])] };
+    expect(planFilter(tree, registry, ctx)).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 });
 

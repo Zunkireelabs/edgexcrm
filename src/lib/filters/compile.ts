@@ -54,7 +54,15 @@ export interface QueryBuilder {
   contains(column: string, value: readonly unknown[] | Record<string, unknown>): this;
   overlaps(column: string, value: readonly unknown[]): this;
   not(column: string, operator: string, value: unknown): this;
-  or(filters: string): this;
+  // `opts.referencedTable` filters a joined/embedded resource (e.g.
+  // lead_collaborators) rather than the base table — REQUIRED whenever the
+  // filter string references a column on that resource. See the "embed" case
+  // in renderCondition below for why this exists: PostgREST rejects a
+  // relation name baked directly into the filter string (a real, production
+  // PGRST100 "failed to parse logic tree" error) — the client library's
+  // referencedTable option is the only correct way to scope an `or()` filter
+  // to an embedded table.
+  or(filters: string, opts?: { referencedTable?: string }): this;
 }
 
 function requireField(registry: FieldRegistry, key: string): FieldDef {
@@ -400,13 +408,26 @@ function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx
     case "columns":
       return renderColumnsPredicate(field as FieldDef & { source: Extract<FieldDef["source"], { kind: "columns" }> }, cond);
     case "embed": {
-      // Dotted relation.column filtering an embedded resource. The caller is
-      // responsible for including that relation in the select with `!inner`
-      // (e.g. `lead_collaborators!inner(user_id)`) — the compiler never calls
-      // .select(), so it cannot arrange that itself. is_none_of is rejected in
-      // requireOperator() before this is reached.
-      const dotted = `${field.source.relation}.${field.source.column}`;
-      return renderConditionPredicate(dotted, field, cond);
+      // The embedded resource's OWN column only — never relation-prefixed.
+      // The caller is responsible for including that relation in the select
+      // with `!inner` (e.g. `lead_collaborators!inner(user_id)`) — the
+      // compiler never calls .select(), so it cannot arrange that itself.
+      // is_none_of is rejected in requireOperator() before this is reached.
+      //
+      // A prior version prefixed the relation name into this string (e.g.
+      // "lead_collaborators.user_id.in.(...)") and passed the whole thing to
+      // a plain `.or(filters)` call. That LOOKS like valid PostgREST
+      // "table.column" logic-tree syntax but the real parser rejects it
+      // (PGRST100 "failed to parse logic tree ((lead_collaborators.user_id
+      // .in.(...))))") the moment the query actually runs — caught in
+      // production, not by any test, because nothing executed the generated
+      // query against a real Postgres/PostgREST instance. The caller
+      // (applyConditionToBuilder / applyOrConditions below) is responsible
+      // for passing `{ referencedTable: field.source.relation }` to `.or()`
+      // whenever the predicate came from this branch — that option is the
+      // correct, and only, way postgrest-js supports filtering an embedded
+      // resource via `.or()`.
+      return renderConditionPredicate(field.source.column, field, cond);
     }
     case "virtual":
       // The field owns its own translation (e.g. status -> stage_id ?? status).
@@ -516,6 +537,9 @@ function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: F
   // AND this is a no-op either way; the drop only matters for applyOrConditions
   // below, but the rule lives at render time so it's uniform everywhere.
   if (predicate === null) return builder;
+  if (field.source.kind === "embed") {
+    return builder.or(predicate, { referencedTable: field.source.relation });
+  }
   return builder.or(predicate);
 }
 
@@ -528,20 +552,45 @@ function applyAndConditions<B extends QueryBuilder>(builder: B, registry: FieldR
 // A true OR clause cannot be expressed as separate builder calls (those AND
 // together) — every condition in the clause is rendered to a predicate string
 // and combined into ONE `.or(...)` call.
+//
+// Embed-kind conditions (Collaborators today; any future relation field) need
+// `{ referencedTable }` on that single `.or()` call — see the module's
+// QueryBuilder doc comment. That option scopes the WHOLE call to one table,
+// so an OR group can only ever reference the base table OR exactly one
+// embedded relation, never a mix — postgrest-js has no way to express
+// "table.column OR otherTable.column" in one filter. checkOrGroupEmbedMix()
+// (used by planFilter, the route's up-front 422 gate) rejects that shape
+// before a request ever reaches here; this function's own throw is the
+// backstop for any caller that invokes compileFilter without going through
+// planFilter first (see src/lib/sms/audience.ts).
 function applyOrConditions<B extends QueryBuilder>(builder: B, registry: FieldRegistry, conditions: FilterCondition[], ctx: CompileCtx): B {
   if (conditions.length === 0) return builder;
-  const parts = conditions
-    .map((cond) => {
-      const field = resolveAndValidate(registry, cond);
-      return renderCondition(field, cond, ctx);
-    })
+
+  const resolved = conditions.map((cond) => ({ cond, field: resolveAndValidate(registry, cond) }));
+  const embedRelations = new Set(
+    resolved
+      .filter(({ field }) => field.source.kind === "embed")
+      .map(({ field }) => (field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation)
+  );
+  const hasNonEmbed = resolved.some(({ field }) => field.source.kind !== "embed");
+  if (embedRelations.size > 1 || (embedRelations.size === 1 && hasNonEmbed)) {
+    throw new FilterCompileError(
+      "an OR group cannot mix a relation-filtered field (e.g. Collaborators) with a different table's field, or reference more than one relation — combine with AND instead, or keep the OR group to a single relation",
+      "unsupported"
+    );
+  }
+
+  const parts = resolved
+    .map(({ field, cond }) => renderCondition(field, cond, ctx))
     // §0 fix: a null leg contributes nothing and must be dropped, never joined
     // in as a tautology — or(<dropped>, X) must compile to just X, not to
     // something that matches every row. If every leg drops, the whole group
     // contributes nothing (no .or() call at all), not `or()` of nothing.
     .filter((p): p is string => p !== null);
   if (parts.length === 0) return builder;
-  return builder.or(or(...parts));
+
+  const referencedTable = embedRelations.size === 1 ? [...embedRelations][0] : undefined;
+  return referencedTable ? builder.or(or(...parts), { referencedTable }) : builder.or(or(...parts));
 }
 
 /**
@@ -630,6 +679,32 @@ function checkCondition(
   if (field.source.kind === "embed") embeds.add(field.source.embedSelect);
 }
 
+// Mirrors applyOrConditions' own throw (compile.ts) — an OR group can only
+// ever target the base table OR exactly one embedded relation (postgrest-js's
+// `referencedTable` option on `.or()` scopes the WHOLE call to one table),
+// never a mix. Checked here too, group-level, so a caller like the leads
+// route gets one clean 422 up front instead of an uncaught throw out of
+// compileFilter later. Skips conditions checkCondition already flagged
+// (unknown/inaccessible field) — no point reporting the same condition twice.
+function checkOrGroupEmbedMix(conditions: FilterCondition[], registry: FieldRegistry, errors: Record<string, string[]>): void {
+  if (conditions.length < 2) return;
+  const relations = new Set<string>();
+  let hasNonEmbed = false;
+  for (const cond of conditions) {
+    const field = registry[cond.field];
+    if (!field) continue;
+    if (field.source.kind === "embed") relations.add(field.source.relation);
+    else hasNonEmbed = true;
+  }
+  if (relations.size > 1 || (relations.size === 1 && hasNonEmbed)) {
+    for (const cond of conditions) {
+      (errors[cond.field] ??= []).push(
+        "an OR group cannot mix a relation-filtered field (e.g. Collaborators) with a different table's field, or reference more than one relation"
+      );
+    }
+  }
+}
+
 export function planFilter(tree: FilterTree, registry: FieldRegistry, ctx: CompileCtx): PlanFilterResult {
   const errors: Record<string, string[]> = {};
   const embeds = new Set<string>();
@@ -637,6 +712,11 @@ export function planFilter(tree: FilterTree, registry: FieldRegistry, ctx: Compi
   for (const cond of tree.conditions) checkCondition(cond, registry, ctx, errors, embeds);
   for (const group of tree.groups ?? []) {
     for (const cond of group.conditions) checkCondition(cond, registry, ctx, errors, embeds);
+  }
+
+  if (tree.conjunction === "or") checkOrGroupEmbedMix(tree.conditions, registry, errors);
+  for (const group of tree.groups ?? []) {
+    if (group.conjunction === "or") checkOrGroupEmbedMix(group.conditions, registry, errors);
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };

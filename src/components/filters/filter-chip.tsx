@@ -35,8 +35,9 @@ export function FilterChip({ field, condition, options, onChange, onRemove }: Fi
   }
 
   // Same tinted-background/colored-text/tinted-border technique already used
-  // for stage badges elsewhere in the app (columns-registry.tsx) — reusing
-  // one real color, not inventing a new palette.
+  // for stage badges elsewhere in the app (columns-registry.tsx) — every chip
+  // gets it now (resolveChipColor always returns a color: a real per-value
+  // one when unambiguous, DEFAULT_CHIP_COLOR otherwise), not just Status/Tags.
   const color = resolveChipColor(condition, options);
 
   return (
@@ -44,16 +45,11 @@ export function FilterChip({ field, condition, options, onChange, onRemove }: Fi
       <div
         // rounded-[4px] matches the Tag pill and Stage badge elsewhere in the
         // app exactly (columns-registry.tsx, stage-selector.tsx) — not rounded-md.
-        className={`inline-flex h-7 shrink-0 items-center gap-1 rounded-[4px] border pl-2.5 pr-1 text-xs ${color ? "" : "border-input bg-background"}`}
-        style={color ? { backgroundColor: `${color}20`, borderColor: `${color}66` } : undefined}
+        className="inline-flex h-7 shrink-0 items-center gap-1 rounded-[4px] border pl-2.5 pr-1 text-xs"
+        style={{ backgroundColor: `${color}20`, borderColor: `${color}66` }}
       >
         <PopoverTrigger asChild>
-          <button
-            type="button"
-            data-testid="filter-chip"
-            className={`font-medium hover:underline ${color ? "" : "text-foreground"}`}
-            style={color ? { color } : undefined}
-          >
+          <button type="button" data-testid="filter-chip" className="font-medium hover:underline" style={{ color }}>
             {formatChipLabel(field, condition, options)}
           </button>
         </PopoverTrigger>
