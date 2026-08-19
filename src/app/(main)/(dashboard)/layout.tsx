@@ -74,6 +74,7 @@ export default async function DashboardLayout({
     tenantData.tenant.industry_id,
     tenantData.role,
     tenantData.permissions,
+    tenantData.entitlements as unknown as Record<string, unknown>,
   );
   const allowedNavKeys =
     tenantData.permissions.allowedNavKeys === null

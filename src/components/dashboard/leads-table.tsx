@@ -18,7 +18,10 @@ import { TOOLBAR_BTN } from "@/components/dashboard/leads/toolbar-btn";
 // Advanced filters (Phase 3, docs/ADVANCED-FILTERS-BRIEF.md) — flag-gated via
 // NEXT_PUBLIC_ADVANCED_FILTERS. The legacy FilterMenu/FilterChips imports above
 // stay as the flag-off fallback; see their @deprecated JSDoc.
-import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
+import { AdvancedFilterBar, DEFAULT_MAX_CONDITIONS } from "@/components/filters/advanced-filter-bar";
+import { AddFilterButton } from "@/components/filters/add-filter-button";
+import { useFilterOptions } from "@/components/filters/use-filter-options";
+import type { FilterCondition } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/filters/types";
 import { useAdvancedFilters } from "@/lib/filters/use-advanced-filters";
 import { leadFields } from "@/lib/filters/registry/leads";
@@ -271,6 +274,75 @@ function withResizedTd(tdElement: ReactNode, width: number | undefined): ReactNo
   });
 }
 
+// Extracted so the identical popover can render in two different toolbar
+// slots — row 1 (legacy/flag-off) or the new filters+sort row (advanced
+// mode) — without duplicating the JSX.
+function SortPopover({
+  sortField,
+  sortDirection,
+  setSortField,
+  setSortDirection,
+  align = "start",
+}: {
+  sortField: SortField;
+  sortDirection: "asc" | "desc";
+  setSortField: (field: SortField) => void;
+  setSortDirection: (direction: "asc" | "desc") => void;
+  align?: "start" | "end";
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button type="button" className={TOOLBAR_BTN}>
+          <ArrowUpDown className="h-3 w-3 shrink-0" />
+          Sort
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align={align} className="w-72 p-4">
+        <div className="space-y-4">
+          <p className="text-sm font-medium">Sort by</p>
+          <div className="flex items-center gap-2">
+            {/* Field selector */}
+            <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
+              <SelectTrigger className="flex-1 h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="activity">Last activity</SelectItem>
+                <SelectItem value="created">Date created</SelectItem>
+                <SelectItem value="updated">Last updated</SelectItem>
+                <SelectItem value="name">Name</SelectItem>
+                <SelectItem value="email">Email</SelectItem>
+              </SelectContent>
+            </Select>
+            {/* Direction toggle */}
+            <div className="flex rounded-md border shrink-0">
+              <button
+                type="button"
+                onClick={() => setSortDirection("desc")}
+                className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
+                  sortDirection === "desc" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                }`}
+              >
+                Z→A
+              </button>
+              <button
+                type="button"
+                onClick={() => setSortDirection("asc")}
+                className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
+                  sortDirection === "asc" ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted"
+                }`}
+              >
+                A→Z
+              </button>
+            </div>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function LeadsTable({
   leads,
   serverPaginated = false,
@@ -367,7 +439,15 @@ export function LeadsTable({
     () => leadFields({ tz: "UTC", now: new Date(0), industryId: industryId ?? null, permissions: {} } satisfies CompileCtx),
     [industryId]
   );
-  const advancedFilters = useAdvancedFilters(advancedFilterRegistry);
+  // Scopes cross-navigation filter persistence (see use-advanced-filters.ts)
+  // per tenant + user + list/funnel, so e.g. a "Prospects" filter doesn't
+  // reappear under "Qualified", and one tenant/user's saved filter can never
+  // leak to another on a shared browser. null (no tenantId/currentUserId yet,
+  // e.g. still loading) opts out of persistence for that render — never
+  // saves/restores under an empty-string key.
+  const advancedFiltersPersistKey =
+    tenantId && currentUserId ? `${tenantId}:${currentUserId}:${activeListSlug ?? activeFunnelKey ?? "all"}` : null;
+  const advancedFilters = useAdvancedFilters(advancedFilterRegistry, advancedFiltersPersistKey);
   const advancedFiltersEnabled = process.env.NEXT_PUBLIC_ADVANCED_FILTERS === "1";
   const advancedFilterActive = advancedFiltersEnabled && !isEmptyTree(advancedFilters.tree);
 
@@ -398,6 +478,10 @@ export function LeadsTable({
   const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [isAssigning, setIsAssigning] = useState(false);
   const [assignTo, setAssignTo] = useState<string>("");
+  // Staging (Leads Organise) only — Branch + Stage are required to leave staging via
+  // Assign; blank Assigned To falls back to the selected branch's manager (§4.2 fix).
+  const [assignBranchId, setAssignBranchId] = useState<string>("");
+  const [assignListId, setAssignListId] = useState<string>("");
   const [addLeadOpen, setAddLeadOpen] = useState(false);
   const [previewLeadId, setPreviewLeadId] = useState<string | null>(null);
   const [branchAssignDialogOpen, setBranchAssignDialogOpen] = useState(false);
@@ -683,9 +767,18 @@ export function LeadsTable({
   // filter params minus pagination/sort, so this reflects every OTHER active filter —
   // matching current cross-filter behavior — via ONE extra opt-in round-trip that asks
   // for both dimensions at once (?facets=source,assignee) rather than two.
+  // Same gate advancedVisibleFieldKeys uses to hide the assignees/collaborators axes
+  // entirely for non-admin/non-team-scoped users — no point fetching either facet
+  // for someone who can't see the dropdown.
   const wantsAssigneeFacet = isAdmin || isTeamScoped;
+  const wantsCollaboratorFacet = isAdmin || isTeamScoped;
+  // Destinations only exists as a field for education_consultancy (registry/leads.ts
+  // Gap 4) — no point requesting a fourth dimension every other tenant can't pick.
+  const wantsDestinationFacet = industryId === "education_consultancy";
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
+  const [serverDestinationFacet, setServerDestinationFacet] = useState<{ name: string; count: number }[] | null>(null);
   const facetFetchParams = useMemo(() => {
     if (!serverPaginated || isStagingView) return null; // staging view isn't serverPaginated today
     const params = buildFetchParams(1, itemsPerPage, false);
@@ -697,14 +790,22 @@ export function LeadsTable({
     params.delete("count");
     // A single "source" stays the pre-existing single-dimension request (and response
     // shape) byte-for-byte — see route.ts's legacySingleSourceFacet branch.
-    params.set("facets", wantsAssigneeFacet ? "source,assignee" : "source");
+    const dims = [
+      "source",
+      wantsAssigneeFacet && "assignee",
+      wantsCollaboratorFacet && "collaborator",
+      wantsDestinationFacet && "destination",
+    ].filter(Boolean);
+    params.set("facets", dims.join(","));
     return params;
-  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet]);
+  }, [serverPaginated, isStagingView, buildFetchParams, itemsPerPage, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
   useEffect(() => {
     if (!facetFetchParams) {
       setServerSourceFacet(null);
       setServerAssigneeFacet(null);
+      setServerCollaboratorFacet(null);
+      setServerDestinationFacet(null);
       return;
     }
     const controller = new AbortController();
@@ -715,10 +816,12 @@ export function LeadsTable({
           // Legacy single-dimension shape (facets=source alone).
           facet?: string;
           options?: { name: string; count: number }[];
-          // New multi-dimension shape (facets=source,assignee or facets=assignee).
+          // New multi-dimension shape (facets=source,assignee,collaborator,destination or a subset).
           facets?: {
             source?: { options: { name: string; count: number }[] } | null;
             assignee?: { options: { name: string; count: number }[] } | null;
+            collaborator?: { options: { name: string; count: number }[] } | null;
+            destination?: { options: { name: string; count: number }[] } | null;
           } | null;
         };
       }) => {
@@ -726,9 +829,30 @@ export function LeadsTable({
         if (body.data?.facet === "source") {
           setServerSourceFacet(body.data.options ?? []);
           setServerAssigneeFacet(null);
+          setServerCollaboratorFacet(null);
+          setServerDestinationFacet(null);
+        } else if (body.data?.facets === null || body.data?.facets === undefined) {
+          // route.ts returns `facets: null` when the active ?f= tree isn't losslessly
+          // expressible into lead_aggregates() (treeToAggregateParams §E — e.g. any
+          // `contains`/`starts_with` text filter, a field outside its narrow param
+          // list, or the top-level AND/OR toggle set to OR). That is NOT "zero people
+          // match" — it's "no server number for this tree at all." Setting the facet
+          // states to `[]` here (as if the server had answered) would make sources/
+          // counselorCounts/collaboratorCounts below treat an EMPTY-BUT-TRUTHY array as
+          // authoritative and permanently blank the Source/Assigned-To/Collaborators
+          // pickers for as long as that condition stays in the tree — you couldn't even
+          // add a new filter on those axes. `null` is the one value those memos already
+          // treat as "no server answer, use the client-computed (page-scoped) fallback"
+          // — the same path they take before the very first fetch resolves.
+          setServerSourceFacet(null);
+          setServerAssigneeFacet(null);
+          setServerCollaboratorFacet(null);
+          setServerDestinationFacet(null);
         } else {
-          setServerSourceFacet(body.data?.facets?.source?.options ?? []);
-          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data?.facets?.assignee?.options ?? []) : null);
+          setServerSourceFacet(body.data.facets.source?.options ?? []);
+          setServerAssigneeFacet(wantsAssigneeFacet ? (body.data.facets.assignee?.options ?? []) : null);
+          setServerCollaboratorFacet(wantsCollaboratorFacet ? (body.data.facets.collaborator?.options ?? []) : null);
+          setServerDestinationFacet(wantsDestinationFacet ? (body.data.facets.destination?.options ?? []) : null);
         }
       })
       .catch((err: unknown) => {
@@ -738,7 +862,7 @@ export function LeadsTable({
         console.error("Failed to load lead facets", err);
       });
     return () => controller.abort();
-  }, [facetFetchParams, wantsAssigneeFacet]);
+  }, [facetFetchParams, wantsAssigneeFacet, wantsCollaboratorFacet, wantsDestinationFacet]);
 
   const sources = useMemo(
     () => (serverSourceFacet ? serverSourceFacet.map((o) => o.name) : clientSources),
@@ -798,8 +922,12 @@ export function LeadsTable({
     return Array.from(c.entries());
   }, [memberMap]);
 
-  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator itself
-  const collaboratorCounts = useMemo(() => {
+  // Per-collaborator counts — cross-filtered: reflects all active filters except collaborator
+  // itself. Client-side fallback for surfaces that aren't serverPaginated, computed from
+  // `localLeads` only (the current 25-row server page) — same page-scoping caveat
+  // clientCounselorCounts above carries, and the one migration 207 / getCollaboratorFacet
+  // closes for the serverPaginated table (see collaboratorCounts below).
+  const clientCollaboratorCounts = useMemo(() => {
     const m = new Map<string, number>();
     const now = Date.now();
     const dayMs = 24 * 60 * 60 * 1000;
@@ -832,6 +960,40 @@ export function LeadsTable({
     });
     return m;
   }, [localLeads, leadCollaborators, sourceFilter, counselorFilter, tagFilter, statusFilter, formFilter, createdFilter, isStagingView]);
+
+  // Server-computed Collaborators facet (serverPaginated only, migration 207) — exact,
+  // tenant-wide counts via lead_aggregates()'s new `collaborator` dimension, replacing
+  // the 25-row-page-scoped clientCollaboratorCounts above for the surface that matters
+  // (the /leads Collaborators picker in both the Advanced Filter bar and the legacy
+  // toolbar dropdown). Mirrors counselorCounts' server-preferred-with-client-fallback shape.
+  const collaboratorCounts = useMemo(() => {
+    if (!serverCollaboratorFacet) return clientCollaboratorCounts;
+    return new Map(serverCollaboratorFacet.map((o) => [o.name, o.count]));
+  }, [serverCollaboratorFacet, clientCollaboratorCounts]);
+
+  // Per-destination counts — client-side fallback for non-serverPaginated surfaces
+  // (and the brief moment before the first facet fetch resolves), computed straight
+  // off `l.destinations` (no separate map to join, unlike collaborators). Page-scoped
+  // like every client-side fallback above — migration 208's `destination` dimension
+  // (see destinationCounts below) is what actually matters for the /leads picker.
+  const clientDestinationCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    localLeads.forEach((l) => {
+      (l.destinations ?? []).forEach((dest) => {
+        if (!dest) return;
+        m.set(dest, (m.get(dest) ?? 0) + 1);
+      });
+    });
+    return m;
+  }, [localLeads]);
+
+  // Server-computed Destinations facet (serverPaginated + education_consultancy only,
+  // migration 208) — closes the gap where "Destinations" had NO option source at all
+  // (registry/leads.ts Gap 3): nothing previously fed this field's picker any values.
+  const destinationCounts = useMemo(() => {
+    if (!serverDestinationFacet) return clientDestinationCounts;
+    return new Map(serverDestinationFacet.map((o) => [o.name, o.count]));
+  }, [serverDestinationFacet, clientDestinationCounts]);
 
   // Secondary toolbar filters (form/counselor/collaborator/source/tag/created/
   // prospect industry). serverPaginated mode sends these as query params (buildFetchParams
@@ -1030,7 +1192,10 @@ export function LeadsTable({
     }
     return [
       { value: "all", label: "All Status", description: "Show all leads" },
-      ...listStages.map((s) => ({ value: s.slug, label: s.name })),
+      // Real stage color, threaded through so the advanced-filter chip can
+      // render the same tinted badge the status column already does
+      // elsewhere — not a new color, the stage's own.
+      ...listStages.map((s) => ({ value: s.slug, label: s.name, color: s.color })),
     ];
   }, [leadLists, activeListSlug, stages]);
 
@@ -1084,6 +1249,50 @@ export function LeadsTable({
     const listPool = allLeadLists ?? leadLists;
     return listSlug ? (listPool.find((l) => l.slug === listSlug)?.id ?? null) : null;
   }, [assignTo, positionSlugMap, leadLists, allLeadLists]);
+
+  // Branch-manager options are locked to their own branch (server rejects any other —
+  // bulk/route.ts §4.2). Tenants without the multi-branch feature have branches=[]; the
+  // Branch/Stage requirement only applies when there's actually a branch to pick.
+  const assignDialogBranches = isTeamScoped && userBranchId
+    ? branches.filter((b) => b.id === userBranchId)
+    : branches;
+  const assignBranchRequired = isStagingView && assignDialogBranches.length > 0;
+  const assignDialogPipelineLists = leadLists.filter((l) => !l.is_staging && !l.is_archive);
+
+  // Staging Assign dialog: once a branch + stage are picked, narrow "Assigned to" down
+  // to that stage's frontline position within that branch, plus the branch manager and
+  // admin/owner — mirrors the Assignee facet's allowedAssigneePositionsForStage gate.
+  const assignDialogStageSlug = assignListId
+    ? assignDialogPipelineLists.find((l) => l.id === assignListId)?.slug ?? null
+    : null;
+  const assignDialogAllowedPositions = assignDialogStageSlug
+    ? allowedAssigneePositionsForStage(assignDialogStageSlug, role, currentUserPositionSlug)
+    : null;
+  const assignDialogBranchManagerId = assignBranchId
+    ? assignDialogBranches.find((b) => b.id === assignBranchId)?.manager_user_id ?? null
+    : null;
+  const assignDialogMembers = useMemo(() => {
+    const pool = Array.from(
+      new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values(),
+    );
+    if (!assignBranchRequired || !assignBranchId) return pool;
+    return pool.filter((m) => {
+      if (m.role === "owner" || m.role === "admin") return true;
+      if (m.user_id === assignDialogBranchManagerId) return true;
+      if (memberBranchMap[m.user_id] !== assignBranchId) return false;
+      if (!assignDialogAllowedPositions) return true;
+      const posSlug = positionSlugMap?.[m.user_id] ?? null;
+      return !!posSlug && assignDialogAllowedPositions.has(posSlug);
+    });
+  }, [assignableMembers, teamMembers, assignBranchRequired, assignBranchId, assignDialogBranchManagerId, memberBranchMap, assignDialogAllowedPositions, positionSlugMap]);
+
+  // Narrowing branch/stage can drop the previously-picked assignee out of the list — clear
+  // it so a stale, no-longer-visible selection can't silently ride along on submit.
+  useEffect(() => {
+    if (assignBranchRequired && assignTo && !assignDialogMembers.some((m) => m.user_id === assignTo)) {
+      setAssignTo("");
+    }
+  }, [assignBranchRequired, assignTo, assignDialogMembers]);
 
   function toggleSelectAll() {
     if (allSelected) {
@@ -1162,6 +1371,10 @@ export function LeadsTable({
       toast.error("No leads selected");
       return;
     }
+    if (assignBranchRequired && (!assignBranchId || !assignListId || !assignTo)) {
+      toast.error("Please select a branch, stage, and assignee");
+      return;
+    }
 
     setIsAssigning(true);
     try {
@@ -1173,8 +1386,10 @@ export function LeadsTable({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ids: chunk,
-            assigned_to: assignTo === "unassign" ? null : assignTo,
-            ...(assignAutoListId ? { list_id: assignAutoListId } : {}),
+            ...(assignTo && { assigned_to: assignTo === "unassign" ? null : assignTo }),
+            ...(assignBranchRequired
+              ? { branch_id: assignBranchId, list_id: assignListId }
+              : (assignAutoListId ? { list_id: assignAutoListId } : {})),
           }),
         });
         const data = await response.json();
@@ -1189,6 +1404,8 @@ export function LeadsTable({
       setSelectedIds(new Set());
       setAssignDialogOpen(false);
       setAssignTo("");
+      setAssignBranchId("");
+      setAssignListId("");
       router.refresh();
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to assign leads");
@@ -1926,8 +2143,38 @@ export function LeadsTable({
   }, [isAdmin, isTeamScoped, showItAgencyFields, showTags, hasMultipleForms]);
 
   const advancedVisibleFields = useMemo(
-    () => Object.values(advancedFilterRegistry).filter((f) => !advancedVisibleFieldKeys.has(f.key)),
-    [advancedFilterRegistry, advancedVisibleFieldKeys]
+    () =>
+      Object.values(advancedFilterRegistry).filter(
+        (f) => !advancedVisibleFieldKeys.has(f.key) && (!f.industries || (!!industryId && f.industries.includes(industryId)))
+      ),
+    [advancedFilterRegistry, advancedVisibleFieldKeys, industryId]
+  );
+
+  // Values currently selected for `fieldKey` across the advanced filter tree (root +
+  // groups). Used below so a Collaborator/Assigned-To chip's label never degrades to
+  // a raw uuid: those two option lists intentionally hide zero-count people (matching
+  // the legacy toolbar), so a filter combination that leaves an already-selected
+  // person at 0 matching leads would otherwise drop them out of `options` entirely —
+  // formatChipLabel's optionLabel() falls back to the raw stored value when a value
+  // isn't found in `options`, and unlike source/tags/destinations (whose raw value is
+  // already a readable string), assignees/collaborators store a uuid. The filter
+  // itself was never wrong — only that one chip's label. Groups have no UI path to
+  // populate yet (advanced-filter-bar.tsx), scanned anyway since it costs nothing.
+  const selectedValuesForField = useCallback(
+    (fieldKey: string): string[] => {
+      const fromConditions = (conds: FilterCondition[]) =>
+        conds
+          .filter((c) => c.field === fieldKey)
+          .flatMap((c): string[] => {
+            if (Array.isArray(c.value)) return c.value.map(String);
+            return c.value !== undefined ? [String(c.value)] : [];
+          });
+      return [
+        ...fromConditions(advancedFilters.tree.conditions),
+        ...(advancedFilters.tree.groups ?? []).flatMap((g) => fromConditions(g.conditions)),
+      ];
+    },
+    [advancedFilters.tree]
   );
 
   // Reuses the exact option arrays the legacy filterDefs above compute — same
@@ -1936,39 +2183,91 @@ export function LeadsTable({
   // zero-count people, matching the legacy filterDefs' "counselor"/"collaborator"
   // entries above byte-for-byte — the bar must not ship with a visible count
   // regression against the toolbar it replaces.
-  const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(
-    () => ({
+  const advancedFilterOptionOverrides: Partial<Record<string, FilterOption[]>> = useMemo(() => {
+    const selectedAssignees = new Set(selectedValuesForField("assignees"));
+    const selectedCollaborators = new Set(selectedValuesForField("collaborators"));
+    const unassignedCount = counselorCounts.get("unassigned") ?? 0;
+
+    return {
       status: statusFilterOptions,
       source: sources.map((s) => ({ value: s, label: `${s} (${(sourceCounts.get(s) ?? 0).toLocaleString()})` })),
       assignees: [
-        ...((counselorCounts.get("unassigned") ?? 0) > 0
-          ? [{ value: "unassigned", label: `Unassigned (${(counselorCounts.get("unassigned") ?? 0).toLocaleString()})` }]
+        ...(unassignedCount > 0 || selectedAssignees.has("unassigned")
+          ? [{ value: "unassigned", label: `Unassigned (${unassignedCount.toLocaleString()})` }]
           : []),
         ...counselors
-          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0)
+          // A currently-selected assignee stays offered even at 0 — see
+          // selectedValuesForField above — so its chip keeps a real name.
+          .filter(([userId]) => (counselorCounts.get(userId) ?? 0) > 0 || selectedAssignees.has(userId))
           .map(([userId, email]) => ({
             value: userId,
             label: `${memberNames[userId] || email.split("@")[0]} (${(counselorCounts.get(userId) ?? 0).toLocaleString()})`,
           })),
       ],
-      // Collaborator counts stay client-side, computed from `localLeads` (the current
-      // server page only) — deliberately, not silently: `lead_collaborators` is a join
-      // table with no existing `lead_aggregates()` dimension, and adding one is a
-      // bigger change than this addendum covers (ADVANCED-FILTERS-BRIEF Phase 3
-      // addendum §C). Being explicitly page-scoped-and-labelled beats shipping a
-      // second, silently different meaning of the same-looking number.
+      // Collaborator counts: server-computed, tenant-wide (migration 207's
+      // `collaborator` dimension on lead_aggregates()) when serverPaginated, falling
+      // back to the page-scoped client computation otherwise — see collaboratorCounts
+      // above. Was purely client-side/page-scoped until this was closed as a
+      // production-readiness gap; kept the owner/admin exclusion, an independent
+      // product decision (they're not offered as assignable collaborators) unrelated
+      // to where the count comes from. A currently-selected collaborator stays offered
+      // even at 0 (same reasoning as assignees above) — deliberately NOT exempted from
+      // the owner/admin exclusion though: if an owner/admin id is already selected
+      // (e.g. from a stale/shared filter link), showing their real name here would
+      // contradict "owners/admins are never offered as collaborators" everywhere else
+      // this list is used; the uuid fallback is the lesser inconsistency in that
+      // specific, rare case.
       collaborators: counselors
-        .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0 && memberRoleMap[userId] !== "owner" && memberRoleMap[userId] !== "admin")
+        .filter(
+          ([userId]) =>
+            ((collaboratorCounts.get(userId) ?? 0) > 0 || selectedCollaborators.has(userId)) &&
+            memberRoleMap[userId] !== "owner" &&
+            memberRoleMap[userId] !== "admin"
+        )
         .map(([userId, email]) => ({
           value: userId,
           label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
         })),
-      tags: [{ value: "student", label: "Student" }],
+      // #1d4ed8 matches TAG_CLASSES_BY_VALUE's blue-700 in columns-registry.tsx
+      // (the existing Student/Other tag toggle) — same color, same meaning.
+      tags: [{ value: "student", label: "Student", color: "#1d4ed8" }],
       industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
       form: formEntries.map(([id, name]) => ({ value: id, label: name })),
-    }),
-    [statusFilterOptions, sources, sourceCounts, counselorCounts, counselors, memberNames, collaboratorCounts, memberRoleMap, formEntries]
-  );
+      // Destinations: server-computed, tenant-wide (migration 208's `destination`
+      // dimension) when serverPaginated + education_consultancy, else the client
+      // fallback. Previously had NO entry here at all — this key didn't exist, so
+      // the field's value picker rendered permanently empty (see destinationCounts).
+      // No selected-value carve-out needed here (unlike assignees/collaborators) —
+      // a destination's raw value IS its display string (e.g. "UK"), so falling back
+      // to the raw value on a 0-count exclusion is already readable, not a uuid.
+      destinations: Array.from(destinationCounts.entries())
+        .filter(([, count]) => count > 0)
+        .sort((a, b) => b[1] - a[1])
+        .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
+    };
+  }, [
+    statusFilterOptions,
+    sources,
+    sourceCounts,
+    counselorCounts,
+    counselors,
+    memberNames,
+    collaboratorCounts,
+    memberRoleMap,
+    formEntries,
+    destinationCounts,
+    selectedValuesForField,
+  ]);
+
+  // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while
+  // its resulting chips render in row 2's AdvancedFilterBar (hideAddButton) —
+  // both need the same option-resolving function, so it's hoisted here rather
+  // than left inside AdvancedFilterBar's own internal instance.
+  const { getOptions: advancedGetOptions } = useFilterOptions(advancedFilterOptionOverrides);
+
+  function handleAddAdvancedFilter(condition: FilterCondition) {
+    advancedFilters.setTree({ ...advancedFilters.tree, conditions: [...advancedFilters.tree.conditions, condition] });
+  }
 
   return (
     <div className="flex flex-1 min-h-0 gap-0">
@@ -2034,78 +2333,29 @@ export function LeadsTable({
 
           <div className="flex-1" />
 
-          {/* Filters — advanced bar (field->operator->value, stacked chips) behind the
-              flag; legacy FilterMenu dropdown otherwise. Both paths must keep working. */}
-          {advancedFiltersEnabled ? (
-            <AdvancedFilterBar
-              entity="leads"
-              fields={advancedVisibleFields}
-              value={advancedFilters.tree}
-              onChange={advancedFilters.setTree}
-              allowGroups={false}
-              optionOverrides={advancedFilterOptionOverrides}
-            />
-          ) : (
+          {/* Filter trigger — stays in row 1 in both modes, matching where it's
+              always lived. Legacy: the FilterMenu button itself. Advanced: just
+              the "+ Add filter" trigger — the resulting chips render in row 2's
+              AdvancedFilterBar (hideAddButton), not here. */}
+          {!advancedFiltersEnabled ? (
             <FilterMenu filters={filterDefs} activeCount={activeFiltersCount} onClearAll={clearFilters} />
+          ) : (
+            <AddFilterButton
+              fields={advancedVisibleFields}
+              getOptions={advancedGetOptions}
+              onAdd={handleAddAdvancedFilter}
+              disabled={advancedFilters.tree.conditions.length >= DEFAULT_MAX_CONDITIONS}
+            />
           )}
 
-          {/* Sort */}
-          <Popover>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={TOOLBAR_BTN}
-              >
-                <ArrowUpDown className="h-3 w-3 shrink-0" />
-                Sort
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-4">
-              <div className="space-y-4">
-                <p className="text-sm font-medium">Sort by</p>
-                <div className="flex items-center gap-2">
-                  {/* Field selector */}
-                  <Select value={sortField} onValueChange={(v) => setSortField(v as SortField)}>
-                    <SelectTrigger className="flex-1 h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="activity">Last activity</SelectItem>
-                      <SelectItem value="created">Date created</SelectItem>
-                      <SelectItem value="updated">Last updated</SelectItem>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="email">Email</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {/* Direction toggle */}
-                  <div className="flex rounded-md border shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setSortDirection("desc")}
-                      className={`px-3 py-2 text-xs font-medium transition-colors whitespace-nowrap ${
-                        sortDirection === "desc"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted"
-                      }`}
-                    >
-                      Z→A
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSortDirection("asc")}
-                      className={`px-3 py-2 text-xs font-medium transition-colors border-l whitespace-nowrap ${
-                        sortDirection === "asc"
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-background hover:bg-muted"
-                      }`}
-                    >
-                      A→Z
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </PopoverContent>
-          </Popover>
+          {/* Sort — row 1 in both modes, next to the filter trigger. */}
+          <SortPopover
+            sortField={sortField}
+            sortDirection={sortDirection}
+            setSortField={setSortField}
+            setSortDirection={setSortDirection}
+            align="end"
+          />
 
           {/* Export — owner/admin always; members only if their position grants it */}
           {canExport && (
@@ -2132,9 +2382,29 @@ export function LeadsTable({
           )}
         </div>
 
+        {/* Chips row — advanced mode, active filters only. Sort moved back to row 1;
+            this row now only ever holds chips + Clear all, so — like the legacy
+            chips row below — it stays hidden entirely until there's something to
+            show, rather than sitting there empty with just a divider line. */}
+        {advancedFilterActive && (
+          <>
+            <div className="h-px bg-border" />
+            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+              <AdvancedFilterBar
+                entity="leads"
+                fields={advancedVisibleFields}
+                value={advancedFilters.tree}
+                onChange={advancedFilters.setTree}
+                allowGroups={false}
+                optionOverrides={advancedFilterOptionOverrides}
+                hideAddButton
+              />
+            </div>
+          </>
+        )}
+
         {/* Chips row — active filters only, replaces the old always-visible pill row.
-            Advanced mode renders its own chips inline in the toolbar row above
-            (AdvancedFilterBar's FilterChipRow) — this legacy row is flag-off only. */}
+            Flag-off (legacy) only — advanced mode's chips render in the row above. */}
         {!advancedFiltersEnabled && activeFiltersCount > 0 && (
           <>
             <div className="h-px bg-border" />
@@ -2194,7 +2464,7 @@ export function LeadsTable({
                 Assign
               </button>
             )}
-            {isAdmin && showBranches && branches.length > 0 && (
+            {isAdmin && !isStagingView && showBranches && branches.length > 0 && (
               <button
                 onClick={() => setBranchAssignDialogOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded transition-colors"
@@ -2502,40 +2772,79 @@ export function LeadsTable({
       {/* Bulk Assign Dialog */}
       <Dialog open={assignDialogOpen} onOpenChange={(open) => {
         setAssignDialogOpen(open);
-        if (!open) setAssignTo("");
+        if (!open) { setAssignTo(""); setAssignBranchId(""); setAssignListId(""); }
       }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Assign {selectedCount} lead{selectedCount !== 1 ? "s" : ""}</DialogTitle>
             <DialogDescription>
-              Select a team member to assign the selected leads to, or unassign them.
+              {assignBranchRequired
+                ? "Select a branch, stage, and assignee."
+                : "Select a team member to assign the selected leads to, or unassign them."}
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
-            <Select value={assignTo} onValueChange={setAssignTo}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select team member..." />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="unassign">
-                  <span className="text-muted-foreground">Unassign (remove assignment)</span>
-                </SelectItem>
-                {Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values())
-                  .map((member) => (
-                    <SelectItem key={member.user_id} value={member.user_id}>
-                      <div className="flex items-center gap-2">
-                        <span>{member.name}</span>
-                        <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {assignAutoListId && (
-              <p className="mt-2 text-xs text-blue-600 font-medium">
-                → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
-              </p>
+          <div className="py-4 space-y-3">
+            {assignBranchRequired && (
+              <>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Branch (required)</p>
+                  <Select value={assignBranchId} onValueChange={setAssignBranchId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select branch..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignDialogBranches.map((b) => (
+                        <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-sm font-medium text-gray-700">Stage (required)</p>
+                  <Select value={assignListId} onValueChange={setAssignListId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select stage..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {assignDialogPipelineLists.map((l) => (
+                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
             )}
+            <div className="space-y-1.5">
+              {assignBranchRequired && (
+                <p className="text-sm font-medium text-gray-700">Assigned to (required)</p>
+              )}
+              <Select value={assignTo} onValueChange={setAssignTo}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select team member..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {!assignBranchRequired && (
+                    <SelectItem value="unassign">
+                      <span className="text-muted-foreground">Unassign (remove assignment)</span>
+                    </SelectItem>
+                  )}
+                  {(assignBranchRequired ? assignDialogMembers : Array.from(new Map((assignableMembers ?? teamMembers.filter((m) => m.canEditLeads !== false)).map((m) => [m.user_id, m])).values()))
+                    .map((member) => (
+                      <SelectItem key={member.user_id} value={member.user_id}>
+                        <div className="flex items-center gap-2">
+                          <span>{member.name}</span>
+                          <span className="text-xs text-muted-foreground">({memberMeta(member.user_id, member.role)})</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+              {assignAutoListId && !assignBranchRequired && (
+                <p className="mt-2 text-xs text-blue-600 font-medium">
+                  → Will move to: {leadLists.find((l) => l.id === assignAutoListId)?.name}
+                </p>
+              )}
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -2543,6 +2852,8 @@ export function LeadsTable({
               onClick={() => {
                 setAssignDialogOpen(false);
                 setAssignTo("");
+                setAssignBranchId("");
+                setAssignListId("");
               }}
               disabled={isAssigning}
             >
@@ -2550,7 +2861,10 @@ export function LeadsTable({
             </Button>
             <Button
               onClick={handleBulkAssign}
-              disabled={isAssigning || !assignTo}
+              disabled={
+                isAssigning ||
+                (assignBranchRequired ? (!assignBranchId || !assignListId || !assignTo) : !assignTo)
+              }
             >
               {isAssigning ? "Assigning..." : assignTo === "unassign" ? "Unassign" : "Assign"}
             </Button>

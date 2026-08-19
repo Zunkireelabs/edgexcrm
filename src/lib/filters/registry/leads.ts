@@ -86,8 +86,16 @@ function compileAssignees(cond: FilterCondition): string | null {
 // ── location: virtual, city + country combined — no legacy equivalent ──────
 
 function compileLocation(cond: FilterCondition): string {
-  if (cond.op === "is_empty") return and("city.is.null", "country.is.null");
-  if (cond.op === "is_not_empty") return or("city.not.is.null", "country.not.is.null");
+  // Blank-string-inclusive, matching the sibling "city"/"country" FieldDefs
+  // (both text, both emptyIsBlankString: true) — city/country IS NULL alone
+  // previously disagreed with filtering City or Country directly, which also
+  // treats "" as empty.
+  if (cond.op === "is_empty") {
+    return and(or("city.is.null", `city.eq.${pgVal("")}`), or("country.is.null", `country.eq.${pgVal("")}`));
+  }
+  if (cond.op === "is_not_empty") {
+    return or(and("city.not.is.null", `city.neq.${pgVal("")}`), and("country.not.is.null", `country.neq.${pgVal("")}`));
+  }
   const value = String(cond.value);
   const pattern = pgVal(`%${value.replace(/([\\%_])/g, "\\$1")}%`);
   if (cond.op === "contains") return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);
@@ -144,6 +152,11 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "column", column: "created_at" },
       group: "Dates",
       filterable: true,
+      // Same column as "created_at" below — this entry exists only so the
+      // legacy `?created=thisweek`-style URLs (legacy-leads-params.ts) still
+      // resolve. Hidden from the picker so users see one "Created" option,
+      // not two identical ones.
+      hiddenFromPicker: true,
     },
     {
       key: "industry",
@@ -191,6 +204,12 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       emptyIsBlankString: true,
       group: "Education",
       filterable: true,
+      // Education-only — these two fields are meaningless outside education_consultancy
+      // tenants (it_agency/travel_agency leads never populate them). Previously shown
+      // in every tenant's "Add filter" picker regardless of industry (this `industries`
+      // field on FieldDef existed but nothing read it yet — see compile.ts's
+      // checkCondition + leads-table.tsx's advancedVisibleFields for enforcement).
+      industries: ["education_consultancy"],
     },
     {
       key: "destinations",
@@ -199,6 +218,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       source: { kind: "promoted", column: "destinations", jsonb: { column: "custom_fields", path: "countries" } },
       group: "Education",
       filterable: true,
+      industries: ["education_consultancy"],
     },
 
     // ── obvious first-class columns (also folds SORT_COLUMNS in) ─────────

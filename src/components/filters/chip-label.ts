@@ -41,3 +41,33 @@ export function formatChipLabel(field: FieldDef, condition: FilterCondition, opt
   const opPrefix = condition.op === "is" ? "" : ` ${OPERATOR_LABELS[condition.op]}`;
   return `${field.label}${opPrefix}: ${formatValue(condition, options)}`;
 }
+
+// The one real color already established elsewhere in the app —
+// TAG_CLASSES_BY_VALUE's blue-700 (columns-registry.tsx), the exact hex the
+// Student tag chip has always used. Every filter chip gets this by default.
+//
+// A prior attempt at "every field gets a color" (since reverted) invented 6
+// new hues grouped into field "families" (identity/people/place/time/origin/
+// profile) that meant nothing anywhere else in the app — reverted as
+// "fabricated colors." This reuses the one color that's actually real
+// instead of inventing more: same technique (light-alpha-tint background +
+// tinted border + colored text), one shared color, not six new ones.
+export const DEFAULT_CHIP_COLOR = "#1d4ed8";
+
+// Resolves the color for a chip's pill. A condition with EXACTLY ONE selected
+// value that carries real per-value color data (a pipeline stage's own
+// color, the tag color scheme) uses that real color — genuine information,
+// takes priority. Every other case — multi-value selections (an ambiguous
+// per-value pick is worse than a shared default; this is not that, it's a
+// deliberate fallback, not a blend) and fields with no per-value color
+// meaning of their own (Name, Email, City, dates, …) — falls back to the one
+// shared DEFAULT_CHIP_COLOR, so every chip is colored, not just Status/Tags.
+export function resolveChipColor(condition: FilterCondition, options: FilterOption[]): string {
+  const { value } = condition;
+  const singleValue = typeof value === "string" ? value : Array.isArray(value) && value.length === 1 ? value[0] : undefined;
+  if (singleValue !== undefined) {
+    const realColor = options.find((o) => o.value === singleValue)?.color;
+    if (realColor) return realColor;
+  }
+  return DEFAULT_CHIP_COLOR;
+}

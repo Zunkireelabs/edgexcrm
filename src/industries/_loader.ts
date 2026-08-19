@@ -82,6 +82,7 @@ export function getIndustrySidebarItems(
   industryId: string | null | undefined,
   role?: string,
   permissions?: ResolvedPermissions,
+  entitlements?: Record<string, unknown>,
 ): readonly SidebarEntry[] {
   const m = getManifest(industryId);
   const registeredFeatureIds = new Set(m.features.map((f) => f.meta.id));
@@ -97,6 +98,7 @@ export function getIndustrySidebarItems(
     if (ALWAYS_VIEWABLE_HREFS.has(item.href)) return true;
     if (item.minRoles && (!role || !item.minRoles.includes(role as never))) return false;
     if (permissions && !canSeeNav(permissions, item.href)) return false;
+    if (item.entitlement && entitlements?.[item.entitlement] !== true) return false;
     return true;
   }
 

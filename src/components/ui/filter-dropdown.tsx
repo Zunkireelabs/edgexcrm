@@ -7,6 +7,11 @@ export interface FilterOption {
   value: string;
   label: string;
   description?: string;
+  // Hex color for this specific VALUE (e.g. a pipeline stage's own color) —
+  // NOT a per-field-type color. Only set when the value has a real, existing
+  // color meaning elsewhere in the app (stage badges, tag toggle); most
+  // options leave this unset and render with the plain neutral style.
+  color?: string;
 }
 
 export interface FilterOptionListProps {

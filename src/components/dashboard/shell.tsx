@@ -505,6 +505,7 @@ export function DashboardShell({
                 <NavSectionHeader label="Marketing" />
                 {eduItem("/forms") && renderIndustryEntry(eduItem("/forms")!)}
                 {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
+                {eduItem("/sms") && renderIndustryEntry(eduItem("/sms")!)}
 
                 {/* Administration */}
                 <NavSectionHeader label="Administration" />

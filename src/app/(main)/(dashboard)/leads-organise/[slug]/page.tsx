@@ -32,9 +32,10 @@ export default async function LeadsOrganiseCockpitPage({
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  // Admin/manager only
+  // Admin/owner, or a team-scoped (branch manager) position — everyone else redirected
   const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
-  if (!isAdmin) redirect("/dashboard");
+  const isTeamScoped = tenantData.permissions.leadScope === "team";
+  if (!isAdmin && !isTeamScoped) redirect("/dashboard");
 
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
   if (!hasLeadLists) notFound();
@@ -187,8 +188,10 @@ export default async function LeadsOrganiseCockpitPage({
         roleMap={roleMap}
         memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
+        currentUserPositionSlug={tenantData.positionSlug}
         extraDefaultVisibleKeys={["assigned_role"]}
         isStagingView
+        isTeamScoped={isTeamScoped}
         canExport={tenantData.permissions.canExport}
         canEditLeads={tenantData.permissions.canEditLeads}
         assignableMembers={assignableMembers}

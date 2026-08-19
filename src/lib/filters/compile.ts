@@ -1,5 +1,6 @@
 import { and, arrayLiteral, EMPTY_ARRAY_LITERAL, or, pgCol, pgLike, pgVal } from "./pgrst";
 import { isOperatorAllowed } from "./operators";
+import { addCalendarUnitsUTC, parseRelativeValue } from "./date-math";
 import {
   FilterCompileError,
   NEGATIVE_OPERATORS,
@@ -53,7 +54,15 @@ export interface QueryBuilder {
   contains(column: string, value: readonly unknown[] | Record<string, unknown>): this;
   overlaps(column: string, value: readonly unknown[]): this;
   not(column: string, operator: string, value: unknown): this;
-  or(filters: string): this;
+  // `opts.referencedTable` filters a joined/embedded resource (e.g.
+  // lead_collaborators) rather than the base table — REQUIRED whenever the
+  // filter string references a column on that resource. See the "embed" case
+  // in renderCondition below for why this exists: PostgREST rejects a
+  // relation name baked directly into the filter string (a real, production
+  // PGRST100 "failed to parse logic tree" error) — the client library's
+  // referencedTable option is the only correct way to scope an `or()` filter
+  // to an embedded table.
+  or(filters: string, opts?: { referencedTable?: string }): this;
 }
 
 function requireField(registry: FieldRegistry, key: string): FieldDef {
@@ -119,18 +128,14 @@ function dayBoundsInTz(dateStr: string, tz: string): { start: string; end: strin
 }
 
 function parseRelativeWindow(value: string): { amount: number; unit: "d" | "m" | "y" } {
-  const match = /^(\d+)([dmy])$/.exec(value);
-  if (!match) throw new FilterCompileError(`invalid relative date value: ${JSON.stringify(value)}`, "invalid_value");
-  return { amount: Number(match[1]), unit: match[2] as "d" | "m" | "y" };
+  const parsed = parseRelativeValue(value);
+  if (!parsed) throw new FilterCompileError(`invalid relative date value: ${JSON.stringify(value)}`, "invalid_value");
+  return parsed;
 }
 
 function addRelativeWindow(base: Date, value: string): Date {
   const { amount, unit } = parseRelativeWindow(value);
-  const result = new Date(base.getTime());
-  if (unit === "d") result.setUTCDate(result.getUTCDate() + amount);
-  else if (unit === "m") result.setUTCMonth(result.getUTCMonth() + amount);
-  else result.setUTCFullYear(result.getUTCFullYear() + amount);
-  return result;
+  return addCalendarUnitsUTC(base, amount, unit);
 }
 
 // ── Predicate rendering: FieldDef + FilterCondition -> a single pgrst string ─
@@ -221,10 +226,24 @@ function renderDateOpAgainstColumn(col: string, op: FilterCondition["op"], value
       return `${col}.is.null`;
     case "is_not_empty":
       return `${col}.not.is.null`;
-    case "before":
-      return `${col}.lt.${pgVal(new Date(String(value)).toISOString())}`;
-    case "after":
-      return `${col}.gt.${pgVal(new Date(String(value)).toISOString())}`;
+    case "before": {
+      // Timezone-safe, matching "on"/"date_between" below: "before <date>"
+      // excludes <date> entirely — strictly before its LOCAL start. A raw
+      // `new Date(value).toISOString()` (the old implementation) anchors a
+      // bare "YYYY-MM-DD" value — exactly what the date-picker UI sends — to
+      // UTC midnight, which is the same trap dayBoundsInTz exists to avoid.
+      const { start } = dayBoundsInTz(String(value), ctx.tz);
+      return `${col}.lt.${pgVal(start)}`;
+    }
+    case "after": {
+      // "after <date>" excludes <date> entirely too — at/after the NEXT day's
+      // local start. (A bare `.gt` on <date>'s own local midnight would
+      // instead match nearly all of <date> itself, since almost nothing is
+      // created at the exact midnight instant — silently meaning "on or
+      // after," not "after," and asymmetric with "before" above.)
+      const { end } = dayBoundsInTz(String(value), ctx.tz);
+      return `${col}.gte.${pgVal(end)}`;
+    }
     case "on": {
       const { start, end } = dayBoundsInTz(String(value), ctx.tz);
       return and(`${col}.gte.${pgVal(start)}`, `${col}.lt.${pgVal(end)}`);
@@ -250,15 +269,17 @@ function renderDateOpAgainstColumn(col: string, op: FilterCondition["op"], value
 
 function subtractRelativeWindow(base: Date, value: string): Date {
   const { amount, unit } = parseRelativeWindow(value);
-  const result = new Date(base.getTime());
-  if (unit === "d") result.setUTCDate(result.getUTCDate() - amount);
-  else if (unit === "m") result.setUTCMonth(result.getUTCMonth() - amount);
-  else result.setUTCFullYear(result.getUTCFullYear() - amount);
-  return result;
+  return addCalendarUnitsUTC(base, -amount, unit);
 }
 
-function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition): string {
-  const isArrayColumn = field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect";
+// `isArrayColumnOverride` exists for `renderPromotedPredicate`'s jsonLeg: a
+// "promoted" field's legacy jsonb fallback is ALWAYS a scalar (`->>` text
+// extraction), even when the real column and `field.type` (e.g. multiselect)
+// say array — so that leg must render as scalar regardless of field.type, or
+// Postgres rejects the array-overlap operator against a text column
+// ("operator does not exist: text && unknown").
+function renderAgainstColumn(col: string, field: FieldDef, cond: FilterCondition, isArrayColumnOverride?: boolean): string {
+  const isArrayColumn = isArrayColumnOverride ?? (field.source.kind === "array_column" || field.type === "tags" || field.type === "multiselect");
   if (field.type === "date") return renderDateOpAgainstColumn(col, cond.op, cond.value, currentCtxRef);
   if (Array.isArray(cond.value) && (cond.op === "is_any_of" || cond.op === "is_none_of" || cond.op === "has_all")) {
     return renderListOpAgainstColumn(col, cond.op, cond.value as string[], isArrayColumn);
@@ -286,7 +307,29 @@ function renderPromotedPredicate(field: FieldDef & { source: Extract<FieldDef["s
   const realCol = field.source.column;
   const jsonCol = pgCol(field.source.jsonb.column, field.source.jsonb.path);
   const realLeg = renderAgainstColumn(realCol, field, cond);
-  const jsonLeg = renderAgainstColumn(jsonCol, field, cond);
+
+  // has_all's legacy jsonb leg is a scalar (`->>`), so it can only ever hold
+  // ONE value — it structurally can never satisfy "has ALL of" a list with
+  // more than one value. renderListOpAgainstColumn's scalar branch throws for
+  // has_all (registries must not offer it on a non-array field), which is
+  // correct for a genuinely scalar field but wrong here, where the ARRAY-typed
+  // field itself allows has_all and only this one legacy leg is scalar. Skip
+  // the leg for N>1 (real leg alone decides); fall back to direct equality
+  // for N===1, where "has all of [x]" on a scalar column IS just "equals x".
+  if (cond.op === "has_all") {
+    const values = cond.value as string[];
+    if (values.length !== 1) return realLeg;
+    return or(realLeg, `${jsonCol}.eq.${pgVal(values[0])}`);
+  }
+
+  const jsonLeg = renderAgainstColumn(jsonCol, field, cond, false);
+
+  if (cond.op === "is_empty") {
+    // Truly empty means BOTH the real column AND the legacy jsonb fallback
+    // are blank — unlike every other op (including is_not_empty, where "has
+    // data in EITHER location" is the correct, desired OR just below).
+    return and(realLeg, jsonLeg);
+  }
 
   if (!isNegative(cond.op)) {
     // Positive ops OR the two legs — either the real column or the legacy
@@ -314,6 +357,15 @@ function renderColumnsPredicate(field: FieldDef & { source: Extract<FieldDef["so
   // negation of every column" (De Morgan over the whole set) — see the isNeg
   // branch below.
   const legs = columns.map((c) => renderAgainstColumn(c, field, cond));
+
+  if (cond.op === "is_empty") {
+    // "the whole field is empty" means EVERY column is empty, not any one of
+    // them — unlike every other multi-column operator (contains/is_not_empty/
+    // etc. below), which correctly ORs across columns ("matches in ANY
+    // column"). A lead with first_name="" and last_name="Smith" is NOT an
+    // empty name.
+    return and(...legs);
+  }
 
   if (!isNeg && fullNamePairs && columns.length >= 2 && typeof cond.value === "string") {
     // "John Smith" won't match any single column — match token pairs against
@@ -356,13 +408,26 @@ function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx
     case "columns":
       return renderColumnsPredicate(field as FieldDef & { source: Extract<FieldDef["source"], { kind: "columns" }> }, cond);
     case "embed": {
-      // Dotted relation.column filtering an embedded resource. The caller is
-      // responsible for including that relation in the select with `!inner`
-      // (e.g. `lead_collaborators!inner(user_id)`) — the compiler never calls
-      // .select(), so it cannot arrange that itself. is_none_of is rejected in
-      // requireOperator() before this is reached.
-      const dotted = `${field.source.relation}.${field.source.column}`;
-      return renderConditionPredicate(dotted, field, cond);
+      // The embedded resource's OWN column only — never relation-prefixed.
+      // The caller is responsible for including that relation in the select
+      // with `!inner` (e.g. `lead_collaborators!inner(user_id)`) — the
+      // compiler never calls .select(), so it cannot arrange that itself.
+      // is_none_of is rejected in requireOperator() before this is reached.
+      //
+      // A prior version prefixed the relation name into this string (e.g.
+      // "lead_collaborators.user_id.in.(...)") and passed the whole thing to
+      // a plain `.or(filters)` call. That LOOKS like valid PostgREST
+      // "table.column" logic-tree syntax but the real parser rejects it
+      // (PGRST100 "failed to parse logic tree ((lead_collaborators.user_id
+      // .in.(...))))") the moment the query actually runs — caught in
+      // production, not by any test, because nothing executed the generated
+      // query against a real Postgres/PostgREST instance. The caller
+      // (applyConditionToBuilder / applyOrConditions below) is responsible
+      // for passing `{ referencedTable: field.source.relation }` to `.or()`
+      // whenever the predicate came from this branch — that option is the
+      // correct, and only, way postgrest-js supports filtering an embedded
+      // resource via `.or()`.
+      return renderConditionPredicate(field.source.column, field, cond);
     }
     case "virtual":
       // The field owns its own translation (e.g. status -> stage_id ?? status).
@@ -472,6 +537,9 @@ function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: F
   // AND this is a no-op either way; the drop only matters for applyOrConditions
   // below, but the rule lives at render time so it's uniform everywhere.
   if (predicate === null) return builder;
+  if (field.source.kind === "embed") {
+    return builder.or(predicate, { referencedTable: field.source.relation });
+  }
   return builder.or(predicate);
 }
 
@@ -484,20 +552,45 @@ function applyAndConditions<B extends QueryBuilder>(builder: B, registry: FieldR
 // A true OR clause cannot be expressed as separate builder calls (those AND
 // together) — every condition in the clause is rendered to a predicate string
 // and combined into ONE `.or(...)` call.
+//
+// Embed-kind conditions (Collaborators today; any future relation field) need
+// `{ referencedTable }` on that single `.or()` call — see the module's
+// QueryBuilder doc comment. That option scopes the WHOLE call to one table,
+// so an OR group can only ever reference the base table OR exactly one
+// embedded relation, never a mix — postgrest-js has no way to express
+// "table.column OR otherTable.column" in one filter. checkOrGroupEmbedMix()
+// (used by planFilter, the route's up-front 422 gate) rejects that shape
+// before a request ever reaches here; this function's own throw is the
+// backstop for any caller that invokes compileFilter without going through
+// planFilter first (see src/lib/sms/audience.ts).
 function applyOrConditions<B extends QueryBuilder>(builder: B, registry: FieldRegistry, conditions: FilterCondition[], ctx: CompileCtx): B {
   if (conditions.length === 0) return builder;
-  const parts = conditions
-    .map((cond) => {
-      const field = resolveAndValidate(registry, cond);
-      return renderCondition(field, cond, ctx);
-    })
+
+  const resolved = conditions.map((cond) => ({ cond, field: resolveAndValidate(registry, cond) }));
+  const embedRelations = new Set(
+    resolved
+      .filter(({ field }) => field.source.kind === "embed")
+      .map(({ field }) => (field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation)
+  );
+  const hasNonEmbed = resolved.some(({ field }) => field.source.kind !== "embed");
+  if (embedRelations.size > 1 || (embedRelations.size === 1 && hasNonEmbed)) {
+    throw new FilterCompileError(
+      "an OR group cannot mix a relation-filtered field (e.g. Collaborators) with a different table's field, or reference more than one relation — combine with AND instead, or keep the OR group to a single relation",
+      "unsupported"
+    );
+  }
+
+  const parts = resolved
+    .map(({ field, cond }) => renderCondition(field, cond, ctx))
     // §0 fix: a null leg contributes nothing and must be dropped, never joined
     // in as a tautology — or(<dropped>, X) must compile to just X, not to
     // something that matches every row. If every leg drops, the whole group
     // contributes nothing (no .or() call at all), not `or()` of nothing.
     .filter((p): p is string => p !== null);
   if (parts.length === 0) return builder;
-  return builder.or(or(...parts));
+
+  const referencedTable = embedRelations.size === 1 ? [...embedRelations][0] : undefined;
+  return referencedTable ? builder.or(or(...parts), { referencedTable }) : builder.or(or(...parts));
 }
 
 /**
@@ -558,6 +651,14 @@ function checkCondition(
     push(`field is not accessible: ${JSON.stringify(cond.field)}`);
     return;
   }
+  // field.industries existed on FieldDef since Phase 1 ("undefined = all industries")
+  // but nothing ever read it — every tenant's registry offered every field regardless
+  // of industry_id. Mirrors the visibleTo check above: a null ctx.industryId does not
+  // satisfy an explicit allow-list.
+  if (field.industries && !(ctx.industryId && field.industries.includes(ctx.industryId))) {
+    push(`field is not accessible: ${JSON.stringify(cond.field)}`);
+    return;
+  }
   if (!isOperatorAllowed(field, cond.op)) {
     push(`operator ${cond.op} is not allowed on field ${field.key}`);
     return;
@@ -578,6 +679,32 @@ function checkCondition(
   if (field.source.kind === "embed") embeds.add(field.source.embedSelect);
 }
 
+// Mirrors applyOrConditions' own throw (compile.ts) — an OR group can only
+// ever target the base table OR exactly one embedded relation (postgrest-js's
+// `referencedTable` option on `.or()` scopes the WHOLE call to one table),
+// never a mix. Checked here too, group-level, so a caller like the leads
+// route gets one clean 422 up front instead of an uncaught throw out of
+// compileFilter later. Skips conditions checkCondition already flagged
+// (unknown/inaccessible field) — no point reporting the same condition twice.
+function checkOrGroupEmbedMix(conditions: FilterCondition[], registry: FieldRegistry, errors: Record<string, string[]>): void {
+  if (conditions.length < 2) return;
+  const relations = new Set<string>();
+  let hasNonEmbed = false;
+  for (const cond of conditions) {
+    const field = registry[cond.field];
+    if (!field) continue;
+    if (field.source.kind === "embed") relations.add(field.source.relation);
+    else hasNonEmbed = true;
+  }
+  if (relations.size > 1 || (relations.size === 1 && hasNonEmbed)) {
+    for (const cond of conditions) {
+      (errors[cond.field] ??= []).push(
+        "an OR group cannot mix a relation-filtered field (e.g. Collaborators) with a different table's field, or reference more than one relation"
+      );
+    }
+  }
+}
+
 export function planFilter(tree: FilterTree, registry: FieldRegistry, ctx: CompileCtx): PlanFilterResult {
   const errors: Record<string, string[]> = {};
   const embeds = new Set<string>();
@@ -585,6 +712,11 @@ export function planFilter(tree: FilterTree, registry: FieldRegistry, ctx: Compi
   for (const cond of tree.conditions) checkCondition(cond, registry, ctx, errors, embeds);
   for (const group of tree.groups ?? []) {
     for (const cond of group.conditions) checkCondition(cond, registry, ctx, errors, embeds);
+  }
+
+  if (tree.conjunction === "or") checkOrGroupEmbedMix(tree.conditions, registry, errors);
+  for (const group of tree.groups ?? []) {
+    if (group.conjunction === "or") checkOrGroupEmbedMix(group.conditions, registry, errors);
   }
 
   if (Object.keys(errors).length > 0) return { ok: false, errors };
