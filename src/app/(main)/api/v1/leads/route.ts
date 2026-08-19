@@ -34,7 +34,7 @@ import { branchMemberIds, syncOriginMembership } from "@/lib/leads/branch-member
 import { POSITION_ROUTE_MAP } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
-import { getSourceFacet, getAssigneeFacet } from "@/lib/leads/aggregates";
+import { getSourceFacet, getAssigneeFacet, getCollaboratorFacet, getDestinationFacet } from "@/lib/leads/aggregates";
 import { compileFilter, planFilter } from "@/lib/filters/compile";
 import { decodeFilterTree, FILTER_PARAM } from "@/lib/filters/serialize";
 import { legacyLeadsParamsToTree } from "@/lib/filters/legacy-leads-params";
@@ -457,7 +457,7 @@ export async function GET(request: NextRequest) {
   // fetch source + assignee counts in one round-trip.
   const facetsParam = searchParams.get("facets");
   const requestedFacets = facetsParam
-    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee">)
+    ? (facetsParam.split(",").map((s) => s.trim()).filter(Boolean) as Array<"source" | "assignee" | "collaborator" | "destination">)
     : [];
   const legacySingleSourceFacet = requestedFacets.length === 1 && requestedFacets[0] === "source";
 
@@ -562,6 +562,8 @@ export async function GET(request: NextRequest) {
 
     let sourceOptions: Awaited<ReturnType<typeof getSourceFacet>> | undefined;
     let assigneeOptions: Awaited<ReturnType<typeof getAssigneeFacet>> | undefined;
+    let collaboratorOptions: Awaited<ReturnType<typeof getCollaboratorFacet>> | undefined;
+    let destinationOptions: Awaited<ReturnType<typeof getDestinationFacet>> | undefined;
     try {
       if (requestedFacets.includes("source")) {
         // Source facet: cross-filtered by the current assignee selection (there's no
@@ -578,6 +580,19 @@ export async function GET(request: NextRequest) {
         // assigneesAny/includeUnassigned are deliberately omitted here.
         assigneeOptions = await getAssigneeFacet(baseFacetParams);
       }
+      if (requestedFacets.includes("collaborator")) {
+        // Collaborator facet (migration 207): MUST NOT apply the collaborator filter
+        // to itself — same rule as assignee above. collaboratorIds is deliberately
+        // omitted here even though baseFacetParams carries it for source/assignee.
+        collaboratorOptions = await getCollaboratorFacet({ ...baseFacetParams, collaboratorIds: null });
+      }
+      if (requestedFacets.includes("destination")) {
+        // Destination facet (migration 208): cross-filtered by every other active
+        // axis via baseFacetParams, same as source — there is no p_destination self-
+        // filter param on the RPC (this axis has no way to filter the base query yet,
+        // matching source's own precedent), so nothing needs to be omitted here.
+        destinationOptions = await getDestinationFacet(baseFacetParams);
+      }
     } catch (err) {
       log.error({ err }, "Failed to fetch lead facets");
       return apiServiceUnavailable("Failed to fetch lead facets");
@@ -593,6 +608,8 @@ export async function GET(request: NextRequest) {
       facets: {
         ...(sourceOptions ? { source: { options: sourceOptions } } : {}),
         ...(assigneeOptions ? { assignee: { options: assigneeOptions } } : {}),
+        ...(collaboratorOptions ? { collaborator: { options: collaboratorOptions } } : {}),
+        ...(destinationOptions ? { destination: { options: destinationOptions } } : {}),
       },
     });
   }

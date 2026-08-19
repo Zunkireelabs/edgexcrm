@@ -26,6 +26,11 @@ export interface FilterHostConfig {
   showChips?: boolean;
   /** Depth-2 group UI. false on narrow toolbars (not offered in Phase 3's leads-table wiring). */
   allowGroups?: boolean;
+  /** Hides the internal "+ Add filter" trigger — for a host (leads-table.tsx)
+   *  that renders its own copy of AddFilterButton elsewhere (e.g. a separate
+   *  row) and wires it to the same value/onChange. Default false — every
+   *  other host (the SMS composer) keeps the button bundled in, unaffected. */
+  hideAddButton?: boolean;
   /** Default 25 — mirrors schema.ts's MAX_TOTAL_CONDITIONS. */
   maxConditions?: number;
   /** Host-supplied option lists, keyed by field key — short-circuits the async
