@@ -23,9 +23,10 @@ async function fetchApplicationsByLeadIds(
   const buildQ = (chunk?: string[]) => {
     let q = supabase
       .from("applications")
-      .select("*, leads!applications_lead_id_fkey(id,first_name,last_name,email)")
+      .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email)")
       .eq("tenant_id", tenantId)
       .is("deleted_at", null)
+      .is("leads.deleted_at", null)
       .order("created_at", { ascending: false });
     if (chunk && chunk.length > 0) q = q.in("lead_id", chunk);
     return q;
@@ -93,6 +94,7 @@ export default async function ApplicationsRoute() {
             .select("*, leads!applications_lead_id_fkey!inner(id,first_name,last_name,email,assigned_to)")
             .eq("tenant_id", tenantData.tenant.id)
             .is("deleted_at", null)
+            .is("leads.deleted_at", null)
             .order("created_at", { ascending: false })
             .in("leads.assigned_to", teamMemberIds);
           return (data ?? []) as Application[];
