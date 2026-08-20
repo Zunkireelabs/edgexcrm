@@ -1,3 +1,6 @@
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
+
 // Custom-field keys that have their own dedicated UI or have been promoted to
 // first-class columns (migration 087). Must NOT leak into the generic
 // "Additional Details" renderer — they would either duplicate the dedicated UI
@@ -25,12 +28,13 @@ const PROMOTED_KEYS = new Set([
 // only reserved when the lead actually belongs to that industry.
 const EDUCATION_ONLY_PROMOTED_KEYS = new Set(["field_of_study", "education_level", "countries"]);
 
-// Keys whose only dedicated UI is the real_estate InvestorProfileCard (see
-// src/industries/real-estate/features/investors). Reserved only for real_estate
-// tenants so they don't leak into the generic "Additional Details" list where a
-// dedicated editor already shows them; for every other industry these are
-// ordinary custom fields (no behavior change).
-const REAL_ESTATE_ONLY_PROMOTED_KEYS = new Set([
+// Keys whose only dedicated UI is the InvestorProfileCard (see
+// src/industries/real-estate/features/investors), shown for any tenant whose
+// industry has the Offerings feature (real_estate, home_moving). Reserved
+// only for those tenants so they don't leak into the generic "Additional
+// Details" list where a dedicated editor already shows them; for every other
+// industry these are ordinary custom fields (no behavior change).
+const OFFERINGS_ONLY_PROMOTED_KEYS = new Set([
   "investor_type",
   "accreditation_status",
   "kyc_status",
@@ -42,5 +46,5 @@ const REAL_ESTATE_ONLY_PROMOTED_KEYS = new Set([
 export function isReservedCustomField(key: string, industryId?: string | null): boolean {
   if (key === "itinerary" || key.startsWith("trip_") || PROMOTED_KEYS.has(key)) return true;
   if (industryId === "education_consultancy" && EDUCATION_ONLY_PROMOTED_KEYS.has(key)) return true;
-  return industryId === "real_estate" && REAL_ESTATE_ONLY_PROMOTED_KEYS.has(key);
+  return getFeatureAccess(industryId, FEATURES.OFFERINGS) && OFFERINGS_ONLY_PROMOTED_KEYS.has(key);
 }

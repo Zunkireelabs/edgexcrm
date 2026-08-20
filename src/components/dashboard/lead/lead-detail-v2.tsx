@@ -43,6 +43,8 @@ import { InvestorProfileCard } from "@/industries/real-estate/features/investors
 import { CommitmentsPanel } from "@/industries/real-estate/features/investors/components/commitments-panel";
 import { InvestorCommsCard } from "@/industries/real-estate/features/investors/components/investor-comms-card";
 import { CheckInHistoryCard } from "@/industries/_shared/features/check-in/check-in-history-card";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 interface TeamMember {
   id: string;
@@ -217,10 +219,11 @@ export function LeadDetailV2({
   const [leaving, setLeaving] = useState(false);
 
   const isItAgency = tenant.industry_id === "it_agency";
-  // real_estate: the lead IS an investor (rides the leads spine). Adds investor
-  // profile + commitments blocks in the right sidebar. Additive — other industries
-  // unaffected.
-  const isRealEstate = tenant.industry_id === "real_estate";
+  // Offerings-industry tenants (real_estate, home_moving): the lead IS an
+  // investor (rides the leads spine). Adds investor profile + commitments
+  // blocks in the right sidebar. Gated on feature access, not a hardcoded
+  // industry list — other industries unaffected.
+  const isRealEstate = getFeatureAccess(tenant.industry_id, FEATURES.OFFERINGS);
 
   const isAdmin = role === "owner" || role === "admin";
   // Position-derived edit capability: admins always, plus members whose position grants

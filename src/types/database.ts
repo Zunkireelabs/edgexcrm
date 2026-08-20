@@ -9,7 +9,8 @@ export type IndustryId =
   | "healthcare"
   | "recruitment"
   | "general"
-  | "travel_agency";
+  | "travel_agency"
+  | "home_moving";
 
 export interface PipelineStageTemplate {
   name: string;

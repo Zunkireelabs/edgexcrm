@@ -17,11 +17,10 @@ import {
 export async function GET() {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
-  // Gate on OFFERINGS (enabled only for real_estate in its manifest) …
+  // Gate on OFFERINGS — scoped per-industry in each manifest (currently
+  // real_estate + home_moving); getFeatureAccess is the single source of
+  // truth for which tenants get this aggregation.
   if (!getFeatureAccess(auth.industryId, FEATURES.OFFERINGS)) return apiForbidden();
-  // … plus a defense-in-depth industry check, mirroring deals-summary's
-  // `!== "it_agency"` guard: these aggregations are real_estate-only.
-  if (auth.industryId !== "real_estate") return apiForbidden();
 
   const db = await scopedClient(auth);
 
