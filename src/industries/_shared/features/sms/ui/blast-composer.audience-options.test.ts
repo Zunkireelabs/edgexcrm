@@ -29,6 +29,10 @@ const FIXTURE = {
     { user_id: "user-1", name: "Hardik" },
     { user_id: "user-2", name: "Manjila" },
   ],
+  leadLists: [
+    { id: "list-1", name: "Qualified", is_staging: false, is_archive: false },
+    { id: "list-2", name: "Migration QC", is_staging: true, is_archive: false },
+  ],
 };
 
 // The exact six fields Sadin reported as broken on prod (SMS-FIX-F11-BRIEF.md).
@@ -64,5 +68,25 @@ describe("buildAudienceOptionOverrides — F-11 fix", () => {
     for (const key of REPORTED_BROKEN_FIELDS) {
       expect(registry[key]?.options ?? []).toHaveLength(0);
     }
+  });
+
+  // F-11 addendum (docs/SMS-FIX-F11-BRIEF.md): stage (list_id) has the same
+  // bug but was added by PR #405 after the original F-11 brief was written,
+  // so it wasn't in Sadin's original report — kept as a separate assertion
+  // rather than folded into REPORTED_BROKEN_FIELDS.
+  it("resolves a non-empty option list for stage, excluding staging/archive lists", () => {
+    const overrides = buildAudienceOptionOverrides({
+      ...FIXTURE,
+      leadLists: [
+        { id: "list-1", name: "Qualified", is_staging: false, is_archive: false },
+        { id: "list-2", name: "Migration QC", is_staging: true, is_archive: false },
+      ],
+    });
+    expect(overrides.stage).toEqual([{ value: "list-1", label: "Qualified" }]);
+  });
+
+  it("stage has no static registry `options` array either (same root cause class)", () => {
+    const registry = leadFields({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} } satisfies CompileCtx);
+    expect(registry.stage?.options ?? []).toHaveLength(0);
   });
 });

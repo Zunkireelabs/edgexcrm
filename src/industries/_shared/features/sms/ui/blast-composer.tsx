@@ -45,6 +45,7 @@ export function buildAudienceOptionOverrides(input: {
   sourceFacet: { name: string; count: number }[];
   assigneeFacet: { name: string; count: number }[];
   roster: { user_id: string; name: string }[];
+  leadLists: { id: string; name: string; is_staging?: boolean; is_archive: boolean }[];
 }): Partial<Record<string, FilterOption[]>> {
   const collaborators = input.roster.map((m) => ({ value: m.user_id, label: m.name }));
   const memberNameById = new Map(collaborators.map((o) => [o.value, o.label]));
@@ -58,6 +59,9 @@ export function buildAudienceOptionOverrides(input: {
     status: STATUS_OPTIONS,
     industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
     tags: TAG_OPTIONS,
+    stage: input.leadLists
+      .filter((l) => !l.is_staging && !l.is_archive)
+      .map((l) => ({ value: l.id, label: l.name })),
   };
 }
 
@@ -102,6 +106,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
   const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
   const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
+  const [leadLists, setLeadLists] = useState<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,6 +114,12 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     smsGet<{ id: string; name: string }[]>("/api/v1/form-configs")
       .then(({ data }) => {
         if (!cancelled) setForms(data);
+      })
+      .catch(() => void 0);
+
+    smsGet<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>("/api/v1/lead-lists")
+      .then(({ data }) => {
+        if (!cancelled) setLeadLists(data);
       })
       .catch(() => void 0);
 
@@ -134,8 +145,8 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   }, []);
 
   const audienceOptionOverrides = useMemo(
-    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster }),
-    [forms, sourceFacet, assigneeFacet, roster]
+    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists }),
+    [forms, sourceFacet, assigneeFacet, roster, leadLists]
   );
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
