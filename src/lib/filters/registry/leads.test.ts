@@ -180,10 +180,30 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 
-  it("collaborators: is_empty is rejected at the registry level — the !inner join can't express 'no matching row' (would silently compile to zero-rows-always, same fix class as is_none_of)", () => {
+  it("collaborators: is_empty compiles to the mig 210 counter column, NOT the !inner join — no embed added, no referencedTable", () => {
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_empty")), registry, ctx);
+    // No embed: is_empty answers from leads.collaborator_count directly, so
+    // the caller never needs to add lead_collaborators to .select() for it.
+    expect(plan).toEqual({ ok: true, embeds: [] });
+
+    const b = compile(andTree(cond("c1", "collaborators", "is_empty")));
+    expect(b.calls).toEqual(["or(collaborator_count.eq.0)"]);
+  });
+
+  it("collaborators: is_empty OR'd with is_any_of on the SAME field is correctly rejected — is_empty targets the base table's counter, is_any_of targets the embedded table, and .or({referencedTable}) can't scope a single filter string to both at once", () => {
+    const plan = planFilter(
+      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_empty"), cond("c2", "collaborators", "is_any_of", ["u1"])] },
+      registry,
+      ctx
+    );
     expect(plan.ok).toBe(false);
-    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_empty is not allowed/);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/cannot mix/);
+  });
+
+  it("collaborators: is_none_of is still rejected — not even in the field's operators list, since a count alone can't say WHO (stays out of scope even with mig 210's counter)", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["u1"])), registry, ctx);
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_none_of is not allowed/);
   });
 
   it("tags has_all matches route.ts's .contains('tags', [tagFilter]) via the native path", () => {

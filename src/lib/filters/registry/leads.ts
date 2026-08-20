@@ -234,17 +234,27 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       key: "collaborators",
       label: "Collaborators",
       type: "relation",
-      source: { kind: "embed", relation: "lead_collaborators", column: "user_id", embedSelect: "lead_collaborators!inner(user_id)" },
-      // is_not_empty is safe to add on top of is_any_of: the embedSelect above
-      // is an `!inner` join, so any row that survives it already has >=1
+      source: {
+        kind: "embed",
+        relation: "lead_collaborators",
+        column: "user_id",
+        embedSelect: "lead_collaborators!inner(user_id)",
+        // Mig 210: a trigger-maintained counter on leads, used ONLY for
+        // is_empty. The !inner join above can prove a collaborator EXISTS,
+        // never that none does — this sidesteps that instead of trying to
+        // express "no matching row" through the join at all. See its comment
+        // in compile.ts's "embed" render case for the full reasoning.
+        emptyColumn: "collaborator_count",
+      },
+      // is_not_empty is safe on top of is_any_of: the embedSelect above is an
+      // `!inner` join, so any row that survives it already has >=1
       // collaborator — is_not_empty just states that fact explicitly.
-      // is_empty is deliberately NOT offered here (unlike OPERATORS_BY_TYPE.relation's
-      // default, which lists it): the same !inner join makes "no matching row"
-      // unrepresentable — user_id can never be NULL on a row the join kept, so
-      // is_empty would silently compile to a filter that matches zero leads,
-      // always. Needs a NOT EXISTS-shaped query (same fix class as is_none_of
-      // above in compile.ts) before it can be offered here.
-      operators: ["is_any_of", "is_not_empty"],
+      // is_none_of is still NOT offered: excluding SPECIFIC people has no
+      // equivalent to the emptyColumn escape hatch (a count alone can't say
+      // WHO) — it would still need the NOT-EXISTS-shaped query this field's
+      // is_empty was rewritten specifically to avoid. See compile.ts's
+      // requireOperator for the enforced rejection.
+      operators: ["is_any_of", "is_not_empty", "is_empty"],
       group: "Basic",
       filterable: true,
     },

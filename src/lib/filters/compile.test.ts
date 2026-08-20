@@ -111,6 +111,25 @@ const registry: FieldRegistry = {
     group: "Basic",
     filterable: true,
   },
+  // Same relation, but WITH the mig 210-style emptyColumn escape hatch wired
+  // up — a distinct fixture (not a mutation of `collaborators` above) so both
+  // "no emptyColumn configured" (rejected) and "emptyColumn configured"
+  // (works, no join) stay independently testable.
+  collaborators_with_count: {
+    key: "collaborators_with_count",
+    label: "Collaborators (with count)",
+    type: "relation",
+    source: {
+      kind: "embed",
+      relation: "lead_collaborators",
+      column: "user_id",
+      embedSelect: "lead_collaborators!inner(user_id)",
+      emptyColumn: "collaborator_count",
+    },
+    operators: ["is_any_of", "is_not_empty", "is_empty"],
+    group: "Basic",
+    filterable: true,
+  },
   status: {
     key: "status",
     label: "Status",
@@ -403,6 +422,64 @@ describe("is_none_of on a relation field", () => {
   it("is_any_of on the same relation field IS supported", () => {
     const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])));
     expect(b.calls[0]).toBe('or(user_id.in.(u1))');
+  });
+});
+
+// ── is_empty on a relation field — the emptyColumn escape hatch (mig 210) ───
+// Same underlying problem as is_none_of above (the !inner join can only prove
+// a match EXISTS, never that none does), but is_empty has a cheap way out: a
+// denormalized counter column on the BASE table, maintained by a DB trigger,
+// checked with zero join involved. Not every relation field has one — plain
+// `collaborators` (no emptyColumn) still rejects is_empty exactly like
+// is_none_of; `collaborators_with_count` is the fixture that has it wired up.
+describe("is_empty on a relation field — rejected without an emptyColumn, safe with one", () => {
+  it("is rejected on a relation field with no emptyColumn configured — same failure class as is_none_of", () => {
+    expect(() => compile(andTree(cond("c1", "collaborators", "is_empty")))).toThrow(FilterCompileError);
+  });
+
+  it("planFilter reports the same rejection up front, not just a compileFilter throw", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_empty")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.collaborators?.[0]).toMatch(/is_empty is not supported/);
+  });
+
+  it("WITH emptyColumn configured: compiles straight to <emptyColumn>.eq.0 — the embedded table's own column never appears", () => {
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_empty")));
+    expect(b.calls).toEqual(["or(collaborator_count.eq.0)"]);
+  });
+
+  it("WITH emptyColumn: does NOT carry referencedTable — this predicate targets the base table, not the embedded one", () => {
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_empty")));
+    expect(b.orReferencedTables).toEqual([undefined]);
+  });
+
+  it("WITH emptyColumn: planFilter does NOT add the relation's embed — the caller never needs to join lead_collaborators just to check the count", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators_with_count", "is_empty")), registry, ctx);
+    expect(result).toEqual({ ok: true, embeds: [] });
+  });
+
+  it("WITH emptyColumn: is_not_empty and is_any_of on the SAME field still use the real !inner join, unaffected by the escape hatch existing", () => {
+    const notEmpty = planFilter(andTree(cond("c1", "collaborators_with_count", "is_not_empty")), registry, ctx);
+    expect(notEmpty).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_any_of", ["u1"])));
+    expect(b.orPayloads()).toEqual(["user_id.in.(u1)"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  it("is_empty (base-table leg) OR'd with is_any_of (embedded-table leg) on the SAME field is rejected — one .or({referencedTable}) call can't scope half its string to each table", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "collaborators_with_count", "is_empty"), cond("c2", "collaborators_with_count", "is_any_of", ["u1"])],
+    };
+    const result = planFilter(tree, registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.collaborators_with_count?.[0]).toMatch(/cannot mix/);
+  });
+
+  it("is_empty ANDed with an unrelated field: no throw, both legs compile independently (AND never shares one .or() call, so there's nothing to mix)", () => {
+    const b = compile(andTree(cond("c1", "status", "is", "new"), cond("c2", "collaborators_with_count", "is_empty")));
+    expect(b.calls).toEqual(["or(or(stage_id.eq.new,and(stage_id.is.null,status.eq.new)))", "or(collaborator_count.eq.0)"]);
+    expect(b.orReferencedTables).toEqual([undefined, undefined]);
   });
 });
 

@@ -82,10 +82,30 @@ function requireOperator(field: FieldDef, cond: FilterCondition): void {
     // a caller's registry override mistakenly allow-lists it.
     throw new FilterCompileError("is_none_of is not supported on relation fields", "unsupported");
   }
+  if (field.source.kind === "embed" && cond.op === "is_empty" && !field.source.emptyColumn) {
+    // Same class of problem as is_none_of above: the !inner join can only
+    // prove a match EXISTS, never that none does. Only allowed when the
+    // field's source names a denormalized emptyColumn to check instead (see
+    // the "embed" case in renderCondition below).
+    throw new FilterCompileError("is_empty is not supported on this relation field (no emptyColumn configured)", "unsupported");
+  }
 }
 
 function isNegative(op: FilterCondition["op"]): boolean {
   return NEGATIVE_OPERATORS.includes(op);
+}
+
+// True when a condition on an embed-kind field actually needs the join —
+// i.e. must add its relation to .select() and scope its predicate with
+// referencedTable. False for is_empty answered via a denormalized
+// emptyColumn (see the FieldSource doc comment in types.ts): that predicate
+// targets a plain column on the BASE table, so every embed-kind special case
+// (select-embed collection, referencedTable, the OR-group relation-mixing
+// guard) must treat it exactly like any other base-table condition, not like
+// a real relation filter.
+function needsEmbedJoin(field: FieldDef, cond: FilterCondition): boolean {
+  if (field.source.kind !== "embed") return false;
+  return !(cond.op === "is_empty" && field.source.emptyColumn);
 }
 
 // ── Date-window helpers (tz-aware, ctx.now-injected — never Date.now()) ─────
@@ -408,11 +428,21 @@ function renderCondition(field: FieldDef, cond: FilterCondition, ctx: CompileCtx
     case "columns":
       return renderColumnsPredicate(field as FieldDef & { source: Extract<FieldDef["source"], { kind: "columns" }> }, cond);
     case "embed": {
+      // is_empty with an emptyColumn configured: answer from the BASE table's
+      // denormalized counter (e.g. leads.collaborator_count), no join at all
+      // — the !inner embed can't express "no matching row" (see the FieldSource
+      // doc comment in types.ts). This predicate targets a plain leads column,
+      // so it must NOT get `referencedTable` from the caller — that's why
+      // isEmbedJoinCondition() below treats this case as non-embed.
+      if (cond.op === "is_empty" && field.source.emptyColumn) {
+        return `${field.source.emptyColumn}.eq.0`;
+      }
       // The embedded resource's OWN column only — never relation-prefixed.
       // The caller is responsible for including that relation in the select
       // with `!inner` (e.g. `lead_collaborators!inner(user_id)`) — the
       // compiler never calls .select(), so it cannot arrange that itself.
-      // is_none_of is rejected in requireOperator() before this is reached.
+      // is_none_of (and is_empty without an emptyColumn) are rejected in
+      // requireOperator() before this is reached.
       //
       // A prior version prefixed the relation name into this string (e.g.
       // "lead_collaborators.user_id.in.(...)") and passed the whole thing to
@@ -537,7 +567,7 @@ function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: F
   // AND this is a no-op either way; the drop only matters for applyOrConditions
   // below, but the rule lives at render time so it's uniform everywhere.
   if (predicate === null) return builder;
-  if (field.source.kind === "embed") {
+  if (field.source.kind === "embed" && needsEmbedJoin(field, cond)) {
     return builder.or(predicate, { referencedTable: field.source.relation });
   }
   return builder.or(predicate);
@@ -569,10 +599,10 @@ function applyOrConditions<B extends QueryBuilder>(builder: B, registry: FieldRe
   const resolved = conditions.map((cond) => ({ cond, field: resolveAndValidate(registry, cond) }));
   const embedRelations = new Set(
     resolved
-      .filter(({ field }) => field.source.kind === "embed")
+      .filter(({ field, cond }) => needsEmbedJoin(field, cond))
       .map(({ field }) => (field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation)
   );
-  const hasNonEmbed = resolved.some(({ field }) => field.source.kind !== "embed");
+  const hasNonEmbed = resolved.some(({ field, cond }) => !needsEmbedJoin(field, cond));
   if (embedRelations.size > 1 || (embedRelations.size === 1 && hasNonEmbed)) {
     throw new FilterCompileError(
       "an OR group cannot mix a relation-filtered field (e.g. Collaborators) with a different table's field, or reference more than one relation — combine with AND instead, or keep the OR group to a single relation",
@@ -667,6 +697,10 @@ function checkCondition(
     push("is_none_of is not supported on relation fields");
     return;
   }
+  if (field.source.kind === "embed" && cond.op === "is_empty" && !field.source.emptyColumn) {
+    push("is_empty is not supported on this relation field (no emptyColumn configured)");
+    return;
+  }
   if (
     (cond.op === "is_any_of" || cond.op === "is_none_of" || cond.op === "has_all") &&
     Array.isArray(cond.value) &&
@@ -676,7 +710,7 @@ function checkCondition(
     return;
   }
 
-  if (field.source.kind === "embed") embeds.add(field.source.embedSelect);
+  if (needsEmbedJoin(field, cond)) embeds.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).embedSelect);
 }
 
 // Mirrors applyOrConditions' own throw (compile.ts) — an OR group can only
@@ -693,7 +727,7 @@ function checkOrGroupEmbedMix(conditions: FilterCondition[], registry: FieldRegi
   for (const cond of conditions) {
     const field = registry[cond.field];
     if (!field) continue;
-    if (field.source.kind === "embed") relations.add(field.source.relation);
+    if (needsEmbedJoin(field, cond)) relations.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation);
     else hasNonEmbed = true;
   }
   if (relations.size > 1 || (relations.size === 1 && hasNonEmbed)) {
