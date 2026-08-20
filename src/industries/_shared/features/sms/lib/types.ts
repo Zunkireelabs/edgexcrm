@@ -90,6 +90,12 @@ export interface SmsPreviewResponse {
   samples: string[];
 }
 
+export interface SmsAudienceCountResponse {
+  matched: number;
+  sendable: number;
+  excluded: { noPhone: number; foreignNumber: number; malformed: number; suppressed: number; duplicatePhone: number };
+}
+
 export interface SmsCreditAccount {
   tenant_id: string;
   balance: number;

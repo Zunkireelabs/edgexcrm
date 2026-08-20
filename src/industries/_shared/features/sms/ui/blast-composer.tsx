@@ -21,7 +21,7 @@ import { CharacterCounter } from "./character-counter";
 import { CostPreviewDialog } from "./cost-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
 import { smsSend, smsGet, SmsApiError } from "../lib/api-client";
-import type { SmsBlastRow, SmsPreviewResponse } from "../lib/types";
+import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse } from "../lib/types";
 
 // No pipeline-scoped list on this surface (the Audience picker targets leads
 // tenant-wide, not one list) — mirrors leads-table.tsx's "no active pipeline"
@@ -85,6 +85,8 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   const [liveMeta, setLiveMeta] = useState<{ prefix: string; footer: string; sendable: number; matched: number } | null>(null);
+  const [audienceCount, setAudienceCount] = useState<{ matched: number; sendable: number } | null>(null);
+  const [audienceCountLoading, setAudienceCountLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmedPreview, setConfirmedPreview] = useState<SmsPreviewResponse | null>(null);
@@ -151,6 +153,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const audienceCountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Autosave — never lose a typed body to a refresh (SMS-PHASE3B-BRIEF.md §4).
   // The parent (blast-workspace.tsx) only mounts this component while
@@ -191,6 +194,24 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
       if (previewTimer.current) clearTimeout(previewTimer.current);
     };
   }, [body, tree, blast.id]);
+
+  // Audience match count — decoupled from `body` (F-12: SMS-PHASE4-FIX-F12-BRIEF.md).
+  // Fires on mount (an empty tree still resolves to "all tenant leads", useful
+  // context before any filter is added) and whenever the filter tree changes,
+  // independent of whether a message has been typed.
+  useEffect(() => {
+    setAudienceCountLoading(true);
+    if (audienceCountTimer.current) clearTimeout(audienceCountTimer.current);
+    audienceCountTimer.current = setTimeout(() => {
+      smsSend<SmsAudienceCountResponse>(`/api/v1/sms/blasts/${blast.id}/audience-count`, "POST", { audience_filter: tree })
+        .then((r) => setAudienceCount({ matched: r.matched, sendable: r.sendable }))
+        .catch(() => void 0)
+        .finally(() => setAudienceCountLoading(false));
+    }, PREVIEW_DEBOUNCE_MS);
+    return () => {
+      if (audienceCountTimer.current) clearTimeout(audienceCountTimer.current);
+    };
+  }, [tree, blast.id]);
 
   async function handleConfirmSend() {
     setSending(true);
@@ -236,6 +257,15 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
       <div className="flex flex-col gap-1.5">
         <Label>Audience</Label>
         <AdvancedFilterBar entity="leads" fields={fields} value={tree} onChange={setTree} allowGroups={false} optionOverrides={audienceOptionOverrides} />
+        {audienceCountLoading ? (
+          <p className="text-xs text-muted-foreground">Counting matches…</p>
+        ) : audienceCount && audienceCount.matched === 0 ? (
+          <p className="text-xs font-medium text-amber-600 dark:text-amber-500">No leads match this filter.</p>
+        ) : audienceCount ? (
+          <p className="text-xs text-muted-foreground">
+            {audienceCount.sendable} sendable of {audienceCount.matched} matched leads.
+          </p>
+        ) : null}
         {liveMeta && (
           <p className="text-xs text-muted-foreground">
             {liveMeta.sendable} sendable of {liveMeta.matched} matched leads.
