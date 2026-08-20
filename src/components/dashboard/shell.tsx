@@ -67,6 +67,8 @@ import { BranchSwitcher } from "./branch-switcher";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import type { LeadList } from "@/types/database";
 import { TruncatedText } from "@/components/ui/truncated-text";
 import { Suspense } from "react";
@@ -293,10 +295,12 @@ export function DashboardShell({
   const navAllowed = (href: string) => href === "/home" || allowedNavKeys === null || allowedNavKeys.includes(href);
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
-  // real_estate (CRE capital-raise): renders the generic sidebar branch, but the
-  // universal "All Leads" nav item is relabeled "Investors" (investors ride the
-  // leads spine). Additive — no other industry's label changes.
-  const isRealEstate = tenant.industry_id === "real_estate";
+  // Offerings-industry tenants (real_estate, home_moving — see FEATURES.OFFERINGS
+  // in each manifest): renders the generic sidebar branch, but the universal
+  // "All Leads" nav item is relabeled "Investors" (investors ride the leads
+  // spine). Gated on feature access, not a hardcoded industry list, so a future
+  // third industry opting into Offerings picks this up automatically.
+  const isRealEstate = getFeatureAccess(tenant.industry_id, FEATURES.OFFERINGS);
 
   // Industry suffix appended to the EdgeX wordmark (empty = plain "EdgeX").
   const brandSuffix =
@@ -691,6 +695,10 @@ export function DashboardShell({
                 {/* Capital Raise */}
                 <NavSectionHeader label="Capital Raise" />
                 {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
+                {/* /forms only resolves for tenants whose manifest registers FORM_BUILDER
+                    (currently home_moving, not real_estate) — reItem() returns undefined
+                    otherwise, so this is a no-op for real_estate tenants. */}
+                {reItem("/forms") && renderIndustryEntry(reItem("/forms")!)}
                 {reItem("/offerings") && renderIndustryEntry(reItem("/offerings")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {reItem("/data-room") && renderIndustryEntry(reItem("/data-room")!)}

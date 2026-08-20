@@ -23,11 +23,12 @@ const DOC_TYPES = ["ppm", "operating_agreement", "financials", "other"] as const
 const DOCUMENT_SELECT =
   "id, offering_id, name, storage_path, content_type, size_bytes, doc_type, uploaded_by, created_at";
 
-// Industry gate shared by every method here. OFFERINGS is already scoped to
-// real_estate only, so getFeatureAccess is sufficient; the explicit industry
-// check is belt-and-suspenders (brief C.3).
+// Industry gate shared by every method here. FEATURES.OFFERINGS is scoped
+// per-industry in each manifest (currently real_estate + home_moving) —
+// getFeatureAccess is the single source of truth, no separate industry list
+// to keep in sync here.
 function offeringsAllowed(industryId: string | null): boolean {
-  return getFeatureAccess(industryId, FEATURES.OFFERINGS) && industryId === "real_estate";
+  return getFeatureAccess(industryId, FEATURES.OFFERINGS);
 }
 
 // GET /api/v1/offerings/[id]/documents — list non-deleted docs for one offering.

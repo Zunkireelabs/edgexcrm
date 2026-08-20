@@ -3,5 +3,10 @@ import type { FeatureMeta } from "../../../_types";
 
 export const formBuilderMeta: FeatureMeta = {
   id: FEATURES.FORM_BUILDER,
-  industries: [INDUSTRIES.EDUCATION_CONSULTANCY, INDUSTRIES.CONSTRUCTION, INDUSTRIES.TRAVEL_AGENCY],
+  industries: [
+    INDUSTRIES.EDUCATION_CONSULTANCY,
+    INDUSTRIES.CONSTRUCTION,
+    INDUSTRIES.TRAVEL_AGENCY,
+    INDUSTRIES.HOME_MOVING,
+  ],
 };

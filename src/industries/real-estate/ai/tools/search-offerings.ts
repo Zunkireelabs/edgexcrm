@@ -29,7 +29,10 @@ export const searchOfferingsTool: AgentTool<z.infer<typeof inputSchema>> = {
     "raising right now?\" or to find an offering by name before calling get_offering.",
   inputSchema,
   scope: "read",
-  industries: ["real_estate"],
+  // home_moving is a literal clone of real_estate's Offerings vertical and
+  // reuses this same tool pack (see home-moving/manifest.ts importing
+  // real-estate/ai/agent.ts's aiConfig as-is) — must stay in sync with that.
+  industries: ["real_estate", "home_moving"],
   async execute(ctx, input) {
     const { db, auth } = ctx;
     if (!getFeatureAccess(auth.industryId, FEATURES.OFFERINGS)) return { error: "Offerings are not available for this tenant." };

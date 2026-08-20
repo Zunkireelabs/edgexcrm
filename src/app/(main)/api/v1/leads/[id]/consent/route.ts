@@ -23,14 +23,15 @@ interface RouteContext {
   params: Promise<{ id: string }>;
 }
 
-// Consent e-sign is shared by two industries: education (Student Consent,
-// exposed via the APPLICATION_TRACKING feature) and real_estate (Subscription
-// Agreement — no separate feature; investors ride the leads spine). Additive
-// gate: education access is unchanged, real_estate is newly permitted.
+// Consent e-sign is shared by education (Student Consent, exposed via the
+// APPLICATION_TRACKING feature) and every Offerings-industry tenant —
+// real_estate, home_moving (Subscription Agreement — no separate feature;
+// investors ride the leads spine). Additive gate: education access is
+// unchanged.
 function consentAccessAllowed(industryId: string | null): boolean {
   return (
     getFeatureAccess(industryId, FEATURES.APPLICATION_TRACKING) ||
-    industryId === "real_estate"
+    getFeatureAccess(industryId, FEATURES.OFFERINGS)
   );
 }
 

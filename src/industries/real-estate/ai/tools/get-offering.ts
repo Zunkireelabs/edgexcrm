@@ -29,7 +29,9 @@ export const getOfferingTool: AgentTool<z.infer<typeof inputSchema>> = {
     "funded), and its investor commitments. Use after search_offerings to look at a specific offering the user asked about.",
   inputSchema,
   scope: "read",
-  industries: ["real_estate"],
+  // home_moving is a literal clone of real_estate's Offerings vertical and
+  // reuses this same tool pack — must stay in sync with home-moving/manifest.ts.
+  industries: ["real_estate", "home_moving"],
   async execute(ctx, input) {
     const { db, auth } = ctx;
     if (!getFeatureAccess(auth.industryId, FEATURES.OFFERINGS)) return { error: "Offerings are not available for this tenant." };
