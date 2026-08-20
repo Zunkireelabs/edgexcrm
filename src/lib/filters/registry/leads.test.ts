@@ -122,6 +122,35 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual([]);
   });
 
+  it("assignees: is_none_of with only ids excludes them but keeps unassigned leads (NULL-inclusive negation)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["11111111-2222-4333-8444-555555555555"])));
+    expect(b.calls).toEqual(["or(or(assigned_to.is.null,assigned_to.neq.11111111-2222-4333-8444-555555555555))"]);
+  });
+
+  it("assignees: is_none_of with multiple ids uses not.in, still NULL-inclusive", () => {
+    const b = compile(
+      andTree(cond("c1", "assignees", "is_none_of", ["11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666"]))
+    );
+    expect(b.calls).toEqual([
+      "or(or(assigned_to.is.null,assigned_to.not.in.(11111111-2222-4333-8444-555555555555,22222222-3333-4444-8555-666666666666)))",
+    ]);
+  });
+
+  it("assignees: is_none_of with only 'unassigned' means 'must have an assignee' — assigned_to.not.is.null, no NULL-inclusive wrap", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["unassigned"])));
+    expect(b.calls).toEqual(["or(assigned_to.not.is.null)"]);
+  });
+
+  it("assignees: is_none_of with 'unassigned' + ids excludes both the unassigned bucket and the named ids (AND, not the NULL-inclusive OR)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["unassigned", "11111111-2222-4333-8444-555555555555"])));
+    expect(b.calls).toEqual(["or(and(assigned_to.not.is.null,assigned_to.neq.11111111-2222-4333-8444-555555555555))"]);
+  });
+
+  it("assignees: is_none_of with only invalid tokens drops out as a no-op, same as is_any_of's fallback", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["garbage"])));
+    expect(b.calls).toEqual([]);
+  });
+
   it("assignees: is_empty compiles to a plain assigned_to.is.null check (no !inner-join trap — assigned_to is a scalar column)", () => {
     const b = compile(andTree(cond("c1", "assignees", "is_empty")));
     expect(b.calls).toEqual(["or(assigned_to.is.null)"]);

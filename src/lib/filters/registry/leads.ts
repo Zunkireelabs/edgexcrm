@@ -77,15 +77,32 @@ function compileSource(cond: FilterCondition): string {
 
 function compileAssignees(cond: FilterCondition): string | null {
   // assigned_to is a plain nullable column (unlike Collaborators' join table),
-  // so is_empty/is_not_empty are ordinary NULL checks — no !inner-join trap
-  // here. Kept distinct from the "unassigned" sentinel inside is_any_of below,
-  // which stays for back-compat with existing saved/URL filters.
+  // so is_empty/is_not_empty/is_none_of are ordinary column comparisons — no
+  // !inner-join trap here, unlike Collaborators (see that field's comment in
+  // leadFields() below for why is_empty/is_none_of stay OFF there).
   if (cond.op === "is_empty") return "assigned_to.is.null";
   if (cond.op === "is_not_empty") return "assigned_to.not.is.null";
 
   const values = asList(cond.value);
   const wantsUnassigned = values.includes("unassigned");
   const ids = values.filter((v) => v !== "unassigned" && UUID_RE.test(v));
+
+  if (cond.op === "is_none_of") {
+    // Mirrors the is_any_of branches below, negated — but "unassigned" stays
+    // an explicit, independently-toggleable bucket rather than getting the
+    // blanket NULL-inclusive safety net compileStatus/compileSource apply to
+    // *unset* data. Here NULL already has its own first-class opt-in/opt-out
+    // via the "unassigned" sentinel, so auto-including it would make it
+    // impossible to express "exclude these people, but still show unassigned
+    // leads" (the ids-only branch) as distinct from "exclude these people AND
+    // unassigned leads" (the unassigned+ids branch).
+    const negatedIds = () => (ids.length === 1 ? `assigned_to.neq.${pgVal(ids[0])}` : `assigned_to.not.in.(${ids.map(pgVal).join(",")})`);
+    if (wantsUnassigned && ids.length > 0) return and("assigned_to.not.is.null", negatedIds());
+    if (wantsUnassigned) return "assigned_to.not.is.null";
+    if (ids.length > 0) return or("assigned_to.is.null", negatedIds());
+    // No valid tokens — same no-op fallback as is_any_of below (§0 fix).
+    return null;
+  }
 
   if (wantsUnassigned && ids.length > 0) return or("assigned_to.is.null", `assigned_to.in.(${ids.map(pgVal).join(",")})`);
   if (wantsUnassigned) return "assigned_to.is.null";
@@ -209,7 +226,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Assigned to",
       type: "uuid",
       source: { kind: "virtual", compile: compileAssignees },
-      operators: ["is_any_of", "is_empty", "is_not_empty"],
+      operators: ["is_any_of", "is_none_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },
