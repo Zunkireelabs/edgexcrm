@@ -695,6 +695,10 @@ export function DashboardShell({
                 {/* Capital Raise */}
                 <NavSectionHeader label="Capital Raise" />
                 {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
+                {/* /forms only resolves for tenants whose manifest registers FORM_BUILDER
+                    (currently home_moving, not real_estate) — reItem() returns undefined
+                    otherwise, so this is a no-op for real_estate tenants. */}
+                {reItem("/forms") && renderIndustryEntry(reItem("/forms")!)}
                 {reItem("/offerings") && renderIndustryEntry(reItem("/offerings")!)}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {reItem("/data-room") && renderIndustryEntry(reItem("/data-room")!)}
