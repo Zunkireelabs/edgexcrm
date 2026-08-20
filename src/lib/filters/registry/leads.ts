@@ -76,6 +76,13 @@ function compileSource(cond: FilterCondition): string {
 // invalid and "unassigned" wasn't requested.
 
 function compileAssignees(cond: FilterCondition): string | null {
+  // assigned_to is a plain nullable column (unlike Collaborators' join table),
+  // so is_empty/is_not_empty are ordinary NULL checks — no !inner-join trap
+  // here. Kept distinct from the "unassigned" sentinel inside is_any_of below,
+  // which stays for back-compat with existing saved/URL filters.
+  if (cond.op === "is_empty") return "assigned_to.is.null";
+  if (cond.op === "is_not_empty") return "assigned_to.not.is.null";
+
   const values = asList(cond.value);
   const wantsUnassigned = values.includes("unassigned");
   const ids = values.filter((v) => v !== "unassigned" && UUID_RE.test(v));
@@ -202,7 +209,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Assigned to",
       type: "uuid",
       source: { kind: "virtual", compile: compileAssignees },
-      operators: ["is_any_of"],
+      operators: ["is_any_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },
@@ -211,7 +218,16 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Collaborators",
       type: "relation",
       source: { kind: "embed", relation: "lead_collaborators", column: "user_id", embedSelect: "lead_collaborators!inner(user_id)" },
-      operators: ["is_any_of"],
+      // is_not_empty is safe to add on top of is_any_of: the embedSelect above
+      // is an `!inner` join, so any row that survives it already has >=1
+      // collaborator — is_not_empty just states that fact explicitly.
+      // is_empty is deliberately NOT offered here (unlike OPERATORS_BY_TYPE.relation's
+      // default, which lists it): the same !inner join makes "no matching row"
+      // unrepresentable — user_id can never be NULL on a row the join kept, so
+      // is_empty would silently compile to a filter that matches zero leads,
+      // always. Needs a NOT EXISTS-shaped query (same fix class as is_none_of
+      // above in compile.ts) before it can be offered here.
+      operators: ["is_any_of", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },

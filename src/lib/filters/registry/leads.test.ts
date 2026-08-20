@@ -122,6 +122,16 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual([]);
   });
 
+  it("assignees: is_empty compiles to a plain assigned_to.is.null check (no !inner-join trap — assigned_to is a scalar column)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_empty")));
+    expect(b.calls).toEqual(["or(assigned_to.is.null)"]);
+  });
+
+  it("assignees: is_not_empty compiles to assigned_to.not.is.null", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_not_empty")));
+    expect(b.calls).toEqual(["or(assigned_to.not.is.null)"]);
+  });
+
   it("assignees: every token invalid, inside an OR group, drops out rather than making the group match every row (§0 fix)", () => {
     const b = compile({
       conjunction: "and",
@@ -134,6 +144,17 @@ describe("leads registry — legacy value-shape equivalence", () => {
   it("collaborators is embed-kind and is planned as the exact !inner select route.ts's selectColumns ternary builds today", () => {
     const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])), registry, ctx);
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("collaborators: is_not_empty is safe on the !inner join (any surviving row already has >=1 collaborator) and still carries referencedTable", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_not_empty")), registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("collaborators: is_empty is rejected at the registry level — the !inner join can't express 'no matching row' (would silently compile to zero-rows-always, same fix class as is_none_of)", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_empty")), registry, ctx);
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_empty is not allowed/);
   });
 
   it("tags has_all matches route.ts's .contains('tags', [tagFilter]) via the native path", () => {
