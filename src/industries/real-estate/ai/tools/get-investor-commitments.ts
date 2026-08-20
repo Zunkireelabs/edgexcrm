@@ -25,7 +25,9 @@ export const getInvestorCommitmentsTool: AgentTool<z.infer<typeof inputSchema>> 
     "committed?\" or \"is <investor> a repeat backer?\".",
   inputSchema,
   scope: "read",
-  industries: ["real_estate"],
+  // home_moving is a literal clone of real_estate's Offerings vertical and
+  // reuses this same tool pack — must stay in sync with home-moving/manifest.ts.
+  industries: ["real_estate", "home_moving"],
   async execute(ctx, input) {
     const { db, auth } = ctx;
     assertUserAuth(auth);
