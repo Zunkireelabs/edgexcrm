@@ -12,5 +12,6 @@ export const emailMeta: FeatureMeta = {
     INDUSTRIES.HEALTHCARE,
     INDUSTRIES.RECRUITMENT,
     INDUSTRIES.GENERAL,
+    INDUSTRIES.HOME_MOVING,
   ],
 };
