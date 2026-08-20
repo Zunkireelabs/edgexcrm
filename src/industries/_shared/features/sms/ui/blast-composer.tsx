@@ -13,13 +13,53 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
+import type { FilterOption } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
 import { EMPTY_TREE, type CompileCtx, type FilterTree } from "@/lib/filters/types";
+import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { CharacterCounter } from "./character-counter";
 import { CostPreviewDialog } from "./cost-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
-import { smsSend, SmsApiError } from "../lib/api-client";
+import { smsSend, smsGet, SmsApiError } from "../lib/api-client";
 import type { SmsBlastRow, SmsPreviewResponse } from "../lib/types";
+
+// No pipeline-scoped list on this surface (the Audience picker targets leads
+// tenant-wide, not one list) — mirrors leads-table.tsx's "no active pipeline"
+// fallback (leads-table.tsx:1254-1262) rather than wiring per-pipeline stages.
+const STATUS_OPTIONS: FilterOption[] = [
+  { value: "all", label: "All Status" },
+  { value: "new", label: "New" },
+  { value: "partial", label: "Partial" },
+  { value: "contacted", label: "Contacted" },
+  { value: "enrolled", label: "Enrolled" },
+  { value: "rejected", label: "Rejected" },
+];
+
+// Matches leads-table.tsx:2318 — the only tag leads-table.tsx offers today.
+const TAG_OPTIONS: FilterOption[] = [{ value: "student", label: "Student" }];
+
+/** Pure so the F-11 regression test can assert every key resolves to a
+ *  non-empty option list from realistic fixture data without rendering. */
+export function buildAudienceOptionOverrides(input: {
+  forms: { id: string; name: string }[];
+  sourceFacet: { name: string; count: number }[];
+  assigneeFacet: { name: string; count: number }[];
+  roster: { user_id: string; name: string }[];
+}): Partial<Record<string, FilterOption[]>> {
+  const collaborators = input.roster.map((m) => ({ value: m.user_id, label: m.name }));
+  const memberNameById = new Map(collaborators.map((o) => [o.value, o.label]));
+  return {
+    form: input.forms.map((f) => ({ value: f.id, label: f.name })),
+    source: input.sourceFacet.map((o) => ({ value: o.name, label: o.name })),
+    assignees: input.assigneeFacet
+      .filter((o) => o.name !== "unassigned")
+      .map((o) => ({ value: o.name, label: memberNameById.get(o.name) ?? o.name })),
+    collaborators,
+    status: STATUS_OPTIONS,
+    industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
+    tags: TAG_OPTIONS,
+  };
+}
 
 interface BlastComposerProps {
   blast: SmsBlastRow;
@@ -52,6 +92,51 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     []
   );
   const fields = useMemo(() => Object.values(registry), [registry]);
+
+  // Audience picker option lists (F-11 fix — SMS-FIX-F11-BRIEF.md). This is a
+  // from-scratch page with no leads/team data already loaded, unlike
+  // leads-table.tsx (the AdvancedFilterBar's only other consumer, which
+  // computes these from data it already has). Fetched once on mount from the
+  // same existing endpoints/constants leads-table.tsx draws from — no new API.
+  const [forms, setForms] = useState<{ id: string; name: string }[]>([]);
+  const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
+  const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
+  const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    smsGet<{ id: string; name: string }[]>("/api/v1/form-configs")
+      .then(({ data }) => {
+        if (!cancelled) setForms(data);
+      })
+      .catch(() => void 0);
+
+    smsGet<{ facets?: { source?: { options: { name: string; count: number }[] } | null; assignee?: { options: { name: string; count: number }[] } | null } }>(
+      "/api/v1/leads?facets=source,assignee"
+    )
+      .then(({ data }) => {
+        if (cancelled) return;
+        setSourceFacet(data.facets?.source?.options ?? []);
+        setAssigneeFacet(data.facets?.assignee?.options ?? []);
+      })
+      .catch(() => void 0);
+
+    smsGet<{ user_id: string; name: string }[]>("/api/v1/team?minimal=1")
+      .then(({ data }) => {
+        if (!cancelled) setRoster(data);
+      })
+      .catch(() => void 0);
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const audienceOptionOverrides = useMemo(
+    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster }),
+    [forms, sourceFacet, assigneeFacet, roster]
+  );
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -139,7 +224,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
 
       <div className="flex flex-col gap-1.5">
         <Label>Audience</Label>
-        <AdvancedFilterBar entity="leads" fields={fields} value={tree} onChange={setTree} allowGroups={false} />
+        <AdvancedFilterBar entity="leads" fields={fields} value={tree} onChange={setTree} allowGroups={false} optionOverrides={audienceOptionOverrides} />
         {liveMeta && (
           <p className="text-xs text-muted-foreground">
             {liveMeta.sendable} sendable of {liveMeta.matched} matched leads.
