@@ -266,11 +266,6 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
             {audienceCount.sendable} sendable of {audienceCount.matched} matched leads.
           </p>
         ) : null}
-        {liveMeta && (
-          <p className="text-xs text-muted-foreground">
-            {liveMeta.sendable} sendable of {liveMeta.matched} matched leads.
-          </p>
-        )}
       </div>
 
       {canSendSms && (
