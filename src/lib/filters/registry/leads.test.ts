@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compileFilter, planFilter, type QueryBuilder } from "../compile";
 import { FilterCompileError, type CompileCtx, type FilterCondition, type FilterTree } from "../types";
 import { leadFields } from "./leads";
+import { legacyLeadsParamsToTree } from "../legacy-leads-params";
 
 // Spot-checks that the leads registry's legacy-facing fields (status, source,
 // assignees) compile to the SAME predicate route.ts's hand-rolled chain emits
@@ -102,6 +103,44 @@ describe("leads registry — legacy value-shape equivalence", () => {
   it("form: a UUID targets form_config_id directly, matching route.ts's .eq('form_config_id', formFilter)", () => {
     const b = compile(andTree(cond("c1", "form", "is", "11111111-2222-4333-8444-555555555555")));
     expect(b.calls).toEqual(["eq(form_config_id,\"11111111-2222-4333-8444-555555555555\")"]);
+  });
+
+  // ── the actual production bug: a malformed uuid on Stage/Form used to throw
+  // a raw Postgres error (22P02 "invalid input syntax for type uuid"),
+  // surfaced to the client as "Failed to fetch leads" — killing the ENTIRE
+  // leads list over one bad value, confirmed live against a real
+  // Postgres/PostgREST instance. Both fields now drop a malformed value
+  // instead of ever reaching the database with it.
+  it("form: a malformed (non-uuid-shaped) value is dropped, not sent to Postgres — the exact class of value that used to 503 the whole leads list", () => {
+    const b = compile(andTree(cond("c1", "form", "is", "not-a-real-uuid")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("stage: a malformed (non-uuid-shaped) list_id value is dropped the same way", () => {
+    const b = compile(andTree(cond("c1", "stage", "is", "garbage")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("stage: a malformed value inside is_any_of is filtered out, valid ones survive", () => {
+    const b = compile(andTree(cond("c1", "stage", "is_any_of", ["11111111-2222-4333-8444-555555555555", "not-a-uuid"])));
+    expect(b.calls).toEqual(['in(list_id,["11111111-2222-4333-8444-555555555555"])']);
+  });
+
+  it("legacy ?form= param (no UUID_RE guard of its own, unlike ?stage=) is protected by the SAME shared compiler-level guard, not a per-path fix", () => {
+    const tree = legacyLeadsParamsToTree(new URLSearchParams({ form: "not-a-real-uuid" }));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan.ok).toBe(true); // never even reaches "invalid" — just contributes nothing
+    const b = compile(tree);
+    expect(b.calls).toEqual([]);
+  });
+
+  it("assignees: the 'unassigned' sentinel (deliberately non-uuid-shaped) is untouched by the guard — virtual fields own their own value handling", () => {
+    // Proves the guard's virtual-field exclusion against the REAL production
+    // field, not just a synthetic fixture: assignees is type:'uuid' same as
+    // form/stage, but compileAssignees legitimately depends on a non-uuid
+    // token reaching it unfiltered.
+    const b = compile(andTree(cond("c1", "assignees", "is_any_of", ["unassigned"])));
+    expect(b.calls).toEqual(["or(assigned_to.is.null)"]);
   });
 
   it("assignees: unassigned + ids matches route.ts's or(assigned_to.is.null,assigned_to.in.(...))", () => {

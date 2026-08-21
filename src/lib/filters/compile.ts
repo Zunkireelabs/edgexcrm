@@ -108,6 +108,40 @@ function needsEmbedJoin(field: FieldDef, cond: FilterCondition): boolean {
   return !(cond.op === "is_empty" && field.source.emptyColumn);
 }
 
+// ── UUID-shaped value guard for `type: "uuid"` fields ───────────────────────
+// A plain uuid column (list_id/"Stage", form_config_id/"Form", …) throws a
+// raw Postgres error — 22P02 "invalid input syntax for type uuid" — for ANY
+// non-UUID-shaped value, confirmed against a real Postgres/PostgREST
+// instance. That error propagates straight out of the leads route's
+// catch-all as a 503 "Failed to fetch leads", taking down the ENTIRE
+// request over one bad value on one field — not a degraded result, a dead
+// page. `assignees` already defends itself (virtual-kind; compileAssignees
+// hand-filters through its own UUID_RE before ever touching a column) — this
+// guard generalizes that same protection to every OTHER uuid-typed field, so
+// the next one doesn't have to remember to add it by hand. Virtual fields
+// are excluded: they own their full value interpretation already (e.g.
+// compileAssignees' "unassigned" sentinel is deliberately NOT uuid-shaped
+// and must reach it unfiltered).
+const UUID_SHAPE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function needsUuidGuard(field: FieldDef): boolean {
+  return field.type === "uuid" && field.source.kind !== "virtual";
+}
+
+// Returns the condition unchanged when nothing needs stripping, a copy with
+// only the UUID-shaped entries of a list value, or null when nothing
+// survives. Mirrors the §0 fix precedent elsewhere in this file: drop,
+// never compile a tautology or hand a column a value its type can't hold.
+function sanitizeUuidCondition(field: FieldDef, cond: FilterCondition): FilterCondition | null {
+  if (!needsUuidGuard(field) || cond.value === undefined) return cond;
+  if (Array.isArray(cond.value)) {
+    const clean = (cond.value as string[]).filter((v) => UUID_SHAPE_RE.test(v));
+    if (clean.length === 0) return null;
+    return clean.length === cond.value.length ? cond : { ...cond, value: clean };
+  }
+  return UUID_SHAPE_RE.test(String(cond.value)) ? cond : null;
+}
+
 // ── Date-window helpers (tz-aware, ctx.now-injected — never Date.now()) ─────
 
 // `dateStr`'s first 10 chars (YYYY-MM-DD) are the target LOCAL calendar date
@@ -554,8 +588,13 @@ function applyNative<B extends QueryBuilder>(builder: B, field: SimpleColumnFiel
   }
 }
 
-function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: FieldRegistry, cond: FilterCondition, ctx: CompileCtx): B {
-  const field = resolveAndValidate(registry, cond);
+function applyConditionToBuilder<B extends QueryBuilder>(builder: B, registry: FieldRegistry, rawCond: FilterCondition, ctx: CompileCtx): B {
+  const field = resolveAndValidate(registry, rawCond);
+  // Malformed uuid value on a uuid-typed field — drop before it can ever reach
+  // isNativeEligible/applyNative's plain .eq()/.in() call, which would hand a
+  // non-uuid string straight to a real uuid column and blow up the request.
+  const cond = sanitizeUuidCondition(field, rawCond);
+  if (cond === null) return builder;
 
   if (isNativeEligible(field, cond)) {
     return applyNative(builder, field as SimpleColumnField, cond);
@@ -596,7 +635,17 @@ function applyAndConditions<B extends QueryBuilder>(builder: B, registry: FieldR
 function applyOrConditions<B extends QueryBuilder>(builder: B, registry: FieldRegistry, conditions: FilterCondition[], ctx: CompileCtx): B {
   if (conditions.length === 0) return builder;
 
-  const resolved = conditions.map((cond) => ({ cond, field: resolveAndValidate(registry, cond) }));
+  // Malformed uuid values are dropped BEFORE the embed-mix check below — same
+  // reasoning as applyConditionToBuilder's AND-path sibling: a bad uuid value
+  // must never reach a real query, and a dropped condition should not count
+  // toward "does this OR group mix an embed relation with something else."
+  const resolved = conditions
+    .map((cond) => {
+      const field = resolveAndValidate(registry, cond);
+      const sanitized = sanitizeUuidCondition(field, cond);
+      return sanitized === null ? null : { cond: sanitized, field };
+    })
+    .filter((r): r is { cond: FilterCondition; field: FieldDef } => r !== null);
   const embedRelations = new Set(
     resolved
       .filter(({ field, cond }) => needsEmbedJoin(field, cond))

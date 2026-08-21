@@ -228,8 +228,10 @@ describe("native fast path — pure AND trees use builder calls, not .or() strin
   });
 
   it('"is_any_of" on a scalar (uuid) field -> in()', () => {
-    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["u1", "u2"])));
-    expect(b.calls).toEqual(['in(assigned_to,["u1","u2"])']);
+    const b = compile(
+      andTree(cond("c1", "assigned_to", "is_any_of", ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]))
+    );
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111","22222222-2222-2222-2222-222222222222"])']);
   });
 
   it('"is_any_of" on an array_column (tags) -> overlaps()', () => {
@@ -300,10 +302,10 @@ describe("negation includes empty rows", () => {
   const negativeCases: { op: FilterCondition["op"]; field: string; value: FilterCondition["value"] }[] = [
     { op: "is_not", field: "first_name", value: "Jane" },
     { op: "is_not", field: "age", value: 5 as unknown as string }, // number type via "is"/"is_not" scalarValue
-    { op: "is_not", field: "assigned_to", value: "u1" },
+    { op: "is_not", field: "assigned_to", value: "11111111-1111-1111-1111-111111111111" },
     { op: "is_not", field: "industry", value: "engineering" },
     { op: "not_contains", field: "first_name", value: "an" },
-    { op: "is_none_of", field: "assigned_to", value: ["u1", "u2"] },
+    { op: "is_none_of", field: "assigned_to", value: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"] },
     { op: "is_none_of", field: "tags", value: ["vip"] },
   ];
 
@@ -328,8 +330,12 @@ describe("negation includes empty rows", () => {
   });
 
   it('"is_none_of" on a scalar column NULL-inclusive form', () => {
-    const b = compile(andTree(cond("c1", "assigned_to", "is_none_of", ["u1", "u2"])));
-    expect(b.calls[0]).toBe("or(or(assigned_to.is.null,assigned_to.not.in.(u1,u2)))");
+    const b = compile(
+      andTree(cond("c1", "assigned_to", "is_none_of", ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]))
+    );
+    expect(b.calls[0]).toBe(
+      "or(or(assigned_to.is.null,assigned_to.not.in.(11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222)))"
+    );
   });
 
   it('"is_none_of" on an array_column (tags) NULL-inclusive form uses .not.ov.', () => {
@@ -597,6 +603,53 @@ describe("no-op condition dropping (§0 fix)", () => {
     };
     const b = compile(tree);
     expect(b.calls).toEqual([]);
+  });
+});
+
+// ── uuid-typed column fields: malformed values are dropped, never sent to
+// Postgres (the "Failed to fetch leads" 503 root cause) ────────────────────
+//
+// A plain uuid column throws a real Postgres error — 22P02 "invalid input
+// syntax for type uuid" — for any non-uuid-shaped value. Confirmed live
+// against a real Postgres/PostgREST instance: that error is exactly what
+// propagates out of the leads route's catch-all as a 503 "Failed to fetch
+// leads", killing the entire request over ONE bad value on one condition.
+// assigned_to (this fixture) is a `column`-kind uuid field with no custom
+// compile() of its own — the same shape as the real registry's "Stage"
+// (list_id) and "Form" (form_config_id) fields that this guard exists for.
+describe("uuid-typed column fields drop malformed values instead of reaching Postgres", () => {
+  it("a non-uuid-shaped scalar 'is' value is dropped — zero .or()/.eq() calls, not an error", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "not-a-real-uuid")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("a non-uuid-shaped scalar value ANDed with a valid condition: only the bad leg drops, the rest still applies", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "garbage"), cond("c2", "industry", "is", "engineering")));
+    expect(b.calls).toEqual(["eq(prospect_industry,\"engineering\")"]);
+  });
+
+  it("is_any_of with a MIX of valid and invalid ids keeps only the valid ones — not an all-or-nothing drop", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["11111111-1111-1111-1111-111111111111", "garbage", "also-bad"])));
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111"])']);
+  });
+
+  it("is_any_of with EVERY id invalid drops the whole condition, same as the existing §0 fix pattern", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["garbage", "also-bad"])));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("is_none_of with every id invalid drops inside an OR group without becoming a tautology", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "assigned_to", "is_none_of", ["garbage"]), cond("c2", "industry", "is", "engineering")],
+    };
+    const b = compile(tree);
+    expect(b.calls).toEqual(["or(prospect_industry.eq.engineering)"]);
+  });
+
+  it("planFilter still reports ok:true for a malformed uuid value — it's dropped silently, not rejected with a 422 (matches the existing garbage-token precedent for assignees)", () => {
+    const result = planFilter(andTree(cond("c1", "assigned_to", "is", "not-a-real-uuid")), registry, ctx);
+    expect(result.ok).toBe(true);
   });
 });
 
