@@ -4,7 +4,7 @@
 // FilterConditionEditor used by AddFilterButton, pre-filled — editing a chip
 // in place is the same screen as creating one, just seeded differently.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
@@ -18,11 +18,16 @@ export interface FilterChipProps {
   options: FilterOption[];
   onChange: (condition: FilterCondition) => void;
   onRemove: () => void;
+  onDraftConditionChange?: (condition: FilterCondition | null) => void;
 }
 
-export function FilterChip({ field, condition, options, onChange, onRemove }: FilterChipProps) {
+export function FilterChip({ field, condition, options, onChange, onRemove, onDraftConditionChange }: FilterChipProps) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(condition);
+
+  useEffect(() => {
+    onDraftConditionChange?.(open ? draft : null);
+  }, [draft, open, onDraftConditionChange]);
 
   function handleOpenChange(next: boolean) {
     if (next) setDraft(condition); // re-seed from the committed value each time it opens

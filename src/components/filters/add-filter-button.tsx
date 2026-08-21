@@ -6,7 +6,7 @@
 // a field chosen but not yet applied — in that case it's discarded, matching
 // Notion/Twenty: closing an unfinished "+ Add filter" adds nothing).
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
@@ -21,11 +21,16 @@ export interface AddFilterButtonProps {
   onAdd: (condition: FilterCondition) => void;
   disabled?: boolean;
   compact?: boolean;
+  onDraftConditionChange?: (condition: FilterCondition | null) => void;
 }
 
-export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact }: AddFilterButtonProps) {
+export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, onDraftConditionChange }: AddFilterButtonProps) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<{ field: FieldDef; condition: FilterCondition } | null>(null);
+
+  useEffect(() => {
+    onDraftConditionChange?.(picked?.condition ?? null);
+  }, [picked, onDraftConditionChange]);
 
   function handleOpenChange(next: boolean) {
     setOpen(next);

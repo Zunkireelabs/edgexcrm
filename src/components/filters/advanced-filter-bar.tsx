@@ -23,6 +23,7 @@ export function AdvancedFilterBar({
   maxConditions = DEFAULT_MAX_CONDITIONS,
   optionOverrides,
   hideAddButton = false,
+  onDraftConditionChange,
 }: FilterHostConfig) {
   const { getOptions } = useFilterOptions(optionOverrides);
 
@@ -67,6 +68,7 @@ export function AdvancedFilterBar({
           getOptions={getOptions}
           onChangeCondition={handleChangeCondition}
           onRemoveCondition={handleRemoveCondition}
+          onDraftConditionChange={onDraftConditionChange}
         />
       )}
       {!hideAddButton && (
@@ -75,6 +77,7 @@ export function AdvancedFilterBar({
           getOptions={getOptions}
           onAdd={handleAdd}
           disabled={atCap}
+          onDraftConditionChange={onDraftConditionChange}
         />
       )}
       {showChips && hasAnything && (
