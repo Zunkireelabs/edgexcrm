@@ -94,6 +94,21 @@ export interface SmsAudienceCountResponse {
   matched: number;
   sendable: number;
   excluded: { noPhone: number; foreignNumber: number; malformed: number; suppressed: number; duplicatePhone: number };
+  sampleNames: string[];
+}
+
+export interface SmsAudiencePreviewRow {
+  leadId: string;
+  name: string;
+  phone: string;
+  source: string | null;
+}
+
+export interface SmsAudiencePreviewResponse {
+  rows: SmsAudiencePreviewRow[];
+  page: number;
+  pageSize: number;
+  total: number;
 }
 
 export interface SmsCreditAccount {

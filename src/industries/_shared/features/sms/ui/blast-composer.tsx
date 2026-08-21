@@ -15,10 +15,12 @@ import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
-import { EMPTY_TREE, type CompileCtx, type FilterTree } from "@/lib/filters/types";
+import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
+import { conditionSchema } from "@/lib/filters/schema";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
 import { CharacterCounter } from "./character-counter";
 import { CostPreviewDialog } from "./cost-preview-dialog";
+import { RecipientsPreviewDialog } from "./recipients-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
 import { smsSend, smsGet, SmsApiError } from "../lib/api-client";
 import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse } from "../lib/types";
@@ -37,6 +39,34 @@ const STATUS_OPTIONS: FilterOption[] = [
 
 // Matches leads-table.tsx:2318 — the only tag leads-table.tsx offers today.
 const TAG_OPTIONS: FilterOption[] = [{ value: "student", label: "Student" }];
+
+/** Renders the persistent audience-count line's "incl. X, Y, Z" clause.
+ *  Pure so the Phase 3 regression test can assert the branch logic without
+ *  rendering. Caller handles the `matched === 0` amber-empty-state branch
+ *  separately — this only covers the sendable > 0 cases. */
+export function formatAudienceCountLine(audienceCount: { matched: number; sendable: number; sampleNames: string[] }): string {
+  const { matched, sendable, sampleNames } = audienceCount;
+  if (sampleNames.length === 0) {
+    return `${sendable} sendable of ${matched} matched leads.`;
+  }
+  const remainder = matched - sampleNames.length;
+  return `${sendable} sendable of ${matched} matched — incl. ${sampleNames.join(", ")}${remainder > 0 ? `, +${remainder} more` : ""}.`;
+}
+
+/** Folds an in-progress draft condition into a committed tree by `id`:
+ *  replaces the condition being edited (FilterChip drafts carry their
+ *  original id) or appends a brand-new one (AddFilterButton drafts have a
+ *  fresh id not yet in `tree.conditions`). Null draft is a no-op. */
+export function withDraft(tree: FilterTree, draft: FilterCondition | null): FilterTree {
+  if (!draft) return tree;
+  const exists = tree.conditions.some((c) => c.id === draft.id);
+  return {
+    ...tree,
+    conditions: exists
+      ? tree.conditions.map((c) => (c.id === draft.id ? draft : c))
+      : [...tree.conditions, draft],
+  };
+}
 
 /** Pure so the F-11 regression test can assert every key resolves to a
  *  non-empty option list from realistic fixture data without rendering. */
@@ -81,13 +111,15 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   const [name, setName] = useState(blast.name);
   const [body, setBody] = useState(blast.body);
   const [tree, setTree] = useState<FilterTree>(blast.audience_filter ?? EMPTY_TREE);
+  const [draftCondition, setDraftCondition] = useState<FilterCondition | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
 
   const [liveMeta, setLiveMeta] = useState<{ prefix: string; footer: string; sendable: number; matched: number } | null>(null);
-  const [audienceCount, setAudienceCount] = useState<{ matched: number; sendable: number } | null>(null);
+  const [audienceCount, setAudienceCount] = useState<{ matched: number; sendable: number; sampleNames: string[] } | null>(null);
   const [audienceCountLoading, setAudienceCountLoading] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [recipientsPreviewOpen, setRecipientsPreviewOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmedPreview, setConfirmedPreview] = useState<SmsPreviewResponse | null>(null);
   const [sending, setSending] = useState(false);
@@ -198,20 +230,26 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   // Audience match count — decoupled from `body` (F-12: SMS-PHASE4-FIX-F12-BRIEF.md).
   // Fires on mount (an empty tree still resolves to "all tenant leads", useful
   // context before any filter is added) and whenever the filter tree changes,
-  // independent of whether a message has been typed.
+  // independent of whether a message has been typed. F-13
+  // (SMS-PHASE4-FIX-F13-BRIEF.md) additionally folds in the in-progress draft
+  // condition (still open in its popover, not yet Applied) once it's valid,
+  // so the count previews what Apply would produce instead of going stale
+  // while the user is mid-edit.
+  const isDraftValid = draftCondition ? conditionSchema.safeParse(draftCondition).success : false;
   useEffect(() => {
     setAudienceCountLoading(true);
     if (audienceCountTimer.current) clearTimeout(audienceCountTimer.current);
     audienceCountTimer.current = setTimeout(() => {
-      smsSend<SmsAudienceCountResponse>(`/api/v1/sms/blasts/${blast.id}/audience-count`, "POST", { audience_filter: tree })
-        .then((r) => setAudienceCount({ matched: r.matched, sendable: r.sendable }))
+      const previewTree = withDraft(tree, isDraftValid ? draftCondition : null);
+      smsSend<SmsAudienceCountResponse>(`/api/v1/sms/blasts/${blast.id}/audience-count`, "POST", { audience_filter: previewTree })
+        .then((r) => setAudienceCount({ matched: r.matched, sendable: r.sendable, sampleNames: r.sampleNames }))
         .catch(() => void 0)
         .finally(() => setAudienceCountLoading(false));
     }, PREVIEW_DEBOUNCE_MS);
     return () => {
       if (audienceCountTimer.current) clearTimeout(audienceCountTimer.current);
     };
-  }, [tree, blast.id]);
+  }, [tree, blast.id, draftCondition, isDraftValid]);
 
   async function handleConfirmSend() {
     setSending(true);
@@ -256,15 +294,32 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
 
       <div className="flex flex-col gap-1.5">
         <Label>Audience</Label>
-        <AdvancedFilterBar entity="leads" fields={fields} value={tree} onChange={setTree} allowGroups={false} optionOverrides={audienceOptionOverrides} />
+        <AdvancedFilterBar
+          entity="leads"
+          fields={fields}
+          value={tree}
+          onChange={setTree}
+          allowGroups={false}
+          optionOverrides={audienceOptionOverrides}
+          onDraftConditionChange={setDraftCondition}
+        />
         {audienceCountLoading ? (
           <p className="text-xs text-muted-foreground">Counting matches…</p>
         ) : audienceCount && audienceCount.matched === 0 ? (
           <p className="text-xs font-medium text-amber-600 dark:text-amber-500">No leads match this filter.</p>
         ) : audienceCount ? (
-          <p className="text-xs text-muted-foreground">
-            {audienceCount.sendable} sendable of {audienceCount.matched} matched leads.
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-muted-foreground">{formatAudienceCountLine(audienceCount)}</p>
+            {audienceCount.sendable > 0 && (
+              <button
+                type="button"
+                onClick={() => setRecipientsPreviewOpen(true)}
+                className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+              >
+                Preview recipients
+              </button>
+            )}
+          </div>
         ) : null}
       </div>
 
@@ -287,6 +342,13 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
           setSendError(null);
           setConfirmOpen(true);
         }}
+      />
+
+      <RecipientsPreviewDialog
+        open={recipientsPreviewOpen}
+        onOpenChange={setRecipientsPreviewOpen}
+        blastId={blast.id}
+        audienceFilter={tree}
       />
 
       <SendConfirmDialog

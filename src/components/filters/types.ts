@@ -4,7 +4,7 @@
 // one component tree serve every one of them. Do not add surface-specific
 // branches inside the bar itself; add a prop instead.
 
-import type { FieldDef, FilterTree } from "@/lib/filters/types";
+import type { FieldDef, FilterCondition, FilterTree } from "@/lib/filters/types";
 import type { FilterOption } from "@/components/ui/filter-dropdown";
 
 export type EntityKey = "leads";
@@ -38,6 +38,11 @@ export interface FilterHostConfig {
    *  which is why this exists as a first-class prop rather than forcing every
    *  surface through a fetch. */
   optionOverrides?: Partial<Record<OptionLoaderKey, FilterOption[]>>;
+  /** Fires with the in-progress condition while an AddFilterButton/FilterChip
+   *  popover is open and editing, `null` once it closes (applied or
+   *  discarded). Undefined by default — every host except the SMS composer
+   *  leaves this unset and sees zero behavior change. */
+  onDraftConditionChange?: (condition: FilterCondition | null) => void;
 }
 
 export type { FilterOption } from "@/components/ui/filter-dropdown";

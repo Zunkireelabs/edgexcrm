@@ -15,11 +15,17 @@ interface BlastRow {
   audience_filter: FilterTree | null;
 }
 
-// POST /api/v1/sms/blasts/[id]/audience-count — F-12: a lightweight sibling
-// of /preview that answers "how many leads match this filter" WITHOUT
-// requiring a message body. /preview stays as-is for the send-cost/sample
-// flow; this route exists so the Audience section gets live feedback the
-// moment a filter changes, before any message is typed.
+// POST /api/v1/sms/blasts/[id]/audience-preview — Phase 3B: on-demand paginated
+// view of the actual matched leads, for "who exactly is this going to." Unlike
+// /audience-count (Phase 3A), this is only called on click (opening the
+// "Preview recipients" dialog), never on every keystroke.
+//
+// resolveAudience() has no DB-level pagination (same as /audience-count and
+// /preview) — it loads the full matched set into memory; this route slices
+// that in-memory array into the requested page rather than adding a second
+// query path. Fine at current tenant scale (same cost /preview already pays
+// to render 3 samples); revisit only if a tenant's audience size makes this
+// slow in practice.
 export async function POST(request: NextRequest, { params }: RouteParams) {
   const guard = await requireSmsAccess();
   if (!guard.ok) return guard.response;
@@ -40,23 +46,25 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
     tree = parsed.data;
   }
 
+  const page = Math.max(1, Number(overrides.page) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number(overrides.pageSize) || 25));
+
   const userClient = await createClient();
   const service = await createServiceClient();
   const audienceResult = await resolveAudience(auth, tree, { user: userClient, service, db });
   if (!audienceResult.ok) return apiValidationError(audienceResult.errors);
 
-  // Phase 3A: first 3 sendable leads' display names, for the "incl. X, Y, Z"
-  // clause on the persistent count line — resolveAudience() already loaded
-  // the full sendable rows, no extra query.
-  const sampleNames = audienceResult.audience.sendable.slice(0, 3).map((r) => {
-    const lead = r.lead as { first_name?: string; last_name?: string };
-    return `${lead.first_name ?? ""} ${lead.last_name ?? ""}`.trim() || "Unnamed lead";
+  const all = audienceResult.audience.sendable;
+  const start = (page - 1) * pageSize;
+  const rows = all.slice(start, start + pageSize).map((r) => {
+    const lead = r.lead as { first_name?: string; last_name?: string; intake_source?: string | null };
+    return {
+      leadId: r.leadId,
+      name: `${lead.first_name ?? ""} ${lead.last_name ?? ""}`.trim() || "Unnamed lead",
+      phone: r.phoneE164,
+      source: lead.intake_source ?? null,
+    };
   });
 
-  return apiSuccess({
-    matched: audienceResult.audience.matched,
-    sendable: audienceResult.audience.sendable.length,
-    excluded: audienceResult.audience.excluded,
-    sampleNames,
-  });
+  return apiSuccess({ rows, page, pageSize, total: all.length });
 }
