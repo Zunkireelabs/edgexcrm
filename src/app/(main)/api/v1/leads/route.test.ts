@@ -235,12 +235,15 @@ describe("GET /api/v1/leads — counselor-scoping wiring", () => {
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: calls }));
 
     const { GET } = await import("./route");
-    const res = await GET(fakeReq({ assigned_to: "other-user" }));
+    // A real uuid-shaped id — a non-uuid value like the old "other-user" fixture
+    // is now correctly dropped by the UUID guard (it would 22P02 against the
+    // real leads.assigned_to column; see compile.ts's sanitizeUuidCondition).
+    const res = await GET(fakeReq({ assigned_to: "22222222-2222-2222-2222-222222222222" }));
 
     expect(res.status).toBe(200);
     // Only the client-requested filter appears — no self-restriction was ever applied.
     const assignedToCalls = calls.filter(([method, args]) => method === "eq" && args[0] === "assigned_to");
-    expect(assignedToCalls).toEqual([["eq", ["assigned_to", "other-user"]]]);
+    expect(assignedToCalls).toEqual([["eq", ["assigned_to", "22222222-2222-2222-2222-222222222222"]]]);
   });
 
   it("branch-manager (leadScope:'team' + branchId) is routed through the uncapped leads_visible_to_user() RPC as scope 'branch', not the old hand-rolled lead_branches/.or() query (BRANCH-SCOPE-TRUNCATION-503-BRIEF)", async () => {
@@ -786,14 +789,16 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
   });
 
   it("?collaborators=<id> and its equivalent ?f= tree both add the lead_collaborators!inner(user_id) embed and strip it from the response", async () => {
+    // A real uuid-shaped id — "u1" is now correctly dropped by the UUID guard
+    // (widened to cover Collaborators; see compile.ts's needsUuidGuard).
     const legacyCalls: Call[] = [];
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: legacyCalls }));
     const { GET } = await import("./route");
-    await GET(fakeReq({ collaborators: "u1" }));
+    await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111" }));
 
     const fCalls: Call[] = [];
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: fCalls }));
-    const fRes = await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ collaborators: "u1" }) }));
+    const fRes = await GET(fakeReq({ [FILTER_PARAM]: encodedTreeFor({ collaborators: "11111111-1111-1111-1111-111111111111" }) }));
 
     expect(fRes.status).toBe(200);
     expect(fCalls).toEqual(legacyCalls);
