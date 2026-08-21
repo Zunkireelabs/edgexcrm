@@ -1,6 +1,6 @@
 // Resolves a human-readable display name to wrap the Reply-To token in
 // (docs/email-productionization/SLICE-A-GUARD-REPLYTO-FIX-BRIEF.md §2). A bare
-// `reply+l<40 hex chars>@lead-crm.zunkireelabs.com` in a lead's To: chip reads
+// `reply+l<40 hex chars>@edgex.zunkireelabs.com` in a lead's To: chip reads
 // as phishing — Gmail only renders the address when there's no name to show.
 //
 // Presentational only. The token itself is never touched here: the reply path

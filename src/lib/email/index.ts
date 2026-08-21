@@ -14,9 +14,10 @@ export function getResendClient(): Resend | null {
   return _resend;
 }
 
-// Platform email host — kept on the Resend-verified domain (NOT migrated to edgex; moving the
-// from-address needs separate Resend domain verification). Single source of truth.
-export const PLATFORM_EMAIL_HOST = "lead-crm.zunkireelabs.com";
+// Platform email host — the Resend-verified domain outbound mail is sent from. Single source
+// of truth. Migrated from lead-crm.zunkireelabs.com to edgex.zunkireelabs.com on 2026-08-21
+// once edgex was DKIM/SPF-verified in Resend (docs/DOMAIN-MIGRATION-BRIEF.md).
+export const PLATFORM_EMAIL_HOST = "edgex.zunkireelabs.com";
 export const PLATFORM_EMAIL_ADDRESS = `noreply@${PLATFORM_EMAIL_HOST}`;
 
 // Email sender address - using verified domain
