@@ -5,11 +5,12 @@ import type { ComponentType } from "react";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import {
   LeadsByStageChart,
+  LeadsByListChart,
   LeadsBySourceChart,
   LeadsByCounselorChart,
 } from "@/components/dashboard/charts";
 import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
-import type { PipelineStage } from "@/types/database";
+import type { LeadList, PipelineStage } from "@/types/database";
 import type { LeadAggregates } from "@/lib/leads/aggregates";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 import type { DeliveryWidgetProps } from "@/industries/it-agency/features/delivery-dashboard/widgets/types";
@@ -125,6 +126,7 @@ interface DashboardRendererProps {
    * data (interactive cross-filtering), not a pre-aggregated count. */
   utmRows: LeadUtmRow[];
   stages: PipelineStage[];
+  lists: LeadList[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
   currentUserId?: string | null;
@@ -138,6 +140,7 @@ export function DashboardRenderer({
   sourceCounts,
   utmRows,
   stages,
+  lists,
   memberMap,
   memberNames,
   currentUserId,
@@ -179,6 +182,8 @@ export function DashboardRenderer({
       );
     case "leads-by-stage":
       return <LeadsByStageChart status={aggregates.status} stages={stages} />;
+    case "leads-by-list":
+      return <LeadsByListChart list={aggregates.list} lists={lists} />;
     case "leads-by-source":
       return <LeadsBySourceChart sourceCounts={sourceCounts} />;
     case "leads-by-counselor":

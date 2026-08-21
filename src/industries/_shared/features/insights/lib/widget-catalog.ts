@@ -11,6 +11,7 @@ export type WidgetSize = "stat" | "half" | "full" | "wide";
 export const WIDGET_CATALOG: WidgetDef[] = [
   { key: "stats",              label: "Stats cards",        description: "Total / New / Contacted / Enrolled / Rejected" },
   { key: "leads-by-stage",     label: "Leads by Status",    description: "Donut of leads grouped by status" },
+  { key: "leads-by-list",      label: "Leads by Stage",     description: "Funnel of leads grouped by Stage" },
   { key: "leads-by-source",    label: "Leads by Source",    description: "Top sources / forms" },
   { key: "leads-by-counselor", label: "Leads by Counselor", description: "Per-counselor lead counts" },
   { key: "utm",                label: "UTM Attribution",    description: "Source / Medium / Campaign breakdown" },
@@ -63,6 +64,7 @@ export const WIDGET_KEYS = WIDGET_CATALOG.map((w) => w.key);
 export const WIDGET_SIZE: Record<string, WidgetSize> = {
   stats: "full",
   "leads-by-stage": "wide",
+  "leads-by-list": "wide",
   "leads-by-source": "half",
   "leads-by-counselor": "half",
   utm: "full",
@@ -130,7 +132,14 @@ const IT_AGENCY_WIDGET_KEYS = new Set([
   "overview-delivery",
 ]);
 
-const LEAD_WIDGET_KEYS = new Set(["stats", "leads-by-stage", "leads-by-source", "leads-by-counselor", "utm"]);
+const LEAD_WIDGET_KEYS = new Set([
+  "stats",
+  "leads-by-stage",
+  "leads-by-list",
+  "leads-by-source",
+  "leads-by-counselor",
+  "utm",
+]);
 
 export function getWidgetCatalog(industryId: string | null): WidgetDef[] {
   const allowed = industryId === "it_agency" ? IT_AGENCY_WIDGET_KEYS : LEAD_WIDGET_KEYS;

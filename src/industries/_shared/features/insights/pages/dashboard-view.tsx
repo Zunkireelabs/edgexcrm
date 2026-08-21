@@ -4,7 +4,7 @@ import React from "react";
 import { DashboardRenderer } from "../components/dashboard-renderer";
 import { DashboardSwitcher } from "../components/dashboard-switcher";
 import { WIDGET_SIZE, type WidgetSize } from "../lib/widget-catalog";
-import type { Dashboard, PipelineStage } from "@/types/database";
+import type { Dashboard, LeadList, PipelineStage } from "@/types/database";
 import type { LeadAggregates } from "@/lib/leads/aggregates";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 
@@ -48,6 +48,7 @@ interface RendererProps {
   sourceCounts: Record<string, number>;
   utmRows: LeadUtmRow[];
   stages: PipelineStage[];
+  lists: LeadList[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
   currentUserId?: string | null;
@@ -113,6 +114,7 @@ interface DashboardViewProps {
   sourceCounts: Record<string, number>;
   utmRows: LeadUtmRow[];
   stages: PipelineStage[];
+  lists: LeadList[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
   visibleDashboards: Dashboard[];
@@ -128,6 +130,7 @@ export function DashboardView({
   sourceCounts,
   utmRows,
   stages,
+  lists,
   memberMap,
   memberNames,
   visibleDashboards,
@@ -158,6 +161,7 @@ export function DashboardView({
             sourceCounts,
             utmRows,
             stages,
+            lists,
             memberMap,
             memberNames,
             currentUserId,
