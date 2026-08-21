@@ -125,7 +125,15 @@ function needsEmbedJoin(field: FieldDef, cond: FilterCondition): boolean {
 const UUID_SHAPE_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function needsUuidGuard(field: FieldDef): boolean {
-  return field.type === "uuid" && field.source.kind !== "virtual";
+  if (field.source.kind === "virtual") return false;
+  // `type: "relation"` (Collaborators) is deliberately included even though
+  // it isn't `type: "uuid"` — its embed column (lead_collaborators.user_id)
+  // is a real uuid FK same as any uuid-typed field, and the same 22P02 crash
+  // was confirmed live for a malformed value reaching it via is_any_of.
+  // "uuid" and "relation" cover every FieldDef in this registry whose
+  // underlying column can actually reject a malformed value; a hypothetical
+  // future kind narrower than that (e.g. a plain enum) would not need this.
+  return field.type === "uuid" || (field.type === "relation" && field.source.kind === "embed");
 }
 
 // Returns the condition unchanged when nothing needs stripping, a copy with
@@ -759,7 +767,18 @@ function checkCondition(
     return;
   }
 
-  if (needsEmbedJoin(field, cond)) embeds.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).embedSelect);
+  // A malformed uuid value gets DROPPED at compile time (sanitizeUuidCondition)
+  // — this must be decided here too, using the same sanitized condition, not
+  // the raw one. Skipping it would tell the caller to add the relation's
+  // !inner join to .select() for a condition that compileFilter never
+  // actually applies a predicate for — and an !inner join filters rows by
+  // merely being present in the select, independent of any predicate, so
+  // that mismatch would silently narrow the result set to "has any
+  // collaborator" instead of leaving the tenant's full leads unfiltered.
+  const sanitized = sanitizeUuidCondition(field, cond);
+  if (sanitized && needsEmbedJoin(field, sanitized)) {
+    embeds.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).embedSelect);
+  }
 }
 
 // Mirrors applyOrConditions' own throw (compile.ts) — an OR group can only
@@ -776,7 +795,14 @@ function checkOrGroupEmbedMix(conditions: FilterCondition[], registry: FieldRegi
   for (const cond of conditions) {
     const field = registry[cond.field];
     if (!field) continue;
-    if (needsEmbedJoin(field, cond)) relations.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation);
+    // Same reasoning as checkCondition above: a condition that will be
+    // dropped for a malformed uuid value must not count as "this OR group
+    // touches a relation" — it contributes nothing at compile time, so it
+    // must not trigger (or avoid) a mixing rejection based on a value that
+    // never actually reaches the query.
+    const sanitized = sanitizeUuidCondition(field, cond);
+    if (!sanitized) continue;
+    if (needsEmbedJoin(field, sanitized)) relations.add((field.source as Extract<FieldDef["source"], { kind: "embed" }>).relation);
     else hasNonEmbed = true;
   }
   if (relations.size > 1 || (relations.size === 1 && hasNonEmbed)) {

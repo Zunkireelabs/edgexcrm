@@ -134,6 +134,14 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual([]);
   });
 
+  it("legacy ?collaborators= param (also no UUID_RE guard of its own) is protected by the same guard, widened to cover Collaborators' relation type", () => {
+    const tree = legacyLeadsParamsToTree(new URLSearchParams({ collaborators: "not-a-real-uuid" }));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan.ok).toBe(true);
+    const b = compile(tree);
+    expect(b.calls).toEqual([]);
+  });
+
   it("assignees: the 'unassigned' sentinel (deliberately non-uuid-shaped) is untouched by the guard — virtual fields own their own value handling", () => {
     // Proves the guard's virtual-field exclusion against the REAL production
     // field, not just a synthetic fixture: assignees is type:'uuid' same as
@@ -210,7 +218,7 @@ describe("leads registry — legacy value-shape equivalence", () => {
   });
 
   it("collaborators is embed-kind and is planned as the exact !inner select route.ts's selectColumns ternary builds today", () => {
-    const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])), registry, ctx);
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 
@@ -231,7 +239,7 @@ describe("leads registry — legacy value-shape equivalence", () => {
 
   it("collaborators: is_empty OR'd with is_any_of on the SAME field is correctly rejected — is_empty targets the base table's counter, is_any_of targets the embedded table, and .or({referencedTable}) can't scope a single filter string to both at once", () => {
     const plan = planFilter(
-      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_empty"), cond("c2", "collaborators", "is_any_of", ["u1"])] },
+      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_empty"), cond("c2", "collaborators", "is_any_of", ["11111111-2222-4333-8444-555555555555"])] },
       registry,
       ctx
     );
@@ -240,7 +248,7 @@ describe("leads registry — legacy value-shape equivalence", () => {
   });
 
   it("collaborators: is_none_of is still rejected — not even in the field's operators list, since a count alone can't say WHO (stays out of scope even with mig 210's counter)", () => {
-    const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["u1"])), registry, ctx);
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
     expect(plan.ok).toBe(false);
     if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_none_of is not allowed/);
   });
