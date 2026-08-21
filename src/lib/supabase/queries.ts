@@ -7,6 +7,7 @@ import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membershi
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
 import type { LeadSubmissionSnapshot } from "@/lib/leads/submission-history";
 import { visibleLeadsBase } from "@/lib/leads/visibility-query";
+import { excludeListIds } from "@/lib/leads/list-scope";
 
 export async function getCurrentUserTenant(): Promise<{
   tenant: Tenant;
@@ -122,7 +123,7 @@ export async function getLeads(
         q = q.in("list_id", scope.listIds);
       } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
         // Master view for education: show leads not in any archive list (NULL list_id is included)
-        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+        q = excludeListIds(q, scope.excludeListIds);
       }
     }
 
@@ -322,7 +323,7 @@ export async function getLeadsPage(
       } else if (scope?.listIds && scope.listIds.length > 0) {
         q = q.in("list_id", scope.listIds);
       } else if (scope?.excludeListIds && scope.excludeListIds.length > 0) {
-        q = q.or(`list_id.is.null,list_id.not.in.(${scope.excludeListIds.join(",")})`);
+        q = excludeListIds(q, scope.excludeListIds);
       }
       if (scope?.status) q = q.eq("status", scope.status);
       if (scope?.stageId) q = q.eq("stage_id", scope.stageId);

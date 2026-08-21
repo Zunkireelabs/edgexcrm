@@ -27,6 +27,9 @@ import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isEmail } from "@/lib/api/validation";
 import type { Lead } from "@/types/database";
+import { compileFilter } from "@/lib/filters/compile";
+import { leadFields } from "@/lib/filters/registry";
+import type { CompileCtx, FilterTree } from "@/lib/filters/types";
 
 // GET /api/v1/integrations/crm/leads
 export const GET = withIntegrationErrorBoundary(async function GET(request: NextRequest) {
@@ -62,9 +65,16 @@ export const GET = withIntegrationErrorBoundary(async function GET(request: Next
     query = query.ilike("email", email);
   }
   if (search) {
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
-    );
+    // Was raw `.or()` string interpolation — a `search` value containing `,` `)`
+    // or `.` escaped the value position and injected a predicate into the
+    // PostgREST filter string, reachable with an integration API key. Routed
+    // through the shared "search" FieldDef (contains, pgLike-escaped) instead.
+    const compileCtx: CompileCtx = { tz: "UTC", now: new Date(), industryId: null, permissions: {} };
+    const searchTree: FilterTree = {
+      conjunction: "and",
+      conditions: [{ id: "search", field: "search", op: "contains", value: search }],
+    };
+    query = compileFilter(query, searchTree, leadFields(compileCtx), compileCtx);
   }
 
   const { data, error, count } = await query
