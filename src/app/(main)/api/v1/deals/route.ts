@@ -8,7 +8,7 @@ import {
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
-import { validate, required, maxLength } from "@/lib/api/validation";
+import { validate, required, maxLength, uuidSearchParam } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
@@ -24,12 +24,20 @@ export async function GET(request: NextRequest) {
   const db = await scopedClient(auth);
   const defaultPipelineId = await ensureDealPipeline(db, auth.tenantId);
 
+  // pipeline_id/stage_id/account_id/contact_id/owner_id all target real uuid
+  // columns — a malformed value used to throw a raw Postgres 22P02 straight
+  // through .eq(), crashing the whole request. pipeline_id was the worst of
+  // the five: applied UNCONDITIONALLY below (no `if` guard), so a garbage
+  // value used to break every single request to this endpoint, not just a
+  // filtered one. uuidSearchParam() drops a malformed value instead of
+  // passing it through — falling back to defaultPipelineId exactly as if the
+  // param had been absent.
   const { searchParams } = new URL(request.url);
-  const pipelineId = searchParams.get("pipeline_id") || defaultPipelineId;
-  const stageId = searchParams.get("stage_id");
-  const accountId = searchParams.get("account_id");
-  const contactId = searchParams.get("contact_id");
-  const ownerId = searchParams.get("owner_id");
+  const pipelineId = uuidSearchParam(searchParams, "pipeline_id") || defaultPipelineId;
+  const stageId = uuidSearchParam(searchParams, "stage_id");
+  const accountId = uuidSearchParam(searchParams, "account_id");
+  const contactId = uuidSearchParam(searchParams, "contact_id");
+  const ownerId = uuidSearchParam(searchParams, "owner_id");
   const status = searchParams.get("status");
   const search = searchParams.get("search");
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10));

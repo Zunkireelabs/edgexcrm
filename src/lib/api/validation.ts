@@ -40,14 +40,29 @@ export function isEmail(): ValidatorFn {
   };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function isUUID(): ValidatorFn {
   return (value) => {
     if (!value || typeof value !== "string") return null;
-    const uuidRegex =
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuidRegex.test(value)) return "Invalid UUID format";
+    if (!UUID_RE.test(value)) return "Invalid UUID format";
     return null;
   };
+}
+
+// Reads a query-string param and returns it ONLY when it's uuid-shaped, else
+// null. The one-line guard a GET route should use before handing a raw
+// searchParams value to .eq()/.in() against a uuid-typed column — a
+// malformed value there throws a raw Postgres 22P02 ("invalid input syntax
+// for type uuid") that crashes the WHOLE request, not just that filter.
+// This was a real, independently-repeated production bug (leads, tasks,
+// deals all had it) before this helper existed — see the leads route's own
+// ?stage=/?assigned_to=/?branch_id= handling for the pattern this codifies,
+// and src/lib/filters/compile.ts's sanitizeUuidCondition for the equivalent
+// guard inside the filter-tree system specifically.
+export function uuidSearchParam(searchParams: URLSearchParams, key: string): string | null {
+  const value = searchParams.get(key);
+  return value && UUID_RE.test(value) ? value : null;
 }
 
 export function isIn(allowed: string[]): ValidatorFn {
