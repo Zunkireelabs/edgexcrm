@@ -196,7 +196,7 @@ export function NotificationsDropdown() {
       {/* Bell Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="relative p-2 hover:bg-gray-100 rounded-lg transition-colors group"
+        className="relative px-1.5 py-1 rounded-[8px] border border-gray-200 bg-white hover:bg-gray-100 transition-colors group"
       >
         <Bell className="w-5 h-5 text-gray-600 group-hover:text-gray-900" />
         {/* Notification Badge */}

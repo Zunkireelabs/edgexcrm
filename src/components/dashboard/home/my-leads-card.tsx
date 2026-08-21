@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Users } from "lucide-react";
+import { Users, ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatRelativeTime } from "@/lib/format-relative-time";
@@ -27,8 +27,9 @@ export function MyLeadsCard({ leads, unreadLeadIds }: MyLeadsCardProps) {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">My Leads</CardTitle>
-          <Link href="/leads" className="text-xs text-blue-600 hover:underline">
-            View all ▸
+          <Link href="/leads" className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:underline">
+            View all
+            <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
@@ -51,14 +52,14 @@ export function MyLeadsCard({ leads, unreadLeadIds }: MyLeadsCardProps) {
                   key={lead.id}
                   href={`/leads/${lead.id}`}
                   prefetch={false}
-                  className="flex items-center gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors group"
+                  className="flex items-center gap-3 py-2 px-1 rounded-md hover:bg-muted/50 transition-colors group"
                 >
                   {isUnread ? (
                     <span className="h-2 w-2 rounded-full bg-blue-500 shrink-0" aria-label="Unread" />
                   ) : (
                     <span className="h-2 w-2 rounded-full bg-transparent shrink-0" />
                   )}
-                  <span className={`flex-1 text-sm truncate ${isUnread ? "font-medium text-gray-900" : "text-gray-700"}`}>
+                  <span className={`flex-1 text-sm truncate ${isUnread ? "font-medium text-foreground" : "text-muted-foreground"}`}>
                     {name}
                   </span>
                   {lead.status && (

@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Do Not Touch The Database
+
+**HARD RULE: No database access of any kind — no migrations, no direct SQL (stage or prod), no `scripts/migrate-apply.sh`, no Supabase MCP writes/reads used to modify data, no `createServiceClient()`/`scopedClient()` calls run ad hoc against a live DB.** This supersedes the "Production DB changes — per-action approval" carve-out further down this file — that section is currently paused. Schema/migration work in this repo happens through code review and the normal PR pipeline only, not through an interactive session touching the DB directly. If a task appears to require a DB change, stop and say so instead of running it.
+
+---
+
 ## Git Hooks
 
 A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.

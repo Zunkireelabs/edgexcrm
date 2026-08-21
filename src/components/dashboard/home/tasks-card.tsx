@@ -66,7 +66,7 @@ export function TasksCard({
         )}
 
         {showCompleted && initialDone.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-gray-100">
+          <div className="mt-3 pt-3 border-t border-border">
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
               Completed
             </p>

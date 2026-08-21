@@ -34,7 +34,7 @@ export function BranchSwitcher({
   if (leadScope !== "all" && userBranchId) {
     const branchName = branches.find((b) => b.id === userBranchId)?.name ?? "—";
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-medium text-blue-700 select-none">
+      <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[8px] bg-blue-50 border border-blue-200 text-xs font-medium text-blue-700 select-none">
         <MapPin className="w-3 h-3 shrink-0" />
         {branchName}
       </div>
@@ -50,7 +50,7 @@ export function BranchSwitcher({
 
     return (
       <Select value={selectedBranchId ?? "all"} onValueChange={handleChange}>
-        <SelectTrigger size="sm" className="w-auto gap-1.5 px-2.5 text-xs font-medium rounded-lg border-gray-200 bg-white text-gray-700">
+        <SelectTrigger size="sm" className="w-auto gap-1.5 px-2.5 text-xs font-medium rounded-[8px] border-gray-200 bg-white text-gray-700">
           <MapPin className="w-3.5 h-3.5 text-gray-500 shrink-0" />
           <SelectValue />
         </SelectTrigger>

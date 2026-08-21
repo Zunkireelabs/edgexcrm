@@ -9,9 +9,10 @@ import type { LeadList } from "@/types/database";
 interface LeadsOrganiseNavGroupProps {
   lists: Pick<LeadList, "id" | "name" | "slug">[];
   onNavigate: () => void;
+  collapsed?: boolean;
 }
 
-export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGroupProps) {
+export function LeadsOrganiseNavGroup({ lists, onNavigate, collapsed = false }: LeadsOrganiseNavGroupProps) {
   const pathname = usePathname();
 
   const isOnOrganise = pathname === "/leads-organise" || pathname.startsWith("/leads-organise/");
@@ -23,6 +24,49 @@ export function LeadsOrganiseNavGroup({ lists, onNavigate }: LeadsOrganiseNavGro
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasActiveChild) setExpanded(true);
   }, [hasActiveChild]);
+
+  if (collapsed) {
+    return (
+      <div className="relative group/navgroup">
+        <Link
+          href="/leads-organise"
+          onClick={onNavigate}
+          title="Leads Organise"
+          className={`w-full flex items-center justify-center px-2 py-1.5 rounded-md transition-colors ${
+            parentActive || hasActiveChild
+              ? "bg-[#ebebeb] text-gray-900"
+              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+          }`}
+        >
+          <PackageOpen className="w-[18px] h-[18px] shrink-0" />
+        </Link>
+        {lists.length > 0 && (
+          <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
+            <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
+              Leads Organise
+            </p>
+            {lists.map((list) => {
+              const active = pathname === `/leads-organise/${list.slug}`;
+              return (
+                <Link
+                  key={list.id}
+                  href={`/leads-organise/${list.slug}`}
+                  onClick={onNavigate}
+                  className={`flex items-center gap-2 px-3 py-1.5 text-[13px] leading-5 transition-colors ${
+                    active
+                      ? "bg-[#ebebeb] text-gray-900 font-medium"
+                      : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+                  }`}
+                >
+                  {list.name}
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
