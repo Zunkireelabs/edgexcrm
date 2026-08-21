@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -33,6 +33,8 @@ import {
   ChevronDown,
   Search,
   Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
   Stamp,
   Network,
   ListChecks,
@@ -146,7 +148,10 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   Send,
 };
 
-function NavSectionHeader({ label }: { label: string }) {
+function NavSectionHeader({ label, collapsed }: { label: string; collapsed?: boolean }) {
+  if (collapsed) {
+    return <div className="mx-3 mt-3 mb-1 border-t border-gray-200" />;
+  }
   return (
     <p className="px-3 pt-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
       {label}
@@ -158,10 +163,12 @@ function SidebarGroupRender({
   group,
   pathname,
   onNavigate,
+  collapsed,
 }: {
   group: SidebarGroup;
   pathname: string;
   onNavigate: () => void;
+  collapsed?: boolean;
 }) {
   const ParentIcon = INDUSTRY_ICONS[group.icon] ?? FileText;
 
@@ -176,6 +183,48 @@ function SidebarGroupRender({
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (hasActiveChild) setExpanded(true);
   }, [hasActiveChild]);
+
+  if (collapsed) {
+    return (
+      <div className="relative group/navgroup">
+        <button
+          type="button"
+          title={group.label}
+          className={`w-full flex items-center justify-center px-2 py-1.5 rounded-[8px] transition-colors ${
+            hasActiveChild
+              ? "bg-[#ebebeb] text-gray-900"
+              : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+          }`}
+        >
+          <ParentIcon className="w-[18px] h-[18px] shrink-0" />
+        </button>
+        <div className="hidden group-hover/navgroup:block absolute left-full top-0 ml-1 z-50 min-w-[190px] bg-white rounded-lg shadow-lg border border-gray-200 py-1.5">
+          <p className="px-3 pb-1 text-[11px] font-medium text-gray-400 uppercase tracking-wider select-none">
+            {group.label}
+          </p>
+          {group.children.map((child) => {
+            const ChildIcon = INDUSTRY_ICONS[child.icon] ?? FileText;
+            const active = isChildActive(child);
+            return (
+              <Link
+                key={child.href}
+                href={child.href}
+                onClick={onNavigate}
+                className={`flex items-center gap-2 px-3 py-1.5 text-[13px] leading-5 transition-colors ${
+                  active
+                    ? "bg-[#ebebeb] text-gray-900 font-medium"
+                    : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
+                }`}
+              >
+                <ChildIcon className="w-4 h-4" />
+                {child.label}
+              </Link>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -278,6 +327,9 @@ export function DashboardShell({
   const isLeadsFullBleed = pathname === "/leads";
   const [mounted, setMounted] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [navScrolled, setNavScrolled] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const { isOpen: isAssistantOpen, toggleAssistant } = useAIAssistant();
   const { openSettings } = useSettingsModal();
@@ -315,7 +367,13 @@ export function DashboardShell({
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
+    if (localStorage.getItem("sidebar-collapsed") === "true") setSidebarCollapsed(true);
   }, []);
+
+  // Persist the collapse preference once mounted (avoids clobbering it before the initial read above).
+  useEffect(() => {
+    if (mounted) localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
+  }, [sidebarCollapsed, mounted]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -352,23 +410,33 @@ export function DashboardShell({
         key={item.href}
         href={item.href}
         onClick={handleClick}
-        className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
+        title={sidebarCollapsed ? item.label : undefined}
+        className={`relative w-full flex items-center gap-3 rounded-[8px] text-[13px] leading-5 font-medium transition-colors ${
+          sidebarCollapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
+        } ${
           isActive
             ? "bg-[#ebebeb] text-gray-900"
             : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
         }`}
       >
-        <item.icon className="w-[18px] h-[18px]" />
-        {item.label}
-        {item.badgeSlot !== undefined
-          ? item.badgeSlot
-          : item.badge
-            ? (
-                <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
-                  {item.badge > 9 ? "9+" : item.badge}
-                </Badge>
-              )
-            : null}
+        <item.icon className="w-[18px] h-[18px] shrink-0" />
+        {!sidebarCollapsed && (
+          <>
+            <span className="flex-1 truncate text-left">{item.label}</span>
+            {item.badgeSlot !== undefined
+              ? item.badgeSlot
+              : item.badge
+                ? (
+                    <Badge variant="destructive" className="ml-auto h-5 min-w-5 px-1.5 text-xs">
+                      {item.badge > 9 ? "9+" : item.badge}
+                    </Badge>
+                  )
+                : null}
+          </>
+        )}
+        {sidebarCollapsed && item.badge ? (
+          <span className="absolute top-1 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+        ) : null}
       </Link>
     );
   }
@@ -381,6 +449,7 @@ export function DashboardShell({
           group={entry}
           pathname={pathname}
           onNavigate={() => setMobileOpen(false)}
+          collapsed={sidebarCollapsed}
         />
       );
     }
@@ -403,18 +472,37 @@ export function DashboardShell({
 
   const sidebarContent = (
     <div className="flex flex-col h-full bg-sidebar-bg">
-      {/* EdgeX product brand wordmark */}
-      <div className="px-5 py-3 h-[52px] flex items-center">
-        <span className="text-lg font-semibold text-gray-900 tracking-tight">
-          EdgeX
-          {brandSuffix && (
-            <span className="font-normal text-[#2663EB]">{brandSuffix}</span>
+      {/* EdgeX product brand wordmark + sidebar collapse toggle, same row */}
+      <div
+        className={`h-[38px] flex items-center py-0 ${
+          sidebarCollapsed ? "justify-center px-2" : "justify-between px-5"
+        }`}
+      >
+        {!sidebarCollapsed && (
+          <span className="text-lg font-semibold text-gray-900 tracking-tight truncate">
+            EdgeX
+            {brandSuffix && (
+              <span className="font-normal text-[#2663EB]">{brandSuffix}</span>
+            )}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => setSidebarCollapsed((v) => !v)}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          className="p-1.5 rounded-md text-gray-400 hover:bg-[#ebebeb] hover:text-gray-700 transition-colors shrink-0"
+        >
+          {sidebarCollapsed ? (
+            <PanelLeftOpen className="w-[18px] h-[18px]" />
+          ) : (
+            <PanelLeftClose className="w-[18px] h-[18px]" />
           )}
-        </span>
+        </button>
       </div>
 
-      {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled) */}
-      {aiAssistantEnabled && (
+      {/* Mode switcher — Orca tab hidden entirely for AI-disabled tenants (env flag AND tenants.ai_enabled); also hidden while collapsed (no room for labeled tabs) */}
+      {aiAssistantEnabled && !sidebarCollapsed && (
         <div className="px-3 pb-2">
           <Tabs value={navMode} onValueChange={handleNavModeChange}>
             <TabsList className="grid w-full grid-cols-2 h-8 border border-[#00001d13]">
@@ -432,22 +520,48 @@ export function DashboardShell({
       )}
 
       {/* Global Search row — top of nav, opens command palette */}
-      <div className="px-3 pb-1">
+      <div className="px-3 pt-4 pb-1">
         <button
           type="button"
           onClick={() => { openSearch(); setMobileOpen(false); }}
-          className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] border border-gray-200 text-[13px] leading-5 font-medium transition-colors text-[#666666] bg-white hover:bg-[#ebebeb] hover:border-gray-300 hover:text-gray-900"
+          title={sidebarCollapsed ? "Global Search" : undefined}
+          className={`w-full flex items-center gap-3 rounded-[8px] border border-gray-200 text-[13px] leading-5 font-medium transition-colors text-[#666666] bg-white hover:bg-[#ebebeb] hover:border-gray-300 hover:text-gray-900 ${
+            sidebarCollapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
+          }`}
         >
           <Search className="w-[18px] h-[18px] shrink-0" />
-          <span className="flex-1 text-left">Global Search</span>
-          <kbd className="text-[11px] text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded font-mono leading-none">
-            {shortcutLabel}
-          </kbd>
+          {!sidebarCollapsed && (
+            <>
+              <span className="flex-1 text-left">Global Search</span>
+              <kbd className="text-[11px] text-gray-400 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded font-mono leading-none">
+                {shortcutLabel}
+              </kbd>
+            </>
+          )}
         </button>
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <div className="relative flex-1 min-h-0">
+        {/* Scroll-fade/blur mask — signals more nav items above once scrolled down */}
+        <div
+          aria-hidden
+          className={`pointer-events-none absolute top-0 left-0 right-0 h-6 z-10 transition-opacity duration-200 ${
+            navScrolled ? "opacity-100" : "opacity-0"
+          }`}
+          style={{
+            background: "linear-gradient(to bottom, var(--sidebar-bg) 0%, transparent 100%)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            maskImage: "linear-gradient(to bottom, black, transparent)",
+            WebkitMaskImage: "linear-gradient(to bottom, black, transparent)",
+          }}
+        />
+        <nav
+          ref={navRef}
+          onScroll={(e) => setNavScrolled(e.currentTarget.scrollTop > 4)}
+          className="h-full p-3 space-y-0.5 overflow-y-auto overflow-x-hidden no-scrollbar"
+        >
         {navMode === "ops" ? (
           isEducation ? (() => {
             // Finds a flat industry item by href (all education items are flat after manifest refactor)
@@ -461,12 +575,12 @@ export function DashboardShell({
                 {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
 
                 {/* Intelligence */}
-                <NavSectionHeader label="Intelligence" />
+                <NavSectionHeader label="Intelligence" collapsed={sidebarCollapsed} />
                 {eduItem("/insights/dashboards") && renderIndustryEntry(eduItem("/insights/dashboards")!)}
                 {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Knowledge Base", icon: Library })}
 
                 {/* Leads */}
-                <NavSectionHeader label="Leads" />
+                <NavSectionHeader label="Leads" collapsed={sidebarCollapsed} />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
                     <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
@@ -477,6 +591,7 @@ export function DashboardShell({
                     <LeadsOrganiseNavGroup
                       lists={stagingLists}
                       onNavigate={() => setMobileOpen(false)}
+                      collapsed={sidebarCollapsed}
                     />
                   </Suspense>
                 )}
@@ -489,30 +604,31 @@ export function DashboardShell({
                   <LeadListsNavGroup
                     lists={leadLists}
                     onNavigate={() => setMobileOpen(false)}
+                    collapsed={sidebarCollapsed}
                     isAdmin={role === "owner" || role === "admin"}
                   />
                 </Suspense>
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
                 {navAllowed("/contacts") && renderNavItem({ href: "/contacts", label: "Contacts", icon: Contact })}
                 {archiveLists.length > 0 && (
-                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} collapsed={sidebarCollapsed} />
                 )}
 
                 {/* Operations */}
-                <NavSectionHeader label="Operations" />
+                <NavSectionHeader label="Operations" collapsed={sidebarCollapsed} />
                 {eduItem("/applications") && renderIndustryEntry(eduItem("/applications")!)}
                 {eduItem("/classes") && renderIndustryEntry(eduItem("/classes")!)}
                 {eduItem("/check-in") && renderIndustryEntry(eduItem("/check-in")!)}
                 {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
 
                 {/* Marketing */}
-                <NavSectionHeader label="Marketing" />
+                <NavSectionHeader label="Marketing" collapsed={sidebarCollapsed} />
                 {eduItem("/forms") && renderIndustryEntry(eduItem("/forms")!)}
                 {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
                 {eduItem("/sms") && renderIndustryEntry(eduItem("/sms")!)}
 
                 {/* Administration */}
-                <NavSectionHeader label="Administration" />
+                <NavSectionHeader label="Administration" collapsed={sidebarCollapsed} />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
                 {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
                 {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
@@ -530,12 +646,12 @@ export function DashboardShell({
                 {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
 
                 {/* Intelligence */}
-                <NavSectionHeader label="Intelligence" />
+                <NavSectionHeader label="Intelligence" collapsed={sidebarCollapsed} />
                 {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
                 {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
 
                 {/* Sales */}
-                <NavSectionHeader label="Sales" />
+                <NavSectionHeader label="Sales" collapsed={sidebarCollapsed} />
                 {stagingLists.length > 0 && navAllowed("/leads-organise") && (
                   <Suspense key="leads-organise-nav" fallback={
                     <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
@@ -546,6 +662,7 @@ export function DashboardShell({
                     <LeadsOrganiseNavGroup
                       lists={stagingLists}
                       onNavigate={() => setMobileOpen(false)}
+                      collapsed={sidebarCollapsed}
                     />
                   </Suspense>
                 )}
@@ -579,6 +696,7 @@ export function DashboardShell({
                         <LeadListsNavGroup
                           lists={ungroupedLists}
                           onNavigate={() => setMobileOpen(false)}
+                          collapsed={sidebarCollapsed}
                           isAdmin={isAdminUser}
                         />
                       </Suspense>
@@ -601,6 +719,7 @@ export function DashboardShell({
                           icon={Filter}
                           lists={processingLists}
                           onNavigate={() => setMobileOpen(false)}
+                          collapsed={sidebarCollapsed}
                           isAdmin={isAdminUser}
                         />
                       </Suspense>
@@ -616,6 +735,7 @@ export function DashboardShell({
                           icon={Target}
                           lists={salesLists}
                           onNavigate={() => setMobileOpen(false)}
+                          collapsed={sidebarCollapsed}
                           isAdmin={isAdminUser}
                         />
                       </Suspense>
@@ -629,6 +749,7 @@ export function DashboardShell({
                           <LeadListsNavGroup
                             lists={ungroupedLists}
                             onNavigate={() => setMobileOpen(false)}
+                            collapsed={sidebarCollapsed}
                             isAdmin={isAdminUser}
                           />
                         </Suspense>
@@ -638,34 +759,34 @@ export function DashboardShell({
                 })()}
                 {itItem("/outreach") && renderIndustryEntry(itItem("/outreach")!)}
                 {archiveLists.length > 0 && (
-                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} collapsed={sidebarCollapsed} />
                 )}
                 {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
 
                 {/* Revenue */}
-                <NavSectionHeader label="Revenue" />
+                <NavSectionHeader label="Revenue" collapsed={sidebarCollapsed} />
                 {itItem("/proposals") && renderIndustryEntry(itItem("/proposals")!)}
                 {itItem("/deals") && renderIndustryEntry(itItem("/deals")!)}
                 {itItem("/services") && renderIndustryEntry(itItem("/services")!)}
 
                 {/* Clients */}
-                <NavSectionHeader label="Clients" />
+                <NavSectionHeader label="Clients" collapsed={sidebarCollapsed} />
                 {itItem("/accounts") && renderIndustryEntry(itItem("/accounts")!)}
                 {itItem("/contacts") && renderIndustryEntry(itItem("/contacts")!)}
 
                 {/* Delivery */}
-                <NavSectionHeader label="Delivery" />
+                <NavSectionHeader label="Delivery" collapsed={sidebarCollapsed} />
                 {itItem("/projects") && renderIndustryEntry(itItem("/projects")!)}
                 {itItem("/tasks") && renderIndustryEntry(itItem("/tasks")!)}
                 {itItem("/time-tracking") && renderIndustryEntry(itItem("/time-tracking")!)}
                 {itItem("/approvals") && renderIndustryEntry(itItem("/approvals")!)}
 
                 {/* Communication */}
-                <NavSectionHeader label="Communication" />
+                <NavSectionHeader label="Communication" collapsed={sidebarCollapsed} />
                 {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
 
                 {/* Organization */}
-                <NavSectionHeader label="Organization" />
+                <NavSectionHeader label="Organization" collapsed={sidebarCollapsed} />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
                 {navAllowed("/people") && renderNavItem({ href: "/people", label: "People", icon: UsersRound })}
                 {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
@@ -688,12 +809,12 @@ export function DashboardShell({
                 {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
 
                 {/* Intelligence */}
-                <NavSectionHeader label="Intelligence" />
+                <NavSectionHeader label="Intelligence" collapsed={sidebarCollapsed} />
                 {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
                 {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
 
                 {/* Capital Raise */}
-                <NavSectionHeader label="Capital Raise" />
+                <NavSectionHeader label="Capital Raise" collapsed={sidebarCollapsed} />
                 {navAllowed("/leads") && renderNavItem({ href: "/leads", label: "Investors", icon: UsersRound, badge: counts.unread_leads || undefined })}
                 {/* /forms only resolves for tenants whose manifest registers FORM_BUILDER
                     (currently home_moving, not real_estate) — reItem() returns undefined
@@ -707,13 +828,13 @@ export function DashboardShell({
                     land (avoids an empty-section header). Add it here when they do. */}
 
                 {/* People */}
-                <NavSectionHeader label="People" />
+                <NavSectionHeader label="People" collapsed={sidebarCollapsed} />
                 {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
                 {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
                 {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
 
                 {/* Comms */}
-                <NavSectionHeader label="Comms" />
+                <NavSectionHeader label="Comms" collapsed={sidebarCollapsed} />
                 {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
               </>
             );
@@ -729,6 +850,7 @@ export function DashboardShell({
                 <LeadsOrganiseNavGroup
                   lists={stagingLists}
                   onNavigate={() => setMobileOpen(false)}
+                  collapsed={sidebarCollapsed}
                 />
               </Suspense>
             )}
@@ -747,6 +869,7 @@ export function DashboardShell({
                       <LeadListsNavGroup
                         lists={leadLists}
                         onNavigate={() => setMobileOpen(false)}
+                        collapsed={sidebarCollapsed}
                         isAdmin={role === "owner" || role === "admin"}
                       />
                     </Suspense>,
@@ -765,7 +888,7 @@ export function DashboardShell({
             {industryBefore.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_MIDDLE.filter((i) => navAllowed(i.href)).map(renderNavItem)}
             {archiveLists.length > 0 && (
-              <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} />
+              <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} collapsed={sidebarCollapsed} />
             )}
             {industryAfter.map(renderIndustryEntry)}
             {UNIVERSAL_NAV_BOTTOM.filter(
@@ -783,12 +906,16 @@ export function DashboardShell({
           </>
         )}
       </nav>
+      </div>
 
       {/* Account — pinned to the bottom of the sidebar; menu opens upward */}
       <div className="border-t border-gray-200 p-3 relative">
         <button
           onClick={() => setShowAccountDropdown(!showAccountDropdown)}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-md transition-colors hover:bg-[#ebebeb]"
+          title={sidebarCollapsed ? userName : undefined}
+          className={`w-full flex items-center gap-3 rounded-md transition-colors hover:bg-[#ebebeb] ${
+            sidebarCollapsed ? "justify-center px-1 py-2" : "px-2 py-2"
+          }`}
         >
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-medium shrink-0"
@@ -796,17 +923,23 @@ export function DashboardShell({
           >
             {tenant.name.charAt(0)}
           </div>
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
-            <p className="text-xs text-gray-500 truncate">{user.email}</p>
-          </div>
-          <ChevronDown className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
+          {!sidebarCollapsed && (
+            <>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm font-medium text-gray-900 truncate">{userName}</p>
+                <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              </div>
+              <ChevronDown className={`w-4 h-4 text-gray-500 shrink-0 transition-transform ${showAccountDropdown ? "rotate-180" : ""}`} />
+            </>
+          )}
         </button>
 
         {showAccountDropdown && (
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowAccountDropdown(false)} />
-            <div className="absolute left-3 right-3 bottom-full mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50">
+            <div className={`absolute bottom-full mb-2 bg-white rounded-xl shadow-lg border border-gray-200 py-2 z-50 ${
+              sidebarCollapsed ? "left-3 w-64" : "left-3 right-3"
+            }`}>
               {/* User info */}
               <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-sm font-semibold text-gray-900 truncate">
@@ -868,14 +1001,18 @@ export function DashboardShell({
         }`}
       >
         {/* Desktop sidebar - Zunkireelabs style */}
-        <aside className="hidden md:flex w-60 flex-shrink-0 flex-col h-full bg-sidebar-bg print:hidden">
+        <aside
+          className={`hidden md:flex flex-shrink-0 flex-col h-full bg-sidebar-bg transition-[width] duration-200 ease-out print:hidden ${
+            sidebarCollapsed ? "w-[68px]" : "w-60"
+          }`}
+        >
           {sidebarContent}
         </aside>
 
         {/* Main content area with header */}
         <div className="flex flex-col flex-1 min-w-0 h-full bg-sidebar-bg">
           {/* Top Header Bar - Zunkireelabs style */}
-          <header className="bg-sidebar-bg px-6 py-3 h-[52px] flex items-center gap-4 w-full print:hidden">
+          <header className="bg-sidebar-bg px-6 py-0 h-[44px] flex items-center gap-4 w-full print:hidden">
             {/* Mobile menu button */}
             <div className="md:hidden">
               {mounted ? (
@@ -937,9 +1074,9 @@ export function DashboardShell({
             {/* Main content - shrinks when AI panel opens */}
             <main
               className={`flex-1 min-h-0 overflow-auto bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
-                isLeadsFullBleed ? "mr-4" : "p-4 mr-4"
+                isLeadsFullBleed ? "mr-3 mb-3" : "p-4 mr-3 mb-3"
               }`}
-              style={{ borderRadius: "8px 8px 0 0", border: "1px solid #00001d13" }}
+              style={{ borderRadius: "var(--radius-lg)", border: "2px solid #00001d13" }}
             >
               {children}
             </main>

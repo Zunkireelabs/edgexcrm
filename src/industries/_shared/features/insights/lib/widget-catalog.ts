@@ -4,7 +4,9 @@ export interface WidgetDef {
   description: string;
 }
 
-export type WidgetSize = "stat" | "half" | "full";
+// "wide" spans 2 of the 3 grid columns and always renders alone in its row —
+// the 3rd column is deliberately left blank rather than filled by another widget.
+export type WidgetSize = "stat" | "half" | "full" | "wide";
 
 export const WIDGET_CATALOG: WidgetDef[] = [
   { key: "stats",              label: "Stats cards",        description: "Total / New / Contacted / Enrolled / Rejected" },
@@ -49,13 +51,18 @@ export const WIDGET_CATALOG: WidgetDef[] = [
 
 export const WIDGET_KEYS = WIDGET_CATALOG.map((w) => w.key);
 
-// Tile size drives the layout grouping in dashboard-view.tsx: consecutive
-// widgets of the same size are grouped into one row. Lead-widget sizes
-// reproduce the pre-Phase-2 grouping exactly (chart trio => "half", stats/utm
-// standalone => "full") so education dashboards render unchanged.
+// Tile size drives the layout grouping in dashboard-view.tsx: "half"/"wide"
+// widgets pack into shared 3-column rows by column units ("wide" = 2 units,
+// "half" = 1 unit), "stat" groups with consecutive stat widgets, and "full"
+// always stands alone. Leads by Status carries a wide, per-stage funnel
+// visualization that needs more than a one-third column to stay legible —
+// "wide" (2/3) — and shares its row with Leads by Source ("half", 1/3),
+// filling that row's 3 units exactly. Leads by Counselor is "half" too, but
+// since the prior row is already full it starts its own row as a single
+// (1/3-width) column, with the remaining 2 columns left blank.
 export const WIDGET_SIZE: Record<string, WidgetSize> = {
   stats: "full",
-  "leads-by-stage": "half",
+  "leads-by-stage": "wide",
   "leads-by-source": "half",
   "leads-by-counselor": "half",
   utm: "full",

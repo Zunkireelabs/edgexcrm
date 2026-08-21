@@ -89,7 +89,7 @@ export function HomeContent({
   }, [router, userId]);
 
   return (
-    <div className="px-4 py-6">
+    <div className="px-4 pt-3 pb-6 max-w-6xl mx-auto w-full">
       <GreetingHeader userName={userName} />
 
       <AttentionSummary

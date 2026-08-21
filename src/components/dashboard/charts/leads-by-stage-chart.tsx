@@ -1,7 +1,7 @@
 "use client";
 
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FunnelChart, type FunnelStage } from "@/components/ui/funnel-chart";
 import type { PipelineStage } from "@/types/database";
 import type { WeekBucketCounts } from "@/lib/leads/aggregates";
 
@@ -24,9 +24,36 @@ const CHART_COLORS = [
   "#84CC16", // Lime
 ];
 
+const OTHER_COLOR = "#94A3B8"; // Slate — neutral bucket for overflow statuses
+const OTHER_KEY = "__other__";
+
+// Keep the funnel within the 3-8 stage range chart guidance calls "optimal" —
+// beyond that, group the smallest statuses into a synthetic "Other" bucket.
+const MAX_STAGES = 7;
+
+// Floor for the sqrt-scaled visual size, as a fraction of the top stage's value —
+// keeps a tiny status (e.g. 1 lead vs. 16,558) visible as a real segment instead
+// of collapsing to nothing, without ever changing the true count/percentage shown.
+const VISUAL_FLOOR_RATIO = 0.12;
+
 interface LeadsByStageChartProps {
   status: Record<string, WeekBucketCounts>;
   stages?: PipelineStage[];
+}
+
+interface StatusDatum {
+  name: string;
+  value: number;
+  status: string;
+}
+
+function formatPercentage(value: number, base: number): string {
+  if (base <= 0) return "0%";
+  const pct = (value / base) * 100;
+  if (pct === 0) return "0%";
+  if (pct < 1) return "<1%";
+  if (pct >= 99.95) return "100%";
+  return `${pct.toFixed(1).replace(/\.0$/, "")}%`;
 }
 
 export function LeadsByStageChart({ status, stages }: LeadsByStageChartProps) {
@@ -36,34 +63,39 @@ export function LeadsByStageChart({ status, stages }: LeadsByStageChartProps) {
     if (bucket.all > 0) statusCounts[key] = bucket.all;
   }
 
-  // Convert to chart data
-  const data = Object.entries(statusCounts)
-    .map(([status, count]) => ({
-      name: status.charAt(0).toUpperCase() + status.slice(1),
+  const sorted = Object.entries(statusCounts)
+    .map(([key, count]) => ({
+      name: key.charAt(0).toUpperCase() + key.slice(1),
       value: count,
-      status,
+      status: key,
     }))
     .sort((a, b) => b.value - a.value);
 
-  const getColor = (status: string, index: number): string => {
-    // Check if it's a known status
-    if (STATUS_COLORS[status]) {
-      return STATUS_COLORS[status];
-    }
-    // Check if we have stage colors
+  const data: StatusDatum[] =
+    sorted.length > MAX_STAGES
+      ? [
+          ...sorted.slice(0, MAX_STAGES - 1),
+          {
+            name: "Other",
+            status: OTHER_KEY,
+            value: sorted.slice(MAX_STAGES - 1).reduce((sum, d) => sum + d.value, 0),
+          },
+        ]
+      : sorted;
+
+  const getColor = (statusKey: string, index: number): string => {
+    if (statusKey === OTHER_KEY) return OTHER_COLOR;
+    if (STATUS_COLORS[statusKey]) return STATUS_COLORS[statusKey];
     if (stages) {
-      const stage = stages.find((s) => s.slug === status || s.name.toLowerCase() === status);
+      const stage = stages.find((s) => s.slug === statusKey || s.name.toLowerCase() === statusKey);
       if (stage?.color) return stage.color;
     }
-    // Fallback to chart colors
     return CHART_COLORS[index % CHART_COLORS.length];
   };
 
-  const total = Object.values(statusCounts).reduce((sum, v) => sum + v, 0);
-
   if (data.length === 0) {
     return (
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Leads by Status
@@ -76,78 +108,62 @@ export function LeadsByStageChart({ status, stages }: LeadsByStageChartProps) {
     );
   }
 
+  const topValue = data[0].value;
+  const maxValue = Math.max(...data.map((d) => d.value), 1);
+  const visualValue = (value: number) => {
+    const ratio = Math.sqrt(value) / Math.sqrt(maxValue);
+    return Math.max(maxValue * VISUAL_FLOOR_RATIO, maxValue * ratio);
+  };
+
+  const dropOffPct = (i: number): number | null => {
+    if (i === 0) return null;
+    const prev = data[i - 1].value;
+    if (prev <= 0) return null;
+    return 100 - (data[i].value / prev) * 100;
+  };
+  const dropOffs = data.map((_, i) => dropOffPct(i));
+
+  const funnelData: FunnelStage[] = data.map((entry, index) => ({
+    label: entry.name,
+    value: entry.value,
+    visualValue: visualValue(entry.value),
+    displayValue: entry.value.toLocaleString(),
+    color: getColor(entry.status, index),
+  }));
+
   return (
-    <Card>
+    <Card className="border-0 shadow-sm">
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Leads by Status
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="flex items-center gap-6">
-          {/* Donut Chart */}
-          <div className="h-[200px] w-[200px] flex-shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={data}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={50}
-                  outerRadius={80}
-                  paddingAngle={2}
-                  dataKey="value"
-                >
-                  {data.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={getColor(entry.status, index)}
-                      stroke="white"
-                      strokeWidth={2}
-                    />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      const percentage = ((data.value / total) * 100).toFixed(1);
-                      return (
-                        <div className="rounded-lg border border-border bg-background px-3 py-2">
-                          <p className="font-medium">{data.name}</p>
-                          <p className="text-sm text-muted-foreground">
-                            {data.value} leads ({percentage}%)
-                          </p>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
+        <FunnelChart
+          data={funnelData}
+          orientation="horizontal"
+          layers={3}
+          edges="curved"
+          grid={{ lineColor: "var(--border)" }}
+          formatPercentage={(pct) => {
+            if (pct === 0) return "0%";
+            if (pct < 1) return "<1%";
+            if (pct >= 99.95) return "100%";
+            return `${pct.toFixed(1).replace(/\.0$/, "")}%`;
+          }}
+          formatValue={(v) => v.toLocaleString()}
+        />
 
-          {/* Legend */}
-          <div className="flex flex-col gap-2 flex-1">
-            {data.map((entry, index) => {
-              const percentage = ((entry.value / total) * 100).toFixed(0);
-              return (
-                <div key={entry.status} className="flex items-center gap-2">
-                  <div
-                    className="h-3 w-3 rounded-sm flex-shrink-0"
-                    style={{ backgroundColor: getColor(entry.status, index) }}
-                  />
-                  <span className="text-sm font-medium">{entry.value}</span>
-                  <span className="text-sm text-muted-foreground">{entry.name}</span>
-                  <span className="text-xs text-muted-foreground ml-auto">
-                    {percentage}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        {/* Screen-reader fallback: the animated SVG carries no semantics on its own */}
+        <ul className="sr-only">
+          {data.map((entry, index) => (
+            <li key={entry.status}>
+              {entry.name}: {entry.value.toLocaleString()} leads, {formatPercentage(entry.value, topValue)} of {data[0].name}
+              {dropOffs[index] !== null &&
+                `, down ${dropOffs[index]!.toFixed(1)}% from ${data[index - 1].name}`}
+            </li>
+          ))}
+        </ul>
       </CardContent>
     </Card>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
+import { MessageSquare, ChevronRight } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { InboxSnapshot } from "@/lib/supabase/queries";
@@ -25,8 +25,9 @@ export function InboxSnapshotCard({ snapshot }: InboxSnapshotCardProps) {
               </span>
             )}
           </CardTitle>
-          <Link href="/inbox" className="text-xs text-blue-600 hover:underline">
-            View inbox ▸
+          <Link href="/inbox" className="inline-flex items-center gap-0.5 text-xs text-blue-600 hover:underline">
+            View inbox
+            <ChevronRight className="h-3 w-3" />
           </Link>
         </div>
       </CardHeader>
@@ -43,15 +44,20 @@ export function InboxSnapshotCard({ snapshot }: InboxSnapshotCardProps) {
                 key={c.id}
                 href={`/inbox?conversation=${c.id}`}
                 prefetch={false}
-                className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors"
+                className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-muted/50 transition-colors"
               >
                 <span
                   className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${
-                    c.unread_count > 0 ? "bg-blue-500" : "bg-gray-300"
+                    c.unread_count > 0 ? "bg-blue-500" : "bg-muted-foreground/30"
                   }`}
+                  aria-label={c.unread_count > 0 ? "Unread" : undefined}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
+                  <p
+                    className={`text-sm truncate ${
+                      c.unread_count > 0 ? "font-medium text-foreground" : "text-muted-foreground"
+                    }`}
+                  >
                     {c.contact_display_name || c.contact_phone || "Unknown contact"}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
