@@ -259,7 +259,7 @@ describe("processFwdRelay — sender guard (the security core)", () => {
     seedActiveFwdToken();
     seedThreadAndAccount();
     seedLastInboundFromLead();
-    const headers = { from: "noreply@lead-crm.zunkireelabs.com" };
+    const headers = { from: "noreply@edgex.zunkireelabs.com" };
 
     await processFwdRelay(BASE_PARAMS, makeDb(), BASE_RECEIVING, headers);
 
