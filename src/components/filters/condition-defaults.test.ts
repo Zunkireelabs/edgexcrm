@@ -20,6 +20,24 @@ const textField: FieldDef = {
   filterable: true,
 };
 
+const searchField: FieldDef = {
+  key: "search",
+  label: "Search (name, email, phone, ID)",
+  type: "text",
+  source: { kind: "column", column: "search" },
+  group: "Basic",
+  filterable: true,
+};
+
+const cityField: FieldDef = {
+  key: "city",
+  label: "City",
+  type: "text",
+  source: { kind: "column", column: "city" },
+  group: "Basic",
+  filterable: true,
+};
+
 describe("defaultOperatorForField", () => {
   it('picks "on" for a date field, not "is_empty" (index 0 in OPERATORS_BY_TYPE.date) — a brand-new date filter should default to something useful, not an almost-always-empty result', () => {
     expect(defaultOperatorForField(dateField)).toBe("on");
@@ -32,6 +50,14 @@ describe("defaultOperatorForField", () => {
   it("falls back to operators[0] if a field's custom operator list doesn't include \"on\" (defensive, no live registry field does this today)", () => {
     const noOnDateField: FieldDef = { ...dateField, operators: ["is_empty", "is_not_empty"] };
     expect(defaultOperatorForField(noOnDateField)).toBe("is_empty");
+  });
+
+  it('picks "contains" for the dedicated "search" field, not "is" (index 0) — a free-text multi-column search is never meaningfully exact-matched (F-14: SMS-PHASE4-FIX-F14-BRIEF.md)', () => {
+    expect(defaultOperatorForField(searchField)).toBe("contains");
+  });
+
+  it('still picks "is" for other text-type fields like city — the search-only default does not leak to other text fields', () => {
+    expect(defaultOperatorForField(cityField)).toBe("is");
   });
 });
 
