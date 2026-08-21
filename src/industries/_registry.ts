@@ -21,6 +21,7 @@ export const INDUSTRIES = {
   RECRUITMENT: "recruitment",
   GENERAL: "general",
   TRAVEL_AGENCY: "travel_agency",
+  HOME_MOVING: "home_moving",
 } as const;
 
 export type IndustryId = (typeof INDUSTRIES)[keyof typeof INDUSTRIES];

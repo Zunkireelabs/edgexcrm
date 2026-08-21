@@ -15,8 +15,11 @@ interface Props {
   params: Promise<{ id: string; docId: string }>;
 }
 
+// FEATURES.OFFERINGS is scoped per-industry in each manifest (currently
+// real_estate + home_moving) — getFeatureAccess is the single source of
+// truth, no separate industry list to keep in sync here.
 function offeringsAllowed(industryId: string | null): boolean {
-  return getFeatureAccess(industryId, FEATURES.OFFERINGS) && industryId === "real_estate";
+  return getFeatureAccess(industryId, FEATURES.OFFERINGS);
 }
 
 // DELETE /api/v1/offerings/[id]/documents/[docId] — soft-delete one data-room doc.

@@ -188,9 +188,10 @@ jobs:
               # Comma-separated LIST, never a single value. The reply address is baked
               # into every email we have ever sent, so a retired domain must keep
               # resolving. First entry = the active domain new addresses mint on.
-              # Free Resend plan allows 1 domain; add inbound.edgex.zunkireelabs.com
-              # FIRST (keeping lead-crm in the list) when the Pro plan lands.
-              echo "INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com"
+              # edgex.zunkireelabs.com verified (DKIM/SPF/receiving MX) in Resend on
+              # 2026-08-21 now that the account is on the Pro plan (previously
+              # free-tier limited to 1 domain, which is why lead-crm was first).
+              echo "INBOUND_EMAIL_DOMAINS=edgex.zunkireelabs.com,lead-crm.zunkireelabs.com"
               # Stage and prod share one Resend account + one inbound domain, so BOTH
               # webhooks receive every email.received. Each env processes only its own
               # marker and silently ignores the other's — without this, stage would

@@ -8,6 +8,7 @@ import {
   apiError,
 } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
+import { uuidSearchParam } from "@/lib/api/validation";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -31,13 +32,17 @@ export async function GET(request: NextRequest) {
   const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get("page_size") ?? "50", 10) || 50));
 
   // Counselor defense-in-depth: force assignee_id to own userId
-  let assigneeId = searchParams.get("assignee_id") ?? undefined;
+  // assignee_id/project_id/account_id all target real uuid columns
+  // (tasks.assignee_id, tasks.project_id, projects.account_id) — a malformed
+  // value used to throw a raw Postgres 22P02 straight through .eq(),
+  // crashing the whole request. uuidSearchParam() drops it instead.
+  let assigneeId = uuidSearchParam(searchParams, "assignee_id") ?? undefined;
   if (shouldRestrictToSelf(auth.permissions)) {
     assigneeId = auth.userId;
   }
 
-  const projectId = searchParams.get("project_id") ?? undefined;
-  const accountId = searchParams.get("account_id") ?? undefined;
+  const projectId = uuidSearchParam(searchParams, "project_id") ?? undefined;
+  const accountId = uuidSearchParam(searchParams, "account_id") ?? undefined;
   const q = searchParams.get("q") ?? undefined;
   const dueKeyword = searchParams.get("due") ?? undefined;
 

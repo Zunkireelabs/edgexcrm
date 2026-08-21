@@ -17,7 +17,9 @@ export const capitalRaiseSummaryTool: AgentTool<z.infer<typeof inputSchema>> = {
     "or \"how much have we raised in total?\".",
   inputSchema,
   scope: "read",
-  industries: ["real_estate"],
+  // home_moving is a literal clone of real_estate's Offerings vertical and
+  // reuses this same tool pack — must stay in sync with home-moving/manifest.ts.
+  industries: ["real_estate", "home_moving"],
   async execute(ctx) {
     const { db, auth } = ctx;
     if (!getFeatureAccess(auth.industryId, FEATURES.OFFERINGS)) return { error: "Offerings are not available for this tenant." };

@@ -111,6 +111,25 @@ const registry: FieldRegistry = {
     group: "Basic",
     filterable: true,
   },
+  // Same relation, but WITH the mig 210-style emptyColumn escape hatch wired
+  // up — a distinct fixture (not a mutation of `collaborators` above) so both
+  // "no emptyColumn configured" (rejected) and "emptyColumn configured"
+  // (works, no join) stay independently testable.
+  collaborators_with_count: {
+    key: "collaborators_with_count",
+    label: "Collaborators (with count)",
+    type: "relation",
+    source: {
+      kind: "embed",
+      relation: "lead_collaborators",
+      column: "user_id",
+      embedSelect: "lead_collaborators!inner(user_id)",
+      emptyColumn: "collaborator_count",
+    },
+    operators: ["is_any_of", "is_not_empty", "is_empty"],
+    group: "Basic",
+    filterable: true,
+  },
   status: {
     key: "status",
     label: "Status",
@@ -209,8 +228,10 @@ describe("native fast path — pure AND trees use builder calls, not .or() strin
   });
 
   it('"is_any_of" on a scalar (uuid) field -> in()', () => {
-    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["u1", "u2"])));
-    expect(b.calls).toEqual(['in(assigned_to,["u1","u2"])']);
+    const b = compile(
+      andTree(cond("c1", "assigned_to", "is_any_of", ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]))
+    );
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111","22222222-2222-2222-2222-222222222222"])']);
   });
 
   it('"is_any_of" on an array_column (tags) -> overlaps()', () => {
@@ -281,10 +302,10 @@ describe("negation includes empty rows", () => {
   const negativeCases: { op: FilterCondition["op"]; field: string; value: FilterCondition["value"] }[] = [
     { op: "is_not", field: "first_name", value: "Jane" },
     { op: "is_not", field: "age", value: 5 as unknown as string }, // number type via "is"/"is_not" scalarValue
-    { op: "is_not", field: "assigned_to", value: "u1" },
+    { op: "is_not", field: "assigned_to", value: "11111111-1111-1111-1111-111111111111" },
     { op: "is_not", field: "industry", value: "engineering" },
     { op: "not_contains", field: "first_name", value: "an" },
-    { op: "is_none_of", field: "assigned_to", value: ["u1", "u2"] },
+    { op: "is_none_of", field: "assigned_to", value: ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"] },
     { op: "is_none_of", field: "tags", value: ["vip"] },
   ];
 
@@ -309,8 +330,12 @@ describe("negation includes empty rows", () => {
   });
 
   it('"is_none_of" on a scalar column NULL-inclusive form', () => {
-    const b = compile(andTree(cond("c1", "assigned_to", "is_none_of", ["u1", "u2"])));
-    expect(b.calls[0]).toBe("or(or(assigned_to.is.null,assigned_to.not.in.(u1,u2)))");
+    const b = compile(
+      andTree(cond("c1", "assigned_to", "is_none_of", ["11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"]))
+    );
+    expect(b.calls[0]).toBe(
+      "or(or(assigned_to.is.null,assigned_to.not.in.(11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222)))"
+    );
   });
 
   it('"is_none_of" on an array_column (tags) NULL-inclusive form uses .not.ov.', () => {
@@ -397,12 +422,70 @@ describe("is_any_of with an empty value array", () => {
 
 describe("is_none_of on a relation field", () => {
   it("is rejected — !inner + not.in means 'has a collaborator who isn't X', not 'has none of X'", () => {
-    expect(() => compile(andTree(cond("c1", "collaborators", "is_none_of", ["u1"])))).toThrow(FilterCompileError);
+    expect(() => compile(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-1111-1111-1111-111111111111"])))).toThrow(FilterCompileError);
   });
 
   it("is_any_of on the same relation field IS supported", () => {
-    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])));
-    expect(b.calls[0]).toBe('or(user_id.in.(u1))');
+    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
+    expect(b.calls[0]).toBe('or(user_id.in.(11111111-1111-1111-1111-111111111111))');
+  });
+});
+
+// ── is_empty on a relation field — the emptyColumn escape hatch (mig 210) ───
+// Same underlying problem as is_none_of above (the !inner join can only prove
+// a match EXISTS, never that none does), but is_empty has a cheap way out: a
+// denormalized counter column on the BASE table, maintained by a DB trigger,
+// checked with zero join involved. Not every relation field has one — plain
+// `collaborators` (no emptyColumn) still rejects is_empty exactly like
+// is_none_of; `collaborators_with_count` is the fixture that has it wired up.
+describe("is_empty on a relation field — rejected without an emptyColumn, safe with one", () => {
+  it("is rejected on a relation field with no emptyColumn configured — same failure class as is_none_of", () => {
+    expect(() => compile(andTree(cond("c1", "collaborators", "is_empty")))).toThrow(FilterCompileError);
+  });
+
+  it("planFilter reports the same rejection up front, not just a compileFilter throw", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_empty")), registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.collaborators?.[0]).toMatch(/is_empty is not supported/);
+  });
+
+  it("WITH emptyColumn configured: compiles straight to <emptyColumn>.eq.0 — the embedded table's own column never appears", () => {
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_empty")));
+    expect(b.calls).toEqual(["or(collaborator_count.eq.0)"]);
+  });
+
+  it("WITH emptyColumn: does NOT carry referencedTable — this predicate targets the base table, not the embedded one", () => {
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_empty")));
+    expect(b.orReferencedTables).toEqual([undefined]);
+  });
+
+  it("WITH emptyColumn: planFilter does NOT add the relation's embed — the caller never needs to join lead_collaborators just to check the count", () => {
+    const result = planFilter(andTree(cond("c1", "collaborators_with_count", "is_empty")), registry, ctx);
+    expect(result).toEqual({ ok: true, embeds: [] });
+  });
+
+  it("WITH emptyColumn: is_not_empty and is_any_of on the SAME field still use the real !inner join, unaffected by the escape hatch existing", () => {
+    const notEmpty = planFilter(andTree(cond("c1", "collaborators_with_count", "is_not_empty")), registry, ctx);
+    expect(notEmpty).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+    const b = compile(andTree(cond("c1", "collaborators_with_count", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
+    expect(b.orPayloads()).toEqual(["user_id.in.(11111111-1111-1111-1111-111111111111)"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  it("is_empty (base-table leg) OR'd with is_any_of (embedded-table leg) on the SAME field is rejected — one .or({referencedTable}) call can't scope half its string to each table", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "collaborators_with_count", "is_empty"), cond("c2", "collaborators_with_count", "is_any_of", ["11111111-1111-1111-1111-111111111111"])],
+    };
+    const result = planFilter(tree, registry, ctx);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.errors.collaborators_with_count?.[0]).toMatch(/cannot mix/);
+  });
+
+  it("is_empty ANDed with an unrelated field: no throw, both legs compile independently (AND never shares one .or() call, so there's nothing to mix)", () => {
+    const b = compile(andTree(cond("c1", "status", "is", "new"), cond("c2", "collaborators_with_count", "is_empty")));
+    expect(b.calls).toEqual(["or(or(stage_id.eq.new,and(stage_id.is.null,status.eq.new)))", "or(collaborator_count.eq.0)"]);
+    expect(b.orReferencedTables).toEqual([undefined, undefined]);
   });
 });
 
@@ -418,40 +501,40 @@ describe("is_none_of on a relation field", () => {
 // see the sweep in the PR description.
 describe("embed (relation) fields pass referencedTable to .or() — never bake the table name into the filter string", () => {
   it("a lone Collaborators condition: filter string has NO table prefix, referencedTable is set", () => {
-    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])));
-    expect(b.orPayloads()).toEqual(["user_id.in.(u1)"]);
+    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
+    expect(b.orPayloads()).toEqual(["user_id.in.(11111111-1111-1111-1111-111111111111)"]);
     expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
   });
 
   it("Collaborators ANDed with a native-eligible field (e.g. tags has_all): the tags leg stays a plain native call, only the embed leg carries referencedTable", () => {
-    const b = compile(andTree(cond("c1", "tags", "has_all", ["student"]), cond("c2", "collaborators", "is_any_of", ["u1"])));
-    expect(b.calls).toEqual(["contains(tags,[\"student\"])", "or(user_id.in.(u1))"]);
+    const b = compile(andTree(cond("c1", "tags", "has_all", ["student"]), cond("c2", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
+    expect(b.calls).toEqual(["contains(tags,[\"student\"])", "or(user_id.in.(11111111-1111-1111-1111-111111111111))"]);
     expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
   });
 
   it("Collaborators ANDed with a non-native field (e.g. status is): both legs are separate .or() calls, only the embed one carries referencedTable", () => {
-    const b = compile(andTree(cond("c1", "status", "is", "new"), cond("c2", "collaborators", "is_any_of", ["u1"])));
+    const b = compile(andTree(cond("c1", "status", "is", "new"), cond("c2", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])));
     expect(b.orReferencedTables).toEqual([undefined, "lead_collaborators"]);
   });
 
   it("OR-toggle: two Collaborators conditions combine into ONE .or() call with referencedTable set once", () => {
     const b = compileFilter(
       new FakeBuilder(),
-      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "collaborators", "is_any_of", ["u2"])] },
+      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"]), cond("c2", "collaborators", "is_any_of", ["22222222-2222-2222-2222-222222222222"])] },
       registry,
       ctx
     );
-    expect(b.orPayloads()).toEqual(["or(user_id.in.(u1),user_id.in.(u2))"]);
+    expect(b.orPayloads()).toEqual(["or(user_id.in.(11111111-1111-1111-1111-111111111111),user_id.in.(22222222-2222-2222-2222-222222222222))"]);
     expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
   });
 
   it("OR-toggle mixing Collaborators with an unrelated field: compileFilter throws rather than silently produce a query wrong for one side of the OR", () => {
-    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "status", "is", "new")] };
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"]), cond("c2", "status", "is", "new")] };
     expect(() => compileFilter(new FakeBuilder(), tree, registry, ctx)).toThrow(FilterCompileError);
   });
 
   it("planFilter catches the same OR-mix case up front, as a clean per-field error — not just a compileFilter throw", () => {
-    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"]), cond("c2", "status", "is", "new")] };
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"]), cond("c2", "status", "is", "new")] };
     const result = planFilter(tree, registry, ctx);
     expect(result.ok).toBe(false);
     if (!result.ok) {
@@ -461,7 +544,7 @@ describe("embed (relation) fields pass referencedTable to .or() — never bake t
   });
 
   it("planFilter does NOT flag a single-condition OR-toggle tree (nothing to mix with just one condition)", () => {
-    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"])] };
+    const tree: FilterTree = { conjunction: "or", conditions: [cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])] };
     expect(planFilter(tree, registry, ctx)).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 });
@@ -478,7 +561,7 @@ describe("registry and operator gating", () => {
   });
 
   it("throws when the operator isn't allowed for the field's type (has_all on a uuid field)", () => {
-    expect(() => compile(andTree(cond("c1", "assigned_to", "has_all", ["u1"])))).toThrow(FilterCompileError);
+    expect(() => compile(andTree(cond("c1", "assigned_to", "has_all", ["11111111-1111-1111-1111-111111111111"])))).toThrow(FilterCompileError);
   });
 
   it("throws when the operator isn't allowed for the field's type (gt on a text field)", () => {
@@ -520,6 +603,105 @@ describe("no-op condition dropping (§0 fix)", () => {
     };
     const b = compile(tree);
     expect(b.calls).toEqual([]);
+  });
+});
+
+// ── uuid-typed column fields: malformed values are dropped, never sent to
+// Postgres (the "Failed to fetch leads" 503 root cause) ────────────────────
+//
+// A plain uuid column throws a real Postgres error — 22P02 "invalid input
+// syntax for type uuid" — for any non-uuid-shaped value. Confirmed live
+// against a real Postgres/PostgREST instance: that error is exactly what
+// propagates out of the leads route's catch-all as a 503 "Failed to fetch
+// leads", killing the entire request over ONE bad value on one condition.
+// assigned_to (this fixture) is a `column`-kind uuid field with no custom
+// compile() of its own — the same shape as the real registry's "Stage"
+// (list_id) and "Form" (form_config_id) fields that this guard exists for.
+describe("uuid-typed column fields drop malformed values instead of reaching Postgres", () => {
+  it("a non-uuid-shaped scalar 'is' value is dropped — zero .or()/.eq() calls, not an error", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "not-a-real-uuid")));
+    expect(b.calls).toEqual([]);
+  });
+
+  // schema.ts's z.string().min(1) already blocks an empty string from ever
+  // reaching here via a validated ?f= tree, and legacy-leads-params.ts's own
+  // `if (value && ...)` truthy guards block it too — so this value is
+  // unreachable through either real path today. Tested anyway (review
+  // finding): the guard is a general-purpose function, not something that
+  // should silently depend on two OTHER layers to keep an empty string out.
+  it("an empty-string scalar value is dropped the same as any other malformed value — not a special case, just fails the same regex", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("an empty string inside an is_any_of list is filtered out same as any other malformed entry", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["", "11111111-1111-1111-1111-111111111111"])));
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111"])']);
+  });
+
+  it("a non-uuid-shaped scalar value ANDed with a valid condition: only the bad leg drops, the rest still applies", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "garbage"), cond("c2", "industry", "is", "engineering")));
+    expect(b.calls).toEqual(["eq(prospect_industry,\"engineering\")"]);
+  });
+
+  it("is_any_of with a MIX of valid and invalid ids keeps only the valid ones — not an all-or-nothing drop", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["11111111-1111-1111-1111-111111111111", "garbage", "also-bad"])));
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111"])']);
+  });
+
+  it("is_any_of with EVERY id invalid drops the whole condition, same as the existing §0 fix pattern", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["garbage", "also-bad"])));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("is_none_of with every id invalid drops inside an OR group without becoming a tautology", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "assigned_to", "is_none_of", ["garbage"]), cond("c2", "industry", "is", "engineering")],
+    };
+    const b = compile(tree);
+    expect(b.calls).toEqual(["or(prospect_industry.eq.engineering)"]);
+  });
+
+  it("planFilter still reports ok:true for a malformed uuid value — it's dropped silently, not rejected with a 422 (matches the existing garbage-token precedent for assignees)", () => {
+    const result = planFilter(andTree(cond("c1", "assigned_to", "is", "not-a-real-uuid")), registry, ctx);
+    expect(result.ok).toBe(true);
+  });
+
+  // Collaborators (`type: "relation"`, not `"uuid"`) is deliberately covered
+  // by the SAME guard, widened rather than duplicated — confirmed live that
+  // a malformed value here hits the identical Postgres 22P02 crash against
+  // lead_collaborators.user_id, a real uuid FK.
+  it("Collaborators: a non-uuid-shaped is_any_of value is dropped — no embed added, no .or() call, not an error", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["not-a-real-uuid"])), registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: [] });
+    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["not-a-real-uuid"])));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("Collaborators: is_any_of with a MIX of valid and invalid ids keeps only the valid ones", () => {
+    const b = compile(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111", "garbage"])));
+    expect(b.orPayloads()).toEqual(["user_id.in.(11111111-1111-1111-1111-111111111111)"]);
+    expect(b.orReferencedTables).toEqual(["lead_collaborators"]);
+  });
+
+  // Regression coverage for a real bug caught while building this guard:
+  // planFilter's embed-collection (checkCondition) and its OR-group mixing
+  // check (checkOrGroupEmbedMix) both originally decided "does this need the
+  // embed join?" from the RAW condition, before sanitization — so a
+  // malformed-and-therefore-dropped Collaborators condition still counted as
+  // "this OR group touches a relation," wrongly rejecting an OR group that
+  // would have compiled fine (the bad leg just vanishes, leaving one clean
+  // base-table condition — no real mixing occurs).
+  it("an OR group with a malformed Collaborators value + a real base-table field does NOT falsely reject as 'cannot mix' — the bad leg is dropped, no relation ends up in play", () => {
+    const tree: FilterTree = {
+      conjunction: "or",
+      conditions: [cond("c1", "collaborators", "is_any_of", ["not-a-real-uuid"]), cond("c2", "status", "is", "new")],
+    };
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: [] });
+    const b = compile(tree);
+    expect(b.orReferencedTables).toEqual([undefined]);
   });
 });
 
@@ -725,13 +907,13 @@ describe("planFilter", () => {
   });
 
   it("collects the embedSelect string for an embed-kind condition", () => {
-    const result = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])), registry, ctx);
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])), registry, ctx);
     expect(result).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
   });
 
   it("dedupes the same embed across multiple conditions on the same relation", () => {
     const result = planFilter(
-      { conjunction: "and", conditions: [cond("c1", "collaborators", "is_any_of", ["u1"])], groups: [{ conjunction: "and", conditions: [cond("c2", "collaborators", "is_any_of", ["u2"])] }] },
+      { conjunction: "and", conditions: [cond("c1", "collaborators", "is_any_of", ["11111111-1111-1111-1111-111111111111"])], groups: [{ conjunction: "and", conditions: [cond("c2", "collaborators", "is_any_of", ["22222222-2222-2222-2222-222222222222"])] }] },
       registry,
       ctx
     );
@@ -757,7 +939,7 @@ describe("planFilter", () => {
   });
 
   it("reports is_none_of on a relation field as an error, matching compileFilter's rejection", () => {
-    const result = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["u1"])), registry, ctx);
+    const result = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-1111-1111-1111-111111111111"])), registry, ctx);
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.errors.collaborators?.[0]).toMatch(/is_none_of is not allowed|is_none_of is not supported/);
   });

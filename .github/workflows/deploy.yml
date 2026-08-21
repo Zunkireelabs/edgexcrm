@@ -247,7 +247,10 @@ jobs:
               echo "# --- BEGIN EMAIL INBOUND env (managed by GitHub Actions) ---"
               # Comma-separated LIST, never a single value — a retired domain must keep
               # resolving because its address is baked into already-sent mail forever.
-              echo "INBOUND_EMAIL_DOMAINS=lead-crm.zunkireelabs.com"
+              # First entry = active domain new addresses mint on. edgex.zunkireelabs.com
+              # verified (DKIM/SPF/receiving MX) in Resend on 2026-08-21 now that the
+              # account is on the Pro plan (previously free-tier limited to 1 domain).
+              echo "INBOUND_EMAIL_DOMAINS=edgex.zunkireelabs.com,lead-crm.zunkireelabs.com"
               # p = prod. Stage and prod share one Resend account and one inbound domain,
               # so both webhooks see every event; each ignores the other's marker. Without
               # this, prod would dead-letter stage's test mail and vice versa.

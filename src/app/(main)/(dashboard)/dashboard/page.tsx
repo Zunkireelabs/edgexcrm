@@ -6,16 +6,19 @@ import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
 import { canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { CapitalRaiseDashboard } from "@/industries/real-estate/features/capital-raise/capital-raise-dashboard";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 
 export default async function DashboardPage() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
 
-  // real_estate (CRE capital-raise) lands here on /dashboard and gets its own
-  // Capital-Raise Dashboard instead of the generic lead StatsCards/charts. This
-  // is an additive early return ABOVE all existing logic — every education /
-  // it_agency / generic path below is untouched and unreachable for real_estate.
-  if (tenantData.tenant.industry_id === "real_estate") {
+  // Offerings-industry tenants (real_estate, home_moving) land here on
+  // /dashboard and get the Capital-Raise Dashboard instead of the generic
+  // lead StatsCards/charts. This is an additive early return ABOVE all
+  // existing logic — every education / it_agency / generic path below is
+  // untouched and unreachable for these tenants.
+  if (getFeatureAccess(tenantData.tenant.industry_id, FEATURES.OFFERINGS)) {
     return <CapitalRaiseDashboard />;
   }
 

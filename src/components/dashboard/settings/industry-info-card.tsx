@@ -45,6 +45,7 @@ const industryColors: Record<IndustryId, string> = {
   recruitment: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200",
   general: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
   travel_agency: "bg-sky-100 text-sky-800 dark:bg-sky-900 dark:text-sky-200",
+  home_moving: "bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200",
 };
 
 export function IndustryInfoCard({ industry }: IndustryInfoCardProps) {

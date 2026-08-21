@@ -14,6 +14,8 @@ import {
   type AccreditationStatus,
 } from "@/industries/real-estate/lib/investor-fields";
 import { isOtherLead } from "@/lib/leads/lead-type";
+import { getFeatureAccess } from "@/industries/_loader";
+import { FEATURES } from "@/industries/_registry";
 import { SALUTATIONS } from "@/industries/it-agency/leads/salutations";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { DestinationsMultiSelect } from "@/components/dashboard/destinations-multi-select";
@@ -261,8 +263,8 @@ export function KeyInfoSection({
       {isOpen && (
         <div className="px-3 pb-3 pt-0 space-y-4">
 
-          {/* ── INVESTOR badges — real_estate only (reads custom_fields, no fetch) ── */}
-          {industryId === "real_estate" && (() => {
+          {/* ── INVESTOR badges — Offerings-industry tenants only (reads custom_fields, no fetch) ── */}
+          {getFeatureAccess(industryId, FEATURES.OFFERINGS) && (() => {
             const cf = (lead.custom_fields || {}) as Record<string, unknown>;
             const accred = cf.accreditation_status ? String(cf.accreditation_status) : null;
             const invType = cf.investor_type ? String(cf.investor_type) : null;
