@@ -22,6 +22,10 @@ export function defaultOperatorForField(field: FieldDef): FilterOperator {
   // "is empty" (almost always zero matches) instead of something useful.
   // Prefer "on" for date fields specifically; every other type keeps [0].
   if (field.type === "date" && operators.includes("on")) return "on";
+  // A free-text multi-column search field is never meaningfully "is"-matched —
+  // nobody types the literal stored string. Default to substring (F-14:
+  // SMS-PHASE4-FIX-F14-BRIEF.md), same reasoning as the date case above.
+  if (field.key === "search" && operators.includes("contains")) return "contains";
   return operators[0];
 }
 const TUPLE_OPERATORS: readonly FilterOperator[] = ["between", "date_between"];
