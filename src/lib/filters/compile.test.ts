@@ -623,6 +623,22 @@ describe("uuid-typed column fields drop malformed values instead of reaching Pos
     expect(b.calls).toEqual([]);
   });
 
+  // schema.ts's z.string().min(1) already blocks an empty string from ever
+  // reaching here via a validated ?f= tree, and legacy-leads-params.ts's own
+  // `if (value && ...)` truthy guards block it too — so this value is
+  // unreachable through either real path today. Tested anyway (review
+  // finding): the guard is a general-purpose function, not something that
+  // should silently depend on two OTHER layers to keep an empty string out.
+  it("an empty-string scalar value is dropped the same as any other malformed value — not a special case, just fails the same regex", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is", "")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("an empty string inside an is_any_of list is filtered out same as any other malformed entry", () => {
+    const b = compile(andTree(cond("c1", "assigned_to", "is_any_of", ["", "11111111-1111-1111-1111-111111111111"])));
+    expect(b.calls).toEqual(['in(assigned_to,["11111111-1111-1111-1111-111111111111"])']);
+  });
+
   it("a non-uuid-shaped scalar value ANDed with a valid condition: only the bad leg drops, the rest still applies", () => {
     const b = compile(andTree(cond("c1", "assigned_to", "is", "garbage"), cond("c2", "industry", "is", "engineering")));
     expect(b.calls).toEqual(["eq(prospect_industry,\"engineering\")"]);
