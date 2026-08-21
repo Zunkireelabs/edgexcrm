@@ -255,4 +255,27 @@ describe("location — city+country combined virtual field", () => {
     expect(cityEmpty.calls[0]).toContain('city.eq.""');
     expect(locationEmpty.calls[0]).toContain('city.eq.""');
   });
+
+  it('"starts_with" ORs the prefix match across both columns — same pgLike("prefix") pattern City/Country use individually', () => {
+    const b = compile(andTree(cond("c1", "location", "starts_with", "Kathmandu")));
+    expect(b.calls[0]).toBe("or(or(city.ilike.Kathmandu%,country.ilike.Kathmandu%))");
+    const cityAlone = compile(andTree(cond("c1", "city", "starts_with", "Kathmandu")));
+    expect(cityAlone.calls[0]).toBe("ilike(city,Kathmandu%)"); // native path — no OR needed for a single column
+  });
+
+  it('"ends_with" ORs the suffix match across both columns', () => {
+    const b = compile(andTree(cond("c1", "location", "ends_with", "pur")));
+    expect(b.calls[0]).toBe("or(or(city.ilike.%pur,country.ilike.%pur))");
+  });
+
+  it("starts_with/ends_with still escape the user's own %/_ wildcards via pgLike, same as contains", () => {
+    const b = compile(andTree(cond("c1", "location", "starts_with", "50%_off")));
+    expect(b.calls[0]).toBe('or(or(city.ilike."50\\\\%\\\\_off%",country.ilike."50\\\\%\\\\_off%"))');
+  });
+
+  it("is/is_not are still NOT offered on location — no single value to equal across two combined columns (same reasoning as Collaborators/Assigned-to)", () => {
+    const plan = planFilter(andTree(cond("c1", "location", "is", "Kathmandu")), registry, ctx);
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.location?.[0]).toMatch(/operator is is not allowed/);
+  });
 });

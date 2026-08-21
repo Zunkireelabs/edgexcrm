@@ -1,4 +1,4 @@
-import { and, or, pgVal } from "../pgrst";
+import { and, or, pgLike, pgVal } from "../pgrst";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
 // Lead field registry — Phase 2 of docs/ADVANCED-FILTERS-BRIEF.md. Covers the 9
@@ -129,10 +129,18 @@ function compileLocation(cond: FilterCondition): string {
     return or(and("city.not.is.null", `city.neq.${pgVal("")}`), and("country.not.is.null", `country.neq.${pgVal("")}`));
   }
   const value = String(cond.value);
-  const pattern = pgVal(`%${value.replace(/([\\%_])/g, "\\$1")}%`);
-  if (cond.op === "contains") return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);
+  // starts_with/ends_with mirror contains exactly (OR across both columns) —
+  // only the wildcard placement differs. No negative form exists for either
+  // (matching every other text field in this registry — the FilterOperator
+  // union has no "not_starts_with"/"not_ends_with" at all).
+  if (cond.op === "contains" || cond.op === "starts_with" || cond.op === "ends_with") {
+    const mode = cond.op === "contains" ? "contains" : cond.op === "starts_with" ? "prefix" : "suffix";
+    const pattern = pgLike(value, mode);
+    return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);
+  }
   // not_contains — De Morgan over the OR'd positive match, each leg NULL-inclusive:
   // NOT(city ilike P OR country ilike P) = (city IS NULL OR city NOT ilike P) AND (country IS NULL OR country NOT ilike P)
+  const pattern = pgLike(value, "contains");
   return and(or("city.is.null", `city.not.ilike.${pattern}`), or("country.is.null", `country.not.ilike.${pattern}`));
 }
 
@@ -370,7 +378,11 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Location",
       type: "text",
       source: { kind: "virtual", compile: compileLocation },
-      operators: ["contains", "not_contains", "is_empty", "is_not_empty"],
+      // "is"/"is not" stay excluded — there's no single value to equal across
+      // two combined columns (same reasoning as Collaborators/Assigned-to's
+      // exclusions above). starts_with/ends_with now match City/Country's own
+      // full operator set — see compileLocation.
+      operators: ["contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },
