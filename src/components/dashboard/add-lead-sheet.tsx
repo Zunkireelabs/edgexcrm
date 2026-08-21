@@ -59,6 +59,11 @@ interface TeamMember {
   branch_id?: string | null;
 }
 
+// Stable reference for the `leadLists` default — an inline `= []` default creates a new
+// array every render, which re-triggers the pre-select effect below (it depends on
+// `leadLists`) in an infinite loop whenever a caller (e.g. KanbanBoard) omits the prop.
+const EMPTY_LEAD_LISTS: LeadList[] = [];
+
 interface AddLeadSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -166,7 +171,7 @@ export function AddLeadSheet({
   tenantId,
   pipelineId,
   stages,
-  leadLists = [],
+  leadLists = EMPTY_LEAD_LISTS,
   teamMembers,
   entities = [],
   entityLabel = "Entity",
