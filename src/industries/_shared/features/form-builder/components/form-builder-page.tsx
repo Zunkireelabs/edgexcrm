@@ -64,7 +64,7 @@ function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; bran
           <p className="text-xs font-medium text-gray-500">{step.title}</p>
         )}
         {step.fields.map((field, i) => (
-          <PreviewField key={i} field={field} branding={branding} />
+          <PreviewField key={i} field={field} branding={branding} stepFields={step.fields} />
         ))}
       </div>
 
@@ -83,7 +83,15 @@ function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; bran
   );
 }
 
-function PreviewField({ field, branding }: { field: FormField; branding: FormBranding }) {
+function PreviewField({
+  field,
+  branding,
+  stepFields = [],
+}: {
+  field: FormField;
+  branding: FormBranding;
+  stepFields?: FormField[];
+}) {
   const hideLabels = branding.hide_labels ?? false;
 
   if (field.type === "checkbox") {
@@ -127,6 +135,17 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
   }
 
   if (field.type === "tel") {
+    // Mirror public-form.tsx: when the phone is linked to a separate Country
+    // select whose options carry dial codes (legacy forms), its dial code is
+    // driven by that field and shown read-only — not as a second picker.
+    const linkedField = field.country_field
+      ? stepFields.find((f) => f.name === field.country_field)
+      : undefined;
+    const isLinked = Boolean(linkedField?.options?.some((o) => o.dial_code));
+    const dialCode =
+      (isLinked ? linkedField?.options?.find((o) => o.dial_code)?.dial_code : undefined) ||
+      DEFAULT_DIAL_CODE;
+
     return (
       <div>
         {!hideLabels && (
@@ -136,7 +155,8 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
         )}
         <div className="flex h-8 rounded-md border border-gray-200 bg-gray-50 overflow-hidden">
           <span className="flex items-center px-2.5 text-xs text-gray-500 border-r border-gray-200 bg-gray-100">
-            {DEFAULT_DIAL_CODE} ▾
+            {dialCode}
+            {!isLinked && " ▾"}
           </span>
           <span className="flex items-center px-2.5 text-xs text-gray-400">
             {field.placeholder || "98XXXXXXXX"}
