@@ -18,6 +18,7 @@ import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { ListRoutingEditor } from "./list-routing-editor";
 import { BranchRoutingEditor } from "./branch-routing-editor";
 import { slugify } from "../lib/validation";
+import { DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 
 interface FormBuilderPageProps {
   formConfig: FormConfig;
@@ -120,6 +121,26 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
         <div className="h-8 rounded-md border border-gray-200 bg-gray-50 px-2.5 flex items-center justify-between text-xs text-gray-400">
           <span>{field.placeholder || "Select..."}</span>
           <span>▾</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "tel") {
+    return (
+      <div>
+        {!hideLabels && (
+          <p className="text-xs font-medium text-gray-700 mb-1">
+            {field.label} {field.required && <span className="text-red-500">*</span>}
+          </p>
+        )}
+        <div className="flex h-8 rounded-md border border-gray-200 bg-gray-50 overflow-hidden">
+          <span className="flex items-center px-2.5 text-xs text-gray-500 border-r border-gray-200 bg-gray-100">
+            {DEFAULT_DIAL_CODE} ▾
+          </span>
+          <span className="flex items-center px-2.5 text-xs text-gray-400">
+            {field.placeholder || "98XXXXXXXX"}
+          </span>
         </div>
       </div>
     );
