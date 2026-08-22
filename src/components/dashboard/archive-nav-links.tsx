@@ -9,9 +9,10 @@ interface ArchiveNavLinksProps {
   /** Archive-type lists (Archived, Delete, …) rendered as top-level LEADS nav items. */
   lists: Pick<LeadList, "id" | "name" | "slug">[];
   onNavigate: () => void;
+  collapsed?: boolean;
 }
 
-export function ArchiveNavLinks({ lists, onNavigate }: ArchiveNavLinksProps) {
+export function ArchiveNavLinks({ lists, onNavigate, collapsed = false }: ArchiveNavLinksProps) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const currentList = searchParams.get("list");
@@ -26,14 +27,17 @@ export function ArchiveNavLinks({ lists, onNavigate }: ArchiveNavLinksProps) {
             key={list.id}
             href={`/leads?list=${list.slug}`}
             onClick={onNavigate}
-            className={`w-full flex items-center gap-3 px-3 py-1.5 rounded-md text-[13px] leading-5 font-medium transition-colors ${
+            title={collapsed ? list.name : undefined}
+            className={`w-full flex items-center gap-3 rounded-md text-[13px] leading-5 font-medium transition-colors ${
+              collapsed ? "justify-center px-2 py-1.5" : "px-3 py-1.5"
+            } ${
               active
                 ? "bg-[#ebebeb] text-gray-900"
                 : "text-[#666666] hover:bg-[#ebebeb] hover:text-gray-900"
             }`}
           >
             <Icon className="w-[18px] h-[18px] shrink-0" />
-            {list.name}
+            {!collapsed && list.name}
           </Link>
         );
       })}

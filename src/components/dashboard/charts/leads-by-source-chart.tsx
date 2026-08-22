@@ -30,7 +30,7 @@ export function LeadsBySourceChart({ sourceCounts }: LeadsBySourceChartProps) {
 
   if (data.length === 0) {
     return (
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Leads by Source
@@ -44,7 +44,7 @@ export function LeadsBySourceChart({ sourceCounts }: LeadsBySourceChartProps) {
   }
 
   return (
-    <Card>
+    <Card className="border-0 shadow-sm">
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Leads by Source

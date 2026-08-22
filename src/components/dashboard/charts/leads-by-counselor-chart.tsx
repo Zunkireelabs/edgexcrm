@@ -42,7 +42,7 @@ export function LeadsByCounselorChart({ assignedToCounts, memberMap, memberNames
 
   if (data.length === 0) {
     return (
-      <Card>
+      <Card className="border-0 shadow-sm">
         <CardHeader>
           <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
             Leads by Team Member
@@ -58,7 +58,7 @@ export function LeadsByCounselorChart({ assignedToCounts, memberMap, memberNames
   const maxCount = Math.max(...data.map((d) => d.count));
 
   return (
-    <Card>
+    <Card className="border-0 shadow-sm">
       <CardHeader>
         <CardTitle className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
           Leads by Team Member

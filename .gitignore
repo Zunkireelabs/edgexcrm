@@ -58,6 +58,10 @@ temp_ss/
 .claude/settings.local.json
 .aider*
 
+# Local-only skills — not pushed to GitHub
+.claude/skills/impeccable/
+.claude/skills/ui-ux-pro-max/
+
 # graphify skill output (generated knowledge graph — regenerated locally via /graphify, never committed)
 graphify-out/
 src/graphify-out/

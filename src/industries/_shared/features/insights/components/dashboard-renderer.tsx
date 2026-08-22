@@ -170,7 +170,13 @@ export function DashboardRenderer({
 
   switch (widgetKey) {
     case "stats":
-      return <StatsCards aggregates={aggregates} />;
+      return (
+        <StatsCards
+          aggregates={aggregates}
+          teamMemberCount={Object.keys(memberMap).length}
+          activeSourceCount={Object.keys(sourceCounts).length}
+        />
+      );
     case "leads-by-stage":
       return <LeadsByStageChart status={aggregates.status} stages={stages} />;
     case "leads-by-source":
