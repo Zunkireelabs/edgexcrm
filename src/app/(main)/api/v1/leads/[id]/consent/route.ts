@@ -288,6 +288,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         to: leadEmail,
         studentName: [leadRow.first_name, leadRow.last_name].filter(Boolean).join(" ") || "Student",
         tenantName: tenantInfo?.name ?? "Your Consultant",
+        tenantId: auth.tenantId,
         token,
         primaryColor: tenantInfo?.primary_color ?? undefined,
         expiryDays: tplRow.link_expiry_days,
