@@ -147,6 +147,8 @@ export function AutoresponderEditor({
                   ref={bodyRef}
                   value={autoresponder.body_html}
                   onChange={(html) => update({ body_html: html })}
+                  format={autoresponder.body_format}
+                  onFormatChange={(format) => update({ body_format: format })}
                   placeholder={"Hi {{first_name}},\n\nWe received your enquiry and will be in touch shortly."}
                 />
               </div>

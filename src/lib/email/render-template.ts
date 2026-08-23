@@ -100,3 +100,20 @@ export function renderTemplate(
     return opts?.escape ? htmlEscape(value) : value;
   });
 }
+
+/**
+ * Single place the body-format decision is made for every send path: 'html'
+ * sends the rendered template verbatim (the admin authored real HTML source,
+ * including <style> blocks that preserveLineBreaks would corrupt); anything
+ * else ('text', undefined, null) keeps today's exact preserveLineBreaks
+ * behavior for back-compat with every rule/autoresponder authored before
+ * body_format existed.
+ */
+export function renderEmailBody(
+  template: string,
+  ctx: Parameters<typeof renderTemplate>[1],
+  format: "text" | "html" | null | undefined
+): string {
+  const rendered = renderTemplate(template, ctx, { escape: true });
+  return format === "html" ? rendered : preserveLineBreaks(rendered);
+}
