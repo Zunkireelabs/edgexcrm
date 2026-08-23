@@ -9,7 +9,7 @@ import {
   apiNotFound,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, maxLength } from "@/lib/api/validation";
+import { validate, maxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteContext {
@@ -52,6 +52,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const { valid, errors } = validate(body, {
     subject: [maxLength(500)],
     body: [maxLength(100_000)],
+    body_format: [isIn(["text", "html"])],
   });
   if (!valid) return apiValidationError(errors);
 
@@ -79,7 +80,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const allowedFields = [
     "name", "is_active", "from_name", "pipeline_id", "stage_id",
-    "subject", "body",
+    "subject", "body", "body_format",
   ];
 
   const updatePayload: Record<string, unknown> = {};

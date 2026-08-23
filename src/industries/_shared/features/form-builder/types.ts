@@ -15,6 +15,7 @@ export interface AutoresponderConfig {
   fire_mode: "every" | "first";
   subject: string;
   body_html: string;
+  body_format: "text" | "html";
 }
 
 export interface BuilderState {

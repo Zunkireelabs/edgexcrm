@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient } from "./index";
 import { resolveTenantSender } from "./sender";
-import { renderTemplate, preserveLineBreaks } from "./render-template";
+import { renderTemplate, renderEmailBody } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { FormConfig, Lead } from "@/types/database";
 
@@ -52,9 +52,7 @@ export async function processFormAutoresponder(
 
   const renderCtx = { lead, tenant: opts.tenant };
   const subject = renderTemplate(ar.subject, renderCtx, { escape: false });
-  // Field values are escaped inside renderTemplate; preserveLineBreaks then
-  // turns plain-text line breaks into <br> without disturbing real HTML.
-  const bodyHtml = preserveLineBreaks(renderTemplate(ar.body_html, renderCtx, { escape: true }));
+  const bodyHtml = renderEmailBody(ar.body_html, renderCtx, ar.body_format);
 
   let status: "sent" | "failed" = "sent";
   let errorMsg: string | null = null;

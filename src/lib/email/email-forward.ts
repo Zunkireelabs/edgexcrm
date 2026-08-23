@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient } from "./index";
 import { resolveTenantSender } from "./sender";
-import { renderTemplate, preserveLineBreaks } from "./render-template";
+import { renderTemplate, renderEmailBody } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
 
@@ -85,8 +85,7 @@ export async function processEmailForwardRules({
       };
 
       const subject = renderTemplate(rule.subject, renderCtx, { escape: false });
-      // Same shared logic as form-autoresponder.ts — see preserveLineBreaks().
-      const body = preserveLineBreaks(renderTemplate(rule.body, renderCtx, { escape: true }));
+      const body = renderEmailBody(rule.body, renderCtx, rule.body_format);
 
       const sender = await resolveTenantSender(tenantId, { nameOverride: rule.from_name ?? undefined });
 

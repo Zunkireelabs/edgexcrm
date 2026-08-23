@@ -1,5 +1,21 @@
 import { describe, it, expect } from "vitest";
-import { preserveLineBreaks } from "./render-template";
+import { preserveLineBreaks, renderEmailBody } from "./render-template";
+import type { Lead } from "@/types/database";
+
+function makeLead(overrides: Partial<Lead> = {}): Lead {
+  return {
+    id: "lead-1",
+    tenant_id: "tenant-1",
+    first_name: "Test",
+    last_name: "Lead",
+    email: null,
+    phone: null,
+    city: null,
+    country: null,
+    custom_fields: {},
+    ...overrides,
+  } as Lead;
+}
 
 describe("preserveLineBreaks", () => {
   it("converts line breaks in plain multi-line text", () => {
@@ -71,5 +87,60 @@ describe("preserveLineBreaks", () => {
   it("handles CRLF and lone CR the same as LF", () => {
     expect(preserveLineBreaks("Hi\r\nthere")).toBe("Hi<br>there");
     expect(preserveLineBreaks("Hi\rthere")).toBe("Hi<br>there");
+  });
+});
+
+describe("renderEmailBody", () => {
+  const lead = makeLead();
+  const ctx = { lead };
+
+  it("'html' format leaves a <style> block's newlines untouched — selectors survive intact", () => {
+    const template = [
+      "<html><head><style>",
+      ".row-1 .column-1 .block-3.paragraph_block td.pad>div,",
+      ".row-2 h1 {",
+      "  color: #101112;",
+      "}",
+      "@media (max-width:700px) {",
+      "  .desktop_hide table.icons-inner,",
+      "  .row-2 { display: none; }",
+      "}",
+      "</style></head><body>Hi {{first_name}}</body></html>",
+    ].join("\n");
+
+    const result = renderEmailBody(template, ctx, "html");
+
+    expect(result).toBe(template.replace("{{first_name}}", "Test"));
+    const styleBlock = result.slice(result.indexOf("<style>"), result.indexOf("</style>"));
+    expect(styleBlock).not.toContain("<br>");
+  });
+
+  it("'html' format leaves a multi-line-attribute tag intact", () => {
+    const template =
+      '<table class="nl-container" width="100%" border="0"\n       cellpadding="0" cellspacing="0">\n</table>';
+    expect(renderEmailBody(template, ctx, "html")).toBe(template);
+  });
+
+  it("'text', undefined, and null formats all match preserveLineBreaks(renderTemplate(...)) exactly (back-compat lock)", () => {
+    const template = "Hi {{first_name}},\n\nWe received your enquiry.";
+    const expected = preserveLineBreaks(
+      template.replace("{{first_name}}", "Test")
+    );
+
+    expect(renderEmailBody(template, ctx, "text")).toBe(expected);
+    expect(renderEmailBody(template, ctx, undefined)).toBe(expected);
+    expect(renderEmailBody(template, ctx, null)).toBe(expected);
+  });
+
+  it("escapes substituted token values in both 'text' and 'html' modes (injection gap stays closed)", () => {
+    const xssLead = makeLead({ first_name: "<img src=x onerror=alert(1)>" });
+    const template = "Hi {{first_name}}";
+
+    expect(renderEmailBody(template, { lead: xssLead }, "text")).toBe(
+      "Hi &lt;img src=x onerror=alert(1)&gt;"
+    );
+    expect(renderEmailBody(template, { lead: xssLead }, "html")).toBe(
+      "Hi &lt;img src=x onerror=alert(1)&gt;"
+    );
   });
 });

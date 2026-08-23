@@ -97,6 +97,7 @@ export interface EmailForwardRule {
   stage_id: string;
   subject: string;
   body: string;
+  body_format?: "text" | "html"; // absent === "text" (back-compat)
   created_at: string;
   updated_at: string;
   // Joined fields (from API responses)
@@ -383,6 +384,7 @@ export interface FormConfig {
     fire_mode: "every" | "first";
     subject: string;
     body_html: string;
+    body_format?: "text" | "html"; // absent === "text" (back-compat)
   };
   created_at: string;
   updated_at: string;

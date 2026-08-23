@@ -52,6 +52,7 @@ interface RuleFormData {
   stage_id: string;
   subject: string;
   body: string;
+  body_format: "text" | "html";
 }
 
 const DEFAULT_FORM: RuleFormData = {
@@ -62,6 +63,7 @@ const DEFAULT_FORM: RuleFormData = {
   stage_id: "",
   subject: "",
   body: "",
+  body_format: "text",
 };
 
 const PLACEHOLDERS = [
@@ -141,6 +143,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
       stage_id: rule.stage_id,
       subject: rule.subject,
       body: rule.body,
+      body_format: rule.body_format === "html" ? "html" : "text",
     });
     setDialogOpen(true);
   };
@@ -453,6 +456,8 @@ export function EmailRulesManager({ }: { tenantId: string }) {
                 ref={bodyRef}
                 value={form.body}
                 onChange={(html) => setForm((f) => ({ ...f, body: html }))}
+                format={form.body_format}
+                onFormatChange={(format) => setForm((f) => ({ ...f, body_format: format }))}
                 placeholder="Paste your HTML email source here. {{placeholders}} anywhere in it get replaced with the lead's values."
                 minHeight={180}
               />
