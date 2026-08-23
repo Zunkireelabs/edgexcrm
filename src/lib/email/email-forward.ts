@@ -84,8 +84,8 @@ export async function processEmailForwardRules({
         extra: { pipeline_name: pipelineName, stage_name: stageName },
       };
 
-      const subject = renderTemplate(rule.subject, renderCtx);
-      const body = renderTemplate(rule.body, renderCtx);
+      const subject = renderTemplate(rule.subject, renderCtx, { escape: false });
+      const body = renderTemplate(rule.body, renderCtx, { escape: true });
 
       const sender = await resolveTenantSender(tenantId, { nameOverride: rule.from_name ?? undefined });
 

@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient } from "./index";
 import { resolveTenantSender } from "./sender";
-import { renderTemplate } from "./render-template";
+import { renderTemplate, looksLikeHtml } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { FormConfig, Lead } from "@/types/database";
 
@@ -52,13 +52,12 @@ export async function processFormAutoresponder(
 
   const renderCtx = { lead, tenant: opts.tenant };
   const subject = renderTemplate(ar.subject, renderCtx, { escape: false });
-  // Field values are escaped inside renderTemplate; we then convert the admin's
-  // plain-text line breaks into <br> so they survive in the HTML email body
-  // (raw \n collapses to whitespace in HTML). The injected <br> is our own markup.
-  const bodyHtml = renderTemplate(ar.body_html, renderCtx, { escape: true }).replace(
-    /\r\n|\r|\n/g,
-    "<br>"
-  );
+  // Field values are escaped inside renderTemplate. Bodies authored as plain text
+  // (no HTML tags) get their line breaks converted to <br> so they survive in the
+  // HTML email (raw \n collapses to whitespace in HTML) — this only applies to
+  // legacy/plain-text content; real HTML pasted in by an admin is sent as-is.
+  const rendered = renderTemplate(ar.body_html, renderCtx, { escape: true });
+  const bodyHtml = looksLikeHtml(ar.body_html) ? rendered : rendered.replace(/\r\n|\r|\n/g, "<br>");
 
   let status: "sent" | "failed" = "sent";
   let errorMsg: string | null = null;

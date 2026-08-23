@@ -1,5 +1,15 @@
 import type { Lead, FormConfig } from "@/types/database";
 
+/**
+ * Heuristic: does this template string already contain real HTML markup
+ * (as opposed to plain text authored with literal line breaks)?
+ * Used to decide whether a send path should convert \n -> <br> for
+ * backward compatibility with plain-text-authored content.
+ */
+export function looksLikeHtml(template: string): boolean {
+  return /<[a-z][\s\S]*>/i.test(template);
+}
+
 function htmlEscape(s: string): string {
   return s
     .replace(/&/g, "&amp;")
