@@ -48,7 +48,7 @@ describe("loadSuppressedEmails / suppressEmail", () => {
     expect(result.size).toBe(1);
   });
 
-  it("loadSuppressedEmails issues one query per 250-chunk, not one per recipient", async (ctx) => {
+  it("loadSuppressedEmails issues one query per 150-chunk, not one per recipient", async (ctx) => {
     if (!localDbAvailable) {
       ctx.skip();
       return;
@@ -72,11 +72,11 @@ describe("loadSuppressedEmails / suppressEmail", () => {
       },
     };
 
-    // 1,200 emails -> 5 chunks of 250, never 1,200 individual lookups.
+    // 1,200 emails -> 8 chunks of 150, never 1,200 individual lookups.
     const emails = Array.from({ length: 1200 }, (_, i) => `bulk${i}@example.com`);
     await loadSuppressedEmails(counting as unknown as typeof rawScoped, tenantId, emails);
 
-    expect(selectCalls).toBe(5);
+    expect(selectCalls).toBe(8);
   });
 
   it("suppressEmail is idempotent — a repeated suppress for the same email does not error or duplicate", async (ctx) => {

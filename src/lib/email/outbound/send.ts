@@ -5,6 +5,7 @@ import { applyEmailEnvGuard } from "./env-guard";
 import { loadSuppressedEmails, normalizeEmail } from "./suppression";
 import { getOrCreateUnsubscribeToken, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
 import { buildBulkEmailHeaders } from "./headers";
+import { getDailyCapStatus } from "./cap";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { logger } from "@/lib/logger";
 
@@ -16,7 +17,6 @@ import { logger } from "@/lib/logger";
 const RECLAIM_THRESHOLD_MS = 15 * 60 * 1000; // §5.2
 const MAX_RECLAIM_ATTEMPTS = 3;
 const SEND_CONCURRENCY = 5;
-const DEFAULT_DAILY_CAP = 2000;
 
 interface QueuedEmailRow {
   id: string;
@@ -132,19 +132,11 @@ export async function sendQueuedEmailBatch(tenantId: string, messageIds: string[
   }
 
   // Step 3: daily cap. Over cap -> leave the remainder 'queued' and report a
-  // throttled count. Never drop, never silently succeed.
-  const { data: settingsRow } = await db.from("tenant_email_settings").select("daily_send_cap").maybeSingle();
-  const dailyCap = (settingsRow as { daily_send_cap?: number } | null)?.daily_send_cap ?? DEFAULT_DAILY_CAP;
+  // throttled count. Never drop, never silently succeed. Shared with the
+  // blast /preview route (Phase 1) via getDailyCapStatus — one place computes
+  // "remaining today," so preview and enforcement can never drift apart.
+  const { dailyCap, sentToday, remaining: remainingCapacity } = await getDailyCapStatus(db);
 
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  const { count: sentToday } = await db
-    .from("email_messages")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "sent")
-    .gte("sent_at", todayStart.toISOString());
-
-  const remainingCapacity = Math.max(0, dailyCap - (sentToday ?? 0));
   const withinCap = toSend.slice(0, remainingCapacity);
   const throttledRows = toSend.slice(remainingCapacity);
 

@@ -3,10 +3,15 @@ import type { ScopedClient } from "@/lib/supabase/scoped";
 // The do-not-contact list. Direct analogue of src/lib/sms/suppression.ts.
 
 // 500 (SMS's chunk size for phone numbers) is too large for email addresses —
-// verified empirically against local PostgREST: 400 emails in one `in` filter
-// already 414s ("URI too long"), 300 is fine. 250 leaves headroom for
-// longer-than-average real addresses.
-const CHUNK_SIZE = 250;
+// verified empirically against local PostgREST using addresses at Admizz's
+// real average length (36.6 chars, e.g. "sabina.sherpa@zunkiree.invalid"):
+// 250, 300, and 400 all 414 ("URI too long"); 200 is the first size that
+// passes. 150 keeps real headroom under that boundary rather than shipping a
+// chunk size validated only against short test-fixture addresses like
+// "a@b.com" — OUTREACH-PHASE1-BRIEF.md §4's 16.7k-scale check is what caught
+// this; the original 250 would 414 on every real Admizz blast, not just a
+// synthetic worst case.
+const CHUNK_SIZE = 150;
 
 // Stored lowercased and trimmed — the single normalization point (mig 211's
 // COMMENT ON COLUMN says the same). Callers must not normalize ad hoc.
