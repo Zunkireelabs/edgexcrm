@@ -376,6 +376,47 @@ read raw bytes before any parse, svix-verify, fast-ack.
 authoritative over vendor documentation — the SMS build found the Aakash docs wrong on three
 separate points.
 
+### §7 appendix — observed bounce payload shape (2026-08-23)
+
+Live-verified by sending a real message through the account's `RESEND_API_KEY` to AWS SES's public
+bounce simulator address (`bounce@simulator.amazonses.com` — Resend sends over SES under the hood,
+confirmed by `amazonses.com` in the DKIM/Received headers of every message this account sends), then
+reading it back via `GET https://api.resend.com/emails/{id}`:
+
+```json
+{
+  "last_event": "bounced",
+  "bounce": {
+    "message": "The recipient's email provider sent a hard bounce message, but didn't specify the reason for the hard bounce. We recommend removing the recipient's email address from your mailing list. Sending messages to addresses that produce hard bounces can have a negative impact on your reputation as a sender.",
+    "type": "Permanent",
+    "subType": "General",
+    "diagnosticCode": ["smtp; 550 5.1.1 As requested: user unknown <bounce@simulator.amazonses.com>"]
+  }
+}
+```
+
+**Confirmed against this codebase's `classifyBounce()`**: `type: "Permanent"` matches the
+`.includes("permanent")` (case-insensitive) check → `hard` → immediate suppression. This is the real
+value, not an assumption from docs.
+
+**Gap found**: `resend`'s shipped TS type (`node_modules/resend/dist/index.d.mts`, `EmailBounce`)
+declares only `message`, `subType`, `type` — **`diagnosticCode` is not in the type but is present on
+the real payload**. Harmless for this route (it isn't read), but don't trust the SDK's type as a
+complete description of the payload if a future phase needs another bounce field.
+
+**Not directly observed**: the *webhook event envelope* itself (`{type, created_at, data: {...,
+bounce: {...}}}`) — no `email.bounced`-events webhook was registered on this Resend account (only the
+existing `email.received` inbound webhook is, pointed at
+`https://dev-lead-crm.zunkireelabs.com/api/webhooks/email/inbound`), and there is no way to receive a
+real webhook call on an unreachable local dev box without standing up a public tunnel, which felt like
+overreach for a phase that ships dark. The webhook replay in §9 below therefore wraps the REST-observed
+`bounce` object (above) in the envelope shape from `resend`'s own `WebhookEventPayload` type
+(`EmailBouncedEvent`), which is a reasonable inference — same SDK, same account, same event data
+object reused for both the REST response and the webhook payload per Resend's docs — but is not itself
+something this session watched arrive over the wire. Flagging this distinction explicitly rather than
+letting "signed replay passed" read as "real webhook payload confirmed," since that's exactly the gap
+this section warns against papering over.
+
 ---
 
 ## §8 Environment variables
