@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient } from "./index";
 import { resolveTenantSender } from "./sender";
-import { renderTemplate, looksLikeHtml } from "./render-template";
+import { renderTemplate, preserveLineBreaks } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
 
@@ -85,11 +85,8 @@ export async function processEmailForwardRules({
       };
 
       const subject = renderTemplate(rule.subject, renderCtx, { escape: false });
-      // Same auto-detection as form-autoresponder.ts: plain-text rule bodies (no
-      // HTML tags) get their line breaks converted to <br> so they still read as a
-      // normal email; real HTML pasted in by an admin is sent exactly as written.
-      const renderedBody = renderTemplate(rule.body, renderCtx, { escape: true });
-      const body = looksLikeHtml(rule.body) ? renderedBody : renderedBody.replace(/\r\n|\r|\n/g, "<br>");
+      // Same shared logic as form-autoresponder.ts — see preserveLineBreaks().
+      const body = preserveLineBreaks(renderTemplate(rule.body, renderCtx, { escape: true }));
 
       const sender = await resolveTenantSender(tenantId, { nameOverride: rule.from_name ?? undefined });
 

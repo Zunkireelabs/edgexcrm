@@ -52,7 +52,16 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="source" className="mt-0">
+        {/*
+          forceMount on both panels keeps the Source textarea (and its ref)
+          mounted even while the Preview tab is showing — Radix Tabs
+          unmounts inactive content by default, which would silently break
+          insertText() (the merge-tag "insert at cursor" buttons) the moment
+          an admin clicks a chip while looking at Preview: the ref would be
+          null with no user-visible warning. Hide the inactive panel with
+          CSS instead of unmounting it.
+        */}
+        <TabsContent value="source" className="mt-0 data-[state=inactive]:hidden" forceMount>
           <textarea
             ref={textareaRef}
             value={value}
@@ -63,7 +72,7 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
           />
         </TabsContent>
 
-        <TabsContent value="preview" className="mt-0">
+        <TabsContent value="preview" className="mt-0 data-[state=inactive]:hidden" forceMount>
           <div className="border border-input rounded-md overflow-hidden bg-white" style={{ minHeight }}>
             {value ? (
               <iframe

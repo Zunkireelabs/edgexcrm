@@ -11,6 +11,7 @@ import {
 } from "@/lib/api/response";
 import { getResendClient } from "@/lib/email/index";
 import { resolveTenantSender } from "@/lib/email/sender";
+import { preserveLineBreaks } from "@/lib/email/render-template";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteContext {
@@ -69,7 +70,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
     to: testEmailAddr,
     subject: `[TEST] ${rule.subject.replace(/\{\{\w+\}\}/g, "Sample")}`,
-    html: `<div style="padding:12px;margin-bottom:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:14px;color:#92400e;">This is a test email. Template placeholders are shown as "Sample".</div>${rule.body.replace(/\{\{\w+\}\}/g, "Sample")}`,
+    html: `<div style="padding:12px;margin-bottom:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:14px;color:#92400e;">This is a test email. Template placeholders are shown as "Sample".</div>${preserveLineBreaks(rule.body.replace(/\{\{\w+\}\}/g, "Sample"))}`,
   });
 
   if (error) {
