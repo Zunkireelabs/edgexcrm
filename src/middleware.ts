@@ -19,6 +19,14 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for the public email unsubscribe link — no session needed, for
+  // the same reason as the SMS opt-out link above. Mail-client link-scanners
+  // (Gmail, Outlook) fetch List-Unsubscribe URLs before any human does; it
+  // must never redirect to /login.
+  if (request.nextUrl.pathname.startsWith("/e/u/")) {
+    return NextResponse.next();
+  }
+
   // Skip auth for public proposal share links — no session needed
   if (request.nextUrl.pathname.startsWith("/proposals/share")) {
     return NextResponse.next();
