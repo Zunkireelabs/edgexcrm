@@ -74,7 +74,8 @@ export async function POST(request: NextRequest) {
     pipeline_id: [required("pipeline_id")],
     stage_id: [required("stage_id")],
     subject: [required("subject"), maxLength(500)],
-    body: [required("body")],
+    // Cap length — this is now an intended full-HTML-document field.
+    body: [required("body"), maxLength(100_000)],
   });
   if (!valid) return apiValidationError(errors);
 
