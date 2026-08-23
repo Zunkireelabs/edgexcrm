@@ -232,3 +232,121 @@ a mask over a wrong diagnosis. Note in the PR description that it stops being ne
 
 **Prod promotion of #435 should wait** for either this fix or a documented minify-only instruction
 to the tenant.
+
+---
+
+## 8. ADDENDUM — fix the autoresponder PATCH clobber (same branch, before merge)
+
+**Added after review of PR #437. Land this on `feature/email-body-format`, not a follow-up PR.**
+
+### The defect
+
+`src/app/(main)/api/v1/form-configs/[id]/route.ts` PATCH replaces the entire `autoresponder`
+JSONB object from whatever the caller sent:
+
+```ts
+if (body.autoresponder !== undefined) {
+  const raw = (body.autoresponder ?? {}) as Record<string, unknown>;
+  const normalized: FormConfig["autoresponder"] = {
+    enabled: Boolean(raw.enabled ?? false),
+    fire_mode: raw.fire_mode === "first" ? "first" : "every",
+    subject: typeof raw.subject === "string" ? raw.subject.slice(0, 998) : "",
+    body_html: typeof raw.body_html === "string" ? raw.body_html.slice(0, 100_000) : "",
+    body_format: raw.body_format === "html" ? "html" : "text",
+  };
+  updatePayload.autoresponder = normalized;
+}
+```
+
+Any caller that sends a **partial** `autoresponder` object silently destroys the keys it omitted.
+Concretely, `PATCH { autoresponder: { enabled: false } }` wipes `subject` and `body_html` to `""`,
+resets `fire_mode` to `"every"`, and — the reason this matters now — **downgrades `body_format`
+from `"html"` back to `"text"`. The next send then re-runs `preserveLineBreaks` over the admin's
+pasted HTML and re-corrupts the `<style>` block, silently undoing everything this branch fixes.**
+
+The dashboard UI always sends the complete object, so this does not fire today. It is a live trap
+for the integration API, any future caller, and any partial-save the UI might add later.
+
+**Fix all five keys, not just `body_format`.** A merge that rescues only the new field while
+leaving `subject`/`body_html` clobberable is arbitrary — the shape of the bug is the whole-object
+replacement, so fix the shape.
+
+### The fix
+
+The handler **already** does a tenant-scoped fetch near the top of PATCH:
+
+```ts
+.from("form_configs").select("id, slug").eq("id", id).eq("tenant_id", auth.tenantId).single();
+if (!existing) return apiNotFound("Form config");
+```
+
+Add `autoresponder` to that existing `select` — **no second query, already tenant-scoped, already
+404s correctly.** Then merge per key, overwriting only what the caller actually provided:
+
+```ts
+if (body.autoresponder !== undefined) {
+  const prev = (existing.autoresponder ?? {}) as Partial<NonNullable<FormConfig["autoresponder"]>>;
+  // Explicit null means "reset to defaults" — preserve today's behavior for that case.
+  const isReset = body.autoresponder === null;
+  const raw = (body.autoresponder ?? {}) as Record<string, unknown>;
+  const base = isReset
+    ? { enabled: false, fire_mode: "every" as const, subject: "", body_html: "", body_format: "text" as const }
+    : prev;
+
+  const normalized: FormConfig["autoresponder"] = {
+    enabled: raw.enabled !== undefined ? Boolean(raw.enabled) : (base.enabled ?? false),
+    fire_mode:
+      raw.fire_mode !== undefined
+        ? (raw.fire_mode === "first" ? "first" : "every")
+        : (base.fire_mode ?? "every"),
+    subject:
+      typeof raw.subject === "string" ? raw.subject.slice(0, 998) : (base.subject ?? ""),
+    body_html:
+      typeof raw.body_html === "string" ? raw.body_html.slice(0, 100_000) : (base.body_html ?? ""),
+    body_format:
+      raw.body_format !== undefined
+        ? (raw.body_format === "html" ? "html" : "text")
+        : (base.body_format ?? "text"),
+  };
+  updatePayload.autoresponder = normalized;
+}
+```
+
+Requirements this must satisfy:
+
+- **Keep the length caps** (998 / 100_000) on any caller-supplied value. Don't re-cap the
+  previously stored value — it was already capped on the way in.
+- **`autoresponder: null` still resets to defaults.** That's today's behavior; don't turn an
+  explicit clear into a no-op.
+- **An absent key means "leave alone", not "reset".** That's the entire point.
+- **A form with no autoresponder yet** (`existing.autoresponder` is null/undefined) must still work
+  — `prev` falls back to `{}` and each `?? default` supplies the old default.
+
+### Tests (add to the existing suite)
+
+These are route-level, so follow whatever pattern the repo already uses for API-route tests; if
+there is none for this route, extract the normalization into a small exported pure function
+(e.g. `normalizeAutoresponder(prev, raw)`) in the same file and unit-test that directly. Prefer the
+pure-function extraction — it's testable without mocking Supabase.
+
+- Partial PATCH `{ enabled: false }` against a stored `body_format: 'html'` record → `body_format`
+  stays `'html'`, `subject` and `body_html` unchanged, `enabled` becomes `false`.
+- Partial PATCH `{ body_html: '<html>…' }` → `body_format` unchanged.
+- Full PATCH from the UI (all five keys) → behaves exactly as it does today.
+- `autoresponder: null` → all five keys reset to defaults.
+- Record with no prior autoresponder + partial PATCH → old defaults applied, no crash.
+- Length caps still enforced on caller-supplied `subject` / `body_html`.
+
+### Verification
+
+- `npm run test`, `npm run build`, `npx eslint --max-warnings 50` all clean.
+- On local dev: save an HTML-mode confirmation email, then toggle the form's **Active** switch (or
+  any save path that doesn't touch the email body) → reopen the autoresponder editor → confirm it
+  is **still in HTML source mode with the body intact**. That's the regression this prevents, and
+  it's a click-through, not a unit test.
+
+### Guardrails (unchanged)
+
+Same branch, same PR (#437). Do not open a second PR. Rebase onto latest `origin/stage` before the
+final push. **Stop at review — do not merge or promote.** No DB access; migration 213 stays unapplied
+to stage/prod.
