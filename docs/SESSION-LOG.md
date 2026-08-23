@@ -179,6 +179,28 @@ When closing a session, push this block's content into a new dated session entry
 
 ---
 
+## Outreach Phase 1 — email blast surface (dark) — 2026-08-23
+
+Successor to Phase 0's send spine: a one-shot bulk-email blast surface (composer → audience filter → review/confirm → send → live status), gated behind the same `EMAIL_OUTBOUND_ENABLED` + `bulk_email_enabled` double-gate, so it ships dark on prod exactly like Phase 0.
+
+**What shipped (PR #436, `feature/email-blast` → stage; mig 212 `email_blasts`).** `BlastComposer` (audience via the existing `AdvancedFilterBar`, no second filter UI), `RecipientsPreviewDialog`, `SendConfirmDialog` (§6 cap-shortfall warning + type-to-confirm), and `email-blast-send.ts` — an Inngest function that materializes the audience, sends in provider-call-per-recipient batches, and self-throttles against the tenant's `daily_send_cap`: when a blast's audience exceeds the day's remaining capacity it sends what it can, marks the blast `throttled`, and resumes automatically once the cap resets (next UTC midnight) — never silently drops or double-sends. Cancel is safe mid-flight (checked before every batch). Reused `HtmlSourceEditor` (built for confirmation-email HTML source, #435) for the composer's Body field instead of a plain textarea — added a `showFormatToggle` prop so the toggle is hidden here (`body_template` is always HTML, no rich-text ambiguity to disambiguate).
+
+**Verification.** Full local `npm run test` (1733 tests) green, including the 20 tests that `ctx.skip()` in CI for lack of a Postgres container there (daily-cap throttle, chunk-size-150 suppression check, stranded-row reclaim, SMS credits/optout/suppression) — run directly against local Supabase and confirmed passing. Manual local-dev smoke: composer → 261-recipient audience → cap lowered to 50 to force the §6 warning → confirmed send → watched it throttle at the cap (32 sent, rest queued) → cancelled mid-throttle and confirmed the remainder stayed un-sent, not silently completed.
+
+**Held for:** 1 human stage-branch approval (no self-approve, no admin-bypass) before squash-merge. Ships dark — no urgency to promote to prod; the consent basis for actually emailing Admizz's real leads is a separate, still-open decision for Sadin.
+
+---
+
+## Outreach Phase 0 — outbound send spine + compliance (dark) — 2026-08-23
+
+Foundation for all real outbound email (blasts, sequences, campaigns): `email_messages` / `email_suppressions` / `email_unsubscribe_tokens` (mig 211), `sendQueuedEmailBatch` with per-message provider calls + suppression checks + stranded-`sending`-row reclaim, and the public unsubscribe route + Resend bounce/complaint webhook handler. Ships dark behind `EMAIL_OUTBOUND_ENABLED` (unset everywhere).
+
+**Code (PR #434 → stage `bb67f3b3`).** Amendment during build: `uq_email_message_source_lead` had to be a full (non-partial) unique index, not `WHERE source_id IS NOT NULL` — PostgREST's `on_conflict` can't target a partial index, so a chunked upsert materialization (the thing Phase 1 does) would have aborted its whole chunk on the first duplicate instead of skipping it via `ON CONFLICT DO NOTHING`. Also fixed during live §9 verification: the public unsubscribe page (`/e/u/[token]`) 307-redirected to `/login` for logged-out visitors because `middleware.ts` only exempted the SMS opt-out prefix (`/u/`), not the email one (`/e/u/`) — made the `List-Unsubscribe` link non-functional for anyone not already logged in.
+
+Brief: `docs/OUTREACH-PHASE0-BRIEF.md`.
+
+---
+
 ## Tenant custom sending domain — Admizz Tier 2 LIVE ON PROD (`hello@admizz.com`) — 2026-08-23
 
 Admizz's outbound automation email now genuinely sends from **their own domain**, not ours. Paid add-on, manual onboarding by design.

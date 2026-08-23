@@ -6,16 +6,18 @@
 // exactly; the differences are email-specific fields (subject, HTML body,
 // from-name override) and no character/credit counter (email has none).
 //
-// The HTML body is a plain Textarea, not a rich-text editor — no new editor
-// dependency is introduced without a reason to (brief §7.4); the live sample
-// preview (rendered by /preview) is what shows the actual recipient result.
+// The HTML body reuses HtmlSourceEditor (built for confirmation emails +
+// email rules, #435) with the format toggle hidden — body_template is
+// always HTML here, no rich-text/plain-text ambiguity to disambiguate. The
+// live sample preview (rendered by /preview) is still what shows the actual
+// recipient result; the editor's own preview tab is structural-only.
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { HtmlSourceEditor } from "@/industries/_shared/features/email/components/html-source-editor";
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption } from "@/components/filters/types";
@@ -276,13 +278,13 @@ export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProp
 
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="blast-body">Body (HTML)</Label>
-        <Textarea
-          id="blast-body"
+        <HtmlSourceEditor
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={setBody}
           placeholder="<p>Hi {{first_name}}, …</p>"
-          rows={10}
-          className="font-mono text-xs"
+          format="html"
+          onFormatChange={() => void 0}
+          showFormatToggle={false}
           disabled={!canSendEmail}
         />
         <p className="text-xs text-muted-foreground">{saving ? "Saving…" : savedAt ? `Saved ${savedAt.toLocaleTimeString()}` : "Draft"}</p>
