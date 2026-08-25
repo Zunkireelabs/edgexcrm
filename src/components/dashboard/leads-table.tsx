@@ -1726,6 +1726,14 @@ export function LeadsTable({
             return new Date(lead.last_activity_at).toLocaleDateString();
           case "created":
             return new Date(lead.created_at).toLocaleDateString();
+          case "updated_at":
+            return new Date(lead.updated_at).toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            });
           case "preferred_contact":
             return lead.preferred_contact_method || "";
           case "display_id":
