@@ -9,9 +9,10 @@ import type { UserRole } from "@/types/database";
 interface OutreachCockpitProps {
   role: UserRole;
   currentUserId: string;
+  industryId: string | null;
 }
 
-export function OutreachCockpit({ role, currentUserId }: OutreachCockpitProps) {
+export function OutreachCockpit({ role, currentUserId, industryId }: OutreachCockpitProps) {
   const isAdmin = role === "owner" || role === "admin";
 
   return (
@@ -19,7 +20,7 @@ export function OutreachCockpit({ role, currentUserId }: OutreachCockpitProps) {
       <div>
         <h1 className="text-xl font-bold">Outreach</h1>
         <p className="text-sm text-muted-foreground">
-          Sequenced follow-ups your reps review, edit, and send from their own inbox.
+          Sequenced follow-ups — reviewed and sent by your team, or sent automatically via EdgeX.
         </p>
       </div>
 
@@ -35,7 +36,7 @@ export function OutreachCockpit({ role, currentUserId }: OutreachCockpitProps) {
         </TabsContent>
 
         <TabsContent value="sequences" className="min-h-0">
-          <SequencesManager isAdmin={isAdmin} />
+          <SequencesManager isAdmin={isAdmin} industryId={industryId} />
         </TabsContent>
 
         <TabsContent value="enrollments" className="min-h-0">

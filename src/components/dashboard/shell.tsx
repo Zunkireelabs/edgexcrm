@@ -629,6 +629,7 @@ export function DashboardShell({
                 {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
                 {eduItem("/sms") && renderIndustryEntry(eduItem("/sms")!)}
                 {eduItem("/email-campaigns") && renderIndustryEntry(eduItem("/email-campaigns")!)}
+                {eduItem("/outreach") && renderIndustryEntry(eduItem("/outreach")!)}
 
                 {/* Administration */}
                 <NavSectionHeader label="Administration" collapsed={sidebarCollapsed} />

@@ -10,5 +10,11 @@ export default async function OutreachRoute() {
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.OUTREACH)) notFound();
 
-  return <OutreachCockpit role={tenantData.role as UserRole} currentUserId={tenantData.userId} />;
+  return (
+    <OutreachCockpit
+      role={tenantData.role as UserRole}
+      currentUserId={tenantData.userId}
+      industryId={tenantData.tenant.industry_id}
+    />
+  );
 }

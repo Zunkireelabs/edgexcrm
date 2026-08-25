@@ -16,6 +16,7 @@ import { smsBlastSend } from "@/lib/inngest/functions/sms-blast-send";
 import { smsDeliveryPoll, smsBlastPollReceipts } from "@/lib/inngest/functions/sms-delivery-poll";
 import { smsCreditReaper } from "@/lib/inngest/functions/sms-credit-reaper";
 import { emailBlastSend } from "@/lib/inngest/functions/email-blast-send";
+import { sequenceStepSend } from "@/lib/inngest/functions/sequence-step-send";
 
 export const { GET, POST, PUT } = serve({
   client: inngest,
@@ -37,5 +38,6 @@ export const { GET, POST, PUT } = serve({
     smsBlastPollReceipts,
     smsCreditReaper,
     emailBlastSend,
+    sequenceStepSend,
   ],
 });

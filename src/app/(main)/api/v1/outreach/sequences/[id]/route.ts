@@ -89,6 +89,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = String(body.name).trim();
   if (body.description !== undefined) updates.description = body.description ? String(body.description) : null;
+  if (body.auto_send !== undefined) updates.auto_send = body.auto_send === true;
 
   if (Object.keys(updates).length > 0) {
     const { error: updateError } = await db.from("email_sequences").update(updates).eq("id", id);

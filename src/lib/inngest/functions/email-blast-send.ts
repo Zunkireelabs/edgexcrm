@@ -167,7 +167,9 @@ export const emailBlastSend = inngest.createFunction(
       const ids = await step.run(`load-batch-${batchIndex}`, () => loadBatchIds(tenantId, blastId));
       if (ids.length === 0) break;
 
-      const result = await step.run(`send-batch-${batchIndex}`, () => sendQueuedEmailBatch(tenantId, ids));
+      const result = await step.run(`send-batch-${batchIndex}`, () =>
+        sendQueuedEmailBatch(tenantId, ids, { capCaller: "blast" })
+      );
       totalSent += result.sent;
       totalFailed += result.failed;
       totalSuppressed += result.suppressed;
