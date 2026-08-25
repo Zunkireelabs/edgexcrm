@@ -12,7 +12,7 @@ describe("renderMessage", () => {
     });
 
     expect(out).toBe(
-      "Admizz: Hi Sita, your application is due Friday.\nOpt out: edgex.zunkireelabs.com/u/aB3dEf9k"
+      "Admizz\nHi Sita, your application is due Friday.\nOpt out: edgex.zunkireelabs.com/u/aB3dEf9k"
     );
   });
 
