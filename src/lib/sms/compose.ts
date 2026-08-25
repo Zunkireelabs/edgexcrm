@@ -22,12 +22,15 @@ export interface TenantSmsSettingsRow {
 export const DEFAULT_OPTOUT_FOOTER_TEMPLATE = "Opt out: {url}";
 
 // tenant_sms_settings.optout_footer is an admin-editable template containing a
-// literal "{url}" placeholder for the per-recipient opt-out link; unset falls
-// back to the Phase 2 default. Never emit "Reply STOP" — renderMessage()
-// throws if this resolves to that pattern.
+// literal "{url}" placeholder for the per-recipient opt-out link. `null` means
+// the tenant has never touched the setting, so it falls back to the Phase 2
+// default; an explicit empty string means an admin deliberately cleared it,
+// so the message goes out with no footer at all. Never emit "Reply STOP" —
+// renderMessage() throws if this resolves to that pattern.
 export function resolveFooter(template: string | null, url: string): string {
-  const t = template && template.trim() ? template : DEFAULT_OPTOUT_FOOTER_TEMPLATE;
-  return t.includes("{url}") ? t.replace("{url}", url) : `${t} ${url}`;
+  if (template === null) return DEFAULT_OPTOUT_FOOTER_TEMPLATE.replace("{url}", url);
+  if (!template.trim()) return "";
+  return template.includes("{url}") ? template.replace("{url}", url) : `${template} ${url}`;
 }
 
 // A real opt-out token is always TOKEN_LENGTH (10) base62 characters — see
