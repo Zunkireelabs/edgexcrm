@@ -1,4 +1,4 @@
--- Migration 212: Email Outbound Phase 1 — email_blasts
+-- Migration 214: Email Outbound Phase 1 — email_blasts
 --
 -- Additive only. Wrap in BEGIN/COMMIT.
 --   Expected before/after row counts: email_blasts 0 -> 0 (new empty table).
@@ -74,7 +74,7 @@ CREATE TRIGGER set_email_blasts_updated_at
   FOR EACH ROW EXECUTE FUNCTION update_updated_at();
 
 -- REQUIRED: self-record in the ledger (mig 123).
-INSERT INTO public.schema_migrations (version) VALUES ('212_email_blasts.sql')
+INSERT INTO public.schema_migrations (version) VALUES ('214_email_blasts.sql')
   ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

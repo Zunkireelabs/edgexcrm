@@ -1,5 +1,5 @@
-// Shared client-side row shapes mirroring migration 212
-// (supabase/migrations/212_email_blasts.sql) and the email_messages table
+// Shared client-side row shapes mirroring migration 214
+// (supabase/migrations/214_email_blasts.sql) and the email_messages table
 // from migration 211. No `zod` here on purpose — these describe API-response
 // shapes the UI trusts, not user input to validate. Mirrors
 // src/industries/_shared/features/sms/lib/types.ts.
