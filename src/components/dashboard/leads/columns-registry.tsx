@@ -634,6 +634,34 @@ const STATIC_COLUMNS: LeadColumn[] = [
     ),
   },
 
+  // ── updated_at — date + time (not date-only like Created/Last activity): an
+  // active lead's updated_at can change several times a day, so date-only would
+  // mostly just read "today" and add nothing beyond the existing Last activity
+  // column. Requested by Manish (Admizz) — Edit Columns had no way to show it
+  // even though the API/sort already support updated_at.
+  {
+    key: "updated_at",
+    label: "Updated At",
+    group: "standard",
+    defaultVisible: false,
+    renderTh: () => (
+      <th key="updated_at" className="px-3 py-2 text-left text-xs font-medium text-gray-600 min-w-[140px]">
+        Updated At
+      </th>
+    ),
+    renderTd: (lead) => (
+      <td key="updated_at" className="px-3 py-1.5 text-sm font-normal text-[#787871] whitespace-nowrap">
+        {new Date(lead.updated_at).toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })}
+      </td>
+    ),
+  },
+
   // ── preferred_contact
   {
     key: "preferred_contact",
