@@ -179,7 +179,10 @@ export async function sendQueuedEmailBatch(tenantId: string, messageIds: string[
 
     const token = await getOrCreateUnsubscribeToken(db, tenantId, msg.to_email, msg.lead_id);
     const unsubUrl = unsubscribeUrl(token);
-    const bodyWithFooter = injectUnsubscribe(msg.body_html, unsubUrl);
+    const bodyWithFooter = injectUnsubscribe(msg.body_html, unsubUrl, {
+      orgName: sender.orgName,
+      mailingAddress: sender.mailingAddress,
+    });
     const headers = buildBulkEmailHeaders(unsubUrl);
 
     await db

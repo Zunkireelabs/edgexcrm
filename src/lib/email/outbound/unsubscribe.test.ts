@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
-import { generateUnsubscribeToken } from "./unsubscribe";
+import { generateUnsubscribeToken, injectUnsubscribe } from "./unsubscribe";
 import { localRawClient, localScopedClient } from "./test-support";
 
 // Token-format/composition tests run everywhere (no DB). The
@@ -45,6 +45,29 @@ describe("unsubscribeUrl", () => {
     // re-import both modules fresh under the env override.
     const mod = await import("./unsubscribe");
     expect(mod.unsubscribeUrl("aB3dEf9k1x")).toMatch(/\/e\/u\/aB3dEf9k1x$/);
+  });
+});
+
+describe("injectUnsubscribe", () => {
+  it("includes the unsubscribe link and org name, omits the address when unset", () => {
+    const html = injectUnsubscribe("<p>Hi</p>", "https://example.com/e/u/abc123", {
+      orgName: "Admizz Education",
+      mailingAddress: null,
+    });
+    expect(html).toContain("<p>Hi</p>");
+    expect(html).toContain('href="https://example.com/e/u/abc123"');
+    expect(html).toContain("Admizz Education");
+    expect(html).not.toContain("&middot;");
+  });
+
+  it("includes the mailing address when set, and escapes HTML in both fields", () => {
+    const html = injectUnsubscribe("<p>Hi</p>", "https://example.com/e/u/abc123", {
+      orgName: "A & B <Corp>",
+      mailingAddress: "123 Main St, Kathmandu",
+    });
+    expect(html).toContain("A &amp; B &lt;Corp&gt;");
+    expect(html).toContain("123 Main St, Kathmandu");
+    expect(html).toContain("&middot;");
   });
 });
 
