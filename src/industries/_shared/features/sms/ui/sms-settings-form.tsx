@@ -59,7 +59,7 @@ export function SmsSettingsForm({ isAdmin }: SmsSettingsFormProps) {
           placeholder="e.g. Admizz"
           disabled={disabled}
         />
-        <p className="text-xs text-muted-foreground">Prefixed to every message as &quot;Label: &quot;.</p>
+        <p className="text-xs text-muted-foreground">Prefixed to every message on its own line, above the body.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

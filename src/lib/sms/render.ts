@@ -28,7 +28,7 @@ export function renderMessage({ body, lead, senderLabel, optOutFooter }: RenderM
   }
 
   const resolvedBody = resolveMergeTokens(body, lead).trim();
-  const prefix = senderLabel ? `${senderLabel}: ` : "";
+  const prefix = senderLabel ? `${senderLabel}\n` : "";
   const footer = optOutFooter ? `\n${optOutFooter}` : "";
 
   return `${prefix}${resolvedBody}${footer}`;
