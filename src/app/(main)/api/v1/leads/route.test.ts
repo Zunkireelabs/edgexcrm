@@ -865,6 +865,40 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(body.meta.total).toBe(761);
   });
 
+  // Logic-gap regression: buildScopedQuery must not be INVOKED (only defined) before the
+  // ?facets= early return — a facets-only request never reads `query`/the split count, so
+  // firing the split head:true RPC call there would be a pure wasted round trip on every
+  // facets request that happens to combine branch/own scope with the Collaborators filter.
+  it("branch-scope ?facets=collaborator&collaborators=<id> never fires the split-count RPC — buildScopedQuery is invoked only past the facets early return", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: [], error: null });
+        throw new Error(`unexpected rpc ${name} — facets response must never touch the base leads query`);
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(
+      fakeReq({ facets: "collaborator", collaborators: "11111111-1111-1111-1111-111111111111" }),
+    );
+
+    expect(res.status).toBe(200);
+    // Only the facet's own lead_aggregates() call — no leads_visible_to_user call at all.
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0][0]).toBe("lead_aggregates");
+  });
+
   it("a malformed ?f= (not valid base64url JSON) is a 422, never an unhandled throw", async () => {
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");

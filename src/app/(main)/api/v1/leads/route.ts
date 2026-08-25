@@ -473,18 +473,6 @@ export async function GET(request: NextRequest) {
     return compileFilter(q, filterTree, filterRegistry, compileCtx);
   };
 
-  let splitTotal: number | null = null;
-  if (wantsSplitCount) {
-    const { count: exactCount, error: splitCountError } = await buildScopedQuery({ head: true, count: "exact" });
-    if (splitCountError) {
-      log.error({ err: splitCountError }, "Failed to fetch leads");
-      return apiServiceUnavailable("Failed to fetch leads");
-    }
-    splitTotal = exactCount ?? 0;
-  }
-
-  let query = buildScopedQuery(countOpts);
-
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CREATED_WINDOW_MS: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
   const createdAfter = createdFilter && createdFilter !== "all" && CREATED_WINDOW_MS[createdFilter]
@@ -668,6 +656,24 @@ export async function GET(request: NextRequest) {
       },
     });
   }
+
+  // buildScopedQuery() is only invoked here, past every `?facets=` early return above —
+  // NOT right after it's defined. A split count (below) is a real network round trip
+  // (unlike merely building an unexecuted query object), and a facets-only request never
+  // touches `query`/`splitTotal` at all; invoking it earlier would fire that extra RPC
+  // call on every facets request that happens to combine the Collaborators filter with
+  // branch/own scope, for a result that's thrown away by the return above.
+  let splitTotal: number | null = null;
+  if (wantsSplitCount) {
+    const { count: exactCount, error: splitCountError } = await buildScopedQuery({ head: true, count: "exact" });
+    if (splitCountError) {
+      log.error({ err: splitCountError }, "Failed to fetch leads");
+      return apiServiceUnavailable("Failed to fetch leads");
+    }
+    splitTotal = exactCount ?? 0;
+  }
+
+  let query = buildScopedQuery(countOpts);
 
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
