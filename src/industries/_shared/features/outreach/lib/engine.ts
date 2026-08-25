@@ -55,6 +55,7 @@ export interface SequenceStepDraftRow {
   sent_at: string | null;
   sent_via: string | null;
   sent_activity_id: string | null;
+  email_message_id: string | null;
 }
 
 export interface GeneratedDraft {
@@ -144,7 +145,7 @@ async function loadSequenceMeta(
 
 async function createDraftForStep(
   db: ScopedClient,
-  auth: AuthContext,
+  auth: Pick<AuthContext, "tenantId">,
   params: {
     enrollment: Pick<SequenceEnrollmentRow, "id" | "lead_id" | "assigned_to">;
     step: SequenceStepRow;
@@ -253,7 +254,7 @@ export async function enrollLead(
  */
 export async function advanceEnrollment(
   db: ScopedClient,
-  auth: AuthContext,
+  auth: Pick<AuthContext, "tenantId">,
   enrollment: Pick<SequenceEnrollmentRow, "id" | "sequence_id" | "lead_id" | "assigned_to">,
   fromStepOrder: number
 ): Promise<void> {
@@ -367,6 +368,107 @@ export async function markDraftSent(
   });
 
   await advanceEnrollment(db, auth, enrollmentRow, draftRow.step_order);
+
+  return { activityId };
+}
+
+/**
+ * Auto-send counterpart to markDraftSent — OUTREACH-PHASE2-BRIEF.md §5.4.
+ * Called by sequence-step-send.ts (an Inngest worker, not a request) once a
+ * step's email_messages row has actually been sent via sendQueuedEmailBatch.
+ * No AuthContext exists in that context — only tenantId — so this takes a
+ * plain tenantId and attributes the lead_activities row to the enrollment's
+ * assigned_to (falling back to enrolled_by) rather than a live session user.
+ * Reuses advanceEnrollment exactly as markDraftSent does; never duplicates it.
+ */
+export async function markDraftSentViaEdgeX(
+  db: ScopedClient,
+  tenantId: string,
+  draftId: string,
+  emailMessageId: string
+): Promise<{ activityId: string | null } | null> {
+  const { data: draft } = await db
+    .from("sequence_step_drafts")
+    .select("*")
+    .eq("id", draftId)
+    .maybeSingle();
+  if (!draft) return null;
+  const draftRow = draft as unknown as SequenceStepDraftRow;
+  if (draftRow.status !== "pending") return null;
+
+  const { data: enrollment } = await db
+    .from("sequence_enrollments")
+    .select("*")
+    .eq("id", draftRow.enrollment_id)
+    .maybeSingle();
+  if (!enrollment) return null;
+  const enrollmentRow = enrollment as unknown as SequenceEnrollmentRow;
+
+  const actorUserId = enrollmentRow.assigned_to ?? enrollmentRow.enrolled_by;
+  let activityId: string | null = null;
+  if (actorUserId) {
+    const { data: activity, error: activityError } = await db
+      .from("lead_activities")
+      .insert({
+        lead_id: draftRow.lead_id,
+        user_id: actorUserId,
+        activity_type: "email",
+        subject: draftRow.subject,
+        description: `Sequence step ${draftRow.step_order} sent automatically via EdgeX`,
+        email_subject: draftRow.subject,
+        email_body: draftRow.body_html,
+        completed_at: new Date().toISOString(),
+        metadata: {
+          source: "sequence",
+          sequence_id: enrollmentRow.sequence_id,
+          enrollment_id: enrollmentRow.id,
+          step_order: draftRow.step_order,
+          sent_via: "edgex_send",
+        },
+      })
+      .select("id")
+      .single();
+    if (!activityError && activity) activityId = (activity as { id: string }).id;
+    else if (activityError) {
+      logger.error({ err: activityError, draftId }, "markDraftSentViaEdgeX: failed to log lead_activities entry");
+    }
+  } else {
+    logger.warn(
+      { draftId, enrollmentId: enrollmentRow.id },
+      "markDraftSentViaEdgeX: enrollment has no assigned_to/enrolled_by — no lead_activities row to attribute the send to"
+    );
+  }
+
+  await db
+    .from("sequence_step_drafts")
+    .update({
+      status: "sent",
+      sent_at: new Date().toISOString(),
+      sent_via: "edgex_send",
+      sent_activity_id: activityId,
+      email_message_id: emailMessageId,
+    })
+    .eq("id", draftId);
+
+  await db
+    .from("sequence_enrollments")
+    .update({ current_step_order: draftRow.step_order })
+    .eq("id", enrollmentRow.id);
+
+  await emitEvent({
+    tenantId,
+    type: "sequence.step_sent",
+    entityType: "sequence_step_draft",
+    entityId: draftId,
+    payload: {
+      sequence_id: enrollmentRow.sequence_id,
+      lead_id: draftRow.lead_id,
+      step_order: draftRow.step_order,
+      sent_via: "edgex_send",
+    },
+  });
+
+  await advanceEnrollment(db, { tenantId }, enrollmentRow, draftRow.step_order);
 
   return { activityId };
 }

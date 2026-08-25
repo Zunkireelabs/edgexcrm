@@ -38,6 +38,13 @@ interface DraftRow {
   body_html: string;
   sent_at: string | null;
   sent_activity_id: string | null;
+  sent_via: string | null;
+  email_message_id: string | null;
+}
+
+interface EmailMessageStatusRow {
+  id: string;
+  status: string;
 }
 
 type LeadTemplateContext = Pick<
@@ -80,7 +87,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
   }
 
   const [{ data: sequence }, { data: steps }, { data: drafts }, { data: lead }, { data: tenant }] = await Promise.all([
-    db.from("email_sequences").select("id, name").eq("id", enrollmentRow.sequence_id).maybeSingle(),
+    db.from("email_sequences").select("id, name, auto_send").eq("id", enrollmentRow.sequence_id).maybeSingle(),
     db
       .from("email_sequence_steps")
       .select("step_order, delay_days, subject_template, body_template")
@@ -88,7 +95,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
       .order("step_order", { ascending: true }),
     db
       .from("sequence_step_drafts")
-      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id")
+      .select("id, step_order, status, due_at, subject, body_html, sent_at, sent_activity_id, sent_via, email_message_id")
       .eq("enrollment_id", id)
       .order("step_order", { ascending: true }),
     db
@@ -103,9 +110,17 @@ export async function GET(_request: NextRequest, { params }: Props) {
     log.error({ enrollmentId: id, sequenceId: enrollmentRow.sequence_id }, "Enrollment references a missing sequence");
     return apiNotFound("Sequence");
   }
-  const sequenceRow = sequence as unknown as { id: string; name: string };
+  const sequenceRow = sequence as unknown as { id: string; name: string; auto_send: boolean };
   const stepRows = (steps ?? []) as unknown as SequenceStepRow[];
   const draftRows = (drafts ?? []) as unknown as DraftRow[];
+
+  // Delivery status for auto-sent steps — one batched lookup, not N+1.
+  const messageIds = draftRows.map((d) => d.email_message_id).filter((v): v is string => !!v);
+  const messageStatusById = new Map<string, string>();
+  if (messageIds.length > 0) {
+    const { data: messages } = await db.from("email_messages").select("id, status").in("id", messageIds);
+    for (const m of (messages ?? []) as unknown as EmailMessageStatusRow[]) messageStatusById.set(m.id, m.status);
+  }
   const leadCtx: LeadTemplateContext =
     (lead as unknown as LeadTemplateContext | null) ??
     { first_name: null, last_name: null, email: null, phone: null, city: null, country: null, custom_fields: {} };
@@ -137,6 +152,8 @@ export async function GET(_request: NextRequest, { params }: Props) {
         sent_at: draft.sent_at,
         draft_id: draft.id,
         sent_activity_id: draft.sent_activity_id,
+        sent_via: draft.sent_via,
+        email_message_status: draft.email_message_id ? messageStatusById.get(draft.email_message_id) ?? null : null,
         // Only pending drafts need body_html — it's what lets the "due now"
         // row reuse DraftReviewPanel (draft-review-panel.tsx) unforked.
         body_html: draft.status === "pending" ? draft.body_html : undefined,
@@ -159,7 +176,7 @@ export async function GET(_request: NextRequest, { params }: Props) {
       current_step_order: enrollmentRow.current_step_order,
       assigned_to: enrollmentRow.assigned_to,
     },
-    sequence: { id: sequenceRow.id, name: sequenceRow.name, total_steps: stepRows.length },
+    sequence: { id: sequenceRow.id, name: sequenceRow.name, total_steps: stepRows.length, auto_send: sequenceRow.auto_send },
     timeline,
   });
 }

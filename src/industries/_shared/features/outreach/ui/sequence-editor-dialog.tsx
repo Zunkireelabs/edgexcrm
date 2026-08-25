@@ -35,6 +35,7 @@ interface SequenceEditorDialogProps {
   onOpenChange: (open: boolean) => void;
   sequence: Sequence | null;
   onSaved: () => void;
+  industryId: string | null;
 }
 
 let keyCounter = 0;
@@ -59,10 +60,16 @@ function stepsFromSequence(sequence: Sequence | null): StepDraft[] {
     }));
 }
 
-export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: SequenceEditorDialogProps) {
+export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved, industryId }: SequenceEditorDialogProps) {
+  // OUTREACH-PHASE2-BRIEF.md §6 — building this only for education_consultancy's
+  // manifest registration already keeps it out of it_agency's reach, but gate
+  // the toggle in the component itself too, per CLAUDE.md's industry-aware UI
+  // convention, in case this same component is ever reused elsewhere.
+  const canAutoSend = industryId === "education_consultancy";
   const isEdit = !!sequence;
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [autoSend, setAutoSend] = useState(false);
   const [steps, setSteps] = useState<StepDraft[]>([]);
   const [saving, setSaving] = useState(false);
   const [lastFocused, setLastFocused] = useState<{ index: number; field: "subject" | "body" } | null>(null);
@@ -74,6 +81,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
     if (open) {
       setName(sequence?.name ?? "");
       setDescription(sequence?.description ?? "");
+      setAutoSend(sequence?.auto_send ?? false);
       setSteps(stepsFromSequence(sequence));
       setLastFocused(null);
     }
@@ -146,6 +154,7 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
     const payload = {
       name: name.trim(),
       description: description.trim() || undefined,
+      auto_send: autoSend,
       steps: steps.map((s, i) => ({
         step_order: i + 1,
         delay_days: i === 0 ? 0 : s.delay_days,
@@ -206,6 +215,21 @@ export function SequenceEditorDialog({ open, onOpenChange, sequence, onSaved }: 
               placeholder="Optional"
             />
           </div>
+
+          {canAutoSend && (
+            <div className="flex items-start gap-2 rounded-md border p-3">
+              <Checkbox id="seq-auto-send" checked={autoSend} onCheckedChange={(checked) => setAutoSend(checked === true)} />
+              <div className="space-y-0.5">
+                <Label htmlFor="seq-auto-send" className="text-sm font-normal cursor-pointer">
+                  Auto-send — every step sends automatically via EdgeX
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  No per-step review. Once a lead is enrolled, each step sends itself when due — the
+                  timeline below stays as an audit trail, not an inbox to work through.
+                </p>
+              </div>
+            </div>
+          )}
 
           <div className="space-y-2">
             <p className="text-xs font-medium text-muted-foreground">Merge tags — click to insert at cursor</p>

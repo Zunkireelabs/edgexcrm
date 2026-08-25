@@ -37,7 +37,21 @@ export interface SendQueuedEmailBatchResult {
   throttled: number;
 }
 
-export async function sendQueuedEmailBatch(tenantId: string, messageIds: string[]): Promise<SendQueuedEmailBatchResult> {
+export interface SendQueuedEmailBatchOptions {
+  /**
+   * OUTREACH-PHASE2-BRIEF.md §5.3 — pass "blast" from email-blast-send.ts so
+   * the shared daily cap reserves headroom for due drip sends first; the
+   * drip worker (sequence-step-send.ts) omits this and always sees the full
+   * remaining. See cap.ts's GetDailyCapStatusOptions doc for the mechanism.
+   */
+  capCaller?: "blast" | "drip";
+}
+
+export async function sendQueuedEmailBatch(
+  tenantId: string,
+  messageIds: string[],
+  opts: SendQueuedEmailBatchOptions = {}
+): Promise<SendQueuedEmailBatchResult> {
   if (messageIds.length === 0) return { sent: 0, failed: 0, suppressed: 0, throttled: 0 };
 
   const db = await scopedClientForTenant(tenantId);
@@ -135,7 +149,9 @@ export async function sendQueuedEmailBatch(tenantId: string, messageIds: string[
   // throttled count. Never drop, never silently succeed. Shared with the
   // blast /preview route (Phase 1) via getDailyCapStatus — one place computes
   // "remaining today," so preview and enforcement can never drift apart.
-  const { dailyCap, sentToday, remaining: remainingCapacity } = await getDailyCapStatus(db);
+  const { dailyCap, sentToday, remaining: remainingCapacity } = await getDailyCapStatus(db, {
+    reserveForDrip: opts.capCaller === "blast",
+  });
 
   const withinCap = toSend.slice(0, remainingCapacity);
   const throttledRows = toSend.slice(remainingCapacity);
