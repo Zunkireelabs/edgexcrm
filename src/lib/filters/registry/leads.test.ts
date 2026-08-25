@@ -326,3 +326,44 @@ describe("location — city+country combined virtual field", () => {
     if (!plan.ok) expect(plan.errors.location?.[0]).toMatch(/operator is is not allowed/);
   });
 });
+
+// ── embed-kind fields need a standing GRANT, or they 503 for every non-admin scope ──
+//
+// A `kind: "embed"` field (Collaborators today) filters via a real PostgREST
+// resource-embed (`relation!inner(column)`) added to `.select()`. For own/branch
+// scope callers, the base query is an RPC (leads_visible_to_user, SECURITY
+// DEFINER) run over the RLS-context client — and PostgREST executes the
+// embedded join to `relation` as the CONNECTING `authenticated` role, not as
+// the RPC's definer. Migration 195 revoked SELECT on every public table from
+// `authenticated` (only re-granting `messages`), so any embed relation without
+// its own follow-up GRANT throws Postgres 42501 "permission denied for table
+// <relation>" the moment a non-owner/admin user (own-scope counselor,
+// branch-scope manager) applies that filter — surfaced to the client as the
+// leads route's 503 "Failed to fetch leads". Owner/admin never see it (they
+// query via the service-role client, which ignores grants), which is exactly
+// why this shipped unnoticed until a branch manager (Bijay Dahal, KTM) hit it
+// in production (2026-08-24) — see migration 212_grant_lead_collaborators_select.sql
+// for the incident + the GRANT that fixed it.
+//
+// This test is the tripwire: every embed relation in the registry MUST be on
+// GRANTED_EMBED_RELATIONS below, and each entry there must be backed by a real
+// `GRANT SELECT ON public.<relation> TO authenticated;` migration (RLS on that
+// table then carries the actual tenant-safety, same pattern as `messages`).
+// Adding a new `kind: "embed"` field WITHOUT writing that migration first is
+// exactly how this bug reappears — this test fails loudly instead of shipping
+// silently broken for every restricted-scope user.
+describe("embed-kind fields must have a standing GRANT (see migration 212 + the comment above)", () => {
+  const GRANTED_EMBED_RELATIONS = new Set(["lead_collaborators"]);
+
+  it("every embed relation referenced by the leads registry is on the granted allowlist", () => {
+    const embedRelations = Object.values(registry)
+      .map((field) => field.source)
+      .filter((source): source is Extract<typeof source, { kind: "embed" }> => source.kind === "embed")
+      .map((source) => source.relation);
+
+    expect(embedRelations.length).toBeGreaterThan(0); // sanity: this test isn't vacuous
+    for (const relation of embedRelations) {
+      expect(GRANTED_EMBED_RELATIONS.has(relation)).toBe(true);
+    }
+  });
+});

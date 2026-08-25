@@ -11,6 +11,9 @@ interface HtmlSourceEditorProps {
   minHeight?: number;
   format: "text" | "html";
   onFormatChange: (format: "text" | "html") => void;
+  /** Hide the Rich text / HTML source toggle for callers whose body is always one format. */
+  showFormatToggle?: boolean;
+  disabled?: boolean;
 }
 
 export interface HtmlSourceEditorHandle {
@@ -20,7 +23,7 @@ export interface HtmlSourceEditorHandle {
 
 export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEditorProps>(
   function HtmlSourceEditor(
-    { value, onChange, placeholder, minHeight = 220, format, onFormatChange },
+    { value, onChange, placeholder, minHeight = 220, format, onFormatChange, showFormatToggle = true, disabled = false },
     ref
   ) {
     const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -49,32 +52,34 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
 
     return (
       <div className="space-y-2">
-        <div className="inline-flex items-center rounded-md border border-input p-0.5 text-xs">
-          <button
-            type="button"
-            aria-pressed={format === "text"}
-            onClick={() => onFormatChange("text")}
-            className={`px-2.5 py-1 rounded transition-colors ${
-              format === "text"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            Rich text
-          </button>
-          <button
-            type="button"
-            aria-pressed={format === "html"}
-            onClick={() => onFormatChange("html")}
-            className={`px-2.5 py-1 rounded transition-colors ${
-              format === "html"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            HTML source
-          </button>
-        </div>
+        {showFormatToggle && (
+          <div className="inline-flex items-center rounded-md border border-input p-0.5 text-xs">
+            <button
+              type="button"
+              aria-pressed={format === "text"}
+              onClick={() => onFormatChange("text")}
+              className={`px-2.5 py-1 rounded transition-colors ${
+                format === "text"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Rich text
+            </button>
+            <button
+              type="button"
+              aria-pressed={format === "html"}
+              onClick={() => onFormatChange("html")}
+              className={`px-2.5 py-1 rounded transition-colors ${
+                format === "html"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              HTML source
+            </button>
+          </div>
+        )}
 
         {format === "text" ? (
           <div className="space-y-1.5">
@@ -83,8 +88,9 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
               value={value}
               onChange={(e) => onChange(e.target.value)}
               placeholder={placeholder}
+              disabled={disabled}
               style={{ minHeight }}
-              className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y"
+              className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y disabled:opacity-50"
             />
             <div
               className="border border-input rounded-md overflow-hidden bg-white"
@@ -137,8 +143,9 @@ export const HtmlSourceEditor = forwardRef<HtmlSourceEditorHandle, HtmlSourceEdi
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder={placeholder}
+                disabled={disabled}
                 style={{ minHeight }}
-                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono"
+                className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono disabled:opacity-50"
               />
             </TabsContent>
 
