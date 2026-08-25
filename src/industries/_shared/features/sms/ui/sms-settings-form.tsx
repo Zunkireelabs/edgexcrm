@@ -59,7 +59,7 @@ export function SmsSettingsForm({ isAdmin }: SmsSettingsFormProps) {
           placeholder="e.g. Admizz"
           disabled={disabled}
         />
-        <p className="text-xs text-muted-foreground">Prefixed to every message as &quot;Label: &quot;.</p>
+        <p className="text-xs text-muted-foreground">Prefixed to every message on its own line, above the body.</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -120,7 +120,10 @@ export function SmsSettingsForm({ isAdmin }: SmsSettingsFormProps) {
           rows={2}
           disabled={disabled}
         />
-        <p className="text-xs text-muted-foreground">Must contain literal &quot;{"{url}"}&quot; — every character here is billed.</p>
+        <p className="text-xs text-muted-foreground">
+          Include a literal &quot;{"{url}"}&quot; to insert the opt-out link — every character here is billed. Leave
+          blank to send with no opt-out footer at all.
+        </p>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
