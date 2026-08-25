@@ -63,6 +63,11 @@ export const FEATURES = {
   // docs/SMS-PHASE3A-BRIEF.md §2). Never call this "campaigns" — that name is
   // already taken by the education referral/leaderboard feature.
   SMS: "sms",
+  // Shared (education_consultancy today; other tenants buy this later — see
+  // docs/OUTREACH-PHASE1-BRIEF.md §7.1/§7.3). The Brevo-replacement email
+  // blast surface. Also never called "campaigns" for the same reason as SMS
+  // above — route is /email-campaigns, provisional naming pending Sadin.
+  EMAIL_CAMPAIGNS: "email-campaigns",
 } as const;
 
 export type FeatureId = (typeof FEATURES)[keyof typeof FEATURES];

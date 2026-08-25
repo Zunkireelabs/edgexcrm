@@ -26,6 +26,7 @@ import {
   Menu,
   FileText,
   Kanban,
+  Mail,
   MessageSquare,
   UsersRound,
   UserCheck,
@@ -128,6 +129,7 @@ const INDUSTRY_ICONS: Record<string, LucideIcon> = {
   LayoutGrid,
   Kanban,
   ListTodo,
+  Mail,
   MessageSquare,
   Stamp,
   Users,
@@ -626,6 +628,7 @@ export function DashboardShell({
                 {eduItem("/forms") && renderIndustryEntry(eduItem("/forms")!)}
                 {eduItem("/campaigns") && renderIndustryEntry(eduItem("/campaigns")!)}
                 {eduItem("/sms") && renderIndustryEntry(eduItem("/sms")!)}
+                {eduItem("/email-campaigns") && renderIndustryEntry(eduItem("/email-campaigns")!)}
 
                 {/* Administration */}
                 <NavSectionHeader label="Administration" collapsed={sidebarCollapsed} />

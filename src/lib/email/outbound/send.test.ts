@@ -354,4 +354,76 @@ describe("send.ts — suppression safety net and daily cap (§4.6)", () => {
     const finalSuppressed = await readMessage(rowSuppressed.id);
     expect(finalSuppressed.status).toBe("suppressed");
   });
+
+  it("hitting the daily cap sends only up to the remaining capacity and leaves the rest 'queued' — never silently dropped or marked sent (OUTREACH-PHASE1-BRIEF.md §6)", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+    const { sendQueuedEmailBatch } = await import("./send");
+
+    // Snapshot + restore the tenant's real cap row so this test can't leak
+    // state into other tests (which assume the default 2000). tenant_id is
+    // this table's primary key (migration 045) — no separate id column.
+    const { data: existingSettings } = await db.from("tenant_email_settings").select("tenant_id, daily_send_cap").eq("tenant_id", tenantId).maybeSingle();
+    const settingsRow = existingSettings as { tenant_id: string; daily_send_cap: number } | null;
+
+    const todayStart = new Date();
+    todayStart.setUTCHours(0, 0, 0, 0);
+    const { count: sentToday } = await db
+      .from("email_messages")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("status", "sent")
+      .gte("sent_at", todayStart.toISOString());
+
+    // Remaining capacity = exactly 1, however much has already sent today
+    // (other tests in this suite/session may have sent real rows).
+    const cappedAt = (sentToday ?? 0) + 1;
+    let insertedForTenant = false;
+    if (settingsRow) {
+      await db.from("tenant_email_settings").update({ daily_send_cap: cappedAt }).eq("tenant_id", tenantId);
+    } else {
+      // No pre-existing settings row for this tenant — insert one, and
+      // DELETE it (not "restore a default") in the finally below. Restoring
+      // to DEFAULT_DAILY_CAP here would be wrong in a different way: it
+      // would leave a row behind that didn't exist before, permanently
+      // changing "no row -> code default (2000)" into "explicit row -> 2000"
+      // for every other test/session reading this tenant's settings.
+      const { error: insertError } = await db.from("tenant_email_settings").insert({ tenant_id: tenantId, daily_send_cap: cappedAt });
+      if (insertError) throw new Error(`failed to insert tenant_email_settings: ${insertError.message}`);
+      insertedForTenant = true;
+    }
+
+    try {
+      const rows = await Promise.all([
+        insertMessage({ to_email: `cap1.${Date.now()}@example.com` }),
+        insertMessage({ to_email: `cap2.${Date.now()}@example.com` }),
+        insertMessage({ to_email: `cap3.${Date.now()}@example.com` }),
+      ]);
+
+      const result = await sendQueuedEmailBatch(tenantId, rows.map((r) => r.id));
+
+      expect(result.sent).toBe(1);
+      expect(result.throttled).toBe(2);
+      expect(sendMock).toHaveBeenCalledTimes(1);
+
+      const final = await Promise.all(rows.map((r) => readMessage(r.id)));
+      const sentCount = final.filter((r) => r.status === "sent").length;
+      const stillQueuedCount = final.filter((r) => r.status === "queued").length;
+      // The function itself never reports/marks anything "sent" beyond the
+      // cap — the blast-level 'throttled' status transition is the caller's
+      // (email-blast-send.ts's) job, but the row-level guarantee here is that
+      // the throttled rows are untouched, still 'queued', not silently
+      // dropped or marked failed.
+      expect(sentCount).toBe(1);
+      expect(stillQueuedCount).toBe(2);
+    } finally {
+      if (settingsRow) {
+        await db.from("tenant_email_settings").update({ daily_send_cap: settingsRow.daily_send_cap }).eq("tenant_id", tenantId);
+      } else if (insertedForTenant) {
+        await db.from("tenant_email_settings").delete().eq("tenant_id", tenantId);
+      }
+    }
+  });
 });
