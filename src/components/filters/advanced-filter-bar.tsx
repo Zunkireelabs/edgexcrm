@@ -38,6 +38,10 @@ export function AdvancedFilterBar({
     onChange({ ...value, conditions: addOrMergeCondition(value.conditions, condition) });
   }
 
+  function handleAddMany(conditions: FilterCondition[]) {
+    onChange({ ...value, conditions: conditions.reduce((acc, c) => addOrMergeCondition(acc, c), value.conditions) });
+  }
+
   function handleChangeCondition(id: string, next: FilterCondition) {
     onChange({ ...value, conditions: value.conditions.map((c) => (c.id === id ? next : c)) });
   }
@@ -77,6 +81,7 @@ export function AdvancedFilterBar({
           fields={fields}
           getOptions={getOptions}
           onAdd={handleAdd}
+          onAddMany={handleAddMany}
           disabled={atCap}
           onDraftConditionChange={onDraftConditionChange}
           hierarchicalGroups={hierarchicalGroups}

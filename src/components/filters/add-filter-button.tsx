@@ -19,13 +19,14 @@ export interface AddFilterButtonProps {
   fields: FieldDef[];
   getOptions: (field: FieldDef) => FilterOption[];
   onAdd: (condition: FilterCondition) => void;
+  onAddMany?: (conditions: FilterCondition[]) => void;
   disabled?: boolean;
   compact?: boolean;
   onDraftConditionChange?: (condition: FilterCondition | null) => void;
   hierarchicalGroups?: Partial<Record<OptionLoaderKey, HierarchicalFieldGroups>>;
 }
 
-export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, onDraftConditionChange, hierarchicalGroups }: AddFilterButtonProps) {
+export function AddFilterButton({ fields, getOptions, onAdd, onAddMany, disabled, compact, onDraftConditionChange, hierarchicalGroups }: AddFilterButtonProps) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<{ field: FieldDef; condition: FilterCondition } | null>(null);
 
@@ -60,8 +61,9 @@ export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, 
   }
 
   function handleSelectStageStatus(stageField: FieldDef, stageValue: string, statusField: FieldDef, statusValue: string) {
-    onAdd({ id: newConditionId(), field: stageField.key, op: defaultOperatorForField(stageField), value: stageValue });
-    onAdd({ id: newConditionId(), field: statusField.key, op: defaultOperatorForField(statusField), value: statusValue });
+    const stageCondition = { id: newConditionId(), field: stageField.key, op: defaultOperatorForField(stageField), value: stageValue };
+    const statusCondition = { id: newConditionId(), field: statusField.key, op: defaultOperatorForField(statusField), value: statusValue };
+    onAddMany?.([stageCondition, statusCondition]);
     setOpen(false);
     setPicked(null);
   }
