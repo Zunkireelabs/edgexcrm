@@ -24,6 +24,7 @@ export function AdvancedFilterBar({
   optionOverrides,
   hideAddButton = false,
   onDraftConditionChange,
+  hierarchicalGroups,
 }: FilterHostConfig) {
   const { getOptions } = useFilterOptions(optionOverrides);
 
@@ -78,6 +79,7 @@ export function AdvancedFilterBar({
           onAdd={handleAdd}
           disabled={atCap}
           onDraftConditionChange={onDraftConditionChange}
+          hierarchicalGroups={hierarchicalGroups}
         />
       )}
       {showChips && hasAnything && (

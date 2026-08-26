@@ -21,7 +21,7 @@ export default async function EmailBlastRoute({ params }: RouteParams) {
 
   return (
     <div className="flex flex-col gap-6 p-6">
-      <BlastWorkspace blastId={id} canSendEmail={canSendEmail} />
+      <BlastWorkspace blastId={id} canSendEmail={canSendEmail} isAdmin={canSendEmail} />
     </div>
   );
 }

@@ -12,8 +12,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterFieldPicker } from "./filter-field-picker";
 import { FilterConditionEditor } from "./filter-condition-editor";
-import { newConditionForField } from "./condition-defaults";
-import type { FilterOption } from "./types";
+import { newConditionForField, newConditionId, defaultOperatorForField } from "./condition-defaults";
+import type { FilterOption, HierarchicalFieldGroups, OptionLoaderKey } from "./types";
 
 export interface AddFilterButtonProps {
   fields: FieldDef[];
@@ -22,9 +22,10 @@ export interface AddFilterButtonProps {
   disabled?: boolean;
   compact?: boolean;
   onDraftConditionChange?: (condition: FilterCondition | null) => void;
+  hierarchicalGroups?: Partial<Record<OptionLoaderKey, HierarchicalFieldGroups>>;
 }
 
-export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, onDraftConditionChange }: AddFilterButtonProps) {
+export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, onDraftConditionChange, hierarchicalGroups }: AddFilterButtonProps) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<{ field: FieldDef; condition: FilterCondition } | null>(null);
 
@@ -48,6 +49,19 @@ export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, 
   function handleApply() {
     if (!picked) return;
     onAdd(picked.condition);
+    setOpen(false);
+    setPicked(null);
+  }
+
+  function handleSelectLeaf(field: FieldDef, value: string) {
+    onAdd({ id: newConditionId(), field: field.key, op: defaultOperatorForField(field), value });
+    setOpen(false);
+    setPicked(null);
+  }
+
+  function handleSelectStageStatus(stageField: FieldDef, stageValue: string, statusField: FieldDef, statusValue: string) {
+    onAdd({ id: newConditionId(), field: stageField.key, op: defaultOperatorForField(stageField), value: stageValue });
+    onAdd({ id: newConditionId(), field: statusField.key, op: defaultOperatorForField(statusField), value: statusValue });
     setOpen(false);
     setPicked(null);
   }
@@ -78,7 +92,13 @@ export function AddFilterButton({ fields, getOptions, onAdd, disabled, compact, 
             onBack={handleBack}
           />
         ) : (
-          <FilterFieldPicker fields={fields} onSelect={handleFieldSelect} />
+          <FilterFieldPicker
+            fields={fields}
+            onSelect={handleFieldSelect}
+            hierarchicalGroups={hierarchicalGroups}
+            onSelectLeaf={handleSelectLeaf}
+            onSelectStageStatus={handleSelectStageStatus}
+          />
         )}
       </PopoverContent>
     </Popover>

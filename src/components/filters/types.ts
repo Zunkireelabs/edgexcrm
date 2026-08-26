@@ -43,6 +43,35 @@ export interface FilterHostConfig {
    *  discarded). Undefined by default — every host except the SMS composer
    *  leaves this unset and sees zero behavior change. */
   onDraftConditionChange?: (condition: FilterCondition | null) => void;
+  /** Opt-in nested-picker override for a single field (email-blast composer's
+   *  "Leads Organize" / "Stage→Status" grouping) — see HierarchicalFieldGroups.
+   *  Absent everywhere else (SMS composer, leads-table), which keeps
+   *  FilterFieldPicker's flat rendering unchanged for those hosts. */
+  hierarchicalGroups?: Partial<Record<OptionLoaderKey, HierarchicalFieldGroups>>;
+}
+
+export interface HierarchicalLeaf {
+  value: string;
+  label: string;
+}
+
+/** A top-level pickable node (e.g. a pipeline stage) that can itself be
+ *  chosen bare, or expanded to reveal `statusOptions` sub-leaves — picking
+ *  one of those commits two conditions (this node's field + the status
+ *  field) in one shot instead of one. */
+export interface HierarchicalStageGroup extends HierarchicalLeaf {
+  statusOptions: HierarchicalLeaf[];
+}
+
+export interface HierarchicalFieldGroups {
+  /** "Leads Organize" — flat leaf items, single-condition commit. */
+  orgLists: HierarchicalLeaf[];
+  /** "Stage" — each expandable to its Status children. */
+  stages: HierarchicalStageGroup[];
+  /** "Archive" — plain leaf row, no chevron/expand. Null if tenant has none. */
+  archive: HierarchicalLeaf | null;
+  /** "Delete" — plain leaf row, no chevron/expand. Null if tenant has none. */
+  deleteList: HierarchicalLeaf | null;
 }
 
 export type { FilterOption } from "@/components/ui/filter-dropdown";
