@@ -93,8 +93,12 @@ export function CadenceTimeline({
   const { data, loading, refresh } = useCadence(enrollmentId);
   const [activeDraft, setActiveDraft] = useState<Draft | null>(null);
 
+  const isAutoSend = data?.sequence.auto_send ?? false;
+
   const openDue = (item: CadenceStepItem) => {
-    if (!canAct || enrollmentStatus !== "active" || item.state !== "pending" || !item.draft_id) return;
+    // Auto-send sequences have no manual review/send action — the read-only
+    // "sent automatically" row below is the only affordance (OUTREACH-PHASE2-BRIEF.md §6).
+    if (isAutoSend || !canAct || enrollmentStatus !== "active" || item.state !== "pending" || !item.draft_id) return;
     setActiveDraft({
       id: item.draft_id,
       lead_id: leadId,
@@ -137,19 +141,26 @@ export function CadenceTimeline({
         const isDue = item.state === "pending" && !!item.due_at && new Date(item.due_at) <= new Date();
         const isScheduled = item.state === "pending" && !isDue;
         const isProjected = item.state === "projected";
-        const clickable = isDue && canAct && enrollmentStatus === "active";
+        const clickable = !isAutoSend && isDue && canAct && enrollmentStatus === "active";
+        const sentAutomatically = isSent && item.sent_via === "edgex_send";
 
-        const statusLabel = isSent
-          ? `Sent ${formatDate(item.sent_at ?? "")}`
-          : isSkipped
-            ? "Skipped"
-            : isDue
-              ? enrollmentStatus === "paused"
-                ? "Due now · paused"
-                : "Due now"
-              : isScheduled
-                ? `Due ${formatDate(item.due_at ?? "")}`
-                : `~${formatDate(item.projected_due_at ?? "")} · projected`;
+        const statusLabel = sentAutomatically
+          ? `Sent automatically via EdgeX ${formatDate(item.sent_at ?? "")}${
+              item.email_message_status ? ` · ${item.email_message_status}` : ""
+            }`
+          : isSent
+            ? `Sent ${formatDate(item.sent_at ?? "")}`
+            : isSkipped
+              ? "Skipped"
+              : isDue
+                ? isAutoSend
+                  ? "Sending shortly via EdgeX"
+                  : enrollmentStatus === "paused"
+                    ? "Due now · paused"
+                    : "Due now"
+                : isScheduled
+                  ? `Due ${formatDate(item.due_at ?? "")}`
+                  : `~${formatDate(item.projected_due_at ?? "")} · projected`;
 
         const rowInner = (
           <>

@@ -10,6 +10,8 @@ export interface CadenceStepItem {
   sent_at?: string | null;
   draft_id?: string;
   sent_activity_id?: string | null;
+  sent_via?: string | null;
+  email_message_status?: string | null;
   body_html?: string;
   projected_due_at?: string;
 }
@@ -21,7 +23,7 @@ export interface CadenceData {
     current_step_order: number;
     assigned_to: string | null;
   };
-  sequence: { id: string; name: string; total_steps: number };
+  sequence: { id: string; name: string; total_steps: number; auto_send: boolean };
   timeline: CadenceStepItem[];
 }
 

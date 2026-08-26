@@ -67,14 +67,30 @@ export function unsubscribeUrl(token: string): string {
   return `${APP_URL.replace(/\/$/, "")}/e/u/${token}`;
 }
 
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // Every message sent through the spine gets this, regardless of headers.ts's
 // List-Unsubscribe header — headers alone are not compliance; some clients
-// never render them (§4.4, brief).
-export function injectUnsubscribe(bodyHtml: string, url: string): string {
+// never render them (§4.4, brief). Sender identity + mailing address protect
+// sending-domain reputation (Resend/ISP spam-complaint risk), independent of
+// any consent question — every tenant gets this line, not just ones under a
+// specific compliance regime. `mailingAddress` is optional: omitted from the
+// footer until a tenant has one set on tenant_email_settings.mailing_address.
+export function injectUnsubscribe(
+  bodyHtml: string,
+  url: string,
+  sender: { orgName: string; mailingAddress?: string | null }
+): string {
+  const identityLine = sender.mailingAddress
+    ? `${escapeHtml(sender.orgName)} &middot; ${escapeHtml(sender.mailingAddress)}`
+    : escapeHtml(sender.orgName);
   const footer =
     '<div style="margin-top:24px;padding-top:16px;border-top:1px solid #e5e7eb;' +
     'font-size:12px;color:#6b7280;">' +
-    `<a href="${url}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>` +
-    " from these emails.</div>";
+    `<div>${identityLine}</div>` +
+    `<div><a href="${url}" style="color:#6b7280;text-decoration:underline;">Unsubscribe</a>` +
+    " from these emails.</div></div>";
   return `${bodyHtml}${footer}`;
 }

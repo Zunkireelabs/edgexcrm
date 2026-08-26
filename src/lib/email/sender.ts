@@ -1,7 +1,12 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { EMAIL_FROM, PLATFORM_EMAIL_ADDRESS } from "./index";
 
-export type ResolvedSender = { from: string; replyTo?: string };
+export type ResolvedSender = {
+  from: string;
+  replyTo?: string;
+  orgName: string;
+  mailingAddress?: string | null;
+};
 
 // Strip anything that could break the RFC 5322 header (CR/LF/angle brackets).
 function sanitizeName(name: string): string {
@@ -24,7 +29,7 @@ export async function resolveTenantSender(
     const supabase = await createServiceClient();
     const { data } = await supabase
       .from("tenant_email_settings")
-      .select("from_name, from_address, reply_to, domain_verified")
+      .select("from_name, from_address, reply_to, domain_verified, mailing_address")
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
@@ -41,8 +46,8 @@ export async function resolveTenantSender(
     const replyToRaw = data?.reply_to || customAddr || null;
     const replyTo = replyToRaw && isValidEmail(replyToRaw) ? replyToRaw : undefined;
 
-    return { from: `${name} <${address}>`, replyTo };
+    return { from: `${name} <${address}>`, replyTo, orgName: name, mailingAddress: data?.mailing_address ?? null };
   } catch {
-    return { from: EMAIL_FROM };
+    return { from: EMAIL_FROM, orgName: "EdgeX" };
   }
 }

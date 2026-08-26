@@ -14,9 +14,10 @@ import type { EmailBlastRow } from "../lib/types";
 interface BlastWorkspaceProps {
   blastId: string;
   canSendEmail: boolean;
+  isAdmin: boolean;
 }
 
-export function BlastWorkspace({ blastId, canSendEmail }: BlastWorkspaceProps) {
+export function BlastWorkspace({ blastId, canSendEmail, isAdmin }: BlastWorkspaceProps) {
   const [blast, setBlast] = useState<EmailBlastRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,7 +44,7 @@ export function BlastWorkspace({ blastId, canSendEmail }: BlastWorkspaceProps) {
       {blast &&
         !loading &&
         (blast.status === "draft" ? (
-          <BlastComposer blast={blast} onSent={load} canSendEmail={canSendEmail} />
+          <BlastComposer blast={blast} onSent={load} canSendEmail={canSendEmail} isAdmin={isAdmin} />
         ) : (
           <BlastDetail blast={blast} canSendEmail={canSendEmail} onRefresh={load} />
         ))}

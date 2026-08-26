@@ -21,9 +21,10 @@ import { formatDate } from "../lib/format-due";
 
 interface SequencesManagerProps {
   isAdmin: boolean;
+  industryId: string | null;
 }
 
-export function SequencesManager({ isAdmin }: SequencesManagerProps) {
+export function SequencesManager({ isAdmin, industryId }: SequencesManagerProps) {
   const { sequences, loading, refresh } = useSequences();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingSequence, setEditingSequence] = useState<Sequence | null>(null);
@@ -98,7 +99,14 @@ export function SequencesManager({ isAdmin }: SequencesManagerProps) {
               }`}
             >
               <div className="min-w-0">
-                <p className="font-medium text-sm truncate">{sequence.name}</p>
+                <div className="flex items-center gap-1.5">
+                  <p className="font-medium text-sm truncate">{sequence.name}</p>
+                  {sequence.auto_send && (
+                    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                      Auto-send
+                    </span>
+                  )}
+                </div>
                 {sequence.description && (
                   <p className="text-sm text-muted-foreground truncate">{sequence.description}</p>
                 )}
@@ -144,6 +152,7 @@ export function SequencesManager({ isAdmin }: SequencesManagerProps) {
         onOpenChange={setEditorOpen}
         sequence={editingSequence}
         onSaved={refresh}
+        industryId={industryId}
       />
 
       <AlertDialog open={!!archiveTarget} onOpenChange={(open) => !open && setArchiveTarget(null)}>

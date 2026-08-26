@@ -18,6 +18,11 @@ export interface Sequence {
   description: string | null;
   status: string;
   created_at: string;
+  // OUTREACH-PHASE2-BRIEF.md §4/§6 — sequence-level auto-send flag. Defaults
+  // false everywhere it_agency already has sequences; only a tenant whose
+  // industry manifest registers Outreach with the flag surfaced in the
+  // editor (currently education_consultancy) can ever set this true.
+  auto_send: boolean;
   email_sequence_steps: SequenceStep[];
 }
 
