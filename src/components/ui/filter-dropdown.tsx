@@ -12,6 +12,15 @@ export interface FilterOption {
   // color meaning elsewhere in the app (stage badges, tag toggle); most
   // options leave this unset and render with the plain neutral style.
   color?: string;
+  // Per-VALUE chip-prefix override — lets a chip read "Leads Organize: X"
+  // instead of the field's own label ("Stage: X") when several visually
+  // distinct picker categories are backed by one shared FieldDef/key for
+  // storage compatibility (email-blast composer's Stage vs. Leads Organize
+  // vs. Archive vs. Delete, all committed as field: "stage" — see
+  // blast-composer.tsx's buildAudienceOptionOverrides). Unset everywhere
+  // else, which keeps every other chip's prefix as field.label exactly as
+  // before.
+  groupLabel?: string;
 }
 
 export interface FilterOptionListProps {
