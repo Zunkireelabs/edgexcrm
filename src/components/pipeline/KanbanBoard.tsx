@@ -266,10 +266,6 @@ export function KanbanBoard({
     () => Object.fromEntries(teamMembersData.map((m) => [m.user_id, m.name])),
     [teamMembersData]
   );
-  const memberRoleMap = useMemo(
-    () => Object.fromEntries(teamMembersData.map((m) => [m.user_id, m.role])),
-    [teamMembersData]
-  );
 
   const hasMultipleForms = Object.keys(formMap).length > 1;
   const formEntries = useMemo(() => Object.entries(formMap), [formMap]);
@@ -647,8 +643,13 @@ export function KanbanBoard({
             multiple: true,
             value: collaboratorFilter,
             onChange: setCollaboratorFilter,
+            // All team members are listed regardless of role — an owner/admin who
+            // is genuinely a collaborator on some leads must be filterable here too
+            // (matches the /leads Collaborators filter). Kanban has no tenant-wide
+            // collaborator facet, so counts are loaded-cards-only and a member with
+            // no collaborator lead on the board shows without a count rather than
+            // being hidden (would hide real collaborators whose leads aren't loaded).
             options: counselors
-              .filter(([uid]) => memberRoleMap[uid] !== "owner" && memberRoleMap[uid] !== "admin")
               .map(([uid, email]) => ({
                 value: uid,
                 label: (collaboratorCounts.get(uid) ?? 0) > 0
