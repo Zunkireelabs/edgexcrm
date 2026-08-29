@@ -34,12 +34,25 @@ function formatValue(condition: FilterCondition, options: FilterOption[]): strin
   return "";
 }
 
+// Resolves the chip's prefix label — normally just field.label, but a
+// single-value condition whose matched option carries a `groupLabel`
+// (see FilterOption) uses that instead. Only fires for a genuinely
+// unambiguous single value (mirrors resolveChipColor's own singleValue
+// check below) — a multi-value selection has no one category to name, so
+// it always falls back to field.label.
+export function resolvePrefixLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  const { value } = condition;
+  if (typeof value !== "string") return field.label;
+  return options.find((o) => o.value === value)?.groupLabel ?? field.label;
+}
+
 export function formatChipLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  const prefixLabel = resolvePrefixLabel(field, condition, options);
   if (NO_VALUE_OPS.has(condition.op)) {
-    return `${field.label}: ${OPERATOR_LABELS[condition.op]}`;
+    return `${prefixLabel}: ${OPERATOR_LABELS[condition.op]}`;
   }
   const opPrefix = condition.op === "is" ? "" : ` ${OPERATOR_LABELS[condition.op]}`;
-  return `${field.label}${opPrefix}: ${formatValue(condition, options)}`;
+  return `${prefixLabel}${opPrefix}: ${formatValue(condition, options)}`;
 }
 
 // The one real color already established elsewhere in the app —

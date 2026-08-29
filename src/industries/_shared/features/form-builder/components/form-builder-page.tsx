@@ -17,6 +17,7 @@ import { AutoresponderEditor } from "./autoresponder-editor";
 import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { ListRoutingEditor } from "./list-routing-editor";
 import { BranchRoutingEditor } from "./branch-routing-editor";
+import { SubmissionsTab } from "./submissions-tab";
 import { slugify } from "../lib/validation";
 import { DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 
@@ -201,6 +202,8 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
   const [slugEditing, setSlugEditing] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
   const [previewStep, setPreviewStep] = useState(0);
+  const [activeTab, setActiveTab] = useState("steps");
+  const [submissionCount, setSubmissionCount] = useState<number | null>(null);
 
   const publicFormUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/form/${tenantSlug}/${state.slug}`;
 
@@ -307,7 +310,7 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
       <div className={`flex gap-6 flex-1 min-h-0 ${showPreview ? "" : ""}`}>
         {/* Editor panel */}
         <div className={`${showPreview ? "flex-1 min-w-0" : "w-full"} overflow-y-auto`}>
-          <Tabs defaultValue="steps">
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="mb-4">
               <TabsTrigger value="steps">
                 Steps & Fields
@@ -317,6 +320,12 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
               <TabsTrigger value="attribution">Attribution</TabsTrigger>
               <TabsTrigger value="routing">Routing</TabsTrigger>
               <TabsTrigger value="autoresponder">Confirmation Email</TabsTrigger>
+              <TabsTrigger value="submissions">
+                Submissions
+                {submissionCount !== null && (
+                  <Badge variant="secondary" className="ml-1.5 text-xs">{submissionCount}</Badge>
+                )}
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="steps" className="space-y-3">
@@ -369,6 +378,14 @@ export function FormBuilderPage({ formConfig, tenantSlug, industryId }: FormBuil
                 autoresponder={state.autoresponder}
                 steps={state.steps}
                 dispatch={dispatch}
+              />
+            </TabsContent>
+
+            <TabsContent value="submissions">
+              <SubmissionsTab
+                formConfigId={formConfig.id}
+                active={activeTab === "submissions"}
+                onTotalChange={setSubmissionCount}
               />
             </TabsContent>
           </Tabs>

@@ -11,6 +11,7 @@ import { conditionSchema } from "@/lib/filters/schema";
 import { FilterOperatorPicker } from "./filter-operator-picker";
 import { FilterValueEditor } from "./filter-value-editor";
 import { reshapeValueForOperator } from "./condition-defaults";
+import { resolvePrefixLabel } from "./chip-label";
 
 export interface FilterConditionEditorProps {
   field: FieldDef;
@@ -43,6 +44,12 @@ export function FilterConditionEditor({ field, condition, options, onChange, onA
   // through the URL — and a validation failure resets the WHOLE filter tree,
   // not just this one condition (see use-advanced-filters.ts's degrade path).
   const isValid = conditionSchema.safeParse(condition).success;
+  // Same per-value prefix used by the chip itself (resolvePrefixLabel) — so
+  // reopening a "Leads Organize: New Leads (Unrouted)" chip shows that same
+  // heading here, not the shared field's generic "Stage" label. Falls back to
+  // field.label whenever the option carries no groupLabel (every field except
+  // the email-blast composer's Stage/Leads Organize/Archive/Delete split).
+  const headingLabel = resolvePrefixLabel(field, condition, options);
 
   return (
     <div className="flex w-72 flex-col gap-2 p-2">
@@ -53,10 +60,10 @@ export function FilterConditionEditor({ field, condition, options, onChange, onA
           className="flex items-center gap-1 self-start px-1 text-xs font-medium text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="size-3.5" />
-          {field.label}
+          {headingLabel}
         </button>
       ) : (
-        <p className="px-1 text-xs font-medium text-muted-foreground">{field.label}</p>
+        <p className="px-1 text-xs font-medium text-muted-foreground">{headingLabel}</p>
       )}
       <FilterOperatorPicker field={field} value={condition.op} onChange={handleOperatorChange} />
       <FilterValueEditor field={field} op={condition.op} value={condition.value} options={options} onChange={handleValueChange} />
