@@ -151,7 +151,6 @@ interface LeadsTableProps {
   userBranchId?: string | null;
   leadLists?: LeadList[];
   roleMap?: Record<string, string>;
-  memberRoleMap?: Record<string, string>;
   positionSlugMap?: Record<string, string | null>;
   extraDefaultVisibleKeys?: string[];
   isStagingView?: boolean;
@@ -366,7 +365,6 @@ export function LeadsTable({
   userBranchId = null,
   leadLists = [],
   roleMap,
-  memberRoleMap = {},
   positionSlugMap,
   extraDefaultVisibleKeys = [],
   isStagingView = false,
@@ -2106,11 +2104,12 @@ export function LeadsTable({
             onChange: (val: string[]) => {
               setCollaboratorFilter(val);
             },
+            // Anyone with >=1 collaborator lead is offered, regardless of role —
+            // an owner/admin who is genuinely a collaborator on some leads (their
+            // assignment writes a lead_collaborators row) must be filterable here,
+            // same as they already appear on the lead-detail Collaborators list.
             options: counselors
-              .filter(([userId]) =>
-                (collaboratorCounts.get(userId) ?? 0) > 0 &&
-                memberRoleMap[userId] !== "owner" &&
-                memberRoleMap[userId] !== "admin")
+              .filter(([userId]) => (collaboratorCounts.get(userId) ?? 0) > 0)
               .map(([userId, email]) => ({
                 value: userId,
                 label: `${memberNames[userId] || email.split("@")[0]} (${(collaboratorCounts.get(userId) ?? 0).toLocaleString()})`,
@@ -2300,22 +2299,15 @@ export function LeadsTable({
       // Collaborator counts: server-computed, tenant-wide (migration 207's
       // `collaborator` dimension on lead_aggregates()) when serverPaginated, falling
       // back to the page-scoped client computation otherwise — see collaboratorCounts
-      // above. Was purely client-side/page-scoped until this was closed as a
-      // production-readiness gap; kept the owner/admin exclusion, an independent
-      // product decision (they're not offered as assignable collaborators) unrelated
-      // to where the count comes from. A currently-selected collaborator stays offered
-      // even at 0 (same reasoning as assignees above) — deliberately NOT exempted from
-      // the owner/admin exclusion though: if an owner/admin id is already selected
-      // (e.g. from a stale/shared filter link), showing their real name here would
-      // contradict "owners/admins are never offered as collaborators" everywhere else
-      // this list is used; the uuid fallback is the lesser inconsistency in that
-      // specific, rare case.
+      // above. Offered regardless of role: an owner/admin who is genuinely a
+      // collaborator on some leads must be filterable here (matches the lead-detail
+      // Collaborators list, which has never excluded them). A currently-selected
+      // collaborator stays offered even at 0 (same reasoning as assignees above) so
+      // its chip keeps a real name.
       collaborators: counselors
         .filter(
           ([userId]) =>
-            ((collaboratorCounts.get(userId) ?? 0) > 0 || selectedCollaborators.has(userId)) &&
-            memberRoleMap[userId] !== "owner" &&
-            memberRoleMap[userId] !== "admin"
+            (collaboratorCounts.get(userId) ?? 0) > 0 || selectedCollaborators.has(userId)
         )
         .map(([userId, email]) => ({
           value: userId,
@@ -2346,7 +2338,6 @@ export function LeadsTable({
     counselors,
     memberNames,
     collaboratorCounts,
-    memberRoleMap,
     formEntries,
     destinationCounts,
     selectedValuesForField,
