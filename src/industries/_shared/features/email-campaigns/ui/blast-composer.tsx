@@ -20,8 +20,9 @@ import { Label } from "@/components/ui/label";
 import { HtmlSourceEditor } from "@/industries/_shared/features/email/components/html-source-editor";
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
-import type { FilterOption } from "@/components/filters/types";
+import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { conditionSchema } from "@/lib/filters/schema";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
@@ -70,7 +71,7 @@ function buildAudienceOptionOverrides(input: {
   sourceFacet: { name: string; count: number }[];
   assigneeFacet: { name: string; count: number }[];
   roster: { user_id: string; name: string }[];
-  leadLists: { id: string; name: string; is_staging?: boolean; is_archive: boolean }[];
+  leadLists: { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[];
 }): Partial<Record<string, FilterOption[]>> {
   const collaborators = input.roster.map((m) => ({ value: m.user_id, label: m.name }));
   const memberNameById = new Map(collaborators.map((o) => [o.value, o.label]));
@@ -84,7 +85,28 @@ function buildAudienceOptionOverrides(input: {
     status: STATUS_OPTIONS,
     industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
     tags: TAG_OPTIONS,
-    stage: input.leadLists.filter((l) => !l.is_staging && !l.is_archive).map((l) => ({ value: l.id, label: l.name })),
+    stage: input.leadLists.filter((l) => !l.is_staging && !isOffFunnelLeadList(l)).map((l) => ({ value: l.id, label: l.name })),
+  };
+}
+
+/** "Leads Organize" (is_staging=true) vs "Stage" (is_staging=false, each
+ *  expandable to STATUS_OPTIONS) groups for the "Add filter" picker's stage
+ *  field — mirrors the leads-page sidebar grouping. Email-blast composer
+ *  only; SMS composer and leads-table keep the flat picker unaffected. */
+function buildStageHierarchy(
+  leadLists: { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[],
+  isAdmin: boolean
+): HierarchicalFieldGroups {
+  const statusLeaves = STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label }));
+  const archiveList = leadLists.find((l) => !l.is_staging && l.is_archive === true);
+  const deleteList = leadLists.find((l) => !l.is_staging && l.slug === "delete");
+  return {
+    orgLists: isAdmin ? leadLists.filter((l) => l.is_staging && !l.is_archive).map((l) => ({ value: l.id, label: l.name })) : [],
+    stages: leadLists
+      .filter((l) => !l.is_staging && !isOffFunnelLeadList(l))
+      .map((l) => ({ value: l.id, label: l.name, statusOptions: statusLeaves })),
+    archive: archiveList ? { value: archiveList.id, label: archiveList.name } : null,
+    deleteList: deleteList ? { value: deleteList.id, label: deleteList.name } : null,
   };
 }
 
@@ -92,12 +114,13 @@ interface BlastComposerProps {
   blast: EmailBlastRow;
   onSent: () => void;
   canSendEmail: boolean;
+  isAdmin: boolean;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const PREVIEW_DEBOUNCE_MS = 600;
 
-export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProps) {
+export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastComposerProps) {
   const router = useRouter();
 
   const [name, setName] = useState(blast.name);
@@ -129,7 +152,7 @@ export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProp
   const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
   const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
   const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
-  const [leadLists, setLeadLists] = useState<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>([]);
+  const [leadLists, setLeadLists] = useState<{ id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -140,7 +163,7 @@ export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProp
       })
       .catch(() => void 0);
 
-    emailBlastGet<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>("/api/v1/lead-lists")
+    emailBlastGet<{ id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[]>("/api/v1/lead-lists")
       .then(({ data }) => {
         if (!cancelled) setLeadLists(data);
       })
@@ -171,6 +194,7 @@ export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProp
     () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists }),
     [forms, sourceFacet, assigneeFacet, roster, leadLists]
   );
+  const hierarchicalGroups = useMemo(() => ({ stage: buildStageHierarchy(leadLists, isAdmin) }), [leadLists, isAdmin]);
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const audienceCountTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -300,6 +324,7 @@ export function BlastComposer({ blast, onSent, canSendEmail }: BlastComposerProp
           allowGroups={false}
           optionOverrides={audienceOptionOverrides}
           onDraftConditionChange={setDraftCondition}
+          hierarchicalGroups={hierarchicalGroups}
         />
         {audienceCountLoading ? (
           <p className="text-xs text-muted-foreground">Counting matches…</p>
