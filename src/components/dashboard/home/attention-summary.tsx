@@ -27,9 +27,21 @@ export function AttentionSummary({ openTasks, schedule, inboxSnapshot, leaveSumm
   if (total === 0) return null;
 
   const parts = [
-    overdueTasks > 0 ? `${overdueTasks} overdue ${overdueTasks === 1 ? "task" : "tasks"}` : null,
-    overdueFollowUps > 0 ? `${overdueFollowUps} overdue ${overdueFollowUps === 1 ? "follow-up" : "follow-ups"}` : null,
-    unread > 0 ? `${unread} unread` : null,
+    overdueTasks > 0 ? (
+      <Link key="overdue-tasks" href="/tasks" className="underline hover:text-amber-700">
+        {overdueTasks} overdue {overdueTasks === 1 ? "task" : "tasks"}
+      </Link>
+    ) : null,
+    overdueFollowUps > 0 ? (
+      <Link key="overdue-follow-ups" href="/leads" className="underline hover:text-amber-700">
+        {overdueFollowUps} overdue {overdueFollowUps === 1 ? "follow-up" : "follow-ups"}
+      </Link>
+    ) : null,
+    unread > 0 ? (
+      <Link key="unread" href="/inbox" className="underline hover:text-amber-700">
+        {unread} unread
+      </Link>
+    ) : null,
     outreachDue > 0 ? (
       <Link key="outreach-due" href="/outreach" className="underline hover:text-amber-700">
         {outreachDue} outreach {outreachDue === 1 ? "email" : "emails"} due

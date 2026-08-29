@@ -35,7 +35,13 @@ const EXEMPT_SITES: Record<string, "rpc-only" | "auth-only"> = {
   "src/app/(main)/(dashboard)/classes/page.tsx": "rpc-only", // visibleLeadsBase() call site
   "src/app/(main)/(dashboard)/applications/page.tsx": "rpc-only", // visibleLeadsBase() call site
   "src/app/(main)/api/v1/sms/blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/sms/blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (F-12)
+  "src/app/(main)/api/v1/sms/blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (Phase 3B)
   "src/app/(main)/api/v1/sms/blasts/[id]/send/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/email-blasts/[id]/preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site (OUTREACH-PHASE1-BRIEF.md §4)
+  "src/app/(main)/api/v1/email-blasts/[id]/audience-count/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/email-blasts/[id]/audience-preview/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
+  "src/app/(main)/api/v1/email-blasts/[id]/send/route.ts": "rpc-only", // resolveAudience() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/route.ts": "rpc-only", // visibleLeadIdsAmong() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site
   "src/app/(main)/api/v1/inbox/conversations/[id]/messages/route.ts": "rpc-only", // canAccessConversationLead() -> visibleLeadsBase() call site

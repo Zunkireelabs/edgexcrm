@@ -10,9 +10,10 @@ export interface FilterChipRowProps {
   getOptions: (field: FieldDef) => FilterOption[];
   onChangeCondition: (id: string, next: FilterCondition) => void;
   onRemoveCondition: (id: string) => void;
+  onDraftConditionChange?: (condition: FilterCondition | null) => void;
 }
 
-export function FilterChipRow({ conditions, registry, getOptions, onChangeCondition, onRemoveCondition }: FilterChipRowProps) {
+export function FilterChipRow({ conditions, registry, getOptions, onChangeCondition, onRemoveCondition, onDraftConditionChange }: FilterChipRowProps) {
   return (
     <>
       {conditions.map((condition) => {
@@ -26,6 +27,7 @@ export function FilterChipRow({ conditions, registry, getOptions, onChangeCondit
             options={getOptions(field)}
             onChange={(next) => onChangeCondition(condition.id, next)}
             onRemove={() => onRemoveCondition(condition.id)}
+            onDraftConditionChange={onDraftConditionChange}
           />
         );
       })}

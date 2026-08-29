@@ -9,6 +9,7 @@ import {
   apiNotFound,
   apiServiceUnavailable,
 } from "@/lib/api/response";
+import { validate, maxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteContext {
@@ -47,6 +48,14 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   if (!existing) return apiNotFound("Email rule");
 
+  // Cap length on subject/body when present — body is now an intended full-HTML-document field.
+  const { valid, errors } = validate(body, {
+    subject: [maxLength(500)],
+    body: [maxLength(100_000)],
+    body_format: [isIn(["text", "html"])],
+  });
+  if (!valid) return apiValidationError(errors);
+
   // If changing pipeline/stage, validate them
   if (body.pipeline_id || body.stage_id) {
     const pipelineId = body.pipeline_id as string | undefined;
@@ -71,7 +80,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
   const allowedFields = [
     "name", "is_active", "from_name", "pipeline_id", "stage_id",
-    "subject", "body",
+    "subject", "body", "body_format",
   ];
 
   const updatePayload: Record<string, unknown> = {};

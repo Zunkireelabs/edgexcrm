@@ -1,7 +1,7 @@
 import { createServiceClient } from "@/lib/supabase/server";
 import { getResendClient } from "./index";
 import { resolveTenantSender } from "./sender";
-import { renderTemplate } from "./render-template";
+import { renderTemplate, renderEmailBody } from "./render-template";
 import { createRequestLogger } from "@/lib/logger";
 import type { Lead } from "@/types/database";
 
@@ -84,8 +84,8 @@ export async function processEmailForwardRules({
         extra: { pipeline_name: pipelineName, stage_name: stageName },
       };
 
-      const subject = renderTemplate(rule.subject, renderCtx);
-      const body = renderTemplate(rule.body, renderCtx);
+      const subject = renderTemplate(rule.subject, renderCtx, { escape: false });
+      const body = renderEmailBody(rule.body, renderCtx, rule.body_format);
 
       const sender = await resolveTenantSender(tenantId, { nameOverride: rule.from_name ?? undefined });
 

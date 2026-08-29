@@ -1,4 +1,4 @@
-import { and, or, pgVal } from "../pgrst";
+import { and, or, pgLike, pgVal } from "../pgrst";
 import { FilterCompileError, type CompileCtx, type FieldDef, type FieldRegistry, type FilterCondition } from "../types";
 
 // Lead field registry — Phase 2 of docs/ADVANCED-FILTERS-BRIEF.md. Covers the 9
@@ -76,9 +76,33 @@ function compileSource(cond: FilterCondition): string {
 // invalid and "unassigned" wasn't requested.
 
 function compileAssignees(cond: FilterCondition): string | null {
+  // assigned_to is a plain nullable column (unlike Collaborators' join table),
+  // so is_empty/is_not_empty/is_none_of are ordinary column comparisons — no
+  // !inner-join trap here, unlike Collaborators (see that field's comment in
+  // leadFields() below for why is_empty/is_none_of stay OFF there).
+  if (cond.op === "is_empty") return "assigned_to.is.null";
+  if (cond.op === "is_not_empty") return "assigned_to.not.is.null";
+
   const values = asList(cond.value);
   const wantsUnassigned = values.includes("unassigned");
   const ids = values.filter((v) => v !== "unassigned" && UUID_RE.test(v));
+
+  if (cond.op === "is_none_of") {
+    // Mirrors the is_any_of branches below, negated — but "unassigned" stays
+    // an explicit, independently-toggleable bucket rather than getting the
+    // blanket NULL-inclusive safety net compileStatus/compileSource apply to
+    // *unset* data. Here NULL already has its own first-class opt-in/opt-out
+    // via the "unassigned" sentinel, so auto-including it would make it
+    // impossible to express "exclude these people, but still show unassigned
+    // leads" (the ids-only branch) as distinct from "exclude these people AND
+    // unassigned leads" (the unassigned+ids branch).
+    const negatedIds = () => (ids.length === 1 ? `assigned_to.neq.${pgVal(ids[0])}` : `assigned_to.not.in.(${ids.map(pgVal).join(",")})`);
+    if (wantsUnassigned && ids.length > 0) return and("assigned_to.not.is.null", negatedIds());
+    if (wantsUnassigned) return "assigned_to.not.is.null";
+    if (ids.length > 0) return or("assigned_to.is.null", negatedIds());
+    // No valid tokens — same no-op fallback as is_any_of below (§0 fix).
+    return null;
+  }
 
   if (wantsUnassigned && ids.length > 0) return or("assigned_to.is.null", `assigned_to.in.(${ids.map(pgVal).join(",")})`);
   if (wantsUnassigned) return "assigned_to.is.null";
@@ -105,10 +129,18 @@ function compileLocation(cond: FilterCondition): string {
     return or(and("city.not.is.null", `city.neq.${pgVal("")}`), and("country.not.is.null", `country.neq.${pgVal("")}`));
   }
   const value = String(cond.value);
-  const pattern = pgVal(`%${value.replace(/([\\%_])/g, "\\$1")}%`);
-  if (cond.op === "contains") return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);
+  // starts_with/ends_with mirror contains exactly (OR across both columns) —
+  // only the wildcard placement differs. No negative form exists for either
+  // (matching every other text field in this registry — the FilterOperator
+  // union has no "not_starts_with"/"not_ends_with" at all).
+  if (cond.op === "contains" || cond.op === "starts_with" || cond.op === "ends_with") {
+    const mode = cond.op === "contains" ? "contains" : cond.op === "starts_with" ? "prefix" : "suffix";
+    const pattern = pgLike(value, mode);
+    return or(`city.ilike.${pattern}`, `country.ilike.${pattern}`);
+  }
   // not_contains — De Morgan over the OR'd positive match, each leg NULL-inclusive:
   // NOT(city ilike P OR country ilike P) = (city IS NULL OR city NOT ilike P) AND (country IS NULL OR country NOT ilike P)
+  const pattern = pgLike(value, "contains");
   return and(or("city.is.null", `city.not.ilike.${pattern}`), or("country.is.null", `country.not.ilike.${pattern}`));
 }
 
@@ -202,7 +234,7 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Assigned to",
       type: "uuid",
       source: { kind: "virtual", compile: compileAssignees },
-      operators: ["is_any_of"],
+      operators: ["is_any_of", "is_none_of", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },
@@ -210,8 +242,27 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       key: "collaborators",
       label: "Collaborators",
       type: "relation",
-      source: { kind: "embed", relation: "lead_collaborators", column: "user_id", embedSelect: "lead_collaborators!inner(user_id)" },
-      operators: ["is_any_of"],
+      source: {
+        kind: "embed",
+        relation: "lead_collaborators",
+        column: "user_id",
+        embedSelect: "lead_collaborators!inner(user_id)",
+        // Mig 210: a trigger-maintained counter on leads, used ONLY for
+        // is_empty. The !inner join above can prove a collaborator EXISTS,
+        // never that none does — this sidesteps that instead of trying to
+        // express "no matching row" through the join at all. See its comment
+        // in compile.ts's "embed" render case for the full reasoning.
+        emptyColumn: "collaborator_count",
+      },
+      // is_not_empty is safe on top of is_any_of: the embedSelect above is an
+      // `!inner` join, so any row that survives it already has >=1
+      // collaborator — is_not_empty just states that fact explicitly.
+      // is_none_of is still NOT offered: excluding SPECIFIC people has no
+      // equivalent to the emptyColumn escape hatch (a count alone can't say
+      // WHO) — it would still need the NOT-EXISTS-shaped query this field's
+      // is_empty was rewritten specifically to avoid. See compile.ts's
+      // requireOperator for the enforced rejection.
+      operators: ["is_any_of", "is_not_empty", "is_empty"],
       group: "Basic",
       filterable: true,
     },
@@ -327,7 +378,11 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
       label: "Location",
       type: "text",
       source: { kind: "virtual", compile: compileLocation },
-      operators: ["contains", "not_contains", "is_empty", "is_not_empty"],
+      // "is"/"is not" stay excluded — there's no single value to equal across
+      // two combined columns (same reasoning as Collaborators/Assigned-to's
+      // exclusions above). starts_with/ends_with now match City/Country's own
+      // full operator set — see compileLocation.
+      operators: ["contains", "not_contains", "starts_with", "ends_with", "is_empty", "is_not_empty"],
       group: "Basic",
       filterable: true,
     },

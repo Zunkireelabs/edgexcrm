@@ -23,6 +23,8 @@ export function AdvancedFilterBar({
   maxConditions = DEFAULT_MAX_CONDITIONS,
   optionOverrides,
   hideAddButton = false,
+  onDraftConditionChange,
+  hierarchicalGroups,
 }: FilterHostConfig) {
   const { getOptions } = useFilterOptions(optionOverrides);
 
@@ -34,6 +36,10 @@ export function AdvancedFilterBar({
 
   function handleAdd(condition: FilterCondition) {
     onChange({ ...value, conditions: addOrMergeCondition(value.conditions, condition) });
+  }
+
+  function handleAddMany(conditions: FilterCondition[]) {
+    onChange({ ...value, conditions: conditions.reduce((acc, c) => addOrMergeCondition(acc, c), value.conditions) });
   }
 
   function handleChangeCondition(id: string, next: FilterCondition) {
@@ -67,6 +73,7 @@ export function AdvancedFilterBar({
           getOptions={getOptions}
           onChangeCondition={handleChangeCondition}
           onRemoveCondition={handleRemoveCondition}
+          onDraftConditionChange={onDraftConditionChange}
         />
       )}
       {!hideAddButton && (
@@ -74,7 +81,10 @@ export function AdvancedFilterBar({
           fields={fields}
           getOptions={getOptions}
           onAdd={handleAdd}
+          onAddMany={handleAddMany}
           disabled={atCap}
+          onDraftConditionChange={onDraftConditionChange}
+          hierarchicalGroups={hierarchicalGroups}
         />
       )}
       {showChips && hasAnything && (

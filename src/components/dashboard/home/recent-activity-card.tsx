@@ -25,27 +25,38 @@ export function RecentActivityCard({ notifications }: RecentActivityCardProps) {
         ) : (
           <div className="space-y-0.5">
             {notifications.map((n) => {
+              const isUnread = !n.read_at;
               const content = (
-                <div className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors">
+                <>
                   <div
-                    className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${n.read_at ? "bg-gray-300" : "bg-blue-500"}`}
+                    className={`h-2 w-2 rounded-full shrink-0 mt-1.5 ${isUnread ? "bg-blue-500" : "bg-muted-foreground/30"}`}
+                    aria-label={isUnread ? "Unread" : undefined}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{n.title}</p>
+                    <p className={`text-sm truncate ${isUnread ? "font-medium text-foreground" : "text-muted-foreground"}`}>
+                      {n.title}
+                    </p>
                     <p className="text-xs text-muted-foreground truncate">{n.message}</p>
                   </div>
                   <span className="text-xs text-muted-foreground shrink-0">
                     {formatRelativeTime(n.created_at)}
                   </span>
-                </div>
+                </>
               );
 
               return n.link ? (
-                <Link key={n.id} href={n.link} prefetch={false}>
+                <Link
+                  key={n.id}
+                  href={n.link}
+                  prefetch={false}
+                  className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-muted/50 transition-colors"
+                >
                   {content}
                 </Link>
               ) : (
-                <div key={n.id}>{content}</div>
+                <div key={n.id} className="flex items-start gap-3 py-2 px-1 rounded-md">
+                  {content}
+                </div>
               );
             })}
           </div>

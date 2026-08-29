@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { compileFilter, planFilter, type QueryBuilder } from "../compile";
 import { FilterCompileError, type CompileCtx, type FilterCondition, type FilterTree } from "../types";
 import { leadFields } from "./leads";
+import { legacyLeadsParamsToTree } from "../legacy-leads-params";
 
 // Spot-checks that the leads registry's legacy-facing fields (status, source,
 // assignees) compile to the SAME predicate route.ts's hand-rolled chain emits
@@ -104,6 +105,52 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual(["eq(form_config_id,\"11111111-2222-4333-8444-555555555555\")"]);
   });
 
+  // ── the actual production bug: a malformed uuid on Stage/Form used to throw
+  // a raw Postgres error (22P02 "invalid input syntax for type uuid"),
+  // surfaced to the client as "Failed to fetch leads" — killing the ENTIRE
+  // leads list over one bad value, confirmed live against a real
+  // Postgres/PostgREST instance. Both fields now drop a malformed value
+  // instead of ever reaching the database with it.
+  it("form: a malformed (non-uuid-shaped) value is dropped, not sent to Postgres — the exact class of value that used to 503 the whole leads list", () => {
+    const b = compile(andTree(cond("c1", "form", "is", "not-a-real-uuid")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("stage: a malformed (non-uuid-shaped) list_id value is dropped the same way", () => {
+    const b = compile(andTree(cond("c1", "stage", "is", "garbage")));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("stage: a malformed value inside is_any_of is filtered out, valid ones survive", () => {
+    const b = compile(andTree(cond("c1", "stage", "is_any_of", ["11111111-2222-4333-8444-555555555555", "not-a-uuid"])));
+    expect(b.calls).toEqual(['in(list_id,["11111111-2222-4333-8444-555555555555"])']);
+  });
+
+  it("legacy ?form= param (no UUID_RE guard of its own, unlike ?stage=) is protected by the SAME shared compiler-level guard, not a per-path fix", () => {
+    const tree = legacyLeadsParamsToTree(new URLSearchParams({ form: "not-a-real-uuid" }));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan.ok).toBe(true); // never even reaches "invalid" — just contributes nothing
+    const b = compile(tree);
+    expect(b.calls).toEqual([]);
+  });
+
+  it("legacy ?collaborators= param (also no UUID_RE guard of its own) is protected by the same guard, widened to cover Collaborators' relation type", () => {
+    const tree = legacyLeadsParamsToTree(new URLSearchParams({ collaborators: "not-a-real-uuid" }));
+    const plan = planFilter(tree, registry, ctx);
+    expect(plan.ok).toBe(true);
+    const b = compile(tree);
+    expect(b.calls).toEqual([]);
+  });
+
+  it("assignees: the 'unassigned' sentinel (deliberately non-uuid-shaped) is untouched by the guard — virtual fields own their own value handling", () => {
+    // Proves the guard's virtual-field exclusion against the REAL production
+    // field, not just a synthetic fixture: assignees is type:'uuid' same as
+    // form/stage, but compileAssignees legitimately depends on a non-uuid
+    // token reaching it unfiltered.
+    const b = compile(andTree(cond("c1", "assignees", "is_any_of", ["unassigned"])));
+    expect(b.calls).toEqual(["or(assigned_to.is.null)"]);
+  });
+
   it("assignees: unassigned + ids matches route.ts's or(assigned_to.is.null,assigned_to.in.(...))", () => {
     const b = compile(andTree(cond("c1", "assignees", "is_any_of", ["unassigned", "11111111-2222-4333-8444-555555555555"])));
     expect(b.calls).toEqual(["or(or(assigned_to.is.null,assigned_to.in.(11111111-2222-4333-8444-555555555555)))"]);
@@ -122,6 +169,45 @@ describe("leads registry — legacy value-shape equivalence", () => {
     expect(b.calls).toEqual([]);
   });
 
+  it("assignees: is_none_of with only ids excludes them but keeps unassigned leads (NULL-inclusive negation)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["11111111-2222-4333-8444-555555555555"])));
+    expect(b.calls).toEqual(["or(or(assigned_to.is.null,assigned_to.neq.11111111-2222-4333-8444-555555555555))"]);
+  });
+
+  it("assignees: is_none_of with multiple ids uses not.in, still NULL-inclusive", () => {
+    const b = compile(
+      andTree(cond("c1", "assignees", "is_none_of", ["11111111-2222-4333-8444-555555555555", "22222222-3333-4444-8555-666666666666"]))
+    );
+    expect(b.calls).toEqual([
+      "or(or(assigned_to.is.null,assigned_to.not.in.(11111111-2222-4333-8444-555555555555,22222222-3333-4444-8555-666666666666)))",
+    ]);
+  });
+
+  it("assignees: is_none_of with only 'unassigned' means 'must have an assignee' — assigned_to.not.is.null, no NULL-inclusive wrap", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["unassigned"])));
+    expect(b.calls).toEqual(["or(assigned_to.not.is.null)"]);
+  });
+
+  it("assignees: is_none_of with 'unassigned' + ids excludes both the unassigned bucket and the named ids (AND, not the NULL-inclusive OR)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["unassigned", "11111111-2222-4333-8444-555555555555"])));
+    expect(b.calls).toEqual(["or(and(assigned_to.not.is.null,assigned_to.neq.11111111-2222-4333-8444-555555555555))"]);
+  });
+
+  it("assignees: is_none_of with only invalid tokens drops out as a no-op, same as is_any_of's fallback", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_none_of", ["garbage"])));
+    expect(b.calls).toEqual([]);
+  });
+
+  it("assignees: is_empty compiles to a plain assigned_to.is.null check (no !inner-join trap — assigned_to is a scalar column)", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_empty")));
+    expect(b.calls).toEqual(["or(assigned_to.is.null)"]);
+  });
+
+  it("assignees: is_not_empty compiles to assigned_to.not.is.null", () => {
+    const b = compile(andTree(cond("c1", "assignees", "is_not_empty")));
+    expect(b.calls).toEqual(["or(assigned_to.not.is.null)"]);
+  });
+
   it("assignees: every token invalid, inside an OR group, drops out rather than making the group match every row (§0 fix)", () => {
     const b = compile({
       conjunction: "and",
@@ -132,8 +218,39 @@ describe("leads registry — legacy value-shape equivalence", () => {
   });
 
   it("collaborators is embed-kind and is planned as the exact !inner select route.ts's selectColumns ternary builds today", () => {
-    const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["u1"])), registry, ctx);
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_any_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
     expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("collaborators: is_not_empty is safe on the !inner join (any surviving row already has >=1 collaborator) and still carries referencedTable", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_not_empty")), registry, ctx);
+    expect(plan).toEqual({ ok: true, embeds: ["lead_collaborators!inner(user_id)"] });
+  });
+
+  it("collaborators: is_empty compiles to the mig 210 counter column, NOT the !inner join — no embed added, no referencedTable", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_empty")), registry, ctx);
+    // No embed: is_empty answers from leads.collaborator_count directly, so
+    // the caller never needs to add lead_collaborators to .select() for it.
+    expect(plan).toEqual({ ok: true, embeds: [] });
+
+    const b = compile(andTree(cond("c1", "collaborators", "is_empty")));
+    expect(b.calls).toEqual(["or(collaborator_count.eq.0)"]);
+  });
+
+  it("collaborators: is_empty OR'd with is_any_of on the SAME field is correctly rejected — is_empty targets the base table's counter, is_any_of targets the embedded table, and .or({referencedTable}) can't scope a single filter string to both at once", () => {
+    const plan = planFilter(
+      { conjunction: "or", conditions: [cond("c1", "collaborators", "is_empty"), cond("c2", "collaborators", "is_any_of", ["11111111-2222-4333-8444-555555555555"])] },
+      registry,
+      ctx
+    );
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/cannot mix/);
+  });
+
+  it("collaborators: is_none_of is still rejected — not even in the field's operators list, since a count alone can't say WHO (stays out of scope even with mig 210's counter)", () => {
+    const plan = planFilter(andTree(cond("c1", "collaborators", "is_none_of", ["11111111-2222-4333-8444-555555555555"])), registry, ctx);
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.collaborators?.[0]).toMatch(/operator is_none_of is not allowed/);
   });
 
   it("tags has_all matches route.ts's .contains('tags', [tagFilter]) via the native path", () => {
@@ -184,5 +301,69 @@ describe("location — city+country combined virtual field", () => {
     const locationEmpty = compile(andTree(cond("c1", "location", "is_empty")));
     expect(cityEmpty.calls[0]).toContain('city.eq.""');
     expect(locationEmpty.calls[0]).toContain('city.eq.""');
+  });
+
+  it('"starts_with" ORs the prefix match across both columns — same pgLike("prefix") pattern City/Country use individually', () => {
+    const b = compile(andTree(cond("c1", "location", "starts_with", "Kathmandu")));
+    expect(b.calls[0]).toBe("or(or(city.ilike.Kathmandu%,country.ilike.Kathmandu%))");
+    const cityAlone = compile(andTree(cond("c1", "city", "starts_with", "Kathmandu")));
+    expect(cityAlone.calls[0]).toBe("ilike(city,Kathmandu%)"); // native path — no OR needed for a single column
+  });
+
+  it('"ends_with" ORs the suffix match across both columns', () => {
+    const b = compile(andTree(cond("c1", "location", "ends_with", "pur")));
+    expect(b.calls[0]).toBe("or(or(city.ilike.%pur,country.ilike.%pur))");
+  });
+
+  it("starts_with/ends_with still escape the user's own %/_ wildcards via pgLike, same as contains", () => {
+    const b = compile(andTree(cond("c1", "location", "starts_with", "50%_off")));
+    expect(b.calls[0]).toBe('or(or(city.ilike."50\\\\%\\\\_off%",country.ilike."50\\\\%\\\\_off%"))');
+  });
+
+  it("is/is_not are still NOT offered on location — no single value to equal across two combined columns (same reasoning as Collaborators/Assigned-to)", () => {
+    const plan = planFilter(andTree(cond("c1", "location", "is", "Kathmandu")), registry, ctx);
+    expect(plan.ok).toBe(false);
+    if (!plan.ok) expect(plan.errors.location?.[0]).toMatch(/operator is is not allowed/);
+  });
+});
+
+// ── embed-kind fields need a standing GRANT, or they 503 for every non-admin scope ──
+//
+// A `kind: "embed"` field (Collaborators today) filters via a real PostgREST
+// resource-embed (`relation!inner(column)`) added to `.select()`. For own/branch
+// scope callers, the base query is an RPC (leads_visible_to_user, SECURITY
+// DEFINER) run over the RLS-context client — and PostgREST executes the
+// embedded join to `relation` as the CONNECTING `authenticated` role, not as
+// the RPC's definer. Migration 195 revoked SELECT on every public table from
+// `authenticated` (only re-granting `messages`), so any embed relation without
+// its own follow-up GRANT throws Postgres 42501 "permission denied for table
+// <relation>" the moment a non-owner/admin user (own-scope counselor,
+// branch-scope manager) applies that filter — surfaced to the client as the
+// leads route's 503 "Failed to fetch leads". Owner/admin never see it (they
+// query via the service-role client, which ignores grants), which is exactly
+// why this shipped unnoticed until a branch manager (Bijay Dahal, KTM) hit it
+// in production (2026-08-24) — see migration 212_grant_lead_collaborators_select.sql
+// for the incident + the GRANT that fixed it.
+//
+// This test is the tripwire: every embed relation in the registry MUST be on
+// GRANTED_EMBED_RELATIONS below, and each entry there must be backed by a real
+// `GRANT SELECT ON public.<relation> TO authenticated;` migration (RLS on that
+// table then carries the actual tenant-safety, same pattern as `messages`).
+// Adding a new `kind: "embed"` field WITHOUT writing that migration first is
+// exactly how this bug reappears — this test fails loudly instead of shipping
+// silently broken for every restricted-scope user.
+describe("embed-kind fields must have a standing GRANT (see migration 212 + the comment above)", () => {
+  const GRANTED_EMBED_RELATIONS = new Set(["lead_collaborators"]);
+
+  it("every embed relation referenced by the leads registry is on the granted allowlist", () => {
+    const embedRelations = Object.values(registry)
+      .map((field) => field.source)
+      .filter((source): source is Extract<typeof source, { kind: "embed" }> => source.kind === "embed")
+      .map((source) => source.relation);
+
+    expect(embedRelations.length).toBeGreaterThan(0); // sanity: this test isn't vacuous
+    for (const relation of embedRelations) {
+      expect(GRANTED_EMBED_RELATIONS.has(relation)).toBe(true);
+    }
   });
 });

@@ -99,38 +99,9 @@ export default async function LeadsPage({
         activeList = found;
       }
     }
-    // "All Leads" (no ?list=): admin/owner see the global view; everyone else lands
-    // on their position's home list. Falls back to first accessible list if no mapping.
-    // Skipped when a valid funnel workspace is requested — that's a deliberate view choice.
-    if (!listSlug && activeFunnelLists.length === 0) {
-      if (!isAdminOrOwner) {
-        const homeSlug = tenantData.positionSlug ? POSITION_HOME_LIST[tenantData.positionSlug] : null;
-        const homeList = homeSlug
-          ? allLists.find((l) => l.slug === homeSlug && !l.is_archive && !l.is_staging)
-          : null;
-        if (homeList && canAccessList(
-          tenantData.permissions,
-          homeList.access as { mode: string; positionIds?: string[] },
-          tenantData.positionId,
-          homeList.id,
-        )) {
-          redirect(`/leads?list=${homeList.slug}`);
-        }
-        // Fallback: first accessible funnel list (for users with no position mapping)
-        const firstFunnel = allLists
-          .filter((l) => !l.is_archive && !l.is_staging)
-          .filter((l) =>
-            canAccessList(
-              tenantData.permissions,
-              l.access as { mode: string; positionIds?: string[] },
-              tenantData.positionId,
-              l.id,
-            ),
-          )
-          .sort((a, b) => a.sort_order - b.sort_order)[0];
-        if (firstFunnel) redirect(`/leads?list=${firstFunnel.slug}`);
-      }
-    }
+    // "All Leads" (no ?list=): every role sees the global master view, scoped by their
+    // existing visibility rules (own/branch/all — see `scope` above). No position-based
+    // redirect — clicking "All Leads" must always show the master view, not a stage.
 
     const excludeIds = allLists.filter((l) => l.is_archive || l.is_staging).map((l) => l.id);
     if (activeList?.slug === "delete") {
@@ -305,9 +276,6 @@ export default async function LeadsPage({
   const positionSlugMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.position_slug])
   );
-  const memberRoleMap = Object.fromEntries(
-    teamMembers.map((m) => [m.user_id, m.role])
-  );
 
   const industry = industryResult.data as Industry | null;
   const entities = (entitiesResult.data || []) as TenantEntity[];
@@ -350,7 +318,7 @@ export default async function LeadsPage({
 
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-4">{pageHeading}</h1>
         <ListKanbanView
           listSlug={activeList.slug}
           pipeline={pipeline}
@@ -378,7 +346,7 @@ export default async function LeadsPage({
   if (canShowFunnelKanban) {
     return (
       <div className="flex flex-col h-full min-h-0">
-        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-6">{pageHeading}</h1>
+        <h1 className="shrink-0 text-base font-bold pl-4 pt-4 mb-2 pr-4">{pageHeading}</h1>
         <FunnelKanbanBoard
           lists={activeFunnelLists}
           initialColumns={kanbanColumnsForBoards}
@@ -409,7 +377,7 @@ export default async function LeadsPage({
     <div className="flex flex-col h-full min-h-0">
       <LeadsTable
         pageHeading={pageHeading}
-        pageHeadingClassName="shrink-0 text-base font-bold pl-4 pt-4 mb-4 pr-6"
+        pageHeadingClassName="shrink-0 text-base font-bold pl-4 pt-4 mb-4 pr-4"
         leads={leads}
         serverPaginated
         initialTotal={leadsTotal}
@@ -451,7 +419,6 @@ export default async function LeadsPage({
         hasListPipeline={hasListPipeline}
         isTeamScoped={tenantData.permissions.leadScope === "team"}
         roleMap={roleMap}
-        memberRoleMap={memberRoleMap}
         positionSlugMap={positionSlugMap}
         allLeadLists={allLists.filter((l) => !l.is_archive && !l.is_staging)}
         currentUserPositionSlug={tenantData.positionSlug}

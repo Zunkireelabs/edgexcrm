@@ -185,22 +185,82 @@ button:disabled,
   stroke-width: 1.3px;
 }
 
-/* Scrollbars: transparent track, subtle thumb — app-wide */
+/* Scrollbars: transparent track, subtle slate thumb — app-wide */
+html,
 * {
-  scrollbar-width: thin; /* standard CSS Scrollbars spec (modern Chromium + Firefox) */
-  scrollbar-color: rgba(0, 0, 0, 0.25) transparent; /* Firefox: thumb, track */
+  scrollbar-width: thin !important; /* standard CSS Scrollbars spec (modern Chromium + Firefox) */
+  scrollbar-color: #cbd5e1 transparent !important; /* Firefox: thumb (slate-300), track */
 }
-*::-webkit-scrollbar {
-  width: 4px;
-  height: 4px;
+*::-webkit-scrollbar,
+html::-webkit-scrollbar {
+  width: 2px !important;
+  height: 2px !important;
 }
-*::-webkit-scrollbar-track {
-  background: transparent;
+*::-webkit-scrollbar-track,
+html::-webkit-scrollbar-track {
+  background: transparent !important;
 }
-*::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.25);
-  border-radius: 9999px;
+*::-webkit-scrollbar-thumb,
+html::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1 !important; /* slate-300 */
+  border-radius: 9999px !important;
 }
-*::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.4);
+*::-webkit-scrollbar-thumb:hover,
+html::-webkit-scrollbar-thumb:hover {
+  background-color: #94a3b8 !important; /* slate-400 */
+}
+*::-webkit-scrollbar-button,
+html::-webkit-scrollbar-button {
+  display: none !important; /* remove the up/down arrow buttons */
+  width: 0 !important;
+  height: 0 !important;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent !important;
+}
+
+/* Hides the scrollbar track/thumb entirely while keeping the element scrollable
+   (wheel/touch/keyboard scroll still work) — used on the sidebar nav. */
+.no-scrollbar {
+  scrollbar-width: none !important; /* Firefox */
+  -ms-overflow-style: none; /* old Edge/IE */
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important; /* Chromium/Safari */
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Thinner variant of the app-wide scrollbar — used where a full 4px bar feels
+   heavy against the content (e.g. the main dashboard content pane). */
+.thin-scrollbar {
+  scrollbar-width: thin;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 2px;
+  height: 2px;
+}
+
+/* Icon "draw-in" reveal (21st.dev-style animated icons): each stroke path is
+   normalized to pathLength=1 at runtime (see useDrawInIcon), so a single
+   dashoffset keyframe traces any icon regardless of its real path length. */
+@keyframes icon-draw-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+.icon-draw-in {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: icon-draw-in 0.5s ease forwards;
+  animation-delay: var(--icon-draw-delay, 0ms);
+}
+@media (prefers-reduced-motion: reduce) {
+  .icon-draw-in {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
 }

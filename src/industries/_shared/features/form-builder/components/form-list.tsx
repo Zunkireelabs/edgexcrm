@@ -11,12 +11,10 @@ import {
   Trash2,
   FileText,
   Loader2,
+  MoreHorizontal,
+  Power,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -25,6 +23,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { FormConfig } from "@/types/database";
 
 interface FormListProps {
@@ -99,15 +104,6 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
 
   return (
     <>
-      <div className="flex justify-end">
-        <Button asChild>
-          <Link href="/forms/new">
-            <Plus className="h-4 w-4 mr-2" />
-            New Form
-          </Link>
-        </Button>
-      </div>
-
       {forms.length === 0 ? (
         <div className="border rounded-xl p-12 text-center bg-card">
           <FileText className="h-10 w-10 text-muted-foreground mx-auto mb-4" />
@@ -123,7 +119,7 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
           </Button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="border rounded-xl divide-y bg-card overflow-hidden">
           {forms.map((form) => {
             const stepCount = Array.isArray(form.steps) ? form.steps.length : 0;
             const fieldCount = Array.isArray(form.steps)
@@ -136,79 +132,88 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
             const accentColor = branding?.primary_color || "#6366f1";
 
             return (
-              <Card key={form.id} className="overflow-hidden border shadow-none hover:shadow-sm transition-shadow">
-                <CardContent className="p-0">
-                  <div className="flex">
-                    {/* Color accent bar */}
-                    <div className="w-1.5 shrink-0" style={{ background: accentColor }} />
+              <div
+                key={form.id}
+                className="flex items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors"
+              >
+                <div
+                  className="h-8 w-8 shrink-0 rounded-md flex items-center justify-center"
+                  style={{ background: `${accentColor}1a` }}
+                >
+                  <FileText className="h-4 w-4" style={{ color: accentColor }} />
+                </div>
 
-                    <div className="flex-1 p-5">
-                      {/* Top row: name + status */}
-                      <div className="flex items-center justify-between mb-1">
-                        <h3 className="font-semibold text-base">{form.name}</h3>
-                        <button
-                          onClick={() => handleToggleActive(form)}
-                          disabled={loadingId === form.id}
-                          className={`flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full transition-colors ${
-                            form.is_active
-                              ? "bg-green-50 text-green-700 hover:bg-green-100"
-                              : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${form.is_active ? "bg-green-500" : "bg-gray-400"}`} />
-                          {loadingId === form.id ? "..." : form.is_active ? "Active" : "Inactive"}
-                        </button>
-                      </div>
-
-                      {/* Meta info */}
-                      <p className="text-sm text-muted-foreground mb-4">
-                        /{tenantSlug}/{form.slug} · {fieldCount} {fieldCount === 1 ? "field" : "fields"}
-                        {stepCount > 1 && ` · ${stepCount} steps`}
-                      </p>
-
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <Button size="sm" asChild>
-                          <Link href={`/forms/${form.id}`} prefetch={false}>
-                            <Pencil className="h-3.5 w-3.5 mr-1.5" />
-                            Edit Form
-                          </Link>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => window.open(publicFormPreviewUrl(form.slug), "_blank")}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
-                          Preview
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={loadingId === `dup-${form.id}`}
-                          onClick={() => handleDuplicate(form)}
-                        >
-                          {loadingId === `dup-${form.id}` ? (
-                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
-                          ) : (
-                            <Copy className="h-3.5 w-3.5 mr-1.5" />
-                          )}
-                          Duplicate
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => setDeleteDialog({ open: true, form })}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                          Delete
-                        </Button>
-                      </div>
-                    </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium text-sm truncate">{form.name}</h3>
+                    <span
+                      className={`shrink-0 flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-full ${
+                        form.is_active
+                          ? "bg-green-50 text-green-700"
+                          : "bg-gray-100 text-gray-500"
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${form.is_active ? "bg-green-500" : "bg-gray-400"}`} />
+                      {form.is_active ? "Active" : "Inactive"}
+                    </span>
                   </div>
-                </CardContent>
-              </Card>
+                  <p className="text-xs text-muted-foreground truncate">
+                    /{tenantSlug}/{form.slug} · {fieldCount} {fieldCount === 1 ? "field" : "fields"}
+                    {stepCount > 1 && ` · ${stepCount} steps`}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button size="sm" variant="ghost" asChild>
+                    <Link href={`/forms/${form.id}`} prefetch={false}>
+                      <Pencil className="h-3.5 w-3.5 mr-1.5" />
+                      Edit Form
+                    </Link>
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => window.open(publicFormPreviewUrl(form.slug), "_blank")}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 mr-1.5" />
+                    Preview
+                  </Button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        className="h-8 w-8"
+                        disabled={loadingId === form.id || loadingId === `dup-${form.id}`}
+                      >
+                        {loadingId === form.id || loadingId === `dup-${form.id}` ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <MoreHorizontal className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => handleToggleActive(form)}>
+                        <Power className="h-3.5 w-3.5 mr-2" />
+                        {form.is_active ? "Deactivate" : "Activate"}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleDuplicate(form)}>
+                        <Copy className="h-3.5 w-3.5 mr-2" />
+                        Duplicate
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() => setDeleteDialog({ open: true, form })}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 mr-2" />
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
             );
           })}
         </div>

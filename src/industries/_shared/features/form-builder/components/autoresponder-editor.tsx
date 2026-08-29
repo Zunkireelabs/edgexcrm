@@ -1,10 +1,15 @@
 "use client";
 
+import { useRef } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import {
+  HtmlSourceEditor,
+  type HtmlSourceEditorHandle,
+} from "@/industries/_shared/features/email/components/html-source-editor";
 import type { FormStep } from "@/types/database";
 import type { AutoresponderConfig, BuilderAction } from "../types";
 
@@ -29,6 +34,8 @@ export function AutoresponderEditor({
   steps,
   dispatch,
 }: AutoresponderEditorProps) {
+  const bodyRef = useRef<HtmlSourceEditorHandle | null>(null);
+
   function update(patch: Partial<AutoresponderConfig>) {
     dispatch({ type: "SET_AUTORESPONDER", payload: patch });
   }
@@ -40,12 +47,12 @@ export function AutoresponderEditor({
 
   const allTokens = [...STANDARD_TOKENS, ...formFieldTokens];
 
-  function copyToken(token: string) {
-    if (!navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(`{{${token}}}`)
-      .then(() => toast.success(`Copied {{${token}}}`))
-      .catch(() => {});
+  function insertToken(token: string) {
+    if (!bodyRef.current) {
+      toast.info("Click into the body first");
+      return;
+    }
+    bodyRef.current.insertText(`{{${token}}}`);
   }
 
   return (
@@ -117,8 +124,10 @@ export function AutoresponderEditor({
             <CardHeader>
               <CardTitle className="text-sm">Email Content</CardTitle>
               <CardDescription>
-                Use <code className="text-xs bg-muted px-1 rounded">{"{{token}}"}</code> merge tags
-                to echo submitted field values into the email. Click a tag below to copy it.
+                Paste complete HTML for the body — it&apos;s sent exactly as written. Use{" "}
+                <code className="text-xs bg-muted px-1 rounded">{"{{token}}"}</code> merge tags
+                anywhere in it to echo submitted field values; click a tag below to insert it at
+                the cursor.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -133,30 +142,29 @@ export function AutoresponderEditor({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="ar-body">Body</Label>
-                <textarea
-                  id="ar-body"
+                <Label>Body</Label>
+                <HtmlSourceEditor
+                  ref={bodyRef}
                   value={autoresponder.body_html}
-                  onChange={(e) => update({ body_html: e.target.value })}
+                  onChange={(html) => update({ body_html: html })}
+                  format={autoresponder.body_format}
+                  onFormatChange={(format) => update({ body_format: format })}
                   placeholder={"Hi {{first_name}},\n\nWe received your enquiry and will be in touch shortly."}
-                  rows={8}
-                  className="w-full px-3 py-2 text-sm border border-input rounded-md bg-background focus:outline-none focus:ring-2 focus:ring-ring resize-y font-mono"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Line breaks are preserved automatically. Field values are inserted safely (HTML-escaped).
-                </p>
               </div>
 
               {/* Merge-tag chips */}
               <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground">Available merge tags — click to copy</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  Available merge tags — click to insert at cursor
+                </p>
                 <div className="flex flex-wrap gap-1.5">
                   {allTokens.map((token) => (
                     <button
                       key={token}
                       type="button"
-                      onClick={() => copyToken(token)}
-                      title={`Copy {{${token}}}`}
+                      onClick={() => insertToken(token)}
+                      title={`Insert {{${token}}}`}
                       className="px-2 py-0.5 rounded bg-muted text-xs font-mono hover:bg-primary/10 hover:text-primary transition-colors"
                     >
                       {`{{${token}}}`}

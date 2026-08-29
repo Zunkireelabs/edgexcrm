@@ -17,6 +17,46 @@ import type { FormStep, FormBranding, FormAttribution, FormConfig } from "@/type
 
 type RouteParams = { params: Promise<{ id: string }> };
 
+const AUTORESPONDER_DEFAULTS: NonNullable<FormConfig["autoresponder"]> = {
+  enabled: false,
+  fire_mode: "every",
+  subject: "",
+  body_html: "",
+  body_format: "text",
+};
+
+/**
+ * Merges a caller-supplied partial `autoresponder` object onto the previously stored one,
+ * key by key — an omitted key means "leave alone", not "reset to default". `raw === null`
+ * is an explicit reset to defaults (matches the pre-existing behavior for that case).
+ */
+export function normalizeAutoresponder(
+  prev: Partial<NonNullable<FormConfig["autoresponder"]>> | null | undefined,
+  raw: Record<string, unknown> | null
+): NonNullable<FormConfig["autoresponder"]> {
+  const base = raw === null ? AUTORESPONDER_DEFAULTS : (prev ?? {});
+  const input = raw ?? {};
+
+  return {
+    enabled: input.enabled !== undefined ? Boolean(input.enabled) : (base.enabled ?? false),
+    fire_mode:
+      input.fire_mode !== undefined
+        ? (input.fire_mode === "first" ? "first" : "every")
+        : (base.fire_mode ?? "every"),
+    // Cap lengths — this JSONB is re-read on every public form submission.
+    subject:
+      typeof input.subject === "string" ? input.subject.slice(0, 998) : (base.subject ?? ""),
+    body_html:
+      typeof input.body_html === "string"
+        ? input.body_html.slice(0, 100_000)
+        : (base.body_html ?? ""),
+    body_format:
+      input.body_format !== undefined
+        ? (input.body_format === "html" ? "html" : "text")
+        : (base.body_format ?? "text"),
+  };
+}
+
 export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { id } = await params;
   const auth = await authenticateRequest();
@@ -58,7 +98,7 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   // Verify ownership
   const { data: existing } = await supabase
     .from("form_configs")
-    .select("id, slug")
+    .select("id, slug, autoresponder")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
     .single();
@@ -150,15 +190,11 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   }
 
   if (body.autoresponder !== undefined) {
-    const raw = (body.autoresponder ?? {}) as Record<string, unknown>;
-    const normalized: FormConfig["autoresponder"] = {
-      enabled: Boolean(raw.enabled ?? false),
-      fire_mode: raw.fire_mode === "first" ? "first" : "every",
-      // Cap lengths — this JSONB is re-read on every public form submission.
-      subject: typeof raw.subject === "string" ? raw.subject.slice(0, 998) : "",
-      body_html: typeof raw.body_html === "string" ? raw.body_html.slice(0, 100_000) : "",
-    };
-    updatePayload.autoresponder = normalized;
+    const raw = body.autoresponder === null ? null : (body.autoresponder as Record<string, unknown>);
+    updatePayload.autoresponder = normalizeAutoresponder(
+      existing.autoresponder as Partial<NonNullable<FormConfig["autoresponder"]>> | null | undefined,
+      raw
+    );
   }
 
   if (body.target_pipeline_id !== undefined) {

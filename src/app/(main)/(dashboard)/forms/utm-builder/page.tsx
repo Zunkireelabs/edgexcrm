@@ -33,7 +33,7 @@ export default async function UtmBuilderPage() {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-2xl font-semibold">UTM Link Builder</h1>
+        <h1 className="text-lg font-bold">UTM Link Builder</h1>
         <p className="text-muted-foreground text-sm mt-1">
           Pick one of your forms or paste any destination URL, then add UTM params. Share the result in your Facebook ad, email, or social post.
         </p>

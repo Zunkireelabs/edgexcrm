@@ -78,11 +78,11 @@ function ActivityRow({
     minute: "2-digit",
   });
 
-  return (
-    <div className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors">
+  const rowContent = (
+    <>
       <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${isOverdue ? "text-red-500" : "text-blue-500"}`} />
       <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">
+        <p className="text-sm font-medium text-foreground truncate">
           {activity.subject ?? "No subject"}
         </p>
         <div className="flex items-center gap-2 mt-0.5">
@@ -99,20 +99,32 @@ function ActivityRow({
           )}
         </div>
       </div>
-      {leadName && activity.lead_id && (
-        <Link
-          href={`/leads/${activity.lead_id}`}
-          prefetch={false}
-          className="text-xs text-blue-600 hover:underline shrink-0"
-        >
-          {leadName}
-        </Link>
+      {leadName && (
+        <span className="text-xs text-blue-600 shrink-0">{leadName}</span>
       )}
       {!leadName && (
         <span className="text-xs text-muted-foreground shrink-0">
           {formatRelativeTime(activity.scheduled_at)}
         </span>
       )}
+    </>
+  );
+
+  if (leadName && activity.lead_id) {
+    return (
+      <Link
+        href={`/leads/${activity.lead_id}`}
+        prefetch={false}
+        className="flex items-start gap-3 py-2 px-1 rounded-md hover:bg-muted/50 transition-colors"
+      >
+        {rowContent}
+      </Link>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-3 py-2 px-1 rounded-md">
+      {rowContent}
     </div>
   );
 }

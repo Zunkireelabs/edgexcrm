@@ -9,7 +9,10 @@ import {
   apiNotFound,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { getResendClient, EMAIL_FROM, PLATFORM_EMAIL_ADDRESS } from "@/lib/email/index";
+import { getResendClient } from "@/lib/email/index";
+import { resolveTenantSender } from "@/lib/email/sender";
+import { preserveLineBreaks } from "@/lib/email/render-template";
+import type { EmailForwardRule } from "@/types/database";
 import { createRequestLogger } from "@/lib/logger";
 
 interface RouteContext {
@@ -53,21 +56,34 @@ export async function POST(request: NextRequest, context: RouteContext) {
     .select("*")
     .eq("id", id)
     .eq("tenant_id", auth.tenantId)
-    .single();
+    .single<EmailForwardRule>();
 
   if (!rule) return apiNotFound("Email rule");
 
   log.info({ ruleId: id, testEmailAddr }, "Sending test email via Resend");
 
-  const fromAddress = rule.from_name
-    ? `${rule.from_name} <${PLATFORM_EMAIL_ADDRESS}>`
-    : EMAIL_FROM;
+  const sender = await resolveTenantSender(auth.tenantId, {
+    nameOverride: rule.from_name ?? undefined,
+  });
+
+  const sampledSubject = rule.subject.replace(/\{\{\w+\}\}/g, "Sample");
+  const sampledBody = rule.body.replace(/\{\{\w+\}\}/g, "Sample");
+
+  // 'html' bodies are often a full <!DOCTYPE html> document — prepending the
+  // test-mode banner <div> before it would produce an invalid document some
+  // clients render oddly, so the notice moves to the subject instead and the
+  // body is sent untouched. 'text' keeps the existing banner + preserveLineBreaks.
+  const isHtml = rule.body_format === "html";
+  const html = isHtml
+    ? sampledBody
+    : `<div style="padding:12px;margin-bottom:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:14px;color:#92400e;">This is a test email. Template placeholders are shown as "Sample".</div>${preserveLineBreaks(sampledBody)}`;
 
   const { data, error } = await resend.emails.send({
-    from: fromAddress,
+    from: sender.from,
+    ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
     to: testEmailAddr,
-    subject: `[TEST] ${rule.subject.replace(/\{\{\w+\}\}/g, "Sample")}`,
-    html: `<div style="padding:12px;margin-bottom:16px;background:#fef3c7;border:1px solid #f59e0b;border-radius:8px;font-size:14px;color:#92400e;">This is a test email. Template placeholders are shown as "Sample".</div>${rule.body.replace(/\{\{\w+\}\}/g, "Sample")}`,
+    subject: `[TEST] ${sampledSubject}`,
+    html,
   });
 
   if (error) {

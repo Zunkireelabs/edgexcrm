@@ -138,6 +138,7 @@ const DEFAULT_AUTORESPONDER: AutoresponderConfig = {
   fire_mode: "every",
   subject: "",
   body_html: "",
+  body_format: "text",
 };
 
 function buildInitialState(formConfig: {

@@ -148,7 +148,13 @@ export async function GET(request: NextRequest) {
   );
   const status = searchParams.get("status");
   const search = searchParams.get("search");
-  let assignedTo = searchParams.get("assigned_to");
+  // Admin-only "filter by this person" scope param — a raw non-UUID value here
+  // used to reach .eq("assigned_to", ...) against leads.assigned_to (a real
+  // uuid column) unchecked, throwing a Postgres 22P02 and 503ing the whole
+  // list. Same UUID_RE guard `stageFilter` below already uses; a malformed
+  // value is dropped (no scope filter applied) rather than sent to Postgres.
+  const assignedToRaw = searchParams.get("assigned_to");
+  let assignedTo = assignedToRaw && UUID_RE.test(assignedToRaw) ? assignedToRaw : null;
   const includeConverted = searchParams.get("include_converted") === "1";
   const listSlug = searchParams.get("list");
   const funnelKey = searchParams.get("funnel");
@@ -398,7 +404,12 @@ export async function GET(request: NextRequest) {
   // the shared-pool AND-filter above (both are "further restrict an already-resolved
   // 'all' scope by an assigned_to allowlist") — the facets branch below reuses whichever
   // of the two is active.
-  const adminBranchFilter = searchParams.get("branch_id");
+  // A raw non-UUID value here used to reach branchMemberIds()'s
+  // .eq("branch_id", ...) against tenant_users.branch_id (a real uuid
+  // column) unchecked, throwing a Postgres 22P02 and 503ing the whole list —
+  // same UUID_RE guard as stageFilter/assignedTo above.
+  const adminBranchFilterRaw = searchParams.get("branch_id");
+  const adminBranchFilter = adminBranchFilterRaw && UUID_RE.test(adminBranchFilterRaw) ? adminBranchFilterRaw : null;
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
     const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
     query = query.in("assigned_to", memberIds);

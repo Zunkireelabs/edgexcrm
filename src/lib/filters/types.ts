@@ -95,7 +95,14 @@ export type FieldSource =
   | { kind: "array_column"; column: string } // tags, destinations
   | { kind: "jsonb"; column: "custom_fields"; path: string }
   | { kind: "promoted"; column: string; jsonb: { column: "custom_fields"; path: string } }
-  | { kind: "embed"; relation: string; column: string; embedSelect: string }
+  // emptyColumn: an optional denormalized column on the BASE table (never the
+  // embedded relation) that answers "is_empty" without a join — e.g. a
+  // maintained collaborator_count on `leads` for the Collaborators field. The
+  // embed's own !inner join can only express "a matching row exists", never
+  // "no matching row exists" (see compile.ts's embed-case comment) — this is
+  // the escape hatch for the one operator that's cheap to answer a different
+  // way. Leave unset to keep is_empty unsupported for a relation field.
+  | { kind: "embed"; relation: string; column: string; embedSelect: string; emptyColumn?: string }
   | { kind: "virtual"; compile: (c: FilterCondition, ctx: CompileCtx) => string | null };
 
 // Minimal local mirror of the permission shape a `visibleTo` predicate needs.

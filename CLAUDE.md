@@ -4,6 +4,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Do Not Touch The Database
+
+**HARD RULE: No database access of any kind — no migrations, no direct SQL (stage or prod), no `scripts/migrate-apply.sh`, no Supabase MCP writes/reads used to modify data, no `createServiceClient()`/`scopedClient()` calls run ad hoc against a live DB.** This supersedes the "Production DB changes — per-action approval" carve-out further down this file — that section is currently paused. Schema/migration work in this repo happens through code review and the normal PR pipeline only, not through an interactive session touching the DB directly. If a task appears to require a DB change, stop and say so instead of running it.
+
+---
+
 ## Git Hooks
 
 A `commit-msg` hook (`.git/hooks/commit-msg`) replaces the default Anthropic co-author line with `Co-Authored-By: Anish Balami <anishbalami38@gmail.com>` on every commit. This hook lives in `.git/hooks/` (not tracked by git) and must be re-created if the repo is re-cloned.
@@ -169,6 +175,7 @@ Use this when adapting code that was built against the old flat pattern (`src/fe
 
 - **Sidebar icons must be string names, not `LucideIcon` component imports.** The manifest crosses the Server Component → Client Component boundary; non-serializable props crash the dashboard. Register the icon name in the `INDUSTRY_ICONS` registry in `src/components/dashboard/shell.tsx` if it isn't already there.
 - **`scopedClient.update()` and `.delete()` always require a caller-supplied filter** (e.g. `.eq("id", leadId)`) beyond the auto-injected `tenant_id`. Without one, the operation targets every row in the tenant. The wrapper can't enforce this at compile time — review catches it.
+- **A PostgREST `!inner` resource-embed on an RPC-based query needs its own `GRANT SELECT ... TO authenticated` on the embedded table, or it 503s for every non-admin scope.** Migration `195_role_scoping_phase_b_revoke.sql` revoked `SELECT` on all public-schema tables from `authenticated` (re-granting only `messages`) — fine for normal queries, since those go through `SECURITY DEFINER` RPCs (`leads_visible_to_user`, `lead_aggregates`) that run as the function owner and bypass the revoke. But when a query embeds a related table via `.select("...,other_table!inner(col)")` (e.g. the leads "Collaborators" filter, `src/lib/filters/registry/leads.ts`), PostgREST executes that embedded join as the *connecting* role, not the RPC's owner — so for own/branch-scope callers (RLS-context client) it throws `42501 permission denied for table <other_table>`. Owner/admin never see it (service-role client bypasses grants entirely), which is exactly how this shipped unnoticed until a branch manager hit it in production (2026-08-24, fixed by `212_grant_lead_collaborators_select.sql`). **Any new `kind: "embed"` filter field must ship its GRANT migration in the same PR** — `src/lib/filters/registry/leads.test.ts`'s `GRANTED_EMBED_RELATIONS` allowlist test fails the build if you forget.
 
 ### Tenant model
 

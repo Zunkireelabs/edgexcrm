@@ -65,6 +65,10 @@ export async function POST(request: NextRequest) {
     .insert({
       name: String(body.name).trim(),
       description: body.description ? String(body.description) : null,
+      // OUTREACH-PHASE2-BRIEF.md §4 — sequence-level, not per-step or
+      // per-tenant. Defaults false so a tenant that never sets it (every
+      // it_agency sequence today) keeps the exact manual-copy behavior.
+      auto_send: body.auto_send === true,
       created_by: auth.userId,
     })
     .select("*")

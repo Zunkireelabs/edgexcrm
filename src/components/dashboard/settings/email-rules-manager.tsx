@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,6 +27,10 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  HtmlSourceEditor,
+  type HtmlSourceEditorHandle,
+} from "@/industries/_shared/features/email/components/html-source-editor";
 import type { EmailForwardRule } from "@/types/database";
 
 interface PipelineOption {
@@ -48,6 +52,7 @@ interface RuleFormData {
   stage_id: string;
   subject: string;
   body: string;
+  body_format: "text" | "html";
 }
 
 const DEFAULT_FORM: RuleFormData = {
@@ -58,6 +63,7 @@ const DEFAULT_FORM: RuleFormData = {
   stage_id: "",
   subject: "",
   body: "",
+  body_format: "text",
 };
 
 const PLACEHOLDERS = [
@@ -82,6 +88,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
   const [isTesting, setIsTesting] = useState(false);
   const [testEmail, setTestEmail] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const bodyRef = useRef<HtmlSourceEditorHandle | null>(null);
 
   const fetchRules = async () => {
     try {
@@ -136,6 +143,7 @@ export function EmailRulesManager({ }: { tenantId: string }) {
       stage_id: rule.stage_id,
       subject: rule.subject,
       body: rule.body,
+      body_format: rule.body_format === "html" ? "html" : "text",
     });
     setDialogOpen(true);
   };
@@ -233,7 +241,11 @@ export function EmailRulesManager({ }: { tenantId: string }) {
   };
 
   const insertPlaceholder = (key: string) => {
-    setForm((prev) => ({ ...prev, body: prev.body + key }));
+    if (!bodyRef.current) {
+      toast.info("Click into the email body first");
+      return;
+    }
+    bodyRef.current.insertText(key);
   };
 
   return (
@@ -440,13 +452,14 @@ export function EmailRulesManager({ }: { tenantId: string }) {
             {/* Body */}
             <div className="space-y-2">
               <Label>Email Body (HTML)</Label>
-              <textarea
-                className="w-full min-h-[140px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
-                placeholder="Write your email content here. You can use HTML and placeholders."
+              <HtmlSourceEditor
+                ref={bodyRef}
                 value={form.body}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, body: e.target.value }))
-                }
+                onChange={(html) => setForm((f) => ({ ...f, body: html }))}
+                format={form.body_format}
+                onFormatChange={(format) => setForm((f) => ({ ...f, body_format: format }))}
+                placeholder="Paste your HTML email source here. {{placeholders}} anywhere in it get replaced with the lead's values."
+                minHeight={180}
               />
             </div>
 

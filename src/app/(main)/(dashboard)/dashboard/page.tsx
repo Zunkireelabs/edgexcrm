@@ -72,10 +72,14 @@ export default async function DashboardPage() {
       <h1 className="text-lg font-bold">Dashboard</h1>
 
       {/* Stats Cards */}
-      {canSeeWidget(permissions, "stats") && <StatsCards aggregates={aggregates} stages={stages} />}
+      {canSeeWidget(permissions, "stats") && (
+        <div className="bg-sidebar-bg border border-sidebar-border rounded-xl p-4">
+          <StatsCards aggregates={aggregates} stages={stages} />
+        </div>
+      )}
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-6">
         {canSeeWidget(permissions, "leads-by-stage") && (
           <LeadsByStageChart status={aggregates.status} stages={stages} />
         )}

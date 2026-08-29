@@ -1,4 +1,5 @@
-import { getResendClient, EMAIL_FROM, APP_URL } from "./index";
+import { getResendClient, APP_URL } from "./index";
+import { resolveTenantSender } from "./sender";
 import { getConsentEmailTemplate, getConsentEmailSubject } from "./templates/consent";
 import { createRequestLogger } from "@/lib/logger";
 
@@ -6,6 +7,7 @@ interface SendConsentEmailParams {
   to: string;
   studentName: string;
   tenantName: string;
+  tenantId: string;
   token: string;
   primaryColor?: string;
   expiryDays: number;
@@ -21,6 +23,7 @@ export async function sendConsentEmail({
   to,
   studentName,
   tenantName,
+  tenantId,
   token,
   primaryColor,
   expiryDays,
@@ -38,10 +41,12 @@ export async function sendConsentEmail({
   }
 
   const consentLink = `${APP_URL}/consent/${token}`;
+  const sender = await resolveTenantSender(tenantId);
 
   try {
     const { data, error } = await resend.emails.send({
-      from: EMAIL_FROM,
+      from: sender.from,
+      ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
       to,
       subject: getConsentEmailSubject(tenantName),
       html: getConsentEmailTemplate({
@@ -58,7 +63,10 @@ export async function sendConsentEmail({
       return { success: false, error: error.message };
     }
 
-    log.info({ messageId: data?.id, to, tenantName }, "Consent email sent");
+    log.info(
+      { messageId: data?.id, to, tenantName, from: sender.from, replyTo: sender.replyTo },
+      "Consent email sent"
+    );
     return { success: true, messageId: data?.id };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : "Unknown error";

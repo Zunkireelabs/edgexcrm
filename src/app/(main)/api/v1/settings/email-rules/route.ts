@@ -8,7 +8,7 @@ import {
   apiForbidden,
   apiServiceUnavailable,
 } from "@/lib/api/response";
-import { validate, required, maxLength } from "@/lib/api/validation";
+import { validate, required, maxLength, isIn } from "@/lib/api/validation";
 import { createRequestLogger } from "@/lib/logger";
 
 // GET /api/v1/settings/email-rules — list all rules for tenant
@@ -74,7 +74,9 @@ export async function POST(request: NextRequest) {
     pipeline_id: [required("pipeline_id")],
     stage_id: [required("stage_id")],
     subject: [required("subject"), maxLength(500)],
-    body: [required("body")],
+    // Cap length — this is now an intended full-HTML-document field.
+    body: [required("body"), maxLength(100_000)],
+    body_format: [isIn(["text", "html"])],
   });
   if (!valid) return apiValidationError(errors);
 
@@ -106,6 +108,7 @@ export async function POST(request: NextRequest) {
       stage_id: body.stage_id as string,
       subject: body.subject as string,
       body: body.body as string,
+      ...(body.body_format !== undefined ? { body_format: body.body_format as string } : {}),
     })
     .select()
     .single();

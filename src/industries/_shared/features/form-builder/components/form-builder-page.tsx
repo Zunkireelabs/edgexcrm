@@ -18,6 +18,7 @@ import { PipelineRoutingEditor } from "./pipeline-routing-editor";
 import { ListRoutingEditor } from "./list-routing-editor";
 import { BranchRoutingEditor } from "./branch-routing-editor";
 import { slugify } from "../lib/validation";
+import { DEFAULT_DIAL_CODE } from "@/lib/country-codes";
 
 interface FormBuilderPageProps {
   formConfig: FormConfig;
@@ -63,7 +64,7 @@ function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; bran
           <p className="text-xs font-medium text-gray-500">{step.title}</p>
         )}
         {step.fields.map((field, i) => (
-          <PreviewField key={i} field={field} branding={branding} />
+          <PreviewField key={i} field={field} branding={branding} stepFields={step.fields} />
         ))}
       </div>
 
@@ -82,7 +83,15 @@ function LivePreview({ steps, branding, currentStep }: { steps: FormStep[]; bran
   );
 }
 
-function PreviewField({ field, branding }: { field: FormField; branding: FormBranding }) {
+function PreviewField({
+  field,
+  branding,
+  stepFields = [],
+}: {
+  field: FormField;
+  branding: FormBranding;
+  stepFields?: FormField[];
+}) {
   const hideLabels = branding.hide_labels ?? false;
 
   if (field.type === "checkbox") {
@@ -120,6 +129,38 @@ function PreviewField({ field, branding }: { field: FormField; branding: FormBra
         <div className="h-8 rounded-md border border-gray-200 bg-gray-50 px-2.5 flex items-center justify-between text-xs text-gray-400">
           <span>{field.placeholder || "Select..."}</span>
           <span>▾</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (field.type === "tel") {
+    // Mirror public-form.tsx: when the phone is linked to a separate Country
+    // select whose options carry dial codes (legacy forms), its dial code is
+    // driven by that field and shown read-only — not as a second picker.
+    const linkedField = field.country_field
+      ? stepFields.find((f) => f.name === field.country_field)
+      : undefined;
+    const isLinked = Boolean(linkedField?.options?.some((o) => o.dial_code));
+    const dialCode =
+      (isLinked ? linkedField?.options?.find((o) => o.dial_code)?.dial_code : undefined) ||
+      DEFAULT_DIAL_CODE;
+
+    return (
+      <div>
+        {!hideLabels && (
+          <p className="text-xs font-medium text-gray-700 mb-1">
+            {field.label} {field.required && <span className="text-red-500">*</span>}
+          </p>
+        )}
+        <div className="flex h-8 rounded-md border border-gray-200 bg-gray-50 overflow-hidden">
+          <span className="flex items-center px-2.5 text-xs text-gray-500 border-r border-gray-200 bg-gray-100">
+            {dialCode}
+            {!isLinked && " ▾"}
+          </span>
+          <span className="flex items-center px-2.5 text-xs text-gray-400">
+            {field.placeholder || "98XXXXXXXX"}
+          </span>
         </div>
       </div>
     );
