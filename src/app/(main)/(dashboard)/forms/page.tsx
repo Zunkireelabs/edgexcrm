@@ -9,6 +9,7 @@ import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
+import { createRequestLogger } from "@/lib/logger";
 import type { FormConfig } from "@/types/database";
 
 export default async function FormsPage() {
@@ -27,7 +28,7 @@ export default async function FormsPage() {
 
   const supabase = await createServiceClient();
 
-  const [formConfigsResult, apiKeysResult] = await Promise.all([
+  const [formConfigsResult, apiKeysResult, submissionCountsResult] = await Promise.all([
     supabase
       .from("form_configs")
       .select("id, name, slug, is_active, created_at, updated_at, steps, branding, redirect_url, tenant_id")
@@ -38,7 +39,25 @@ export default async function FormsPage() {
       .select("id, name, permissions, permissions_detail, form_id, created_at, last_used_at, revoked_at")
       .eq("tenant_id", tenantData.tenant.id)
       .order("created_at", { ascending: false }),
+    supabase.rpc("form_submission_counts", { p_tenant_id: tenantData.tenant.id }),
   ]);
+
+  if (submissionCountsResult.error) {
+    // Swallowed to `[]` below rather than failing the whole page — but a broken
+    // deploy (e.g. migration 217 not applied) must not look identical to
+    // "this tenant has no submissions", so it's logged server-side.
+    createRequestLogger({
+      requestId: crypto.randomUUID(),
+      method: "GET",
+      path: "/forms",
+      tenantId: tenantData.tenant.id,
+    }).error({ error: submissionCountsResult.error }, "form_submission_counts RPC failed");
+  }
+  const submissionCounts: Record<string, { total: number; last30d: number }> = {};
+  for (const row of submissionCountsResult.data ?? []) {
+    const r = row as { form_config_id: string; total: number; last_30d: number };
+    submissionCounts[r.form_config_id] = { total: Number(r.total), last30d: Number(r.last_30d) };
+  }
 
   const apiKeys = (apiKeysResult.data || []).map((k) => ({
     ...k,
@@ -70,6 +89,7 @@ export default async function FormsPage() {
       <FormList
         forms={(formConfigsResult.data ?? []) as FormConfig[]}
         tenantSlug={tenantData.tenant.slug}
+        submissionCounts={submissionCounts}
       />
       <ApiKeysManager
         tenantId={tenantData.tenant.id}
