@@ -5,6 +5,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { scopedClient } from "@/lib/supabase/scoped";
+import { dayBoundsInTz } from "@/lib/filters/compile";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -66,6 +67,39 @@ async function fetchLeadRefs(
     }
   }
   return map;
+}
+
+/**
+ * Maps the `matched` query param to the boolean the `matched_existing` column
+ * expects. `undefined` means "no filter" — the caller must skip the `.eq()`
+ * entirely rather than compiling one, since there's no boolean value that
+ * means "either".
+ */
+export function resolveMatchedFilter(matched: string | null): boolean | undefined {
+  if (matched === "new") return false;
+  if (matched === "existing") return true;
+  return undefined;
+}
+
+/**
+ * `from`/`to` are date-only strings (YYYY-MM-DD) from the UI's <input
+ * type="date">, compared against a timestamptz column. A naive
+ * `.lte("created_at", to)` parses `to` as UTC midnight, so `to=<today>`
+ * excludes all of today — `from=X&to=X` would silently return zero rows.
+ * Reuses the tz-aware day-boundary math the leads filter engine already
+ * uses for "on"/"date_between" (src/lib/filters/compile.ts) — `to` is an
+ * exclusive upper bound at the NEXT day's local midnight, matching
+ * `date_between`'s `.lt` there, not `.lte`.
+ */
+export function buildDateRangeFilter(
+  from: string | null,
+  to: string | null,
+  tz: string
+): { gte?: string; lt?: string } {
+  const result: { gte?: string; lt?: string } = {};
+  if (from) result.gte = dayBoundsInTz(from, tz).start;
+  if (to) result.lt = dayBoundsInTz(to, tz).end;
+  return result;
 }
 
 function csvEscape(value: unknown): string {
@@ -141,6 +175,19 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const to = url.searchParams.get("to");
   const format = url.searchParams.get("format");
 
+  let tz = "UTC";
+  if (from || to) {
+    const { data: tenantRow } = await db
+      .raw()
+      .from("tenants")
+      .select("timezone")
+      .eq("id", auth.tenantId)
+      .single();
+    tz = (tenantRow as unknown as { timezone: string } | null)?.timezone ?? "UTC";
+  }
+  const dateRange = buildDateRangeFilter(from, to, tz);
+  const matchedFilter = resolveMatchedFilter(matched);
+
   function buildQuery(pageFrom: number, pageTo: number, withCount: boolean) {
     let query = db
       .from("lead_submissions")
@@ -158,10 +205,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         );
       }
     }
-    if (matched === "new") query = query.eq("matched_existing", false);
-    else if (matched === "existing") query = query.eq("matched_existing", true);
-    if (from) query = query.gte("created_at", from);
-    if (to) query = query.lte("created_at", to);
+    if (matchedFilter !== undefined) query = query.eq("matched_existing", matchedFilter);
+    if (dateRange.gte) query = query.gte("created_at", dateRange.gte);
+    if (dateRange.lt) query = query.lt("created_at", dateRange.lt);
 
     return query
       .order("created_at", { ascending: false })

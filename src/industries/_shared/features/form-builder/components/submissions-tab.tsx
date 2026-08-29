@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { Download, Loader2, Search } from "lucide-react";
+import { AlertCircle, Download, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +74,7 @@ function sourceCampaign(row: SubmissionRow): string {
 export function SubmissionsTab({ formConfigId, active, onTotalChange }: SubmissionsTabProps) {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [rows, setRows] = useState<SubmissionRow[]>([]);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -87,6 +88,36 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
   const [exporting, setExporting] = useState(false);
 
   const [selected, setSelected] = useState<SubmissionRow | null>(null);
+
+  const hasActiveFilters = Boolean(debouncedSearch || matched !== "all" || from || to);
+
+  function clearFilters() {
+    setSearch("");
+    setMatched("all");
+    setFrom("");
+    setTo("");
+  }
+
+  // The tab-label badge is the form's TOTAL submission count, unaffected by
+  // filters — fetched once (unfiltered, limit=1) rather than reusing the
+  // filtered list's meta.total, which would make the badge move as filters
+  // are applied (e.g. selecting "Existing" would rewrite it to the filtered
+  // count). Mirrors the "Steps & Fields" badge beside it, which is also a
+  // fixed count.
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    fetch(`/api/v1/form-configs/${formConfigId}/submissions?page=1&limit=1`)
+      .then((res) => (res.ok ? (res.json() as Promise<SubmissionsResponse>) : null))
+      .then((json) => {
+        if (!cancelled && json) onTotalChange?.(json.meta.total);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, formConfigId]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -113,34 +144,39 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
     return params.toString();
   }, [page, debouncedSearch, matched, from, to]);
 
+  const loadSubmissions = useCallback(
+    (signal?: AbortSignal) => {
+      setLoading(true);
+      setLoadError(false);
+      return fetch(`/api/v1/form-configs/${formConfigId}/submissions?${queryString}`, { signal })
+        .then((res) => {
+          if (!res.ok) throw new Error("Failed to load submissions");
+          return res.json() as Promise<SubmissionsResponse>;
+        })
+        .then((json) => {
+          setRows(json.data);
+          setTotalPages(json.meta.totalPages);
+          setTotal(json.meta.total);
+          setLoaded(true);
+        })
+        .catch((err) => {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          setLoadError(true);
+          setRows([]);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    },
+    [formConfigId, queryString]
+  );
+
   useEffect(() => {
     if (!active) return;
-    let cancelled = false;
-    setLoading(true);
-    fetch(`/api/v1/form-configs/${formConfigId}/submissions?${queryString}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load submissions");
-        return res.json() as Promise<SubmissionsResponse>;
-      })
-      .then((json) => {
-        if (cancelled) return;
-        setRows(json.data);
-        setTotalPages(json.meta.totalPages);
-        setTotal(json.meta.total);
-        onTotalChange?.(json.meta.total);
-        setLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setRows([]);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active, formConfigId, queryString]);
+    const controller = new AbortController();
+    loadSubmissions(controller.signal);
+    return () => controller.abort();
+  }, [active, loadSubmissions]);
 
   async function handleExportCsv() {
     setExporting(true);
@@ -224,6 +260,21 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
           <div className="flex items-center justify-center py-12 text-muted-foreground text-sm">
             <Loader2 className="h-4 w-4 animate-spin mr-2" />
             Loading submissions...
+          </div>
+        ) : loadError ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm">
+            <AlertCircle className="h-5 w-5 text-destructive" />
+            <p className="text-destructive">Couldn&apos;t load submissions.</p>
+            <Button size="sm" variant="outline" onClick={() => loadSubmissions()}>
+              Retry
+            </Button>
+          </div>
+        ) : rows.length === 0 && hasActiveFilters ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-12 text-sm text-muted-foreground">
+            <p>No submissions match these filters.</p>
+            <Button size="sm" variant="outline" onClick={clearFilters}>
+              Clear filters
+            </Button>
           </div>
         ) : rows.length === 0 ? (
           <div className="text-center py-12 text-muted-foreground text-sm">No submissions yet.</div>

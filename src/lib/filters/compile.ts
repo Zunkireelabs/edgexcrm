@@ -182,7 +182,7 @@ function nextCalendarDate(dateStr: string): string {
 // the wall-clock day is only 23 hours; a fixed +24h offset would silently
 // leak one hour of the FOLLOWING day into an "on <that date>" filter. See
 // compile.test.ts's DST-transition-day coverage.
-function dayBoundsInTz(dateStr: string, tz: string): { start: string; end: string } {
+export function dayBoundsInTz(dateStr: string, tz: string): { start: string; end: string } {
   return {
     start: localMidnightUtc(dateStr, tz).toISOString(),
     end: localMidnightUtc(nextCalendarDate(dateStr), tz).toISOString(),

@@ -9,6 +9,7 @@ import { ApiKeysManager } from "@/components/dashboard/api-keys-manager";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { canSeeNav } from "@/lib/api/permissions";
+import { createRequestLogger } from "@/lib/logger";
 import type { FormConfig } from "@/types/database";
 
 export default async function FormsPage() {
@@ -41,6 +42,17 @@ export default async function FormsPage() {
     supabase.rpc("form_submission_counts", { p_tenant_id: tenantData.tenant.id }),
   ]);
 
+  if (submissionCountsResult.error) {
+    // Swallowed to `[]` below rather than failing the whole page — but a broken
+    // deploy (e.g. migration 217 not applied) must not look identical to
+    // "this tenant has no submissions", so it's logged server-side.
+    createRequestLogger({
+      requestId: crypto.randomUUID(),
+      method: "GET",
+      path: "/forms",
+      tenantId: tenantData.tenant.id,
+    }).error({ error: submissionCountsResult.error }, "form_submission_counts RPC failed");
+  }
   const submissionCounts: Record<string, { total: number; last30d: number }> = {};
   for (const row of submissionCountsResult.data ?? []) {
     const r = row as { form_config_id: string; total: number; last_30d: number };
