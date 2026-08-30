@@ -2,18 +2,30 @@
 
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 import { FilterChip } from "./filter-chip";
-import type { FilterOption } from "./types";
+import type { FilterOption, HierarchicalFieldGroups, OptionLoaderKey } from "./types";
 
 export interface FilterChipRowProps {
   conditions: FilterCondition[];
   registry: Record<string, FieldDef>;
   getOptions: (field: FieldDef) => FilterOption[];
+  /** All filterable fields — forwarded to each chip's back-arrow picker. */
+  fields: FieldDef[];
+  hierarchicalGroups?: Partial<Record<OptionLoaderKey, HierarchicalFieldGroups>>;
   onChangeCondition: (id: string, next: FilterCondition) => void;
   onRemoveCondition: (id: string) => void;
   onDraftConditionChange?: (condition: FilterCondition | null) => void;
 }
 
-export function FilterChipRow({ conditions, registry, getOptions, onChangeCondition, onRemoveCondition, onDraftConditionChange }: FilterChipRowProps) {
+export function FilterChipRow({
+  conditions,
+  registry,
+  getOptions,
+  fields,
+  hierarchicalGroups,
+  onChangeCondition,
+  onRemoveCondition,
+  onDraftConditionChange,
+}: FilterChipRowProps) {
   return (
     <>
       {conditions.map((condition) => {
@@ -24,7 +36,9 @@ export function FilterChipRow({ conditions, registry, getOptions, onChangeCondit
             key={condition.id}
             field={field}
             condition={condition}
-            options={getOptions(field)}
+            getOptions={getOptions}
+            fields={fields}
+            hierarchicalGroups={hierarchicalGroups}
             onChange={(next) => onChangeCondition(condition.id, next)}
             onRemove={() => onRemoveCondition(condition.id)}
             onDraftConditionChange={onDraftConditionChange}

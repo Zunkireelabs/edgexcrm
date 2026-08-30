@@ -43,6 +43,21 @@ export function AdvancedFilterBar({
   }
 
   function handleChangeCondition(id: string, next: FilterCondition) {
+    // A chip's back-arrow re-pick can re-point it at a field another chip
+    // already filters. Two "field is A" / "field is B" conditions AND to a
+    // silently-empty match — so if the re-pointed field collides with a
+    // mergeable sibling, fold them together (parity with addOrMergeCondition
+    // on the "+ Add filter" path). The common case — editing value/operator,
+    // or switching to an unused field — hits neither branch and keeps the
+    // chip's row position.
+    const MERGEABLE = new Set(["is", "is_any_of"]);
+    const others = value.conditions.filter((c) => c.id !== id);
+    const collidesWithMergeableSibling =
+      MERGEABLE.has(next.op) && others.some((c) => c.field === next.field && MERGEABLE.has(c.op));
+    if (collidesWithMergeableSibling) {
+      onChange({ ...value, conditions: addOrMergeCondition(others, next) });
+      return;
+    }
     onChange({ ...value, conditions: value.conditions.map((c) => (c.id === id ? next : c)) });
   }
 
@@ -71,6 +86,8 @@ export function AdvancedFilterBar({
           conditions={conditions}
           registry={registry}
           getOptions={getOptions}
+          fields={fields}
+          hierarchicalGroups={hierarchicalGroups}
           onChangeCondition={handleChangeCondition}
           onRemoveCondition={handleRemoveCondition}
           onDraftConditionChange={onDraftConditionChange}
