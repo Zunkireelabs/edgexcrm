@@ -96,6 +96,7 @@ import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/s
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
+import { getLeadFullName, getLeadInitials } from "@/components/dashboard/lead/lead-name";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -208,12 +209,6 @@ interface LeadsTableProps {
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
 const POSITION_ROUTE_MAP = POSITION_ROUTE_MAP_WITH_ADMIN;
-
-function getInitials(firstName?: string | null, lastName?: string | null): string {
-  const first = firstName?.charAt(0)?.toUpperCase() || "";
-  const last = lastName?.charAt(0)?.toUpperCase() || "";
-  return first + last || "?";
-}
 
 const MIN_COLUMN_WIDTH = 60;
 
@@ -1696,7 +1691,7 @@ export function LeadsTable({
       exportCols.map((col): string => {
         switch (col.key) {
           case "name":
-            return `${lead.first_name || ""} ${lead.last_name || ""}`.trim();
+            return getLeadFullName(lead, "");
           case "email":
             return lead.email || "";
           case "phone":
@@ -2703,7 +2698,7 @@ export function LeadsTable({
             ) : (
               paginatedLeads.map((lead) => {
                 const isSelected = selectedIds.has(lead.id);
-                const initials = getInitials(lead.first_name, lead.last_name);
+                const initials = getLeadInitials(lead);
 
                 return (
                   <tr
