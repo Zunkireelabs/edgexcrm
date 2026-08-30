@@ -29,6 +29,7 @@ export interface SmsBlastRow {
   completed_at: string | null;
   created_at: string;
   updated_at: string;
+  deleted_at: string | null;
 }
 
 export type SmsMessageStatus = "queued" | "deferred" | "sending" | "submitted" | "delivered" | "failed" | "suppressed" | "cancelled";

@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data, error } = await db.from("email_blasts").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await db.from("email_blasts").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
   if (error || !data) return apiNotFound("Email blast");
   return apiSuccess(data);
 }
@@ -36,7 +36,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data: existing, error: fetchError } = await db.from("email_blasts").select("id, status").eq("id", id).maybeSingle();
+  const { data: existing, error: fetchError } = await db
+    .from("email_blasts")
+    .select("id, status")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (fetchError || !existing) return apiNotFound("Email blast");
   if ((existing as unknown as BlastRow).status !== "draft") {
     return apiConflict("Only a draft blast can be edited");
@@ -88,7 +93,18 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return apiSuccess(data);
 }
 
-// DELETE /api/v1/email-blasts/[id] — soft delete (status -> 'cancelled').
+// DELETE /api/v1/email-blasts/[id] — remove a blast from the campaigns list.
+//   • never-sent (no email_messages rows: every draft/scheduled, plus a blast
+//     cancelled straight from draft)   -> HARD delete the row
+//   • has send history (cancelled mid-send / sent / failed)  -> SOFT hide
+//     (stamp deleted_at; keep the row + messages + stats for the record)
+//   • in-flight (queued/sending/throttled)  -> 409, must /cancel first
+//
+// Before this, DELETE only flipped status to 'cancelled' and the list had no
+// filter, so a "deleted" blast reappeared on refresh and an already-cancelled
+// one could never be removed at all.
+const IN_FLIGHT_STATUSES = new Set(["queued", "sending", "throttled"]);
+
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "DELETE", path: "/api/v1/email-blasts/[id]" });
@@ -98,16 +114,52 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data: existing, error: fetchError } = await db.from("email_blasts").select("id, status").eq("id", id).maybeSingle();
+  const { data: existing, error: fetchError } = await db
+    .from("email_blasts")
+    .select("id, status")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (fetchError || !existing) return apiNotFound("Email blast");
-  if (!["draft", "scheduled"].includes((existing as unknown as BlastRow).status)) {
-    return apiConflict("Only a draft or scheduled blast can be cancelled this way — use /cancel for an in-flight blast");
+  const status = (existing as unknown as BlastRow).status;
+
+  if (IN_FLIGHT_STATUSES.has(status)) {
+    return apiConflict("This blast is in progress — cancel it first, then delete it");
   }
 
-  const { data, error } = await db.from("email_blasts").update({ status: "cancelled" }).eq("id", id).select("*").single();
+  // email_messages has no FK back to email_blasts (soft source/source_id link,
+  // see migration 211) — count directly instead of relying on a cascade.
+  const { count: messageCount, error: countError } = await db
+    .from("email_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("source", "blast")
+    .eq("source_id", id);
+  if (countError) {
+    log.error({ err: countError }, "Failed to check email blast messages before delete");
+    return apiServiceUnavailable("Failed to delete email blast");
+  }
+
+  if ((messageCount ?? 0) === 0) {
+    // Never materialized a recipient — safe to remove entirely. Clear any stray
+    // messages defensively (there should be none) before dropping the row.
+    await db.from("email_messages").delete().eq("source", "blast").eq("source_id", id);
+    const { error: deleteError } = await db.from("email_blasts").delete().eq("id", id);
+    if (deleteError) {
+      log.error({ err: deleteError }, "Failed to hard-delete email blast");
+      return apiServiceUnavailable("Failed to delete email blast");
+    }
+    return apiSuccess({ id, deleted: true });
+  }
+
+  const { data, error } = await db
+    .from("email_blasts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
   if (error) {
-    log.error({ err: error }, "Failed to cancel email blast");
-    return apiServiceUnavailable("Failed to cancel email blast");
+    log.error({ err: error }, "Failed to soft-delete email blast");
+    return apiServiceUnavailable("Failed to delete email blast");
   }
 
   return apiSuccess(data);

@@ -127,7 +127,18 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   const [modalType, setModalType] = useState<ActivityType>("call");
   const [composeOpen, setComposeOpen] = useState(false);
   const [replyContext, setReplyContext] = useState<{ thread: EmailThread; lastMessage: Email } | null>(null);
-  const [appNotes, setAppNotes] = useState<{ id: string; notes: string; created_at: string; updated_at: string | null; institution_name: string | null }[]>([]);
+  const [appNotes, setAppNotes] = useState<
+    {
+      id: string;
+      notes: string;
+      created_at: string;
+      updated_at: string | null;
+      institution_name: string | null;
+      created_by: string | null;
+      notes_updated_by: string | null;
+      notes_updated_at: string | null;
+    }[]
+  >([]);
 
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
   const hasOutreach = getFeatureAccess(industryId, FEATURES.OUTREACH);
@@ -157,7 +168,16 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       const res = await fetch(`/api/v1/leads/${leadId}/applications`);
       if (res.ok) {
         const json = await res.json();
-        const apps = (json.data ?? []) as { id: string; notes: string | null; created_at: string; updated_at: string | null; institution_name: string | null }[];
+        const apps = (json.data ?? []) as {
+          id: string;
+          notes: string | null;
+          created_at: string;
+          updated_at: string | null;
+          institution_name: string | null;
+          created_by: string | null;
+          notes_updated_by: string | null;
+          notes_updated_at: string | null;
+        }[];
         setAppNotes(apps.filter((a): a is typeof apps[number] & { notes: string } => Boolean(a.notes && a.notes.trim())));
       }
     } catch {
@@ -569,7 +589,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               | { kind: "system"; id: string; at: string; event: LeadActivity }
               | { kind: "note"; id: string; at: string; note: LeadNote }
               | { kind: "activity"; id: string; at: string; record: LeadActivityRecord }
-              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null };
+              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null; authorId: string | null };
 
             // Audit events (skip note_added — replaced by actual note items below)
             const sysItems: UnifiedItem[] = systemActivities
@@ -586,10 +606,15 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               .filter((a) => a.activity_type === "call" || a.activity_type === "meeting")
               .map((a) => ({ kind: "activity", id: `act-${a.id}`, at: a.created_at, record: a }));
 
-            // Application notes
+            // Application notes. Time + author come from the notes field's own
+            // stamps (migration 219) — falling back to the application's create
+            // time / creator for rows written before that. Using notes_updated_at
+            // (not the row's updated_at) keeps an unrelated stage/field edit from
+            // moving this entry in the timeline.
             const appNoteItems: UnifiedItem[] = appNotes.map((a) => ({
-              kind: "app_note", id: `appnote-${a.id}`, at: a.updated_at ?? a.created_at,
+              kind: "app_note", id: `appnote-${a.id}`, at: a.notes_updated_at ?? a.created_at,
               content: a.notes, institution: a.institution_name,
+              authorId: a.notes_updated_by ?? a.created_by,
             }));
 
             const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems]
@@ -717,7 +742,12 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                                 {item.content}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5">
-                                {formatTimeOnly(item.at)}
+                                {[
+                                  formatTimeOnly(item.at),
+                                  resolveActorLabel(item.authorId, currentUserId, teamMemberNames, teamMemberEmails),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
                               </p>
                             </div>
                           </div>

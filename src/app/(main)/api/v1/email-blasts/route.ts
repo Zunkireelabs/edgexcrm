@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
   const { data, error, count } = await db
     .from("email_blasts")
     .select("*", { count: "exact" })
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .range(from, to);
 

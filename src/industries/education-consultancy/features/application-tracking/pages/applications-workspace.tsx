@@ -291,7 +291,7 @@ export function ApplicationsWorkspace({
     <div className="flex flex-col flex-1 min-h-0 gap-3">
       {/* Header */}
       <div className="flex items-center justify-between gap-3 shrink-0">
-        <h1 className="text-xl font-bold">Applications</h1>
+        <h1 className="text-base font-bold">Applications</h1>
         <div className="flex items-center gap-2">
           <ApplicationPipelineSelector
             pipelines={pipelines ?? []}
