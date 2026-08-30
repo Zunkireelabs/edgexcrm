@@ -10,7 +10,7 @@ import { FilterChipRow } from "./filter-chip-row";
 import { ConjunctionToggle } from "./conjunction-toggle";
 import { AddFilterButton } from "./add-filter-button";
 import { useFilterOptions } from "./use-filter-options";
-import { addOrMergeCondition } from "./condition-defaults";
+import { addOrMergeCondition, applyConditionChange } from "./condition-defaults";
 import type { FilterHostConfig } from "./types";
 
 export const DEFAULT_MAX_CONDITIONS = 25;
@@ -44,21 +44,11 @@ export function AdvancedFilterBar({
 
   function handleChangeCondition(id: string, next: FilterCondition) {
     // A chip's back-arrow re-pick can re-point it at a field another chip
-    // already filters. Two "field is A" / "field is B" conditions AND to a
-    // silently-empty match — so if the re-pointed field collides with a
-    // mergeable sibling, fold them together (parity with addOrMergeCondition
-    // on the "+ Add filter" path). The common case — editing value/operator,
-    // or switching to an unused field — hits neither branch and keeps the
-    // chip's row position.
-    const MERGEABLE = new Set(["is", "is_any_of"]);
-    const others = value.conditions.filter((c) => c.id !== id);
-    const collidesWithMergeableSibling =
-      MERGEABLE.has(next.op) && others.some((c) => c.field === next.field && MERGEABLE.has(c.op));
-    if (collidesWithMergeableSibling) {
-      onChange({ ...value, conditions: addOrMergeCondition(others, next) });
-      return;
-    }
-    onChange({ ...value, conditions: value.conditions.map((c) => (c.id === id ? next : c)) });
+    // already filters — which must de-dupe (two "field is A" / "field is B"
+    // AND to zero rows). applyConditionChange folds the sibling into the
+    // edited chip in its own row slot; the common case (value/operator edit,
+    // or switching to an unused field) is a plain position-preserving replace.
+    onChange({ ...value, conditions: applyConditionChange(value.conditions, id, next) });
   }
 
   function handleRemoveCondition(id: string) {
