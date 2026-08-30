@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data, error } = await db.from("sms_blasts").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await db.from("sms_blasts").select("*").eq("id", id).is("deleted_at", null).maybeSingle();
   if (error || !data) return apiNotFound("SMS blast");
   return apiSuccess(data);
 }
@@ -36,7 +36,12 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data: existing, error: fetchError } = await db.from("sms_blasts").select("id, status").eq("id", id).maybeSingle();
+  const { data: existing, error: fetchError } = await db
+    .from("sms_blasts")
+    .select("id, status")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (fetchError || !existing) return apiNotFound("SMS blast");
   if ((existing as unknown as BlastRow).status !== "draft") {
     return apiConflict("Only a draft blast can be edited");
@@ -80,7 +85,15 @@ export async function PATCH(request: NextRequest, { params }: RouteParams) {
   return apiSuccess(data);
 }
 
-// DELETE /api/v1/sms/blasts/[id] — soft delete (status -> 'cancelled').
+// DELETE /api/v1/sms/blasts/[id] — remove a blast from the campaigns list.
+// Same three-way model as the email side (see email-blasts/[id]/route.ts):
+//   • never-sent (no sms_messages rows)      -> HARD delete the row
+//   • has send history                        -> SOFT hide (stamp deleted_at)
+//   • in-flight (queued/sending/throttled)    -> 409, must /cancel first
+// sms_messages.blast_id has ON DELETE CASCADE, so a hard delete takes its
+// messages with it automatically.
+const IN_FLIGHT_STATUSES = new Set(["queued", "sending", "throttled"]);
+
 export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "DELETE", path: "/api/v1/sms/blasts/[id]" });
@@ -90,16 +103,46 @@ export async function DELETE(_request: NextRequest, { params }: RouteParams) {
   const { db } = guard;
   const { id } = await params;
 
-  const { data: existing, error: fetchError } = await db.from("sms_blasts").select("id, status").eq("id", id).maybeSingle();
+  const { data: existing, error: fetchError } = await db
+    .from("sms_blasts")
+    .select("id, status")
+    .eq("id", id)
+    .is("deleted_at", null)
+    .maybeSingle();
   if (fetchError || !existing) return apiNotFound("SMS blast");
-  if (!["draft", "scheduled"].includes((existing as unknown as BlastRow).status)) {
-    return apiConflict("Only a draft or scheduled blast can be cancelled this way — use /cancel for an in-flight blast");
+  const status = (existing as unknown as BlastRow).status;
+
+  if (IN_FLIGHT_STATUSES.has(status)) {
+    return apiConflict("This blast is in progress — cancel it first, then delete it");
   }
 
-  const { data, error } = await db.from("sms_blasts").update({ status: "cancelled" }).eq("id", id).select("*").single();
+  const { count: messageCount, error: countError } = await db
+    .from("sms_messages")
+    .select("id", { count: "exact", head: true })
+    .eq("blast_id", id);
+  if (countError) {
+    log.error({ err: countError }, "Failed to check sms blast messages before delete");
+    return apiServiceUnavailable("Failed to delete SMS blast");
+  }
+
+  if ((messageCount ?? 0) === 0) {
+    const { error: deleteError } = await db.from("sms_blasts").delete().eq("id", id);
+    if (deleteError) {
+      log.error({ err: deleteError }, "Failed to hard-delete sms blast");
+      return apiServiceUnavailable("Failed to delete SMS blast");
+    }
+    return apiSuccess({ id, deleted: true });
+  }
+
+  const { data, error } = await db
+    .from("sms_blasts")
+    .update({ deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
   if (error) {
-    log.error({ err: error }, "Failed to cancel sms blast");
-    return apiServiceUnavailable("Failed to cancel SMS blast");
+    log.error({ err: error }, "Failed to soft-delete sms blast");
+    return apiServiceUnavailable("Failed to delete SMS blast");
   }
 
   return apiSuccess(data);
