@@ -82,6 +82,7 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const registered = searchParams.get('registered');
+  const errorParam = searchParams.get('error');
 
   const supabase = useMemo(() => {
     try {
@@ -119,6 +120,24 @@ function LoginPageContent() {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Same blocked-account check as handleSubmit's password-login path —
+        // a suspended user revisiting /login with a still-valid session
+        // cookie must not be silently pushed into the dashboard's generic
+        // fallback screen either.
+        try {
+          const statusRes = await fetch('/api/v1/auth/status');
+          if (statusRes.ok) {
+            const { data } = await statusRes.json();
+            if (data?.blocked) {
+              await supabase.auth.signOut();
+              setError("Can't login. Please contact your admin.");
+              return;
+            }
+          }
+        } catch {
+          // Network hiccup — fall through; the real block still applies server-side.
+        }
+
         if (token) {
           // Only redirect to dashboard if invite acceptance succeeded
           const accepted = await acceptInvite(token);
@@ -140,6 +159,13 @@ function LoginPageContent() {
       setMessage('Account created successfully! Please sign in.');
     }
   }, [registered]);
+
+  // Blocked-account redirect from the OAuth callback (src/app/(main)/api/auth/callback/route.ts)
+  useEffect(() => {
+    if (errorParam === 'suspended') {
+      setError("Can't login. Please contact your admin.");
+    }
+  }, [errorParam]);
 
   // Validate invite token and show info
   useEffect(() => {
@@ -217,6 +243,30 @@ function LoginPageContent() {
           supabase.auth.signInWithPassword({ email, password })
         );
         if (error) throw error;
+
+        // Blocked-account check (migration 220's suspend feature) — right after
+        // a real credential match, before navigating in. Without this, a
+        // blocked account's login "succeeds" (we deliberately never touch the
+        // Supabase Auth account itself) and they only find out something's
+        // wrong after landing on the generic "No Organization Found" screen.
+        // Fails open on a network error: this is a UX improvement, not the
+        // actual enforcement — getCurrentUserTenant()/buildUserAuthContext()
+        // still block them for real even if this check itself can't be reached.
+        try {
+          const statusRes = await fetch('/api/v1/auth/status');
+          if (statusRes.ok) {
+            const { data } = await statusRes.json();
+            if (data?.blocked) {
+              await supabase.auth.signOut();
+              setError("Can't login. Please contact your admin.");
+              setLoading(false);
+              return;
+            }
+          }
+        } catch {
+          // Network hiccup on the status check — fall through to normal
+          // login; the real block (if any) still applies server-side.
+        }
 
         // If there's an invite token, accept it — only redirect on success
         if (token) {
