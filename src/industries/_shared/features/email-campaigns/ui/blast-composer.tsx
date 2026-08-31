@@ -23,6 +23,7 @@ import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { conditionSchema } from "@/lib/filters/schema";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
@@ -87,11 +88,19 @@ function buildAudienceOptionOverrides(input: {
   assigneeFacet: { name: string; count: number }[];
   roster: { user_id: string; name: string }[];
   leadLists: ComposerLeadList[];
+  fieldsOfStudy: string[];
+  studyLevels: string[];
 }): Partial<Record<string, FilterOption[]>> {
   const collaborators = input.roster.map((m) => ({ value: m.user_id, label: m.name }));
   const memberNameById = new Map(collaborators.map((o) => [o.value, o.label]));
   return {
     form: input.forms.map((f) => ({ value: f.id, label: f.name })),
+    // field_of_study/degree_level: this composer's registry() below always
+    // passes industryId: "education_consultancy" (this feature is education-
+    // only per meta.ts), so both fields are always offered — same Settings-
+    // catalog source as leads-table.tsx, fetched via useEduTaxonomy() below.
+    field_of_study: input.fieldsOfStudy.map((name) => ({ value: name, label: name })),
+    degree_level: input.studyLevels.map((name) => ({ value: name, label: name })),
     source: input.sourceFacet.map((o) => ({ value: o.name, label: o.name })),
     assignees: input.assigneeFacet
       .filter((o) => o.name !== "unassigned")
@@ -218,9 +227,10 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
     };
   }, []);
 
+  const { fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels } = useEduTaxonomy();
   const audienceOptionOverrides = useMemo(
-    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists }),
-    [forms, sourceFacet, assigneeFacet, roster, leadLists]
+    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists, fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels }),
+    [forms, sourceFacet, assigneeFacet, roster, leadLists, eduFieldsOfStudy, eduStudyLevels]
   );
   const hierarchicalGroups = useMemo(() => ({ stage: buildStageHierarchy(leadLists, isAdmin) }), [leadLists, isAdmin]);
 
