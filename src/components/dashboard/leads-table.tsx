@@ -853,7 +853,7 @@ export function LeadsTable({
   // tenant hasn't configured any yet) — `enabled` gates the fetch to education_
   // consultancy only, same reasoning as wantsDestinationFacet above.
   const { fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels } = useEduTaxonomy({
-    enabled: industryId === "education_consultancy",
+    enabled: wantsDestinationFacet,
   });
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
@@ -2342,10 +2342,14 @@ export function LeadsTable({
         .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
       // Field of study / Level of study: fixed lists straight from Settings (see
       // eduFieldsOfStudy/eduStudyLevels above) — no counts, no cross-filtering,
-      // just the tenant's configured catalog in its configured order. Empty for
-      // non-education tenants (useEduTaxonomy's `enabled: false` above), but the
-      // fields themselves are already industries-gated out of the picker for
-      // those tenants anyway — see registry/leads.ts's `industries` array.
+      // just the tenant's configured catalog in its configured order. For a
+      // non-education tenant, useEduTaxonomy's `enabled: false` above skips the
+      // fetch but its useState initializers still hold the hardcoded education
+      // fallback lists — these two entries are NOT actually empty then, just
+      // inert, because the fields themselves are industries-gated out of the
+      // "Add filter" picker for those tenants — see registry/leads.ts's
+      // `industries` array. Don't read these overrides directly outside that
+      // gate; they carry education-only values regardless of tenant.
       field_of_study: eduFieldsOfStudy.map((name) => ({ value: name, label: name })),
       degree_level: eduStudyLevels.map((name) => ({ value: name, label: name })),
     };
