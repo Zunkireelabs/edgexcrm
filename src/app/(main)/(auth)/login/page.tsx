@@ -82,6 +82,7 @@ function LoginPageContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const registered = searchParams.get('registered');
+  const errorParam = searchParams.get('error');
 
   const supabase = useMemo(() => {
     try {
@@ -119,6 +120,24 @@ function LoginPageContent() {
     const checkUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
+        // Same blocked-account check as handleSubmit's password-login path —
+        // a suspended user revisiting /login with a still-valid session
+        // cookie must not be silently pushed into the dashboard's generic
+        // fallback screen either.
+        try {
+          const statusRes = await fetch('/api/v1/auth/status');
+          if (statusRes.ok) {
+            const { data } = await statusRes.json();
+            if (data?.blocked) {
+              await supabase.auth.signOut();
+              setError("Can't login. Please contact your admin.");
+              return;
+            }
+          }
+        } catch {
+          // Network hiccup — fall through; the real block still applies server-side.
+        }
+
         if (token) {
           // Only redirect to dashboard if invite acceptance succeeded
           const accepted = await acceptInvite(token);
@@ -140,6 +159,13 @@ function LoginPageContent() {
       setMessage('Account created successfully! Please sign in.');
     }
   }, [registered]);
+
+  // Blocked-account redirect from the OAuth callback (src/app/(main)/api/auth/callback/route.ts)
+  useEffect(() => {
+    if (errorParam === 'suspended') {
+      setError("Can't login. Please contact your admin.");
+    }
+  }, [errorParam]);
 
   // Validate invite token and show info
   useEffect(() => {
