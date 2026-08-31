@@ -218,6 +218,30 @@ function LoginPageContent() {
         );
         if (error) throw error;
 
+        // Blocked-account check (migration 220's suspend feature) — right after
+        // a real credential match, before navigating in. Without this, a
+        // blocked account's login "succeeds" (we deliberately never touch the
+        // Supabase Auth account itself) and they only find out something's
+        // wrong after landing on the generic "No Organization Found" screen.
+        // Fails open on a network error: this is a UX improvement, not the
+        // actual enforcement — getCurrentUserTenant()/buildUserAuthContext()
+        // still block them for real even if this check itself can't be reached.
+        try {
+          const statusRes = await fetch('/api/v1/auth/status');
+          if (statusRes.ok) {
+            const { data } = await statusRes.json();
+            if (data?.blocked) {
+              await supabase.auth.signOut();
+              setError("Can't login. Please contact your admin.");
+              setLoading(false);
+              return;
+            }
+          }
+        } catch {
+          // Network hiccup on the status check — fall through to normal
+          // login; the real block (if any) still applies server-side.
+        }
+
         // If there's an invite token, accept it — only redirect on success
         if (token) {
           const accepted = await acceptInvite(token);

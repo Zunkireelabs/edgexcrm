@@ -44,7 +44,9 @@ export async function GET(request: Request) {
 
   const { data: membersRaw, error } = await db
     .from("tenant_users")
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at, positions(permissions, name)")
+    .select(
+      "id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at, suspended_at, positions(permissions, name)"
+    )
     .order("created_at", { ascending: true });
 
   if (error) {
@@ -62,6 +64,7 @@ export async function GET(request: Request) {
     default_hourly_rate: number | null;
     cost_rate: number | null;
     created_at: string;
+    suspended_at: string | null;
     positions: { permissions: PositionPermissions | null; name: string | null } | { permissions: PositionPermissions | null; name: string | null }[] | null;
   }>;
 
@@ -105,6 +108,7 @@ export async function GET(request: Request) {
       default_hourly_rate: m.default_hourly_rate,
       cost_rate: isAdmin ? m.cost_rate : null,
       created_at: m.created_at,
+      suspended_at: m.suspended_at,
       canEditLeads,
       position_name: positionData?.name ?? null,
     };
@@ -178,6 +182,9 @@ export async function PATCH(request: Request) {
     cost_rate?: number | null;
     position_id?: string | null;
     branch_id?: string | null;
+    // true = suspend (block login, keep the tenant_users row + name resolution
+    // everywhere it already surfaces), false = unsuspend. Migration 220.
+    suspend?: boolean;
   };
   try {
     body = await request.json();
@@ -209,15 +216,33 @@ export async function PATCH(request: Request) {
 
   const { data: existingMember } = await db
     .from("tenant_users")
-    .select("id, role")
+    .select("id, role, suspended_at")
     .eq("user_id", body.user_id)
     .maybeSingle();
 
   if (!existingMember) return apiNotFound("Team member");
 
-  const currentMember = existingMember as unknown as { id: string; role: string };
+  const currentMember = existingMember as unknown as { id: string; role: string; suspended_at: string | null };
 
   const patch: Record<string, unknown> = {};
+
+  if (body.suspend !== undefined) {
+    // Cannot suspend yourself — mirrors the self-lockout guard below for
+    // position changes; a blocked admin couldn't undo it.
+    if (body.user_id === auth.userId) return apiForbidden();
+
+    if (body.suspend) {
+      // Owner tier must be demoted before suspension, not suspended directly
+      // — mirrors "Owner tier is never assignable" / the last-owner guard
+      // further down; an owner account should never silently lose access.
+      if (currentMember.role === "owner") return apiForbidden();
+      patch.suspended_at = new Date().toISOString();
+      patch.suspended_by = auth.userId;
+    } else {
+      patch.suspended_at = null;
+      patch.suspended_by = null;
+    }
+  }
 
   if (body.default_hourly_rate !== undefined) {
     patch.default_hourly_rate = body.default_hourly_rate;
@@ -299,7 +324,7 @@ export async function PATCH(request: Request) {
     .from("tenant_users")
     .update(patch)
     .eq("user_id", body.user_id)
-    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at")
+    .select("id, user_id, role, position_id, branch_id, default_hourly_rate, cost_rate, created_at, suspended_at")
     .single();
 
   if (error) {
@@ -327,6 +352,28 @@ export async function PATCH(request: Request) {
         entityType: "team_member",
         entityId: body.user_id,
         payload: { position_id: body.position_id, role: patch.role },
+        requestId,
+      }),
+    ]);
+  }
+
+  if (body.suspend !== undefined) {
+    Promise.all([
+      createAuditLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: body.suspend ? "team.member_suspended" : "team.member_unsuspended",
+        entityType: "team_member",
+        entityId: body.user_id,
+        changes: { suspended_at: { old: currentMember.suspended_at, new: patch.suspended_at } },
+        requestId,
+      }),
+      emitEvent({
+        tenantId: auth.tenantId,
+        type: body.suspend ? "team.member_suspended" : "team.member_unsuspended",
+        entityType: "team_member",
+        entityId: body.user_id,
+        payload: { suspended: !!body.suspend },
         requestId,
       }),
     ]);

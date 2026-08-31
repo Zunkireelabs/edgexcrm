@@ -50,7 +50,9 @@ export async function buildUserAuthContext(
   const serviceClient = await createServiceClient();
   let membershipQuery = serviceClient
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)")
+    .select(
+      "tenant_id, role, position_id, branch_id, suspended_at, tenants(industry_id, plan, entitlement_overrides), positions(permissions, slug)"
+    )
     .eq("user_id", userId);
   if (tenantId) membershipQuery = membershipQuery.eq("tenant_id", tenantId);
 
@@ -59,6 +61,7 @@ export async function buildUserAuthContext(
     role: string;
     position_id: string | null;
     branch_id: string | null;
+    suspended_at: string | null;
     tenants:
       | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }
       | { industry_id: string | null; plan: string; entitlement_overrides: Record<string, unknown> }[]
@@ -70,6 +73,13 @@ export async function buildUserAuthContext(
   }>();
 
   if (!membership) return null;
+  // A suspended member (migration 220) is treated identically to "no
+  // membership" — every existing caller already handles a null AuthContext
+  // (API routes 401, dashboard pages redirect to /login), so this needs no
+  // new response shape anywhere. Their tenant_users row is deliberately NOT
+  // deleted, so name resolution (assignee/activity-author lookups elsewhere
+  // in the app) keeps working — only login/API access is blocked here.
+  if (membership.suspended_at) return null;
 
   const tenantsEmbed = Array.isArray(membership.tenants)
     ? membership.tenants[0] ?? null
