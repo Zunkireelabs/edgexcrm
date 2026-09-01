@@ -322,6 +322,61 @@ describe("§5.3 — attribution: one row = one provider call", () => {
   });
 });
 
+describe("send.ts — rate-limit retry (live-bug fix, 2026-09-01)", () => {
+  it("retries a rate_limit_exceeded response instead of permanently failing a good recipient", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+    const { sendQueuedEmailBatch } = await import("./send");
+
+    const row = await insertMessage({ to_email: `ratelimited.${Date.now()}@example.com` });
+
+    // Reproduces the live blast: Resend rejects the first two attempts with
+    // its real 429 shape (name: "rate_limit_exceeded"), then succeeds on
+    // retry — exactly the transient case this fix exists for.
+    let calls = 0;
+    sendMock.mockImplementation(async (payload: { to: string[] }) => {
+      calls += 1;
+      if (calls <= 2) {
+        return { data: null, error: { name: "rate_limit_exceeded", message: "Too many requests. You can only make 10 requests per second." } };
+      }
+      return { data: { id: `resend-${payload.to[0]}` }, error: null };
+    });
+
+    const result = await sendQueuedEmailBatch(tenantId, [row.id]);
+
+    expect(calls).toBe(3); // 2 rate-limited attempts + 1 successful retry
+    expect(result.sent).toBe(1);
+    expect(result.failed).toBe(0);
+
+    const final = await readMessage(row.id);
+    expect(final.status).toBe("sent"); // never landed on 'failed' — the actual bug being fixed
+  }, 10000);
+
+  it("still fails permanently after exhausting rate-limit retries (not an infinite retry loop)", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+    const { sendQueuedEmailBatch } = await import("./send");
+
+    const row = await insertMessage({ to_email: `alwaysratelimited.${Date.now()}@example.com` });
+    sendMock.mockImplementation(async () => ({
+      data: null,
+      error: { name: "rate_limit_exceeded", message: "Too many requests. You can only make 10 requests per second." },
+    }));
+
+    const result = await sendQueuedEmailBatch(tenantId, [row.id]);
+
+    expect(result.sent).toBe(0);
+    expect(result.failed).toBe(1);
+    const final = await readMessage(row.id);
+    expect(final.status).toBe("failed");
+    expect(final.error_code).toBe("provider_error");
+  }, 10000);
+});
+
 describe("send.ts — suppression safety net and daily cap (§4.6)", () => {
   it("drops a suppressed recipient before the provider call, and still sends the rest", async (ctx) => {
     if (!localDbAvailable) {
