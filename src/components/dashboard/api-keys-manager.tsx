@@ -491,8 +491,11 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
             </p>
           </div>
         ) : (
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto">
+            {/* min-w keeps every column (Actions is last) at its natural width
+                and lets the wrapper scroll instead of compressing/clipping the
+                Actions column inside the narrow Settings modal. */}
+            <Table className="min-w-[680px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
