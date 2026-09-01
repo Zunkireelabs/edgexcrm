@@ -18,6 +18,7 @@ import { checkDailyBudget } from "@/lib/ai/budget";
 import "@/lib/ai/tools/packs"; // module-load registration — must run before buildToolset()
 import { buildToolset } from "@/lib/ai/tools/registry";
 import { toAiSdkTools, buildToolApproval, buildDeniedWriteActionRows } from "@/lib/ai/tools/adapter";
+import { buildRefineToolInput } from "@/lib/ai/tools/refine-input";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
 import { getIndustryAiConfig } from "@/industries/_loader";
 import { model } from "@/lib/ai/provider";
@@ -154,6 +155,13 @@ export async function POST(request: NextRequest) {
     tools,
     toolApproval,
     experimental_toolApprovalSecret: toolApprovalSecret,
+    // Strip `undefined`-valued keys our optional-field sanitizers leave on the
+    // parsed input BEFORE the approval signature is computed — otherwise the
+    // signed input (`canonicalJSON` keeps `"k":undefined`) and the input the
+    // browser round-trips on approve (`JSON.stringify` drops it) disagree, and
+    // every write approval fails InvalidToolApprovalSignatureError. See
+    // lib/ai/tools/refine-input.ts.
+    experimental_refineToolInput: buildRefineToolInput(toolset),
     stopWhen: stepCountIs(MAX_TOOL_STEPS),
     // One retry before giving up — no cross-provider fallback this slice (only
     // OPENAI_API_KEY is provisioned). provider.ts's model() seam is where a
@@ -264,7 +272,26 @@ export async function POST(request: NextRequest) {
     messageMetadata: ({ part }) => (part.type === "start" ? { conversationId } : undefined),
     onError: (error) => {
       log.error({ err: error }, "chat stream error");
-      return "Something went wrong generating a response. Please try again.";
+      return streamErrorMessage(error);
     },
   });
+}
+
+/**
+ * User-facing text for an error that surfaced mid-stream (after headers were
+ * committed, so it can only be delivered as a stream error part — never leak
+ * raw provider/internal detail). A bare-crash on the approval-execution path
+ * used to always render the generic retry card, hiding that the write was
+ * actually blocked; these branches name the real failure so the user knows
+ * whether to retry, rephrase, or propose the action again.
+ */
+export function streamErrorMessage(error: unknown): string {
+  if (
+    InvalidToolApprovalSignatureError.isInstance(error) ||
+    InvalidToolApprovalError.isInstance(error) ||
+    ToolCallNotFoundForApprovalError.isInstance(error)
+  ) {
+    return "That approval couldn't be verified, so the action was not run. Ask me to do it again and approve the fresh request.";
+  }
+  return "Something went wrong generating a response. Please try again.";
 }
