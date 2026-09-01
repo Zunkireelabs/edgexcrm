@@ -24,7 +24,7 @@ import { CostPreviewDialog } from "./cost-preview-dialog";
 import { RecipientsPreviewDialog } from "./recipients-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
 import { smsSend, smsGet, SmsApiError } from "../lib/api-client";
-import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse } from "../lib/types";
+import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse, SmsSettings } from "../lib/types";
 
 // No pipeline-scoped list on this surface (the Audience picker targets leads
 // tenant-wide, not one list) — mirrors leads-table.tsx's "no active pipeline"
@@ -173,6 +173,14 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
   const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
   const [leadLists, setLeadLists] = useState<ComposerLeadList[]>([]);
+  // Tenant's per-blast recipient cap (max_recipients_per_blast, admin-
+  // configurable 1-20,000, default 500 — SMS-PHASE3A-BRIEF.md §4). Fetched so
+  // the audience count line below can warn BEFORE Review & send, instead of
+  // the only signal being the server's 422 MAX_RECIPIENTS_EXCEEDED after the
+  // user has already gone through the full confirm flow (the actual client
+  // complaint: they only found out they were over the cap at the very last
+  // step, with no way to see it coming while still adjusting filters).
+  const [smsSettings, setSmsSettings] = useState<SmsSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -202,6 +210,12 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     smsGet<{ user_id: string; name: string }[]>("/api/v1/team?minimal=1")
       .then(({ data }) => {
         if (!cancelled) setRoster(data);
+      })
+      .catch(() => void 0);
+
+    smsGet<SmsSettings>("/api/v1/sms/settings")
+      .then(({ data }) => {
+        if (!cancelled) setSmsSettings(data);
       })
       .catch(() => void 0);
 
@@ -300,6 +314,15 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     }
   }
 
+  // Null max_recipients_per_blast (settings not loaded yet) never blocks
+  // sending — this is an early-warning UX layer on top of the server's real
+  // enforcement (send/route.ts's MAX_RECIPIENTS_EXCEEDED), not a replacement
+  // for it, so a slow/failed settings fetch fails open here and still gets
+  // caught server-side.
+  const recipientCap = smsSettings?.max_recipients_per_blast ?? null;
+  const overCapBy = recipientCap !== null && audienceCount ? audienceCount.sendable - recipientCap : 0;
+  const isOverCap = overCapBy > 0;
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div className="flex flex-col gap-1.5">
@@ -341,16 +364,24 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
         ) : audienceCount && audienceCount.matched === 0 ? (
           <p className="text-xs font-medium text-amber-600 dark:text-amber-500">No leads match this filter.</p>
         ) : audienceCount ? (
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">{formatAudienceCountLine(audienceCount)}</p>
-            {audienceCount.sendable > 0 && (
-              <button
-                type="button"
-                onClick={() => setRecipientsPreviewOpen(true)}
-                className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-              >
-                Preview recipients
-              </button>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">{formatAudienceCountLine(audienceCount)}</p>
+              {audienceCount.sendable > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRecipientsPreviewOpen(true)}
+                  className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Preview recipients
+                </button>
+              )}
+            </div>
+            {isOverCap && (
+              <p className="text-xs font-medium text-destructive">
+                Exceeds this tenant&apos;s {recipientCap}-recipient cap by {overCapBy} — narrow your filter to send, or ask an
+                owner/admin to raise the cap in SMS Settings.
+              </p>
             )}
           </div>
         ) : null}
@@ -358,7 +389,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
 
       {canSendSms && (
         <div className="flex items-center gap-2">
-          <Button onClick={() => setPreviewOpen(true)} disabled={!body.trim()}>
+          <Button onClick={() => setPreviewOpen(true)} disabled={!body.trim() || isOverCap}>
             Review &amp; send
           </Button>
         </div>
