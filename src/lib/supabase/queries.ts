@@ -28,11 +28,18 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug), tenants(*)")
+    .select("tenant_id, role, position_id, branch_id, suspended_at, positions(permissions, name, slug), tenants(*)")
     .eq("user_id", user.id)
     .single();
 
   if (!membership) return null;
+  // A suspended member (migration 220) is treated identically to "no
+  // membership" — same fail-closed shape as buildUserAuthContext() in
+  // src/lib/api/auth.ts (the API-route enforcement point). This is the
+  // SEPARATE Server Component path every dashboard page/layout calls
+  // directly instead of going through authenticateRequest(), so both need
+  // the same check or a suspended user still gets the full dashboard here.
+  if ((membership as { suspended_at?: string | null }).suspended_at) return null;
 
   const tenant = Array.isArray(membership.tenants)
     ? membership.tenants[0] ?? null
