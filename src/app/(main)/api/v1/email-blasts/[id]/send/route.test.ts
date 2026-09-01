@@ -147,6 +147,28 @@ describe("POST /api/v1/email-blasts/[id]/send", () => {
     expect(body.data.suppressed).toBe(1);
   });
 
+  it("chunks a large audience into multiple upsert calls instead of one giant request, and still materializes every row", async () => {
+    // Reproduces the live failure: a single unchunked upsert of a real-size
+    // audience (each row carrying a full subject/body_html copy) blew past a
+    // request-size limit and failed outright ("Failed to materialize
+    // recipient rows" on a 3,114-row Admizz blast). 250 rows here forces
+    // MATERIALIZE_CHUNK_SIZE=100 to split into 3 calls (100 + 100 + 50).
+    const fake = fakeDb();
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    const sendable = Array.from({ length: 250 }, (_, i) => audienceRow(`lead-${i}`, `lead${i}@example.com`));
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 250, sendable, suppressed: [], excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 } },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(200);
+    expect(fake.messages.size).toBe(250); // every row landed, none dropped by chunking
+    expect(fake.upsertCallCountGetter()).toBe(3); // never one call for the whole audience
+  });
+
   it("rejects sending a non-draft blast", async () => {
     const fake = fakeDb({ blastStatus: "queued" });
     requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
