@@ -128,21 +128,29 @@ export function buildAudienceOptionOverrides(input: {
   };
 }
 
-/** "Leads Organize" (is_staging=true) vs "Stage" (is_staging=false, each
- *  expandable to STATUS_OPTIONS) groups for the "Add filter" picker's stage
- *  field — mirrors the leads-page sidebar grouping. Ported verbatim from the
- *  email-campaigns composer's buildStageHierarchy (#454) now that this
- *  composer has the same is_staging/is_archive/slug data (#465) to build it
- *  from — brings the SMS "Add filter" menu to parity with email's. */
+/** "Leads Organize" (is_staging=true) vs "Stage" (is_staging=false) groups
+ *  for the "Add filter" picker's stage field — mirrors the leads-page
+ *  sidebar grouping. Adapted from the email-campaigns composer's
+ *  buildStageHierarchy (#454) now that this composer has the same
+ *  is_staging/is_archive/slug data (#465) to build it from — brings the SMS
+ *  "Add filter" menu to parity with email's grouping.
+ *
+ *  Deliberately NOT identical to email's version: stages here carry no
+ *  `statusOptions`. FilterFieldPicker hides the flat "Status" field the
+ *  moment any hierarchical stage has status leaves attached (so it isn't
+ *  offered twice) — fine for email, which has no separate standalone Status
+ *  use, but SMS audiences are commonly built on "Status = X" alone, and that
+ *  flat filter must keep working exactly as it does today. Leaving
+ *  statusOptions empty keeps every Stage a plain (non-expandable) leaf, so
+ *  the flat Status field stays visible under BASIC, unaffected. */
 function buildStageHierarchy(leadLists: ComposerLeadList[], isAdmin: boolean): HierarchicalFieldGroups {
-  const statusLeaves = STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label }));
   const archiveList = leadLists.find((l) => !l.is_staging && l.is_archive === true);
   const deleteList = leadLists.find((l) => !l.is_staging && l.slug === "delete");
   return {
     orgLists: isAdmin ? leadLists.filter((l) => l.is_staging && !l.is_archive).map((l) => ({ value: l.id, label: l.name })) : [],
     stages: leadLists
       .filter((l) => !l.is_staging && !isOffFunnelLeadList(l))
-      .map((l) => ({ value: l.id, label: l.name, statusOptions: statusLeaves })),
+      .map((l) => ({ value: l.id, label: l.name, statusOptions: [] })),
     archive: archiveList ? { value: archiveList.id, label: archiveList.name } : null,
     deleteList: deleteList ? { value: deleteList.id, label: deleteList.name } : null,
   };
