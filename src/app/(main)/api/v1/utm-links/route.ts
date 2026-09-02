@@ -11,9 +11,10 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { computeSubmissionCounts, keyOf } from "@/lib/utm/submission-counts";
 import type { UtmLink } from "@/types/database";
 
-type UtmLinkRow = Omit<UtmLink, "form_name"> & {
+type UtmLinkRow = Omit<UtmLink, "form_name" | "submission_count"> & {
   form: { name: string } | null;
 };
 
@@ -37,9 +38,11 @@ export async function GET() {
   }
 
   const rows = (data ?? []) as unknown as UtmLinkRow[];
+  const countByKey = await computeSubmissionCounts(db, rows);
   const links: UtmLink[] = rows.map(({ form, ...row }) => ({
     ...row,
     form_name: form?.name ?? null,
+    submission_count: countByKey.get(keyOf(row.utm_source, row.utm_medium, row.utm_campaign)) ?? 0,
   }));
 
   return apiSuccess({ links });
@@ -116,7 +119,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { form, ...row } = inserted as unknown as UtmLinkRow;
-  const link: UtmLink = { ...row, form_name: form?.name ?? null };
+  const link: UtmLink = { ...row, form_name: form?.name ?? null, submission_count: 0 };
 
   log.info({ linkId: link.id }, "UTM link saved");
   return apiSuccess(link, 201);

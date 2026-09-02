@@ -366,6 +366,7 @@ export interface UtmLink {
   created_at: string;
   // Joined from form_configs (set by API/server when listing)
   form_name?: string | null;
+  submission_count: number;
 }
 
 export interface FormConfig {
