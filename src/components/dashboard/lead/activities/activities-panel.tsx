@@ -699,9 +699,11 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                         const a = item.record;
                         const actor = resolveActorLabel(a.user_id, currentUserId, teamMemberNames, teamMemberEmails);
                         const Icon = a.activity_type === "call" ? Phone : Calendar;
+                        const meetingMode = a.metadata?.meeting_mode as string | undefined;
+                        const meetingModeLabel = meetingMode === "online" ? "Online" : meetingMode === "in_person" ? "In Person" : null;
                         const label = a.activity_type === "call"
                           ? `Call${a.call_outcome ? ` · ${a.call_outcome.replace(/_/g, " ")}` : ""}${a.duration_minutes ? ` · ${a.duration_minutes}m` : ""}`
-                          : `Meeting${a.subject ? ` · ${a.subject}` : ""}`;
+                          : `Meeting${meetingModeLabel ? ` (${meetingModeLabel})` : ""}${a.subject ? ` · ${a.subject}` : ""}`;
                         const notes = a.description?.replace(/<[^>]+>/g, "").trim();
                         return (
                           <div key={item.id} className="flex gap-3">

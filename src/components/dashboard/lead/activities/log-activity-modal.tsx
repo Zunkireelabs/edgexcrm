@@ -60,9 +60,6 @@ export function LogActivityModal({
   // Meeting fields
   const [meetingSubject, setMeetingSubject] = useState("");
   const [meetingMode, setMeetingMode] = useState<"in_person" | "online">("in_person");
-  const [location, setLocation] = useState("");
-  const [scheduledDate, setScheduledDate] = useState("");
-  const [scheduledTime, setScheduledTime] = useState("");
 
   const resetForm = () => {
     setDescription("");
@@ -71,9 +68,6 @@ export function LogActivityModal({
     setEmailSubject("");
     setMeetingSubject("");
     setMeetingMode("in_person");
-    setLocation("");
-    setScheduledDate("");
-    setScheduledTime("");
   };
 
   const handleSubmit = async () => {
@@ -95,12 +89,6 @@ export function LogActivityModal({
       } else if (activityType === "meeting") {
         payload.subject = meetingSubject || "Meeting";
         payload.meeting_mode = meetingMode;
-        payload.location = location || null;
-        if (scheduledDate && scheduledTime) {
-          payload.scheduled_at = new Date(`${scheduledDate}T${scheduledTime}`).toISOString();
-        } else if (scheduledDate) {
-          payload.scheduled_at = new Date(scheduledDate).toISOString();
-        }
       }
 
       const res = await fetch(`/api/v1/leads/${leadId}/activities`, {
@@ -203,24 +191,6 @@ export function LogActivityModal({
                   onChange={(e) => setMeetingSubject(e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Date</Label>
-                  <Input
-                    type="date"
-                    value={scheduledDate}
-                    onChange={(e) => setScheduledDate(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Time</Label>
-                  <Input
-                    type="time"
-                    value={scheduledTime}
-                    onChange={(e) => setScheduledTime(e.target.value)}
-                  />
-                </div>
-              </div>
               <div className="space-y-2">
                 <Label>Meeting Type</Label>
                 <Select value={meetingMode} onValueChange={(v) => setMeetingMode(v as "in_person" | "online")}>
@@ -233,14 +203,6 @@ export function LogActivityModal({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>{meetingMode === "online" ? "Meeting Link" : "Location"}</Label>
-                <Input
-                  placeholder={meetingMode === "online" ? "Zoom / Google Meet URL" : "Office address"}
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                />
-              </div>
             </>
           )}
 
@@ -251,7 +213,7 @@ export function LogActivityModal({
               placeholder="Add any notes about this activity..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              rows={3}
+              rows={6}
             />
           </div>
         </div>
