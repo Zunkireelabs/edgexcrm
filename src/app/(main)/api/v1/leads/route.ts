@@ -329,7 +329,6 @@ export async function GET(request: NextRequest) {
   // (also matches unassigned leads whose branch_id matches) and is what dashboard/
   // insights/pipeline counts already use — collapsing onto it is the fix, not a
   // side effect (see docs/BRANCH-SCOPE-TRUNCATION-503-BRIEF.md).
-  const countOpts = wantCount ? { count: "exact" as const } : {};
   const useVisibilityRpc = !useSharedPool && ((scope.restrictToSelf && scope.userId) || !!scope.branchId);
   // Collaborator filter needs an inner-join embed to filter on lead_collaborators.user_id
   // rather than resolving matching lead ids client-side first — a popular collaborator can
@@ -354,49 +353,36 @@ export async function GET(request: NextRequest) {
   // filterPlan is computed above, before the query is even built.
   const hasCollaboratorsEmbed = filterPlan.embeds.includes("lead_collaborators!inner(user_id)");
   const selectColumns: string = filterPlan.embeds.length > 0 ? `${LEADS_LIST_COLUMNS},${filterPlan.embeds.join(",")}` : LEADS_LIST_COLUMNS;
-  let query = useVisibilityRpc
-    ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, countOpts).select(selectColumns)
-    : supabase.from("leads").select(selectColumns, countOpts).eq("tenant_id", auth.tenantId);
 
-  query = onlyDeleted ? query.not("deleted_at", "is", null) : query.is("deleted_at", null);
+  // §COUNT-SPLIT (2026-08-25, prod incident): PostgREST composes `count: "exact"` over
+  // an RPC-based FROM (useVisibilityRpc — own/branch scope) by wrapping the call as
+  // `pgrst_call` and adding a `count(*) OVER()` window function alongside the row
+  // projection. Combined with the Collaborators embed's referencedTable-scoped filter,
+  // that composition resolves the filter against `pgrst_call` instead of the joined
+  // `lead_collaborators` table — confirmed live (branch manager, Collaborators filter,
+  // first load): 42703 "column pgrst_call.user_id does not exist", hint "owner_id" (a
+  // real `leads` column — RETURNS SETOF leads is what `pgrst_call` resolves to here).
+  // A `head: true` count-only call builds a structurally simpler `SELECT count(*) FROM
+  // (...)` — no window function, no row projection — which sidesteps this composition
+  // entirely. Owner/admin (plain `.from("leads")`, not the RPC) never hits it — that
+  // combo is already proven safe (badge-counts/route.ts's own `!inner` + count:exact),
+  // so it's deliberately left on the single combined call below.
+  const wantsSplitCount = hasCollaboratorsEmbed && wantCount && useVisibilityRpc;
+  const countOpts = wantCount && !wantsSplitCount ? { count: "exact" as const } : {};
 
-  if (!includeConverted) {
-    query = query.is("converted_at", null);
-  }
-
-  // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
-  query = query.not("tags", "cs", '{"other"}');
-
-  // Apply list/funnel filters — skipped entirely for the recycle bin (onlyDeleted spans
-  // every list; a deleted lead's old list_id is not a filter axis there), mirroring
-  // getLeads's applyFilters (src/lib/supabase/queries.ts).
-  if (!onlyDeleted) {
-    if (resolvedListId) {
-      query = query.eq("list_id", resolvedListId);
-    } else if (funnelListIds.length > 0) {
-      query = query.in("list_id", funnelListIds);
-    } else if (excludeListIds.length > 0) {
-      // Master view: exclude leads in archive/staging lists
-      query = query.or(`list_id.is.null,list_id.not.in.(${excludeListIds.join(",")})`);
-    }
-  }
-
-  // Hoisted (not just applied to `query` below) so the facets=source branch further
-  // down can pass the SAME resolved id set into lead_aggregates() instead of
-  // re-deriving this scope logic a second time — see migration 194's ADDENDUM header.
-  let sharedPoolAssignedToAny: string[] | null = null;
-
+  // Async scope-narrowing lookups — resolved ONCE up front (not inside buildScopedQuery)
+  // so a split count call and the data call below see the exact same member-id
+  // snapshot and never cost a second branchMemberIds() round trip.
+  let sharedPoolMemberIds: string[] | null = null;
   if (useSharedPool) {
     // auth.branchMemberIds is empty for own-scope, so resolve explicitly.
-    const memberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId!);
-    query = query.in("assigned_to", memberIds);
+    sharedPoolMemberIds = await branchMemberIds(supabase, auth.tenantId, auth.branchId!);
     assignedTo = null;
-    sharedPoolAssignedToAny = memberIds;
   } else if (scope.restrictToSelf) {
     assignedTo = null; // self-scoped users: ignore any client assignedTo param — visibility already applied above
   }
   // scope.branchId (non-shared-pool): no further filter needed here — the base query
-  // above already routed through visibleLeadsBase()'s branch-scope RPC, which is the
+  // below already routes through visibleLeadsBase()'s branch-scope RPC, which is the
   // uncapped, unbounded-URL-free replacement for the deleted lead_branches fetch + .or().
 
   // Admin branch focus filter (?branch_id= switcher) — honored ONLY for all-scope callers;
@@ -410,36 +396,82 @@ export async function GET(request: NextRequest) {
   // same UUID_RE guard as stageFilter/assignedTo above.
   const adminBranchFilterRaw = searchParams.get("branch_id");
   const adminBranchFilter = adminBranchFilterRaw && UUID_RE.test(adminBranchFilterRaw) ? adminBranchFilterRaw : null;
+  let adminBranchMemberIds: string[] | null = null;
   if (adminBranchFilter && auth.permissions.leadScope === "all") {
-    const memberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
-    query = query.in("assigned_to", memberIds);
-    sharedPoolAssignedToAny = memberIds;
+    adminBranchMemberIds = await branchMemberIds(supabase, auth.tenantId, adminBranchFilter);
   }
 
-  // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
-  if (auth.permissions.pipelineAccess !== "all") {
-    query = query.in("pipeline_id", [...auth.permissions.pipelineAccess.ids]);
-  }
+  // Hoisted (not just applied inside buildScopedQuery below) so the facets=source branch
+  // further down can pass the SAME resolved id set into lead_aggregates() instead of
+  // re-deriving this scope logic a second time — see migration 194's ADDENDUM header.
+  // adminBranchMemberIds wins when both are set, matching the original sequential
+  // `.in()` application order (shared-pool applied first, admin-branch-filter second).
+  const sharedPoolAssignedToAny: string[] | null = adminBranchMemberIds ?? sharedPoolMemberIds;
 
-  if (assignedTo) {
-    query = query.eq("assigned_to", assignedTo);
-  }
+  // buildScopedQuery(execOpts) — every filter that applies to BOTH the data page and its
+  // count, in one place. execOpts carries only the count/head shape (see the two call
+  // sites below); every predicate this builds is otherwise identical either way, so a
+  // split count call can never drift from the data it's counting.
+  const buildScopedQuery = (execOpts: { count?: "exact"; head?: boolean }) => {
+    let q = useVisibilityRpc
+      ? visibleLeadsBase({ user: userClient, service: supabase }, auth.tenantId, scope, execOpts).select(selectColumns)
+      : supabase.from("leads").select(selectColumns, execOpts).eq("tenant_id", auth.tenantId);
 
-  if (stageFilter) {
-    query = query.eq("stage_id", stageFilter);
-  }
+    q = onlyDeleted ? q.not("deleted_at", "is", null) : q.is("deleted_at", null);
 
-  // ADVANCED-FILTERS-BRIEF Phase 2: every toolbar filter that used to be a
-  // hand-written .eq/.in/.or/.contains/.gte chain here (status, search, form,
-  // assignees, collaborators, source, tag, industry, created) now compiles
-  // through the SAME compileFilter() call whether it came from ?f= or from
-  // the legacy params via legacyLeadsParamsToTree — see filterTree/filterPlan
-  // above. compileFilter never touches .select()/.from()/.rpc() (see its
-  // module doc comment), so it's safe to call on `query` at this point
-  // regardless of which branch (visibleLeadsBase RPC vs plain service query)
-  // built it. `stage`/`list`/`funnel`/branch/pipeline/shared-pool SCOPE
-  // filters above and below this call are deliberately untouched.
-  query = compileFilter(query, filterTree, filterRegistry, compileCtx);
+    if (!includeConverted) {
+      q = q.is("converted_at", null);
+    }
+
+    // Exclude "other" tagged contacts — they live on the /contacts page, not in lead lists
+    q = q.not("tags", "cs", '{"other"}');
+
+    // Apply list/funnel filters — skipped entirely for the recycle bin (onlyDeleted spans
+    // every list; a deleted lead's old list_id is not a filter axis there), mirroring
+    // getLeads's applyFilters (src/lib/supabase/queries.ts).
+    if (!onlyDeleted) {
+      if (resolvedListId) {
+        q = q.eq("list_id", resolvedListId);
+      } else if (funnelListIds.length > 0) {
+        q = q.in("list_id", funnelListIds);
+      } else if (excludeListIds.length > 0) {
+        // Master view: exclude leads in archive/staging lists
+        q = q.or(`list_id.is.null,list_id.not.in.(${excludeListIds.join(",")})`);
+      }
+    }
+
+    if (sharedPoolMemberIds) {
+      q = q.in("assigned_to", sharedPoolMemberIds);
+    }
+    if (adminBranchMemberIds) {
+      q = q.in("assigned_to", adminBranchMemberIds);
+    }
+
+    // Pipeline-access enforcement (dormant until Phase 3 when restrictive positions exist)
+    if (auth.permissions.pipelineAccess !== "all") {
+      q = q.in("pipeline_id", [...auth.permissions.pipelineAccess.ids]);
+    }
+
+    if (assignedTo) {
+      q = q.eq("assigned_to", assignedTo);
+    }
+
+    if (stageFilter) {
+      q = q.eq("stage_id", stageFilter);
+    }
+
+    // ADVANCED-FILTERS-BRIEF Phase 2: every toolbar filter that used to be a
+    // hand-written .eq/.in/.or/.contains/.gte chain here (status, search, form,
+    // assignees, collaborators, source, tag, industry, created) now compiles
+    // through the SAME compileFilter() call whether it came from ?f= or from
+    // the legacy params via legacyLeadsParamsToTree — see filterTree/filterPlan
+    // above. compileFilter never touches .select()/.from()/.rpc() (see its
+    // module doc comment), so it's safe to call on `q` at this point regardless
+    // of which branch (visibleLeadsBase RPC vs plain service query) built it.
+    // `stage`/`list`/`funnel`/branch/pipeline/shared-pool SCOPE filters above
+    // and below this call are deliberately untouched.
+    return compileFilter(q, filterTree, filterRegistry, compileCtx);
+  };
 
   const DAY_MS = 24 * 60 * 60 * 1000;
   const CREATED_WINDOW_MS: Record<string, number> = { today: DAY_MS, week: 7 * DAY_MS, month: 30 * DAY_MS };
@@ -625,6 +657,24 @@ export async function GET(request: NextRequest) {
     });
   }
 
+  // buildScopedQuery() is only invoked here, past every `?facets=` early return above —
+  // NOT right after it's defined. A split count (below) is a real network round trip
+  // (unlike merely building an unexecuted query object), and a facets-only request never
+  // touches `query`/`splitTotal` at all; invoking it earlier would fire that extra RPC
+  // call on every facets request that happens to combine the Collaborators filter with
+  // branch/own scope, for a result that's thrown away by the return above.
+  let splitTotal: number | null = null;
+  if (wantsSplitCount) {
+    const { count: exactCount, error: splitCountError } = await buildScopedQuery({ head: true, count: "exact" });
+    if (splitCountError) {
+      log.error({ err: splitCountError }, "Failed to fetch leads");
+      return apiServiceUnavailable("Failed to fetch leads");
+    }
+    splitTotal = exactCount ?? 0;
+  }
+
+  let query = buildScopedQuery(countOpts);
+
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
@@ -647,7 +697,9 @@ export async function GET(request: NextRequest) {
   // 16,898 rows). The caller must have a cached total from a prior count=1 response
   // for the same filter set before it ever sends count=0; apiPaginated cannot enforce
   // that contract, only signal "not computed" instead of silently lying with 0.
-  const total = wantCount ? (count ?? 0) : -1;
+  // wantsSplitCount: the real count came from the separate head-only call above —
+  // `count` on THIS response is null (countOpts was {} for this query, see §COUNT-SPLIT).
+  const total = wantCount ? (wantsSplitCount ? (splitTotal ?? 0) : (count ?? 0)) : -1;
   log.info({ total, page, pageSize, wantCount }, "Leads fetched");
 
   // Strip the lead_collaborators embed — it only existed to filter (see selectColumns

@@ -805,6 +805,100 @@ describe("GET /api/v1/leads — ?f= compiles through the SAME compileFilter() as
     expect(legacyCalls.some(([m, a]) => m === "select" && String(a[0]).includes("lead_collaborators!inner(user_id)"))).toBe(true);
   });
 
+  // §COUNT-SPLIT regression (prod incident 2026-08-25): a branch/own-scope caller
+  // (routed through leads_visible_to_user()) combining the Collaborators embed with an
+  // exact count used to send ONE combined data+count request — PostgREST resolves that
+  // combination's referencedTable filter against the RPC's own `pgrst_call` alias
+  // instead of the joined table (42703 "column pgrst_call.user_id does not exist"),
+  // 503ing the whole list for the exact scope+filter combo a real branch manager hit
+  // live. This proves the fix: the count is split into its own head:true request built
+  // from the SAME filter chain, so the total is still correct and no combined call with
+  // this shape is ever sent.
+  it("branch-scope + ?collaborators= splits the exact count into its own head:true RPC call instead of combining it with the data fetch", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: { head?: boolean; count?: string }) => {
+        rpcCalls.push([name, params, opts]);
+        const isHeadCount = !!opts?.head;
+        const chain: Record<string, unknown> = {
+          select: () => chain,
+          is: () => chain,
+          not: () => chain,
+          eq: () => chain,
+          in: () => chain,
+          or: () => chain,
+          order: () => chain,
+          range: () => Promise.resolve({ data: [], error: null, count: 0 }),
+          // Real postgrest-js builders are thenable — route.ts awaits the head-only
+          // call directly, with no .range() tail (a head request has no rows to page).
+          then: (resolve: (v: { data: null; error: null; count: number | null }) => void) =>
+            resolve({ data: null, error: null, count: isHeadCount ? 761 : null }),
+        };
+        return chain;
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq({ collaborators: "11111111-1111-1111-1111-111111111111" }));
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    // Two RPC calls, not one: the split-out exact count, then the data page.
+    expect(rpcCalls).toHaveLength(2);
+    expect(rpcCalls[0][2]).toEqual({ head: true, count: "exact" });
+    expect(rpcCalls[1][2]).toEqual({}); // data call requests no inline count
+    // Both calls carry the identical scope + embed — the count can never drift from
+    // what the data query is actually filtering.
+    expect(rpcCalls[0][1]).toEqual(rpcCalls[1][1]);
+    expect(rpcCalls[0][0]).toBe("leads_visible_to_user");
+    // The total in the response comes from the split head:true call's count, not a
+    // (missing/undefined) count on the data call.
+    expect(body.meta.total).toBe(761);
+  });
+
+  // Logic-gap regression: buildScopedQuery must not be INVOKED (only defined) before the
+  // ?facets= early return — a facets-only request never reads `query`/the split count, so
+  // firing the split head:true RPC call there would be a pure wasted round trip on every
+  // facets request that happens to combine branch/own scope with the Collaborators filter.
+  it("branch-scope ?facets=collaborator&collaborators=<id> never fires the split-count RPC — buildScopedQuery is invoked only past the facets early return", async () => {
+    const rpcCalls: RpcCall[] = [];
+    authenticateRequestMock.mockResolvedValue(
+      authFixture({
+        userId: "user-1",
+        branchId: "branch-1",
+        branchMemberIds: ["u1", "u2"],
+        permissions: permissions({ leadScope: "team" }),
+      }),
+    );
+    createClientMock.mockResolvedValue({
+      rpc: (name: string, params: unknown, opts: unknown) => {
+        rpcCalls.push([name, params, opts]);
+        if (name === "lead_aggregates") return Promise.resolve({ data: [], error: null });
+        throw new Error(`unexpected rpc ${name} — facets response must never touch the base leads query`);
+      },
+    });
+    createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
+
+    const { GET } = await import("./route");
+    const res = await GET(
+      fakeReq({ facets: "collaborator", collaborators: "11111111-1111-1111-1111-111111111111" }),
+    );
+
+    expect(res.status).toBe(200);
+    // Only the facet's own lead_aggregates() call — no leads_visible_to_user call at all.
+    expect(rpcCalls).toHaveLength(1);
+    expect(rpcCalls[0][0]).toBe("lead_aggregates");
+  });
+
   it("a malformed ?f= (not valid base64url JSON) is a 422, never an unhandled throw", async () => {
     createServiceClientMock.mockResolvedValue(fakeDb({ leadsCalls: [] }));
     const { GET } = await import("./route");
