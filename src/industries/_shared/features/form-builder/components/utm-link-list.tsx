@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dialog";
 import { CopyButton } from "@/components/ui/copy-button";
 import { formatRelativeTime } from "@/lib/format-relative-time";
+import { buildTrackingUrl } from "../lib/build-tracking-url";
 import type { UtmLink } from "@/types/database";
 
 export interface UtmLinkListHandle {
@@ -91,7 +92,14 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {links.map((link) => (
+                {links.map((link) => {
+                  const destinationUrlWithParams = buildTrackingUrl(
+                    link.destination_url,
+                    link.utm_source ?? "",
+                    link.utm_medium ?? "",
+                    link.utm_campaign ?? "",
+                  );
+                  return (
                   <TableRow key={link.id}>
                     <TableCell title={link.tracking_url} className="max-w-[200px]">
                       <div className="font-medium truncate">
@@ -99,8 +107,17 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                           <span className="text-muted-foreground italic">External URL</span>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {link.destination_url}
+                      <div className="flex items-center gap-1 group">
+                        <div className="text-xs text-muted-foreground truncate">
+                          {link.destination_url}
+                        </div>
+                        {destinationUrlWithParams && (
+                          <CopyButton
+                            value={destinationUrlWithParams}
+                            label="Destination link"
+                            className="h-4 w-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          />
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>{link.utm_source ?? <span className="text-muted-foreground">—</span>}</TableCell>
@@ -126,7 +143,8 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}
