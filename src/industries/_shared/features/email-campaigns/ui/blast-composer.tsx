@@ -23,6 +23,7 @@ import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
 import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { conditionSchema } from "@/lib/filters/schema";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
@@ -66,17 +67,40 @@ export function withDraft(tree: FilterTree, draft: FilterCondition | null): Filt
   };
 }
 
+type ComposerLeadList = { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean };
+
+/** Which of the 4 picker categories a lead list belongs to — drives the
+ *  chip's prefix label (FilterOption.groupLabel, resolved by
+ *  resolvePrefixLabel in chip-label.ts) so a Leads Organize pick reads
+ *  "Leads Organize: X", not the shared field's generic "Stage: X". Order
+ *  matters: Archive/Delete are also off-funnel, so they're checked before
+ *  the generic isOffFunnelLeadList fallback. */
+function stageGroupLabel(list: ComposerLeadList): string {
+  if (list.is_staging) return "Leads Organize";
+  if (list.is_archive) return "Archive";
+  if (list.slug === "delete") return "Delete";
+  return "Stage";
+}
+
 function buildAudienceOptionOverrides(input: {
   forms: { id: string; name: string }[];
   sourceFacet: { name: string; count: number }[];
   assigneeFacet: { name: string; count: number }[];
   roster: { user_id: string; name: string }[];
-  leadLists: { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[];
+  leadLists: ComposerLeadList[];
+  fieldsOfStudy: string[];
+  studyLevels: string[];
 }): Partial<Record<string, FilterOption[]>> {
   const collaborators = input.roster.map((m) => ({ value: m.user_id, label: m.name }));
   const memberNameById = new Map(collaborators.map((o) => [o.value, o.label]));
   return {
     form: input.forms.map((f) => ({ value: f.id, label: f.name })),
+    // field_of_study/degree_level: this composer's registry() below always
+    // passes industryId: "education_consultancy" (this feature is education-
+    // only per meta.ts), so both fields are always offered — same Settings-
+    // catalog source as leads-table.tsx, fetched via useEduTaxonomy() below.
+    field_of_study: input.fieldsOfStudy.map((name) => ({ value: name, label: name })),
+    degree_level: input.studyLevels.map((name) => ({ value: name, label: name })),
     source: input.sourceFacet.map((o) => ({ value: o.name, label: o.name })),
     assignees: input.assigneeFacet
       .filter((o) => o.name !== "unassigned")
@@ -85,7 +109,23 @@ function buildAudienceOptionOverrides(input: {
     status: STATUS_OPTIONS,
     industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
     tags: TAG_OPTIONS,
-    stage: input.leadLists.filter((l) => !l.is_staging && !isOffFunnelLeadList(l)).map((l) => ({ value: l.id, label: l.name })),
+    // Every lead list, unfiltered — this is the label/lookup source for the
+    // "stage" field's committed chips (Stage, Leads Organize, Archive, and
+    // Delete all commit as { field: "stage", value: <list_id> }; see
+    // buildStageHierarchy below). Narrowing this to only the 4 pipeline-stage
+    // lists (as it used to be) meant any Leads Organize / Archive / Delete
+    // pick had no matching option: formatChipLabel fell back to printing the
+    // raw list_id UUID on the chip, and reopening that chip rendered
+    // FilterConditionEditor with none of its radio options selected (looked
+    // like the pick had reverted to a blank "Stage" panel). What's initially
+    // OFFERED when adding a new filter is still governed separately by
+    // buildStageHierarchy's own (narrower, isAdmin-aware) filtering — this
+    // array only has to be able to NAME and RE-SELECT whatever was already
+    // picked, so it must be the full set. groupLabel tags each option with
+    // which of the 4 picker categories it came from, purely for chip/panel
+    // display (resolvePrefixLabel) — the committed condition is still always
+    // { field: "stage", value: l.id } underneath, unaffected by this tag.
+    stage: input.leadLists.map((l) => ({ value: l.id, label: l.name, groupLabel: stageGroupLabel(l) })),
   };
 }
 
@@ -93,10 +133,7 @@ function buildAudienceOptionOverrides(input: {
  *  expandable to STATUS_OPTIONS) groups for the "Add filter" picker's stage
  *  field — mirrors the leads-page sidebar grouping. Email-blast composer
  *  only; SMS composer and leads-table keep the flat picker unaffected. */
-function buildStageHierarchy(
-  leadLists: { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[],
-  isAdmin: boolean
-): HierarchicalFieldGroups {
+function buildStageHierarchy(leadLists: ComposerLeadList[], isAdmin: boolean): HierarchicalFieldGroups {
   const statusLeaves = STATUS_OPTIONS.filter((o) => o.value !== "all").map((o) => ({ value: o.value, label: o.label }));
   const archiveList = leadLists.find((l) => !l.is_staging && l.is_archive === true);
   const deleteList = leadLists.find((l) => !l.is_staging && l.slug === "delete");
@@ -190,9 +227,10 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
     };
   }, []);
 
+  const { fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels } = useEduTaxonomy();
   const audienceOptionOverrides = useMemo(
-    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists }),
-    [forms, sourceFacet, assigneeFacet, roster, leadLists]
+    () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists, fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels }),
+    [forms, sourceFacet, assigneeFacet, roster, leadLists, eduFieldsOfStudy, eduStudyLevels]
   );
   const hierarchicalGroups = useMemo(() => ({ stage: buildStageHierarchy(leadLists, isAdmin) }), [leadLists, isAdmin]);
 

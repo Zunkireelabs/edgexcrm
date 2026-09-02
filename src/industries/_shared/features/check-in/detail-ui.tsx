@@ -95,7 +95,7 @@ export function CheckInDetailPage({
             {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-3">
-                <h1 className="text-xl font-bold truncate">{fullName}</h1>
+                <h1 className="text-lg font-bold truncate">{fullName}</h1>
                 {stageName && (
                   <Badge
                     variant="secondary"

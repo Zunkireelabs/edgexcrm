@@ -5,7 +5,6 @@ import {
   ListChecks,
   Plus,
   Search,
-  Filter,
   Pencil,
   Trash2,
   Bot,
@@ -13,15 +12,13 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// Types
-type AutomationLevel = "fully_automated" | "agent_human" | "human_led";
+import type { AutomationMatrixRow } from "@/lib/ai/agents/queries";
+import type { AutomationLevel } from "@/lib/ai/agents/policy";
 
 interface Task {
   id: string;
   name: string;
   description: string;
-  roleId: string;
   roleName: string;
   roleType: "human" | "agent" | "hybrid";
   automationLevel: AutomationLevel;
@@ -29,139 +26,74 @@ interface Task {
   humanHandles?: string;
 }
 
-// Mock data
-const MOCK_TASKS: Task[] = [
-  {
-    id: "task-1",
-    name: "Score incoming leads",
-    description: "Analyze form data and assign a quality score",
-    roleId: "role-3",
-    roleName: "Lead Qualifier",
+const HANDLING_COPY: Record<AutomationLevel, { agent?: string; human?: string }> = {
+  fully_automated: { agent: "Runs automatically — no human step" },
+  agent_human: { agent: "Proposes the change", human: "Approves before it applies" },
+  human_led: { agent: "Can only suggest", human: "Decides and acts" },
+};
+
+/** One matrix row = one (agent, write tool) pair. Turns it into the card shape the list renders. */
+function toTask(row: AutomationMatrixRow): Task {
+  const copy = HANDLING_COPY[row.automationLevel];
+  return {
+    id: `${row.agentId}:${row.toolId}`,
+    name: row.label.charAt(0).toUpperCase() + row.label.slice(1),
+    description: `Write action “${row.toolId}” handled by ${row.agentName}`,
+    roleName: row.agentName,
     roleType: "agent",
-    automationLevel: "fully_automated",
-    agentHandles: "Analyzes all form fields, assigns 0-100 score",
-  },
-  {
-    id: "task-2",
-    name: "Classify lead quality",
-    description: "Tag leads as Hot, Warm, or Cold",
-    roleId: "role-3",
-    roleName: "Lead Qualifier",
-    roleType: "agent",
-    automationLevel: "fully_automated",
-    agentHandles: "Uses score thresholds to classify",
-  },
-  {
-    id: "task-3",
-    name: "Initial outreach email",
-    description: "Send personalized first contact email",
-    roleId: "role-2",
-    roleName: "Counselor",
-    roleType: "human",
-    automationLevel: "agent_human",
-    agentHandles: "Drafts personalized email",
-    humanHandles: "Reviews and sends",
-  },
-  {
-    id: "task-4",
-    name: "Book consultation call",
-    description: "Schedule a call with qualified leads",
-    roleId: "role-4",
-    roleName: "Scheduler",
-    roleType: "agent",
-    automationLevel: "fully_automated",
-    agentHandles: "Checks availability, sends invite",
-  },
-  {
-    id: "task-5",
-    name: "Verify uploaded documents",
-    description: "Check document validity and completeness",
-    roleId: "role-5",
-    roleName: "Document Processor",
-    roleType: "agent",
-    automationLevel: "agent_human",
-    agentHandles: "OCR extraction, format validation",
-    humanHandles: "Reviews flagged documents",
-  },
-  {
-    id: "task-6",
-    name: "Conduct discovery call",
-    description: "Have initial conversation with lead",
-    roleId: "role-2",
-    roleName: "Counselor",
-    roleType: "human",
-    automationLevel: "human_led",
-    humanHandles: "Full conversation ownership",
-    agentHandles: "Provides talking points",
-  },
-  {
-    id: "task-7",
-    name: "Advance pipeline stages",
-    description: "Move leads through the pipeline automatically",
-    roleId: "role-6",
-    roleName: "Pipeline Manager",
-    roleType: "agent",
-    automationLevel: "fully_automated",
-    agentHandles: "Monitors triggers, updates stages",
-  },
-  {
-    id: "task-8",
-    name: "Send follow-up reminders",
-    description: "Remind leads about pending actions",
-    roleId: "role-4",
-    roleName: "Scheduler",
-    roleType: "agent",
-    automationLevel: "fully_automated",
-    agentHandles: "Sends 24h and 1h reminders",
-  },
-];
+    automationLevel: row.automationLevel,
+    agentHandles: copy.agent,
+    humanHandles: copy.human,
+  };
+}
 
 const AUTOMATION_CONFIG = {
   fully_automated: {
     label: "Fully Automated",
-    color: "emerald",
     bg: "bg-emerald-50",
     border: "border-emerald-200",
     text: "text-emerald-700",
-    dot: "bg-emerald-500",
   },
   agent_human: {
     label: "Agent + Human",
-    color: "amber",
     bg: "bg-amber-50",
     border: "border-amber-200",
     text: "text-amber-700",
-    dot: "bg-amber-500",
   },
   human_led: {
     label: "Human-led",
-    color: "blue",
     bg: "bg-blue-50",
     border: "border-blue-200",
     text: "text-blue-700",
-    dot: "bg-blue-500",
   },
-};
+} as const;
 
-export function TasksContent() {
+interface TasksContentProps {
+  tasks: AutomationMatrixRow[];
+}
+
+export function TasksContent({ tasks: matrixRows }: TasksContentProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAutomation, setFilterAutomation] = useState<AutomationLevel | "all">("all");
   const [filterRole, setFilterRole] = useState<string>("all");
 
-  // Get unique roles for filter dropdown
-  const uniqueRoles = Array.from(new Set(MOCK_TASKS.map(t => t.roleName)));
+  const tasks = matrixRows.map(toTask);
 
-  const filteredTasks = MOCK_TASKS.filter((task) => {
-    const matchesSearch = task.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  // Get unique roles for filter dropdown
+  const uniqueRoles = Array.from(new Set(tasks.map((t) => t.roleName)));
+
+  const filteredTasks = tasks.filter((task) => {
+    const matchesSearch =
+      task.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesAutomation = filterAutomation === "all" || task.automationLevel === filterAutomation;
     const matchesRole = filterRole === "all" || task.roleName === filterRole;
     return matchesSearch && matchesAutomation && matchesRole;
   });
 
-  const automatedCount = MOCK_TASKS.filter(t => t.automationLevel === "fully_automated").length;
-  const hybridCount = MOCK_TASKS.filter(t => t.automationLevel === "agent_human").length;
-  const humanCount = MOCK_TASKS.filter(t => t.automationLevel === "human_led").length;
+  const automatedCount = tasks.filter((t) => t.automationLevel === "fully_automated").length;
+  const hybridCount = tasks.filter((t) => t.automationLevel === "agent_human").length;
+  const humanCount = tasks.filter((t) => t.automationLevel === "human_led").length;
 
   return (
     <div className="space-y-6">
@@ -350,12 +282,14 @@ export function TasksContent() {
         <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
           <ListChecks className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No tasks found
+            {tasks.length === 0 ? "No automatable tasks yet" : "No tasks found"}
           </h3>
           <p className="text-sm text-gray-500 mb-4">
-            {searchQuery || filterAutomation !== "all" || filterRole !== "all"
-              ? "Try adjusting your search or filters"
-              : "Create your first task to get started"}
+            {tasks.length === 0
+              ? "Hire an agent with write capabilities from the Agents screen to define tasks here."
+              : searchQuery || filterAutomation !== "all" || filterRole !== "all"
+                ? "Try adjusting your search or filters"
+                : "Create your first task to get started"}
           </p>
         </div>
       )}

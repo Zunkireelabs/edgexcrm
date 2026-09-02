@@ -278,7 +278,7 @@ export function ClassesWorkspace({ classes, enrollments: initialEnrollments, can
       {/* Header */}
       <div className="flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold">Classes</h1>
+          <h1 className="text-base font-bold">Classes</h1>
           <p className="text-sm text-muted-foreground">
             {classes.length} class{classes.length !== 1 ? "es" : ""}
           </p>

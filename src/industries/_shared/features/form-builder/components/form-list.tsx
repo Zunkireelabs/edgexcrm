@@ -35,9 +35,10 @@ import type { FormConfig } from "@/types/database";
 interface FormListProps {
   forms: FormConfig[];
   tenantSlug: string;
+  submissionCounts?: Record<string, { total: number; last30d: number }>;
 }
 
-export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
+export function FormList({ forms: initialForms, tenantSlug, submissionCounts = {} }: FormListProps) {
   const [forms, setForms] = useState(initialForms);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ open: boolean; form: FormConfig | null }>({
@@ -160,6 +161,17 @@ export function FormList({ forms: initialForms, tenantSlug }: FormListProps) {
                   <p className="text-xs text-muted-foreground truncate">
                     /{tenantSlug}/{form.slug} · {fieldCount} {fieldCount === 1 ? "field" : "fields"}
                     {stepCount > 1 && ` · ${stepCount} steps`}
+                    {submissionCounts[form.id] && (
+                      <>
+                        {" · "}
+                        {submissionCounts[form.id].total} submission
+                        {submissionCounts[form.id].total === 1 ? "" : "s"}
+                        {" "}
+                        <span className="text-muted-foreground/70">
+                          ({submissionCounts[form.id].last30d} in last 30d)
+                        </span>
+                      </>
+                    )}
                   </p>
                 </div>
 

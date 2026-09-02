@@ -35,11 +35,28 @@ export function optionalFilterString<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((val) => (isBlankString(val) || isFilterSentinel(val) ? undefined : val), schema);
 }
 
-/** Blank string or the NIL UUID -> undefined. For optional uuid fields. */
+/**
+ * A UUID-shaped string built from a single repeated hex digit, e.g. the
+ * all-zeros NIL UUID or gpt-4o-mini's favourite all-Fs placeholder
+ * (`ffffffff-ffff-ffff-ffff-ffffffffffff`). Case-insensitive.
+ */
+const REPEATED_HEX_UUID = /^([0-9a-f])\1{7}-\1{4}-\1{4}-\1{4}-\1{12}$/i;
+
+function isPlaceholderUuid(value: unknown): value is string {
+  return typeof value === "string" && REPEATED_HEX_UUID.test(value.trim());
+}
+
+/**
+ * Blank string, the NIL UUID, or any single-repeated-hex-digit UUID
+ * placeholder -> undefined. For optional uuid fields. A model that invents
+ * an id (despite "never invent" instructions) reaches for a repeated-digit
+ * value; letting it through produces a not-found ref that later fails on an
+ * FK violation instead of surfacing as an obvious placeholder.
+ */
 export function optionalUuid<T extends z.ZodTypeAny>(schema: T) {
   return z.preprocess((val) => {
     if (isBlankString(val)) return undefined;
-    if (typeof val === "string" && val.trim().toLowerCase() === NIL_UUID) return undefined;
+    if (isPlaceholderUuid(val)) return undefined;
     return val;
   }, schema);
 }

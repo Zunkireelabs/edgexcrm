@@ -38,8 +38,25 @@ describe("optionalUuid", () => {
     expect(schema.parse({ id: NIL_UUID.toUpperCase() })).toEqual({ id: undefined });
   });
 
+  it("parses the all-Fs placeholder uuid (lowercase) to undefined", () => {
+    expect(schema.parse({ id: "ffffffff-ffff-ffff-ffff-ffffffffffff" })).toEqual({ id: undefined });
+  });
+
+  it("parses the all-Fs placeholder uuid (uppercase) to undefined", () => {
+    expect(schema.parse({ id: "FFFFFFFF-FFFF-FFFF-FFFF-FFFFFFFFFFFF" })).toEqual({ id: undefined });
+  });
+
+  it("parses an all-same-digit placeholder uuid to undefined", () => {
+    expect(schema.parse({ id: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa" })).toEqual({ id: undefined });
+  });
+
   it("leaves a real uuid untouched", () => {
     expect(schema.parse({ id: REAL_UUID })).toEqual({ id: REAL_UUID });
+  });
+
+  it("leaves a real random uuid untouched", () => {
+    const uuid = "9f8c2e14-7b3a-4d6f-a1c9-2e5b8d0f4a71";
+    expect(schema.parse({ id: uuid })).toEqual({ id: uuid });
   });
 
   it("still rejects a non-uuid, non-blank string", () => {

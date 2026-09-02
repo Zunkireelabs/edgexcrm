@@ -13,26 +13,16 @@ import {
   AlertCircle,
   Clock,
 } from "lucide-react";
+import { formatRelativeTime } from "@/lib/ai/tools/universal/lib/approval-resolve";
+import type { OrcaOverviewStats } from "@/lib/ai/agents/queries";
 
-// Mock stats for Phase 1
-const MOCK_STATS = {
-  totalRoles: 6,
-  humanRoles: 2,
-  agentRoles: 4,
-  activeAgents: 4,
-  pausedAgents: 1,
-  totalTasks: 25,
-  automatedTasks: 21,
-  recentActivity: [
-    { id: 1, agent: "Lead Qualifier", action: "Scored lead #1247", time: "2 min ago", status: "success" },
-    { id: 2, agent: "Scheduler", action: "Booked meeting for lead #1245", time: "5 min ago", status: "success" },
-    { id: 3, agent: "Document Processor", action: "Verified documents for #1243", time: "12 min ago", status: "success" },
-    { id: 4, agent: "Outreach Agent", action: "Failed to send email #1242", time: "15 min ago", status: "error" },
-    { id: 5, agent: "Pipeline Manager", action: "Advanced lead #1240 to 'Contacted'", time: "20 min ago", status: "success" },
-  ],
-};
+interface OverviewContentProps {
+  stats: OrcaOverviewStats;
+}
 
-export function OverviewContent() {
+export function OverviewContent({ stats }: OverviewContentProps) {
+  const automatedLabel = stats.tasks.automatedPct === null ? "—" : `${stats.tasks.automatedPct}% automated`;
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -55,10 +45,10 @@ export function OverviewContent() {
           <div className="flex items-center justify-between mb-3">
             <Users className="w-5 h-5 text-gray-400" />
             <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-              {MOCK_STATS.humanRoles} human, {MOCK_STATS.agentRoles} agent
+              {stats.humanRoles} human, {stats.agentRoles} agent
             </span>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{MOCK_STATS.totalRoles}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.rolesTotal}</p>
           <p className="text-sm text-gray-500 mt-1">Roles defined</p>
         </div>
 
@@ -67,10 +57,10 @@ export function OverviewContent() {
           <div className="flex items-center justify-between mb-3">
             <Bot className="w-5 h-5 text-gray-400" />
             <span className="text-xs font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded">
-              {MOCK_STATS.activeAgents} active
+              {stats.agentsActive} active
             </span>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{MOCK_STATS.activeAgents + MOCK_STATS.pausedAgents}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.agentsTotal}</p>
           <p className="text-sm text-gray-500 mt-1">AI Agents</p>
         </div>
 
@@ -79,10 +69,10 @@ export function OverviewContent() {
           <div className="flex items-center justify-between mb-3">
             <ListChecks className="w-5 h-5 text-gray-400" />
             <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-0.5 rounded">
-              {Math.round((MOCK_STATS.automatedTasks / MOCK_STATS.totalTasks) * 100)}% automated
+              {automatedLabel}
             </span>
           </div>
-          <p className="text-3xl font-bold text-gray-900">{MOCK_STATS.totalTasks}</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.tasks.total}</p>
           <p className="text-sm text-gray-500 mt-1">Tasks defined</p>
         </div>
 
@@ -92,7 +82,7 @@ export function OverviewContent() {
             <Activity className="w-5 h-5 text-gray-400" />
             <span className="text-xs font-medium text-gray-500">Last 24h</span>
           </div>
-          <p className="text-3xl font-bold text-gray-900">142</p>
+          <p className="text-3xl font-bold text-gray-900">{stats.agentActions24h}</p>
           <p className="text-sm text-gray-500 mt-1">Agent actions</p>
         </div>
       </div>
@@ -144,31 +134,43 @@ export function OverviewContent() {
           </Link>
         </div>
 
-        <div className="space-y-3">
-          {MOCK_STATS.recentActivity.map((activity) => (
-            <div
-              key={activity.id}
-              className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0"
-            >
-              {activity.status === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-gray-900 truncate">
-                  <span className="font-medium">{activity.agent}</span>
-                  {" · "}
-                  {activity.action}
-                </p>
+        {stats.recentActivity.length === 0 ? (
+          <div className="py-8 text-center">
+            <Activity className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+            <p className="text-sm font-medium text-gray-900">No agent activity yet</p>
+            <p className="text-xs text-gray-500 mt-1">
+              Agent runs will appear here once your fleet starts working.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {stats.recentActivity.map((activity) => (
+              <div
+                key={activity.id}
+                className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0"
+              >
+                {activity.status === "error" ? (
+                  <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                ) : activity.status === "running" ? (
+                  <Clock className="w-4 h-4 text-amber-500 shrink-0" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-900 truncate">
+                    <span className="font-medium">{activity.agentName}</span>
+                    {" · "}
+                    {activity.action}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
+                  <Clock className="w-3 h-3" />
+                  {formatRelativeTime(activity.at)}
+                </div>
               </div>
-              <div className="flex items-center gap-1 text-xs text-gray-400 shrink-0">
-                <Clock className="w-3 h-3" />
-                {activity.time}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Getting Started (shown when setup is incomplete) */}

@@ -33,6 +33,8 @@ const FIXTURE = {
     { id: "list-1", name: "Qualified", is_staging: false, is_archive: false },
     { id: "list-2", name: "Migration QC", is_staging: true, is_archive: false },
   ],
+  fieldsOfStudy: ["Engineering & Technology", "Business & Management"],
+  studyLevels: ["Undergraduate", "Postgraduate"],
 };
 
 // The exact six fields Sadin reported as broken on prod (SMS-FIX-F11-BRIEF.md).
@@ -88,5 +90,27 @@ describe("buildAudienceOptionOverrides — F-11 fix", () => {
   it("stage has no static registry `options` array either (same root cause class)", () => {
     const registry = leadFields({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} } satisfies CompileCtx);
     expect(registry.stage?.options ?? []).toHaveLength(0);
+  });
+
+  // field_of_study/degree_level: same F-11 root cause reintroduced when
+  // field_of_study's registry type changed from text->select (Admizz fixed-
+  // dropdown request) and degree_level was added — both are select-type,
+  // industryId-always-education-consultancy fields on this composer, so both
+  // need a live optionOverrides entry or the picker shows an empty dropdown.
+  it("resolves a non-empty option list for field_of_study and degree_level", () => {
+    expect(overrides.field_of_study).toEqual([
+      { value: "Engineering & Technology", label: "Engineering & Technology" },
+      { value: "Business & Management", label: "Business & Management" },
+    ]);
+    expect(overrides.degree_level).toEqual([
+      { value: "Undergraduate", label: "Undergraduate" },
+      { value: "Postgraduate", label: "Postgraduate" },
+    ]);
+  });
+
+  it("field_of_study/degree_level have no static registry `options` array either (same root cause class)", () => {
+    const registry = leadFields({ tz: "UTC", now: new Date(0), industryId: "education_consultancy", permissions: {} } satisfies CompileCtx);
+    expect(registry.field_of_study?.options ?? []).toHaveLength(0);
+    expect(registry.degree_level?.options ?? []).toHaveLength(0);
   });
 });

@@ -200,4 +200,33 @@ describe("POST /api/v1/ai/chat — tool approval signing (experimental_toolAppro
       expect.stringContaining("write tools active without AI_TOOL_APPROVAL_SECRET"),
     );
   });
+
+  it("passes a per-write-tool refineToolInput map to streamText", async () => {
+    getToolApprovalSecretMock.mockReturnValue("a".repeat(64));
+    buildToolsetMock.mockReturnValue(writeToolset());
+
+    const { POST } = await import("./route");
+    await POST(fakeReq({ messages: MESSAGES }));
+
+    const callArgs = streamTextMock.mock.calls[0][0];
+    expect(typeof callArgs.experimental_refineToolInput.update_lead).toBe("function");
+    // The refiner drops undefined keys so the signed input matches the
+    // JSON-round-tripped input on approve.
+    expect(callArgs.experimental_refineToolInput.update_lead({ id: "1", note: undefined })).toEqual({ id: "1" });
+  });
+});
+
+describe("streamErrorMessage", () => {
+  it("names an approval-verification failure instead of the generic retry copy", async () => {
+    const { streamErrorMessage } = await import("./route");
+    const { InvalidToolApprovalSignatureError } = await vi.importActual<typeof import("ai")>("ai");
+    const err = new InvalidToolApprovalSignatureError({ approvalId: "a", toolCallId: "c", reason: "invalid signature" });
+    expect(streamErrorMessage(err)).toMatch(/approval couldn't be verified/i);
+    expect(streamErrorMessage(err)).not.toMatch(/generating a response/i);
+  });
+
+  it("falls back to the generic message for an unknown error", async () => {
+    const { streamErrorMessage } = await import("./route");
+    expect(streamErrorMessage(new Error("boom"))).toMatch(/something went wrong generating a response/i);
+  });
 });

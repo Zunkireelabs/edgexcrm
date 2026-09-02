@@ -251,7 +251,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (body.tuition_fee !== undefined && body.tuition_fee !== null) insert.tuition_fee = Number(body.tuition_fee);
   if (body.deposit_paid !== undefined) insert.deposit_paid = Boolean(body.deposit_paid);
   if (body.offer_letter_url) insert.offer_letter_url = String(body.offer_letter_url);
-  if (body.notes) insert.notes = String(body.notes);
+  if (body.notes) {
+    insert.notes = String(body.notes);
+    // Attribution for the "Application note" row on the lead Activity timeline
+    // (migration 219) — stamped whenever the notes text is written.
+    insert.notes_updated_by = auth.userId;
+    insert.notes_updated_at = new Date().toISOString();
+  }
   if (body.offer_type && ["conditional", "unconditional"].includes(String(body.offer_type))) {
     insert.offer_type = body.offer_type;
   }

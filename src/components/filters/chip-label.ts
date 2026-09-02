@@ -34,12 +34,57 @@ function formatValue(condition: FilterCondition, options: FilterOption[]): strin
   return "";
 }
 
+// Resolves the chip's prefix label — normally just field.label, but a
+// single-value condition whose matched option carries a `groupLabel`
+// (see FilterOption) uses that instead. Only fires for a genuinely
+// unambiguous single value (mirrors resolveChipColor's own singleValue
+// check below) — a multi-value selection has no one category to name, so
+// it always falls back to field.label.
+export function resolvePrefixLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  const { value } = condition;
+  if (typeof value !== "string") return field.label;
+  return options.find((o) => o.value === value)?.groupLabel ?? field.label;
+}
+
+// When a chip is REOPENED for editing, narrow its option list to only the
+// options that share the committed value's `groupLabel` — so reopening a
+// "Leads Organize: New Leads" chip offers only the other Leads Organize
+// lists, not every stage-family list at once. #454 deliberately widened the
+// email-campaigns composer's `stage` override to ALL lead lists (so any
+// committed chip could still name + re-select itself) and tagged each with a
+// `groupLabel`; this is the read side of that tag for the re-edit editor.
+//
+// Inert for every other field: fields whose options carry no `groupLabel`
+// (Name, City, Status, the SMS composer's stage list, …) are returned
+// untouched. Also falls back to the full list whenever the committed value(s)
+// don't resolve to exactly one group (a no-value operator, a stale value not
+// in the list, or a multi-select spanning categories) — narrowing only ever
+// happens when there's one unambiguous category to narrow to.
+export function scopeOptionsToConditionGroup(condition: FilterCondition, options: FilterOption[]): FilterOption[] {
+  if (!options.some((o) => o.groupLabel !== undefined)) return options;
+
+  const { value } = condition;
+  const selected = typeof value === "string" ? [value] : Array.isArray(value) ? value.map(String) : [];
+  if (selected.length === 0) return options;
+
+  const groups = new Set(
+    selected
+      .map((v) => options.find((o) => o.value === v)?.groupLabel)
+      .filter((g): g is string => g !== undefined),
+  );
+  if (groups.size !== 1) return options;
+
+  const [only] = groups;
+  return options.filter((o) => o.groupLabel === only);
+}
+
 export function formatChipLabel(field: FieldDef, condition: FilterCondition, options: FilterOption[]): string {
+  const prefixLabel = resolvePrefixLabel(field, condition, options);
   if (NO_VALUE_OPS.has(condition.op)) {
-    return `${field.label}: ${OPERATOR_LABELS[condition.op]}`;
+    return `${prefixLabel}: ${OPERATOR_LABELS[condition.op]}`;
   }
   const opPrefix = condition.op === "is" ? "" : ` ${OPERATOR_LABELS[condition.op]}`;
-  return `${field.label}${opPrefix}: ${formatValue(condition, options)}`;
+  return `${prefixLabel}${opPrefix}: ${formatValue(condition, options)}`;
 }
 
 // The one real color already established elsewhere in the app —
