@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { model } from "./provider";
+import { model, aiRequestProviderOptions } from "./provider";
 import { MODELS, ACTIVE_PROVIDER } from "./models";
 import { checkDailyBudget } from "./budget";
 import { startTrace } from "./telemetry";
@@ -106,6 +106,7 @@ export async function draftSequenceEmail(input: DraftEmailInput): Promise<DraftE
   try {
     const { object, usage } = await generateObject({
       model: model("agent"),
+      providerOptions: aiRequestProviderOptions(),
       schema: draftSchema,
       system: systemPrompt,
       prompt,

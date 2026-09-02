@@ -47,7 +47,10 @@ vi.mock("@/lib/ai/prompts/assistant", () => ({ buildSystemPrompt: vi.fn(() => "s
 
 vi.mock("@/industries/_loader", () => ({ getIndustryAiConfig: vi.fn(() => undefined) }));
 
-vi.mock("@/lib/ai/provider", () => ({ model: vi.fn(() => "fake-model") }));
+vi.mock("@/lib/ai/provider", () => ({
+  model: vi.fn(() => "fake-model"),
+  aiRequestProviderOptions: vi.fn(() => ({ openai: { store: false } })),
+}));
 
 vi.mock("@/lib/ai/telemetry", () => ({ startTrace: vi.fn(() => ({ span: vi.fn(), end: vi.fn() })) }));
 
@@ -164,6 +167,15 @@ describe("POST /api/v1/ai/chat — tool approval signing (experimental_toolAppro
     expect(streamTextMock).toHaveBeenCalledTimes(1);
     const callArgs = streamTextMock.mock.calls[0][0];
     expect(callArgs.experimental_toolApprovalSecret).toBe("a".repeat(64));
+  });
+
+  it("passes store:false through to streamText so OpenAI does not retain prompt/completion content", async () => {
+    const { POST } = await import("./route");
+    await POST(fakeReq({ messages: MESSAGES }));
+
+    expect(streamTextMock).toHaveBeenCalledTimes(1);
+    const callArgs = streamTextMock.mock.calls[0][0];
+    expect(callArgs.providerOptions).toEqual({ openai: { store: false } });
   });
 
   it("passes undefined through to streamText when the secret is unset — signing stays off", async () => {

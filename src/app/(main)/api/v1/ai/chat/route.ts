@@ -21,7 +21,7 @@ import { toAiSdkTools, buildToolApproval, buildDeniedWriteActionRows } from "@/l
 import { buildRefineToolInput } from "@/lib/ai/tools/refine-input";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
 import { getIndustryAiConfig } from "@/industries/_loader";
-import { model } from "@/lib/ai/provider";
+import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import { startTrace } from "@/lib/ai/telemetry";
 import { createRequestLogger } from "@/lib/logger";
 import type { ScopedClient } from "@/lib/supabase/scoped";
@@ -150,6 +150,7 @@ export async function POST(request: NextRequest) {
 
   const result = streamText({
     model: model("agent"),
+    providerOptions: aiRequestProviderOptions(),
     system: systemPrompt,
     messages: modelMessages,
     tools,
@@ -221,6 +222,7 @@ export async function POST(request: NextRequest) {
               try {
                 const { text } = await generateText({
                   model: model("fast"),
+                  providerOptions: aiRequestProviderOptions(),
                   prompt: `Write a short 3-6 word title (no quotes, no trailing punctuation) summarizing this CRM assistant chat, based on the user's first message:\n\n"${firstUserText.slice(0, 500)}"`,
                 });
                 const title = text.trim().replace(/^"|"$/g, "").slice(0, 80);

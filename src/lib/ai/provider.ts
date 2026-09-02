@@ -21,3 +21,19 @@ export function model(kind: "agent" | "fast") {
   const id = MODELS[ACTIVE_PROVIDER][kind];
   return ACTIVE_PROVIDER === "anthropic" ? anthropic(id) : openai(id);
 }
+
+// OpenAI retains prompt + completion content in our org logs unless `store: false`
+// rides on the request (true for both the Chat and Responses paths `openai(id)` can
+// resolve to). We get nothing for that retention and D5 makes no promise that depends
+// on it, so it's pure downside exposure — turn it off on every language-model call.
+//
+// This can't be centralised on the model instance: the AI SDK's openai provider
+// (v4) takes only a model id — `openai(id)` has no settings argument — so provider
+// options must be passed per call. This helper centralises the *value* instead, so
+// every `model()` consumer spreads the same thing into its
+// streamText/generateText/generateObject call and a new call site can't quietly
+// diverge. Anthropic has no equivalent knob and its console has no comparable
+// retention default; returns undefined there so nothing extra is sent.
+export function aiRequestProviderOptions(): { openai: { store: false } } | undefined {
+  return ACTIVE_PROVIDER === "openai" ? { openai: { store: false } } : undefined;
+}
