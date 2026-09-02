@@ -1,10 +1,9 @@
-import { redirect } from "next/navigation";
-import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { RolesContent } from "@/components/dashboard/orca/roles-content";
+import { notFound } from "next/navigation";
 
-export default async function OrcaRolesPage() {
-  const tenantData = await getCurrentUserTenant();
-  if (!tenantData) redirect("/login");
-
-  return <RolesContent />;
+// Hidden + unreachable. `roles-content.tsx` is still hardcoded mock data
+// (MOCK_ROLES). This route will return as the AI-access-management surface
+// once the real data model (positions + agents) exists — until then a direct
+// URL must not reach fabricated data.
+export default function OrcaRolesPage() {
+  notFound();
 }

@@ -26,6 +26,7 @@ import {
 import { assignDisplayIds } from "@/lib/leads/assign-display-ids";
 import { requirePermission } from "@/lib/api/integration-permissions";
 import { validate, required, isEmail } from "@/lib/api/validation";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 import type { Lead } from "@/types/database";
 
 // GET /api/v1/integrations/crm/leads
@@ -62,9 +63,19 @@ export const GET = withIntegrationErrorBoundary(async function GET(request: Next
     query = query.ilike("email", email);
   }
   if (search) {
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`
+    // Sanitised: the term is neutralised to a literal ilike operand so its
+    // `, . ( ) "` can't be parsed as PostgREST expression syntax. See
+    // src/lib/api/search-filter.ts.
+    const searchOr = buildIlikeOrFilter(
+      ["first_name", "last_name", "email", "phone"],
+      search,
     );
+    // A search that sanitises to nothing (e.g. `search=%`) is a request the
+    // caller expects to filter — return an empty page, never the whole tenant.
+    if (!searchOr) {
+      return apiSuccess({ leads: [], total: 0, limit, offset });
+    }
+    query = query.or(searchOr);
   }
 
   const { data, error, count } = await query

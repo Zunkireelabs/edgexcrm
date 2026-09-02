@@ -43,6 +43,7 @@ const SAFE_STRING_KEYS = new Set([
   "kind",
   "type",
   "outcome",
+  "decision", // review-outcome enum (accepted/rejected/edited_accepted) — operational, never personal.
   "stage",
   "list",
   "tool",
@@ -91,6 +92,34 @@ function maskValue(value: unknown, keyHint: string | null): unknown {
 function mask({ data }: { data: unknown }): unknown {
   try {
     return maskValue(data, null);
+  } catch {
+    return MASK_ERROR_PLACEHOLDER;
+  }
+}
+
+// Langfuse `score` bodies do NOT pass through the client-level `mask` above —
+// the SDK only masks trace/span/generation `input`/`output`. `scoreRun`'s
+// `comment` is the one free-text field that reaches Langfuse un-masked, so it
+// gets its own enforcement here rather than relying on call sites to only ever
+// pass operational strings.
+//
+// The operational comment is strictly `key=value;key=value` (e.g.
+// `decision=accepted;kind=draft_email`). We parse it into that object shape and
+// run it through the SAME per-key `maskValue` the client mask uses: a safe-listed
+// key (`kind`, `decision`) survives verbatim, anything else collapses to
+// `[masked]`, and a comment that isn't in the operational shape at all (a
+// free-text sentence, an email address) fails closed to `[masked]` whole.
+const OPERATIONAL_COMMENT_RE = /^[a-zA-Z0-9_]+=[^;]*(?:;[a-zA-Z0-9_]+=[^;]*)*$/;
+
+export function maskComment(comment: string): string {
+  try {
+    if (!OPERATIONAL_COMMENT_RE.test(comment)) return MASK_PLACEHOLDER;
+    const pairs = comment.split(";").map((part) => {
+      const eq = part.indexOf("=");
+      return [part.slice(0, eq), part.slice(eq + 1)] as const;
+    });
+    const masked = maskValue(Object.fromEntries(pairs), null) as Record<string, unknown>;
+    return pairs.map(([key]) => `${key}=${masked[key]}`).join(";");
   } catch {
     return MASK_ERROR_PLACEHOLDER;
   }
@@ -227,13 +256,19 @@ export function startTrace(meta: {
 
 /**
  * Attach a numeric quality score to a run's trace (trace id = runId). No-ops when Langfuse is
- * unconfigured, exactly like startTrace. `comment` is OPERATIONAL METADATA ONLY (decision, kind,
- * agent key) — never lead content: scores are not run through the client `mask`, so anything here
- * leaves the process verbatim.
+ * unconfigured, exactly like startTrace. `comment` is expected to be OPERATIONAL METADATA ONLY
+ * (`decision=...;kind=...`); it does NOT pass through the client `mask`, so it is masked here
+ * via `maskComment` before it leaves the process — a non-operational or PII-shaped comment
+ * fails closed to `[masked]` rather than being sent verbatim.
  */
 export function scoreRun(runId: string, name: string, value: number, comment?: string): void {
   const client = getClient();
   if (!client) return;
-  client.score({ traceId: runId, name, value, comment });
+  client.score({
+    traceId: runId,
+    name,
+    value,
+    comment: comment === undefined ? undefined : maskComment(comment),
+  });
   scheduleFlush(client);
 }

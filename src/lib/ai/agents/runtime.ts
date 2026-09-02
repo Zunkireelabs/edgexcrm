@@ -1,5 +1,5 @@
 import { generateText, stepCountIs } from "ai";
-import { model } from "@/lib/ai/provider";
+import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import { MODELS, ACTIVE_PROVIDER } from "@/lib/ai/models";
 import { startTrace, scoreRun } from "@/lib/ai/telemetry";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -168,6 +168,7 @@ export async function runAgent(
   try {
     const { usage, steps } = await generateText({
       model: model(modelKind),
+      providerOptions: aiRequestProviderOptions(),
       system: def.systemPrompt({ tenantId, industryId: agentAuth.industryId }),
       prompt: buildTriggerPrompt(trigger),
       tools,

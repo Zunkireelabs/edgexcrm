@@ -1,5 +1,9 @@
 "use client";
 
+// MOCK + UNREACHABLE: rendered by no route. `/orca/roles` now 404s. This file
+// (MOCK_ROLES) is retained as the starting point for the real AI-access-
+// management surface, pending the positions + agents data model.
+
 import { useState } from "react";
 import {
   Users,
