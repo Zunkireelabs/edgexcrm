@@ -491,8 +491,12 @@ export function ApiKeysManager({ initialKeys, category, forms }: ApiKeysManagerP
             </p>
           </div>
         ) : (
-          <div className="rounded-md border">
-            <Table>
+          <div className="rounded-md border overflow-x-auto">
+            {/* min-w-max = size to natural content width so no column (Actions
+                is last) gets compressed/clipped; the wrapper scrolls instead
+                inside the narrow Settings modal. whitespace-nowrap keeps the
+                Name / Created cells from wrapping into a squeezed layout. */}
+            <Table className="min-w-max [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap">
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>

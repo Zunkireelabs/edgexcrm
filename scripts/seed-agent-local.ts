@@ -1,12 +1,19 @@
 /**
- * Seed a local-only "Lead Triage" agent identity for Phase 5 slice 5.1b
+ * Seed local-only background-agent identities for Phase 5 / Phase 7
  * end-to-end verification (docs/ai-native-efforts/03-PHASE-3-BACKGROUND-AGENTS.md).
  *
- * Creates (idempotently, safe to re-run):
- *   1. A broad-read "AI Agent — Lead Triage" position (member-tier, leadScope:"all",
- *      no write grants) for the target tenant.
- *   2. An active agent_identities row (agent_key:'lead-triage') on that position.
+ * Creates (idempotently, safe to re-run) for the target tenant:
+ *   1. A broad-read "AI Agent — <name>" position (member-tier, leadScope:"all",
+ *      no write grants) per seeded agent.
+ *   2. An active agent_identities row per seeded agent.
  *   3. Flips the target tenant's ai_enabled + ai_agents_enabled to true.
+ *
+ * Agents seeded:
+ *   - lead-triage        — every tenant (universal, industry-aware)
+ *   - follow-up-drafter  — education_consultancy tenants only (industry-scoped,
+ *                          fires on crm/lead.assigned → draft_email in the
+ *                          review queue). See
+ *                          src/industries/education-consultancy/ai/agents/follow-up-drafter.ts
  *
  * Agents are hired per-tenant (the real UI for this lands in slice 5.2's
  * /orca/agents catalog) — this script is a LOCAL test-only stand-in for that
@@ -21,16 +28,12 @@
  */
 
 import { config } from "dotenv";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 config({ path: ".env.local" });
 
 const tenantSlugArg = process.argv.find((a) => a.startsWith("--tenant-slug="));
 const TENANT_SLUG = tenantSlugArg ? tenantSlugArg.split("=")[1] : "test-agency";
-
-const AGENT_KEY = "lead-triage";
-const POSITION_SLUG = "ai-agent-lead-triage";
-const POSITION_NAME = "AI Agent — Lead Triage";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
@@ -61,25 +64,43 @@ const POSITION_PERMISSIONS = {
   dashboard: { widgets: { mode: "all" as const } },
 };
 
-async function main() {
-  const { data: tenant, error: tenantError } = await supabase
-    .from("tenants")
-    .select("id, name, ai_enabled, ai_agents_enabled")
-    .eq("slug", TENANT_SLUG)
-    .maybeSingle();
-  if (tenantError || !tenant) {
-    console.error(`Tenant "${TENANT_SLUG}" not found:`, tenantError?.message ?? "no row");
-    process.exit(1);
-  }
-  console.log(`Tenant: ${tenant.name} (${tenant.id})`);
+interface AgentSeed {
+  agentKey: string;
+  displayName: string;
+  positionSlug: string;
+  positionName: string;
+  /** Restrict to tenants in one of these industry ids; undefined = all. */
+  industries?: string[];
+}
 
-  const { data: position, error: positionError } = await supabase
+const AGENT_SEEDS: AgentSeed[] = [
+  {
+    agentKey: "lead-triage",
+    displayName: "Lead Triage",
+    positionSlug: "ai-agent-lead-triage",
+    positionName: "AI Agent — Lead Triage",
+  },
+  {
+    agentKey: "follow-up-drafter",
+    displayName: "Follow-up Drafter",
+    positionSlug: "ai-agent-follow-up-drafter",
+    positionName: "AI Agent — Follow-up Drafter",
+    industries: ["education_consultancy"],
+  },
+];
+
+async function seedAgent(
+  db: SupabaseClient,
+  tenantId: string,
+  seed: AgentSeed,
+): Promise<void> {
+  const { data: position, error: positionError } = await db
     .from("positions")
     .upsert(
       {
-        tenant_id: tenant.id,
-        name: POSITION_NAME,
-        slug: POSITION_SLUG,
+        tenant_id: tenantId,
+        name: seed.positionName,
+        slug: seed.positionSlug,
         base_tier: "member",
         is_system: false,
         permissions: POSITION_PERMISSIONS,
@@ -89,18 +110,18 @@ async function main() {
     .select("id")
     .single();
   if (positionError || !position) {
-    console.error("Failed to upsert position:", positionError?.message);
+    console.error(`Failed to upsert position for ${seed.agentKey}:`, positionError?.message);
     process.exit(1);
   }
-  console.log(`Position: ${POSITION_NAME} (${position.id})`);
+  console.log(`Position: ${seed.positionName} (${position.id})`);
 
-  const { data: identity, error: identityError } = await supabase
+  const { data: identity, error: identityError } = await db
     .from("agent_identities")
     .upsert(
       {
-        tenant_id: tenant.id,
-        agent_key: AGENT_KEY,
-        display_name: "Lead Triage",
+        tenant_id: tenantId,
+        agent_key: seed.agentKey,
+        display_name: seed.displayName,
         position_id: position.id,
         status: "active",
       },
@@ -109,10 +130,31 @@ async function main() {
     .select("id")
     .single();
   if (identityError || !identity) {
-    console.error("Failed to upsert agent_identities row:", identityError?.message);
+    console.error(`Failed to upsert agent_identities row for ${seed.agentKey}:`, identityError?.message);
     process.exit(1);
   }
-  console.log(`Agent identity: ${AGENT_KEY} (${identity.id}), status active`);
+  console.log(`Agent identity: ${seed.agentKey} (${identity.id}), status active`);
+}
+
+async function main() {
+  const { data: tenant, error: tenantError } = await supabase
+    .from("tenants")
+    .select("id, name, industry_id, ai_enabled, ai_agents_enabled")
+    .eq("slug", TENANT_SLUG)
+    .maybeSingle();
+  if (tenantError || !tenant) {
+    console.error(`Tenant "${TENANT_SLUG}" not found:`, tenantError?.message ?? "no row");
+    process.exit(1);
+  }
+  console.log(`Tenant: ${tenant.name} (${tenant.id}), industry ${tenant.industry_id}`);
+
+  for (const seed of AGENT_SEEDS) {
+    if (seed.industries && !seed.industries.includes(tenant.industry_id as string)) {
+      console.log(`Skipping ${seed.agentKey} — tenant industry (${tenant.industry_id}) not in [${seed.industries.join(", ")}]`);
+      continue;
+    }
+    await seedAgent(supabase, tenant.id as string, seed);
+  }
 
   const { error: tenantUpdateError } = await supabase
     .from("tenants")
@@ -124,7 +166,7 @@ async function main() {
   }
   console.log(`Tenant flags: ai_enabled=true, ai_agents_enabled=true`);
 
-  console.log("\nDone. Set AI_AGENTS_ENABLED=true in .env.local, start the Inngest dev server, then create a lead in this tenant.");
+  console.log("\nDone. Set AI_AGENTS_ENABLED=true in .env.local, start the Inngest dev server, then create/assign a lead in this tenant.");
 }
 
 main();
