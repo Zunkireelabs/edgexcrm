@@ -24,7 +24,10 @@ vi.mock("@/lib/ai/tools/adapter", () => ({ toAiSdkTools: toAiSdkToolsMock }));
 vi.mock("./draft-tools", () => ({ buildDraftTools: buildDraftToolsMock }));
 vi.mock("./write-executor", () => ({ buildPolicyEnforcedWriteTools: buildPolicyEnforcedWriteToolsMock }));
 vi.mock("ai", () => ({ generateText: generateTextMock, stepCountIs: (n: number) => n }));
-vi.mock("@/lib/ai/provider", () => ({ model: modelMock }));
+vi.mock("@/lib/ai/provider", () => ({
+  model: modelMock,
+  aiRequestProviderOptions: () => ({ openai: { store: false } }),
+}));
 vi.mock("@/lib/ai/models", () => ({
   MODELS: { openai: { agent: "gpt-4o-mini", fast: "gpt-4o-mini" }, anthropic: { agent: "claude-sonnet-5", fast: "claude-haiku-4-5" } },
   ACTIVE_PROVIDER: "openai",
@@ -277,6 +280,7 @@ describe("runAgent — 5.4a: registry scope:\"write\" tools are policy-enforced,
     await runAgent(WRITE_DEF, agentAuth(), TRIGGER);
 
     const callArgs = generateTextMock.mock.calls[0][0];
+    expect(callArgs.providerOptions).toEqual({ openai: { store: false } });
     expect(callArgs.tools.update_lead_stage).toMatchObject({ execute: wrappedExecute });
     // The underlying registered tool's own execute() is never called directly by runAgent —
     // only the wrapper's replacement reaches the model.

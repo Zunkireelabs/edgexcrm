@@ -41,3 +41,26 @@ describe("model() provider key-presence guard", () => {
     expect(() => model("agent")).toThrow(/OPENAI_API_KEY is not set/);
   });
 });
+
+describe("aiRequestProviderOptions()", () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    delete process.env.AI_PROVIDER;
+    vi.resetModules();
+  });
+
+  it("sends store:false on the openai branch so prompts/completions aren't retained in the org's OpenAI logs", async () => {
+    delete process.env.AI_PROVIDER; // defaults to openai
+    const { aiRequestProviderOptions } = await import("./provider");
+    expect(aiRequestProviderOptions()).toEqual({ openai: { store: false } });
+  });
+
+  it("returns undefined on the anthropic branch — no equivalent knob, nothing extra sent", async () => {
+    process.env.AI_PROVIDER = "anthropic";
+    const { aiRequestProviderOptions } = await import("./provider");
+    expect(aiRequestProviderOptions()).toBeUndefined();
+  });
+});
