@@ -13,6 +13,7 @@ import {
 import { validate, required, maxLength, isPositiveInt } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 export async function GET(
   _request: NextRequest,
@@ -152,6 +153,8 @@ export async function POST(
       payload: { lead_id: id, title: body.title },
       requestId,
     }),
+    // Keep "Updated At" reflecting real activity, not just direct field edits.
+    touchLeadUpdatedAt(supabase, auth.tenantId, id),
   ]);
 
   return apiSuccess(checklist, 201);

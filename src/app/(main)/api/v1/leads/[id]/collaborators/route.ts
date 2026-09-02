@@ -4,6 +4,7 @@ import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiServiceUnavailable, apiError } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { createAuditLog } from "@/lib/api/audit";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 export async function GET(
   request: NextRequest,
@@ -121,6 +122,9 @@ export async function POST(
   }
 
   log.info({ leadId: id, addedUserId: userId }, "Collaborator added");
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  void touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   void createAuditLog({
     tenantId: auth.tenantId,
