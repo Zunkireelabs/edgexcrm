@@ -801,7 +801,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
       {/* Search Section — compact, does not grow */}
       <div className="shrink-0 max-w-2xl mx-auto w-full mb-6">
         <div className="mb-4">
-          <h1 className="text-2xl font-bold">Check-In</h1>
+          <h1 className="text-base font-bold">Check-In</h1>
           <p className="text-sm text-muted-foreground mt-1">
             Search by email or phone number to check in a visitor
           </p>
@@ -815,7 +815,7 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
             value={query}
             onChange={(e) => handleInputChange(e.target.value)}
             placeholder="Enter email or phone number..."
-            className="pl-10 h-12 text-base"
+            className="pl-10 h-10 text-sm"
           />
           {searching && (
             <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />

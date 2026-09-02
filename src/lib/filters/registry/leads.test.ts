@@ -285,6 +285,39 @@ describe("leads registry — legacy value-shape equivalence", () => {
   });
 });
 
+describe("field_of_study / degree_level — fixed-dropdown Education filters (Admizz request)", () => {
+  it("field_of_study is a select (dropdown), not text (free typing) — options come from leads-table.tsx's Settings-catalog optionOverrides, not a static list here", () => {
+    expect(registry.field_of_study.type).toBe("select");
+    expect(registry.field_of_study.options).toBeUndefined();
+    expect(registry.field_of_study.industries).toEqual(["education_consultancy"]);
+  });
+
+  it("field_of_study as a select offers is/is_not/is_any_of/is_none_of, not text's contains/starts_with", () => {
+    const plan = planFilter(andTree(cond("c1", "field_of_study", "contains", "Comp")), registry, ctx);
+    expect(plan.ok).toBe(false);
+    const b = compile(andTree(cond("c1", "field_of_study", "is_any_of", ["Engineering & Technology"])));
+    expect(b.calls[0]).toContain("field_of_study.in.");
+  });
+
+  it("degree_level exists, mirrors field_of_study's shape exactly (promoted, select, Education group, education_consultancy-only)", () => {
+    expect(registry.degree_level).toBeDefined();
+    expect(registry.degree_level.label).toBe("Level of study");
+    expect(registry.degree_level.type).toBe("select");
+    expect(registry.degree_level.group).toBe("Education");
+    expect(registry.degree_level.industries).toEqual(["education_consultancy"]);
+    expect(registry.degree_level.source).toEqual({
+      kind: "promoted",
+      column: "degree_level",
+      jsonb: { column: "custom_fields", path: "degree_level" },
+    });
+  });
+
+  it("degree_level dual-reads the legacy custom_fields leg exactly like field_of_study (no legacy Admizz row silently excluded)", () => {
+    const b = compile(andTree(cond("c1", "degree_level", "is", "Undergraduate")));
+    expect(b.calls[0]).toBe("or(or(degree_level.eq.Undergraduate,custom_fields->>degree_level.eq.Undergraduate))");
+  });
+});
+
 describe("location — city+country combined virtual field", () => {
   it('"is_empty" requires BOTH city and country to be blank (NULL or "") — matches the blank-string-inclusive semantics city/country each have individually', () => {
     const b = compile(andTree(cond("c1", "location", "is_empty")));

@@ -55,7 +55,7 @@ export function newConditionForField(field: FieldDef): FilterCondition {
 // before Y"), not a duplicate pick to merge.
 const MERGEABLE_ADD_OPERATORS: readonly FilterOperator[] = ["is", "is_any_of"];
 
-function asValueList(value: FilterValue | undefined): string[] {
+export function asValueList(value: FilterValue | undefined): string[] {
   if (Array.isArray(value)) return value.map(String);
   return value === undefined ? [] : [String(value)];
 }
@@ -75,6 +75,31 @@ export function addOrMergeCondition(conditions: FilterCondition[], next: FilterC
 
   const merged = Array.from(new Set([...asValueList(conditions[existingIndex].value), ...asValueList(next.value)]));
   return conditions.map((c, i) => (i === existingIndex ? { ...c, op: "is_any_of", value: merged } : c));
+}
+
+// Applies an in-place edit to the condition `id` (a chip's operator/value
+// change, or a back-arrow re-point onto a different field). Normally a plain
+// replace that keeps the chip's row slot. BUT a re-point can land on a field
+// another chip already filters with a mergeable operator — and two
+// "field is A" / "field is B" conditions AND to a silently-zero-row match, so
+// that collision must de-dupe. Unlike the "+ Add filter" path, we fold the
+// sibling's values INTO the edited chip (keeping its id and row position) and
+// drop the sibling — so the chip the user was editing never vanishes and an
+// untouched chip is never mutated under them.
+export function applyConditionChange(
+  conditions: FilterCondition[],
+  id: string,
+  next: FilterCondition,
+): FilterCondition[] {
+  const sibling = MERGEABLE_ADD_OPERATORS.includes(next.op)
+    ? conditions.find((c) => c.id !== id && c.field === next.field && MERGEABLE_ADD_OPERATORS.includes(c.op))
+    : undefined;
+  if (!sibling) return conditions.map((c) => (c.id === id ? next : c));
+
+  const merged = Array.from(new Set([...asValueList(sibling.value), ...asValueList(next.value)]));
+  const folded: FilterCondition =
+    merged.length === 1 ? { ...next, op: "is", value: merged[0] } : { ...next, op: "is_any_of", value: merged };
+  return conditions.filter((c) => c.id !== sibling.id).map((c) => (c.id === id ? folded : c));
 }
 
 // When the operator changes on an existing condition, the old value's shape

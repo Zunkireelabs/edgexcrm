@@ -13,6 +13,28 @@ import { DEFAULT_AUTOMATION_LEVEL, type AutomationLevel } from "./policy";
 import { assigneeLabel } from "@/lib/ai/tools/universal/lib/approval-resolve";
 import type { ScopedClient } from "@/lib/supabase/scoped";
 import type { IndustryId } from "@/industries/_registry";
+import type { AgentDefinition } from "./types";
+
+/**
+ * The real `scope: "write"` registry tools an agent definition declares that
+ * are ALSO available to this tenant's industry — the same predicate
+ * buildAgentToolset (runtime.ts) applies at execution time (Phase 6 slice
+ * 6.1 Part 2). Shared by getAgentDetail's per-agent matrix and the
+ * tenant-wide getAutomationMatrix so the two never diverge on which tools
+ * count as automatable writes.
+ */
+function writeToolIdsForDef(def: AgentDefinition | undefined, industryId: string | null): string[] {
+  const registered = getRegisteredTools();
+  return (def?.toolIds ?? []).filter((id) => {
+    const t = registered.find((tool) => tool.id === id);
+    if (!t || t.scope !== "write") return false;
+    if (t.industries !== undefined) {
+      if (industryId === null) return false;
+      if (!t.industries.includes(industryId as IndustryId)) return false;
+    }
+    return true;
+  });
+}
 
 export interface AgentFleetItem {
   id: string;
@@ -556,19 +578,8 @@ export async function getAgentDetail(
   // tool id no longer implies "draft-only" (5.4a), so the matrix only ever
   // lists real scope:"write" registry tools, never draft-tool ids. Also
   // applies the same industry predicate buildAgentToolset (runtime.ts) uses
-  // at execution time (Phase 6 slice 6.1 Part 2) — without it the matrix
-  // offered a control for a tool the agent's own runtime toolset would never
-  // include for this tenant's industry (e.g. update_lead_stage, education-only,
-  // shown to an it_agency tenant).
-  const writeToolIds = (def?.toolIds ?? []).filter((id) => {
-    const t = getRegisteredTools().find((tool) => tool.id === id);
-    if (!t || t.scope !== "write") return false;
-    if (t.industries !== undefined) {
-      if (industryId === null) return false;
-      if (!t.industries.includes(industryId as IndustryId)) return false;
-    }
-    return true;
-  });
+  // at execution time (Phase 6 slice 6.1 Part 2).
+  const writeToolIds = writeToolIdsForDef(def, industryId);
 
   const [{ data: position }, { data: runs }, { data: outputs }, { data: policies }, { data: writes }] = await Promise.all([
     row.position_id
@@ -717,5 +728,225 @@ export async function getAgentDetail(
       reviewedAt: o.reviewed_at,
     })),
     recentWrites,
+  };
+}
+
+// ── /orca Overview + /orca/tasks real-data helpers (5.4d Part 2 follow-up) ──
+
+export interface AutomationMatrixRow {
+  agentId: string;
+  agentName: string;
+  /** Position the agent is assigned to, or "Unassigned". */
+  assignedRole: string;
+  toolId: string;
+  /** Human phrase for the write action (WRITE_TOOL_PHRASES), falls back to the raw id. */
+  label: string;
+  automationLevel: AutomationLevel;
+}
+
+export interface AutomationCounts {
+  total: number;
+  fullyAutomated: number;
+  agentHuman: number;
+  humanLed: number;
+  /** fully_automated / total, rounded; null when there are no rows. */
+  automatedPct: number | null;
+}
+
+/** Pure roll-up of an automation matrix into the three-bucket counts the
+ *  Overview tile and the Tasks page stat cards both display — kept here so the
+ *  two surfaces can never disagree. */
+export function summarizeAutomation(rows: Pick<AutomationMatrixRow, "automationLevel">[]): AutomationCounts {
+  const total = rows.length;
+  const fullyAutomated = rows.filter((r) => r.automationLevel === "fully_automated").length;
+  const agentHuman = rows.filter((r) => r.automationLevel === "agent_human").length;
+  const humanLed = rows.filter((r) => r.automationLevel === "human_led").length;
+  return {
+    total,
+    fullyAutomated,
+    agentHuman,
+    humanLed,
+    automatedPct: total > 0 ? Math.round((fullyAutomated / total) * 100) : null,
+  };
+}
+
+/**
+ * Every (hired agent, write tool) pair for this tenant, with its resolved
+ * automation level — the real data behind the /orca/tasks automation matrix
+ * (replaces MOCK_TASKS). One row per write tool the agent's definition
+ * declares that is available to this tenant's industry; the level is the
+ * stored `agent_tool_policies` row or DEFAULT_AUTOMATION_LEVEL ("human_led")
+ * when none exists — the exact same resolution getAgentDetail / resolveAutomationLevel use.
+ */
+export async function getAutomationMatrix(
+  tenantId: string,
+  industryId: string | null,
+): Promise<AutomationMatrixRow[]> {
+  const db = await scopedClientForTenant(tenantId);
+
+  const { data: identities } = await db
+    .from("agent_identities")
+    .select("id, agent_key, display_name, position_id, status, created_at")
+    .order("created_at", { ascending: true });
+
+  const rows = (identities ?? []) as unknown as IdentityRow[];
+  if (rows.length === 0) return [];
+
+  const agentIds = rows.map((r) => r.id);
+  const positionIds = [...new Set(rows.map((r) => r.position_id).filter((id): id is string => id !== null))];
+
+  const [{ data: policies }, { data: positions }] = await Promise.all([
+    db.from("agent_tool_policies").select("agent_id, tool_id, automation_level").in("agent_id", agentIds),
+    positionIds.length > 0
+      ? db.from("positions").select("id, name").in("id", positionIds)
+      : Promise.resolve({ data: [] as PositionRow[] }),
+  ]);
+
+  const policyByKey = new Map<string, AutomationLevel>(
+    (
+      (policies ?? []) as unknown as Array<{ agent_id: string; tool_id: string; automation_level: AutomationLevel }>
+    ).map((p) => [`${p.agent_id}:${p.tool_id}`, p.automation_level]),
+  );
+  const positionNameById = new Map(((positions ?? []) as unknown as PositionRow[]).map((p) => [p.id, p.name]));
+
+  const out: AutomationMatrixRow[] = [];
+  for (const r of rows) {
+    const def = getAgentDefinition(r.agent_key);
+    const assignedRole = r.position_id ? (positionNameById.get(r.position_id) ?? "Unassigned") : "Unassigned";
+    for (const toolId of writeToolIdsForDef(def, industryId)) {
+      out.push({
+        agentId: r.id,
+        agentName: r.display_name,
+        assignedRole,
+        toolId,
+        label: WRITE_TOOL_PHRASES[toolId] ?? toolId,
+        automationLevel: policyByKey.get(`${r.id}:${toolId}`) ?? DEFAULT_AUTOMATION_LEVEL,
+      });
+    }
+  }
+  return out;
+}
+
+export interface OrcaActivityEntry {
+  id: string;
+  agentName: string;
+  action: string;
+  /** ISO timestamp — humanize client-side with formatRelativeTime. */
+  at: string;
+  status: "success" | "error" | "running";
+}
+
+export interface OrcaOverviewStats {
+  humanRoles: number;
+  agentRoles: number;
+  rolesTotal: number;
+  agentsTotal: number;
+  agentsActive: number;
+  agentsPaused: number;
+  tasks: AutomationCounts;
+  /** agent_runs started in the last 24h. */
+  agentActions24h: number;
+  recentActivity: OrcaActivityEntry[];
+}
+
+const OVERVIEW_ACTIVITY_LIMIT = 8;
+
+function agentRunActionLabel(triggerEvent: string): string {
+  if (triggerEvent === "crm/lead.created") return "Triaged a new lead";
+  if (triggerEvent === "manual") return "Ran on request";
+  if (triggerEvent.startsWith("cron")) return "Ran a scheduled job";
+  return `Ran (${triggerEvent})`;
+}
+
+interface OverviewRunRow {
+  id: string;
+  agent_id: string;
+  trigger_event: string;
+  subject_type: string | null;
+  subject_id: string | null;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+/**
+ * Real data for the /orca Overview tiles + Recent Agent Activity list
+ * (replaces MOCK_STATS). Every number is derived from live tenant-scoped
+ * tables: human roles from `positions`, agents from `agent_identities`,
+ * tasks/% automated from the same automation matrix /orca/tasks renders,
+ * and activity from `agent_runs`. A tenant with no agent activity yields an
+ * empty `recentActivity` (the client renders an honest empty state, never
+ * zeros dressed up as data).
+ */
+export async function getOrcaOverviewStats(
+  tenantId: string,
+  industryId: string | null,
+): Promise<OrcaOverviewStats> {
+  const db = await scopedClientForTenant(tenantId);
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+  const [{ count: humanRoles }, { data: identities }, matrix, { count: agentActions24h }, { data: recentRuns }] =
+    await Promise.all([
+      db.from("positions").select("*", { count: "exact", head: true }),
+      db.from("agent_identities").select("id, display_name, status"),
+      getAutomationMatrix(tenantId, industryId),
+      db.from("agent_runs").select("*", { count: "exact", head: true }).gte("started_at", since),
+      db
+        .from("agent_runs")
+        .select("id, agent_id, trigger_event, subject_type, subject_id, status, started_at, finished_at")
+        .order("started_at", { ascending: false })
+        .limit(OVERVIEW_ACTIVITY_LIMIT),
+    ]);
+
+  const idRows = (identities ?? []) as unknown as Array<{
+    id: string;
+    display_name: string;
+    status: "active" | "paused";
+  }>;
+  const agentNameById = new Map(idRows.map((a) => [a.id, a.display_name]));
+  const agentsActive = idRows.filter((a) => a.status === "active").length;
+
+  const runRows = (recentRuns ?? []) as unknown as OverviewRunRow[];
+  const leadIds = [
+    ...new Set(
+      runRows.filter((r) => r.subject_type === "lead" && r.subject_id).map((r) => r.subject_id as string),
+    ),
+  ];
+  const { data: leads } =
+    leadIds.length > 0
+      ? await db.from("leads").select("id, first_name, last_name, email, display_id").in("id", leadIds)
+      : { data: [] as LeadLookupRow[] };
+  const leadLabelById = new Map(
+    ((leads ?? []) as unknown as LeadLookupRow[]).map((l) => [l.id, leadSubjectLabel(l)]),
+  );
+
+  const recentActivity: OrcaActivityEntry[] = runRows.map((r) => {
+    const subject =
+      r.subject_type === "lead" && r.subject_id ? (leadLabelById.get(r.subject_id) ?? null) : null;
+    const verb = agentRunActionLabel(r.trigger_event);
+    return {
+      id: r.id,
+      agentName: agentNameById.get(r.agent_id) ?? "Unknown agent",
+      action: subject ? `${verb} · ${subject}` : verb,
+      at: r.finished_at ?? r.started_at ?? new Date(0).toISOString(),
+      status:
+        r.status === "failed"
+          ? "error"
+          : r.status === "running" || r.status === "awaiting_approval"
+            ? "running"
+            : "success",
+    };
+  });
+
+  return {
+    humanRoles: humanRoles ?? 0,
+    agentRoles: idRows.length,
+    rolesTotal: (humanRoles ?? 0) + idRows.length,
+    agentsTotal: idRows.length,
+    agentsActive,
+    agentsPaused: idRows.length - agentsActive,
+    tasks: summarizeAutomation(matrix),
+    agentActions24h: agentActions24h ?? 0,
+    recentActivity,
   };
 }

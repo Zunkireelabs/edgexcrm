@@ -130,6 +130,15 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     patch.countries = normalizeDestinations(body.countries);
   }
 
+  // Stamp note authorship whenever the notes text actually changes (migration
+  // 219) — this is what the lead Activity timeline's "Application note" row
+  // resolves its "· <actor>" from. A no-op notes patch (same string) is left
+  // alone so it doesn't reattribute an unrelated field edit.
+  if ("notes" in patch && patch.notes !== existingRow.notes) {
+    patch.notes_updated_by = auth.userId;
+    patch.notes_updated_at = new Date().toISOString();
+  }
+
   if (Object.keys(patch).length === 0) return apiSuccess(existingRow);
 
   const { data: updated, error } = await db
