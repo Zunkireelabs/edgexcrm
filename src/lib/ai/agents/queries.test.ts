@@ -24,6 +24,7 @@ function makeChain(result: { data: unknown; count?: number }) {
   chain.in = self;
   chain.limit = self;
   chain.or = self;
+  chain.gte = self;
   // Unlike the no-op stubs above (existing tests already pass in
   // pre-filtered data, per the comment above), `.is()` has exactly one
   // caller in the codebase (getAgentDetail's undo_of exclusion) so it's
@@ -633,5 +634,173 @@ describe("getAgentDetail", () => {
     const detail = await getAgentDetail("tenant-1", "a1", "education_consultancy");
 
     expect(detail!.toolPolicies.map((p) => p.toolId)).toContain("update_lead_stage");
+  });
+});
+
+describe("summarizeAutomation", () => {
+  it("buckets rows by automation level and computes automatedPct off fully_automated", async () => {
+    const { summarizeAutomation } = await import("./queries");
+    const counts = summarizeAutomation([
+      { automationLevel: "fully_automated" },
+      { automationLevel: "fully_automated" },
+      { automationLevel: "agent_human" },
+      { automationLevel: "human_led" },
+    ]);
+    expect(counts).toEqual({ total: 4, fullyAutomated: 2, agentHuman: 1, humanLed: 1, automatedPct: 50 });
+  });
+
+  it("returns automatedPct null for an empty matrix", async () => {
+    const { summarizeAutomation } = await import("./queries");
+    expect(summarizeAutomation([])).toEqual({
+      total: 0,
+      fullyAutomated: 0,
+      agentHuman: 0,
+      humanLed: 0,
+      automatedPct: null,
+    });
+  });
+});
+
+describe("getAutomationMatrix", () => {
+  it("returns [] when the tenant has no hired agents", async () => {
+    scopedClientForTenantMock.mockResolvedValue(fakeDb({ agent_identities: { data: [] } }));
+    const { getAutomationMatrix } = await import("./queries");
+    expect(await getAutomationMatrix("t1", "it_agency")).toEqual([]);
+  });
+
+  it("emits one row per industry-available write tool, resolving the stored level or the human_led default", async () => {
+    getAgentDefinitionMock.mockReturnValue({ toolIds: ["get_lead", "create_task", "assign_lead"] });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        agent_identities: {
+          data: [
+            {
+              id: "a1",
+              agent_key: "mcp-client",
+              display_name: "External MCP Client",
+              position_id: "p1",
+              status: "active",
+              created_at: "2026-01-01",
+            },
+          ],
+        },
+        agent_tool_policies: {
+          data: [{ agent_id: "a1", tool_id: "create_task", automation_level: "fully_automated" }],
+        },
+        positions: { data: [{ id: "p1", name: "Sales Rep" }] },
+      }),
+    );
+    const { getAutomationMatrix } = await import("./queries");
+
+    const rows = await getAutomationMatrix("t1", "it_agency");
+
+    // get_lead (read) dropped; create_task keeps its stored level; assign_lead
+    // has no policy row -> human_led default.
+    expect(rows).toEqual([
+      {
+        agentId: "a1",
+        agentName: "External MCP Client",
+        assignedRole: "Sales Rep",
+        toolId: "create_task",
+        label: "create a task",
+        automationLevel: "fully_automated",
+      },
+      {
+        agentId: "a1",
+        agentName: "External MCP Client",
+        assignedRole: "Sales Rep",
+        toolId: "assign_lead",
+        label: "assign a lead to a team member",
+        automationLevel: "human_led",
+      },
+    ]);
+  });
+});
+
+describe("getOrcaOverviewStats", () => {
+  it("rolls positions/agents/matrix/runs into real tiles and a recent-activity list", async () => {
+    getAgentDefinitionMock.mockReturnValue({ toolIds: ["create_task"] });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        positions: { data: [], count: 3 },
+        agent_identities: {
+          data: [
+            { id: "a1", agent_key: "lead-triage", display_name: "Triage", status: "active", created_at: "2026-01-01" },
+            { id: "a2", agent_key: "daily-digest", display_name: "Digest", status: "paused", created_at: "2026-01-01" },
+          ],
+        },
+        agent_tool_policies: { data: [] },
+        agent_runs: {
+          count: 1,
+          data: [
+            {
+              id: "r1",
+              agent_id: "a1",
+              trigger_event: "crm/lead.created",
+              subject_type: "lead",
+              subject_id: "lead-1",
+              status: "completed",
+              started_at: "2026-01-02T00:00:00Z",
+              finished_at: "2026-01-02T00:00:05Z",
+            },
+            {
+              id: "r2",
+              agent_id: "a2",
+              trigger_event: "cron",
+              subject_type: null,
+              subject_id: null,
+              status: "failed",
+              started_at: "2026-01-01T00:00:00Z",
+              finished_at: null,
+            },
+          ],
+        },
+        leads: {
+          data: [{ id: "lead-1", first_name: "Ada", last_name: "Lovelace", email: null, display_id: "L-1" }],
+        },
+      }),
+    );
+    const { getOrcaOverviewStats } = await import("./queries");
+
+    const stats = await getOrcaOverviewStats("t1", "it_agency");
+
+    expect(stats.humanRoles).toBe(3);
+    expect(stats.agentRoles).toBe(2);
+    expect(stats.rolesTotal).toBe(5);
+    expect(stats.agentsActive).toBe(1);
+    expect(stats.agentsPaused).toBe(1);
+    expect(stats.tasks).toEqual({
+      total: 2,
+      fullyAutomated: 0,
+      agentHuman: 0,
+      humanLed: 2,
+      automatedPct: 0,
+    });
+    expect(stats.agentActions24h).toBe(1);
+    expect(stats.recentActivity).toEqual([
+      { id: "r1", agentName: "Triage", action: "Triaged a new lead · Ada Lovelace", at: "2026-01-02T00:00:05Z", status: "success" },
+      { id: "r2", agentName: "Digest", action: "Ran a scheduled job", at: "2026-01-01T00:00:00Z", status: "error" },
+    ]);
+  });
+
+  it("returns an empty recentActivity list (honest empty state) when the tenant has no runs", async () => {
+    getAgentDefinitionMock.mockReturnValue({ toolIds: [] });
+    scopedClientForTenantMock.mockResolvedValue(
+      fakeDb({
+        positions: { data: [], count: 0 },
+        agent_identities: { data: [] },
+        agent_tool_policies: { data: [] },
+        agent_runs: { data: [], count: 0 },
+        leads: { data: [] },
+      }),
+    );
+    const { getOrcaOverviewStats } = await import("./queries");
+
+    const stats = await getOrcaOverviewStats("t1", "it_agency");
+
+    expect(stats.recentActivity).toEqual([]);
+    expect(stats.agentActions24h).toBe(0);
+    expect(stats.tasks.automatedPct).toBeNull();
+    expect(stats.rolesTotal).toBe(0);
   });
 });

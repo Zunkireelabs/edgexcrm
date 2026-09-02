@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { defaultOperatorForField, defaultValueForOperator, reshapeValueForOperator, addOrMergeCondition } from "./condition-defaults";
+import { defaultOperatorForField, defaultValueForOperator, reshapeValueForOperator, addOrMergeCondition, applyConditionChange } from "./condition-defaults";
 import type { FieldDef, FilterCondition } from "@/lib/filters/types";
 
 const dateField: FieldDef = {
@@ -120,5 +120,58 @@ describe("addOrMergeCondition", () => {
     const isNot: FilterCondition = { id: "c1", field: "stage", op: "is_not", value: "list-a" };
     const isB: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-b" };
     expect(addOrMergeCondition([isNot], isB)).toEqual([isNot, isB]);
+  });
+});
+
+describe("applyConditionChange — in-place chip edit / back-arrow re-point", () => {
+  it("plain replace keeps the chip's row position when the edited field collides with nothing", () => {
+    const a: FilterCondition = { id: "c1", field: "name", op: "contains", value: "bri" };
+    const b: FilterCondition = { id: "c2", field: "city", op: "is", value: "NYC" };
+    const next: FilterCondition = { id: "c1", field: "name", op: "contains", value: "brian" };
+    expect(applyConditionChange([a, b], "c1", next)).toEqual([next, b]);
+  });
+
+  it("re-pointing onto an unused field is still a position-preserving replace", () => {
+    const a: FilterCondition = { id: "c1", field: "name", op: "contains", value: "x" };
+    const b: FilterCondition = { id: "c2", field: "city", op: "is", value: "NYC" };
+    const next: FilterCondition = { id: "c1", field: "source", op: "is", value: "walk-in" };
+    expect(applyConditionChange([a, b], "c1", next)).toEqual([next, b]);
+  });
+
+  it("folds the pre-existing sibling's value into the edited chip and drops the sibling — one condition survives, carrying the edited chip's id", () => {
+    const stage: FilterCondition = { id: "c1", field: "stage", op: "is", value: "list-a" };
+    const name: FilterCondition = { id: "c2", field: "name", op: "contains", value: "x" };
+    // c2 was re-pointed from `name` onto `stage` (which c1 already filters)
+    const next: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-b" };
+    expect(applyConditionChange([stage, name], "c2", next)).toEqual([
+      { id: "c2", field: "stage", op: "is_any_of", value: ["list-a", "list-b"] },
+    ]);
+  });
+
+  it("keeps other non-colliding chips in place around the folded chip", () => {
+    const src: FilterCondition = { id: "c0", field: "source", op: "is", value: "walk-in" };
+    const stage: FilterCondition = { id: "c1", field: "stage", op: "is", value: "list-a" };
+    const name: FilterCondition = { id: "c2", field: "name", op: "contains", value: "x" };
+    const next: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-b" };
+    expect(applyConditionChange([src, stage, name], "c2", next)).toEqual([
+      src,
+      { id: "c2", field: "stage", op: "is_any_of", value: ["list-a", "list-b"] },
+    ]);
+  });
+
+  it("a fold that dedupes down to a single value stays a plain `is`", () => {
+    const stage: FilterCondition = { id: "c1", field: "stage", op: "is", value: "list-a" };
+    const other: FilterCondition = { id: "c2", field: "name", op: "contains", value: "x" };
+    const next: FilterCondition = { id: "c2", field: "stage", op: "is", value: "list-a" };
+    expect(applyConditionChange([stage, other], "c2", next)).toEqual([
+      { id: "c2", field: "stage", op: "is", value: "list-a" },
+    ]);
+  });
+
+  it("does not fold when the re-pointed operator is not mergeable (is_not) — left as two conditions", () => {
+    const stage: FilterCondition = { id: "c1", field: "stage", op: "is", value: "list-a" };
+    const other: FilterCondition = { id: "c2", field: "name", op: "contains", value: "x" };
+    const next: FilterCondition = { id: "c2", field: "stage", op: "is_not", value: "list-b" };
+    expect(applyConditionChange([stage, other], "c2", next)).toEqual([stage, next]);
   });
 });

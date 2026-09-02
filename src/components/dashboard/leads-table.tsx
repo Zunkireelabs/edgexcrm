@@ -96,6 +96,7 @@ import { STAGE_FRONTLINE, allowedAssigneePositionsForStage } from "@/lib/leads/s
 import { ColumnManagerDialog } from "@/components/dashboard/leads/column-manager-dialog";
 import { POSITION_ROUTE_MAP_WITH_ADMIN } from "@/industries/education-consultancy/features/new-leads-triage/position-routing";
 import { DESTINATION_SYNONYM_KEYS } from "@/lib/leads/destination-normalize";
+import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 
 type SortField = "activity" | "created" | "updated" | "name" | "email";
 type SortDirection = "asc" | "desc";
@@ -844,6 +845,16 @@ export function LeadsTable({
   // Destinations only exists as a field for education_consultancy (registry/leads.ts
   // Gap 4) — no point requesting a fourth dimension every other tenant can't pick.
   const wantsDestinationFacet = industryId === "education_consultancy";
+  // Field of study / Level of study: unlike Destinations (a live facet over real
+  // lead data), these two are FIXED dropdowns sourced from the tenant's own
+  // Settings > Courses / Interested Degree Level catalogs (Admizz's explicit ask —
+  // "fixed" options, not whatever happens to already be on a lead). useEduTaxonomy()
+  // already fetches exactly those two catalogs (with a hardcoded fallback if the
+  // tenant hasn't configured any yet) — `enabled` gates the fetch to education_
+  // consultancy only, same reasoning as wantsDestinationFacet above.
+  const { fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels } = useEduTaxonomy({
+    enabled: wantsDestinationFacet,
+  });
   const [serverSourceFacet, setServerSourceFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverAssigneeFacet, setServerAssigneeFacet] = useState<{ name: string; count: number }[] | null>(null);
   const [serverCollaboratorFacet, setServerCollaboratorFacet] = useState<{ name: string; count: number }[] | null>(null);
@@ -2329,6 +2340,18 @@ export function LeadsTable({
         .filter(([, count]) => count > 0)
         .sort((a, b) => b[1] - a[1])
         .map(([dest, count]) => ({ value: dest, label: `${dest} (${count.toLocaleString()})` })),
+      // Field of study / Level of study: fixed lists straight from Settings (see
+      // eduFieldsOfStudy/eduStudyLevels above) — no counts, no cross-filtering,
+      // just the tenant's configured catalog in its configured order. For a
+      // non-education tenant, useEduTaxonomy's `enabled: false` above skips the
+      // fetch but its useState initializers still hold the hardcoded education
+      // fallback lists — these two entries are NOT actually empty then, just
+      // inert, because the fields themselves are industries-gated out of the
+      // "Add filter" picker for those tenants — see registry/leads.ts's
+      // `industries` array. Don't read these overrides directly outside that
+      // gate; they carry education-only values regardless of tenant.
+      field_of_study: eduFieldsOfStudy.map((name) => ({ value: name, label: name })),
+      degree_level: eduStudyLevels.map((name) => ({ value: name, label: name })),
     };
   }, [
     statusFilterOptions,
@@ -2343,6 +2366,8 @@ export function LeadsTable({
     selectedValuesForField,
     leadLists,
     isAdmin,
+    eduFieldsOfStudy,
+    eduStudyLevels,
   ]);
 
   // "+ Add filter" renders separately in row 1 (see the toolbar JSX below) while

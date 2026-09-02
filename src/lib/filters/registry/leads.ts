@@ -271,16 +271,37 @@ export function leadFields(ctx: CompileCtx): FieldRegistry {
     {
       key: "field_of_study",
       label: "Field of study",
-      type: "text",
+      // Was `type: "text"` (free-typed `contains`/`starts_with` search) until the
+      // Admizz request to make it a fixed dropdown instead — options now come from
+      // the tenant's own Settings > Courses catalog (leads-table.tsx's
+      // advancedFilterOptionOverrides.field_of_study, sourced via useEduTaxonomy()),
+      // never a hardcoded list here. `select` gets is/is_not/is_any_of/is_none_of
+      // instead of contains/starts_with — see OPERATORS_BY_TYPE.
+      type: "select",
       source: { kind: "promoted", column: "field_of_study", jsonb: { column: "custom_fields", path: "field_of_study" } },
       emptyIsBlankString: true,
       group: "Education",
       filterable: true,
-      // Education-only — these two fields are meaningless outside education_consultancy
+      // Education-only — these fields are meaningless outside education_consultancy
       // tenants (it_agency/travel_agency leads never populate them). Previously shown
       // in every tenant's "Add filter" picker regardless of industry (this `industries`
       // field on FieldDef existed but nothing read it yet — see compile.ts's
       // checkCondition + leads-table.tsx's advancedVisibleFields for enforcement).
+      industries: ["education_consultancy"],
+    },
+    {
+      key: "degree_level",
+      label: "Level of study",
+      // Same shape as field_of_study above (promoted scalar, dropdown, education-only)
+      // — added alongside the field_of_study text->select conversion per the same
+      // Admizz request. Options come from the tenant's Settings > Interested Degree
+      // Level catalog (leads-table.tsx's advancedFilterOptionOverrides.degree_level,
+      // via useEduTaxonomy()'s studyLevels), never a hardcoded list here.
+      type: "select",
+      source: { kind: "promoted", column: "degree_level", jsonb: { column: "custom_fields", path: "degree_level" } },
+      emptyIsBlankString: true,
+      group: "Education",
+      filterable: true,
       industries: ["education_consultancy"],
     },
     {

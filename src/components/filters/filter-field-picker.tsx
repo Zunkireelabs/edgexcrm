@@ -47,7 +47,9 @@ export function FilterFieldPicker({ fields, onSelect, hierarchicalGroups, onSele
   // the flat "Status" row so it isn't offered twice — scoped to hierarchy
   // being active, so SMS composer / leads-table (no hierarchicalGroups) keep
   // showing Status under BASIC exactly as today.
-  const hasNestedStatus = hierarchicalFields.some((f) => (hierarchicalGroups?.[f.key]?.stages.length ?? 0) > 0);
+  const hasNestedStatus = hierarchicalFields.some((f) =>
+    (hierarchicalGroups?.[f.key]?.stages ?? []).some((s) => s.statusOptions.length > 0),
+  );
   const flatFields = filterable.filter((f) => !hierarchicalGroups?.[f.key] && !(hasNestedStatus && f.key === "status"));
   const grouped = groupFields(flatFields);
   const statusField = fields.find((f) => f.key === "status");

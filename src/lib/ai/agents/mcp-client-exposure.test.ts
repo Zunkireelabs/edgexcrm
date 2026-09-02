@@ -118,6 +118,7 @@ const INPUT_BY_TOOL: Record<string, unknown> = {
   get_lead: { leadId: LEAD_ID },
   search_leads: { limit: 20 },
   team_lookup: { limit: 50 },
+  pipeline_summary: {},
 };
 
 describe("mcp-client AgentDefinition — D9 tool-exposure rules", () => {
@@ -129,8 +130,10 @@ describe("mcp-client AgentDefinition — D9 tool-exposure rules", () => {
   const writeToolIds = def.toolIds.filter((id) => toolById.get(id)?.scope === "write");
   const readToolIds = def.toolIds.filter((id) => toolById.get(id)?.scope === "read");
 
-  it("declares exactly the expected 6 tools (3 reads, 3 writes) — locks the D9-verified list", () => {
-    expect(def.toolIds.sort()).toEqual(["assign_lead", "create_task", "get_lead", "search_leads", "team_lookup", "update_lead_stage"].sort());
+  it("declares exactly the expected 7 tools (4 reads, 3 writes) — locks the D9-verified list", () => {
+    expect(def.toolIds.sort()).toEqual(
+      ["assign_lead", "create_task", "get_lead", "pipeline_summary", "search_leads", "team_lookup", "update_lead_stage"].sort(),
+    );
   });
 
   it("every declared write tool has an APPROVAL_EXECUTORS entry (an approval must never resolve to 'no executor registered')", () => {
@@ -140,12 +143,12 @@ describe("mcp-client AgentDefinition — D9 tool-exposure rules", () => {
     }
   });
 
-  it("does NOT declare pipeline_summary — it calls assertUserAuth and would throw under AgentAuthContext despite lead-triage/daily-digest listing it as a toolId", () => {
-    expect(def.toolIds).not.toContain("pipeline_summary");
+  it("declares pipeline_summary — Phase 7 (7.3) made it agent-safe, restoring the read the 5.5 D9 originally assumed", () => {
+    expect(def.toolIds).toContain("pipeline_summary");
   });
 
-  it("regression guard: pipeline_summary really does throw under AgentAuthContext today (the reason it's excluded)", async () => {
-    await expect(pipelineSummaryTool.execute(ctxFor(fixtureAgentAuth()), {})).rejects.toThrow(/Phase 5\.1b/);
+  it("regression guard: pipeline_summary no longer throws under AgentAuthContext (agent-safe via auth.permissions, no assertUserAuth)", async () => {
+    await expect(pipelineSummaryTool.execute(ctxFor(fixtureAgentAuth()), {})).resolves.not.toThrow();
   });
 
   it.each(readToolIds)("every declared read tool ('%s') executes cleanly under AgentAuthContext (no assertUserAuth throw)", async (toolId) => {
