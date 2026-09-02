@@ -4,6 +4,7 @@ import { authenticateRequest, getClientIp } from "@/lib/api/auth";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiServiceUnavailable } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { createAuditLog } from "@/lib/api/audit";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 export async function DELETE(
   request: NextRequest,
@@ -59,6 +60,9 @@ export async function DELETE(
   }
 
   log.info({ leadId: id, removedUserId: userId }, "Collaborator removed");
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   void createAuditLog({
     tenantId: auth.tenantId,

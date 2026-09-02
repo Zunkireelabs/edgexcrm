@@ -21,6 +21,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { normalizeDestinations, normalizeFieldOfStudy, normalizeDegreeLevel } from "@/lib/leads/destination-normalize";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -279,6 +280,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
   }
 
   const createdRow = created as unknown as { id: string };
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, leadRow.id);
 
   await Promise.all([
     createAuditLog({

@@ -13,6 +13,7 @@ import {
 import { validate, required, maxLength, isPositiveInt } from "@/lib/api/validation";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 export async function GET(
   _request: NextRequest,
@@ -131,6 +132,9 @@ export async function POST(
   }
 
   log.info({ checklistId: checklist.id, leadId: id }, "Checklist item created");
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   Promise.all([
     createAuditLog({

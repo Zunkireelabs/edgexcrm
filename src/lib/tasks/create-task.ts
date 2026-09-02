@@ -173,6 +173,12 @@ export async function createTaskCore(
     return { kind: "db_error", error };
   }
 
+  // Keep the lead's "Updated At" reflecting real activity, not just direct
+  // field edits. Only when the task is actually attached to a lead.
+  if (task.lead_id) {
+    await db.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", task.lead_id as string);
+  }
+
   await Promise.all([
     emitEvent({
       tenantId,
