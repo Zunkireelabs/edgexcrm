@@ -62,7 +62,7 @@ export async function DELETE(
   log.info({ leadId: id, removedUserId: userId }, "Collaborator removed");
 
   // Keep "Updated At" reflecting real activity, not just direct field edits.
-  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
+  void touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   void createAuditLog({
     tenantId: auth.tenantId,

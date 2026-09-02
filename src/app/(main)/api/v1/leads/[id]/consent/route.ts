@@ -317,9 +317,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         requestId,
         payload: { lead_id: id, sent_via: sentVia },
       }),
+      touchLeadUpdatedAt(supabase, auth.tenantId, id),
     ]);
-
-    await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
     log.info({ consentId: (newRecord as { id: string }).id }, "Consent sent");
     return apiSuccess({ ...newRecord, link: consentLink }, 201);
@@ -419,9 +418,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
         requestId,
         payload: { lead_id: id, sent_via: "in_person" },
       }),
+      touchLeadUpdatedAt(supabase, auth.tenantId, id),
     ]);
-
-    await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
     log.info({ consentId: (newRecord as { id: string }).id }, "In-person consent session started");
     return apiSuccess({ ...newRecord, link: consentLink }, 201);
@@ -481,9 +479,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       requestId,
       payload: { lead_id: id, method: "manual_upload" },
     }),
+    touchLeadUpdatedAt(supabase, auth.tenantId, id),
   ]);
-
-  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   log.info({ consentId: manualRow.id }, "Manual consent recorded");
   return apiSuccess(manualRecord, 201);

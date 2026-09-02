@@ -124,7 +124,7 @@ export async function POST(
   log.info({ leadId: id, addedUserId: userId }, "Collaborator added");
 
   // Keep "Updated At" reflecting real activity, not just direct field edits.
-  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
+  void touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   void createAuditLog({
     tenantId: auth.tenantId,

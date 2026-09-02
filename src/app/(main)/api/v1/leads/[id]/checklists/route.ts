@@ -133,9 +133,6 @@ export async function POST(
 
   log.info({ checklistId: checklist.id, leadId: id }, "Checklist item created");
 
-  // Keep "Updated At" reflecting real activity, not just direct field edits.
-  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
-
   Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -156,6 +153,8 @@ export async function POST(
       payload: { lead_id: id, title: body.title },
       requestId,
     }),
+    // Keep "Updated At" reflecting real activity, not just direct field edits.
+    touchLeadUpdatedAt(supabase, auth.tenantId, id),
   ]);
 
   return apiSuccess(checklist, 201);

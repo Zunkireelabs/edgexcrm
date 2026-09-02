@@ -175,6 +175,10 @@ export async function createTaskCore(
 
   // Keep the lead's "Updated At" reflecting real activity, not just direct
   // field edits. Only when the task is actually attached to a lead.
+  // Inlined rather than reusing touchLeadUpdatedAt() (src/lib/leads/touch-updated-at.ts):
+  // that helper is typed for the raw service client and does its own
+  // .eq("tenant_id", ...); db here is a ScopedClient, whose .update() already
+  // auto-scopes to the tenant, so only the .eq("id", ...) filter is needed.
   if (task.lead_id) {
     await db.from("leads").update({ updated_at: new Date().toISOString() }).eq("id", task.lead_id as string);
   }

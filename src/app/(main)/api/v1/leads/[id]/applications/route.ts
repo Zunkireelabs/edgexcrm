@@ -281,9 +281,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   const createdRow = created as unknown as { id: string };
 
-  // Keep "Updated At" reflecting real activity, not just direct field edits.
-  await touchLeadUpdatedAt(supabase, auth.tenantId, leadRow.id);
-
   await Promise.all([
     createAuditLog({
       tenantId: auth.tenantId,
@@ -300,6 +297,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       entityId: createdRow.id,
       requestId,
     }),
+    // Keep "Updated At" reflecting real activity, not just direct field edits.
+    touchLeadUpdatedAt(supabase, auth.tenantId, leadRow.id),
   ]);
 
   log.info({ applicationId: createdRow.id }, "Application created via lead panel");
