@@ -16,6 +16,7 @@ import { FEATURES } from "@/industries/_registry";
 import { hasProspectQualification, canBypassProspectQualification } from "@/lib/leads/prospect-qualification";
 import { addLeadCollaborator } from "@/lib/leads/collaborators";
 import { createAuditLog } from "@/lib/api/audit";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -103,6 +104,11 @@ export async function POST(request: NextRequest, context: RouteContext) {
     entityId: id,
     changes: { note_id: { old: null, new: checkInNote?.id ?? null } },
   });
+
+  // Keep "Updated At" reflecting real activity — the triage/auto-promote
+  // branches below already touch it via their own leads.update() calls, so
+  // this only matters for the (common) case where neither branch fires.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, id);
 
   const isEducation = auth.industryId === "education_consultancy";
 

@@ -42,6 +42,10 @@ function makeFakeSupabase(opts: FakeSupabaseOpts) {
       eq: () => b,
       is: () => b,
       single: async () => ({ data: opts.lead, error: opts.lead ? null : { message: "not found" } }),
+      update: () => b,
+      then: (resolve: (v: { data: unknown; error: unknown }) => void) => {
+        resolve({ data: null, error: null });
+      },
     };
     return b;
   }
