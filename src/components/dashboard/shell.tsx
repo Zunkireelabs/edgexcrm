@@ -377,6 +377,39 @@ export function DashboardShell({
     if (mounted) localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed, mounted]);
 
+  // Suspended-account watchdog. Suspension (migration 220) is already
+  // enforced server-side on every API call and every server-rendered
+  // navigation (buildUserAuthContext/getCurrentUserTenant both fail-closed) —
+  // but someone sitting on an already-loaded dashboard tab with no further
+  // navigation or fetch never hits either checkpoint, so they'd keep full
+  // access until they happened to click something. Poll the same
+  // /api/v1/auth/status endpoint the login page uses so a suspension takes
+  // effect within one interval even with zero interaction. Not instant
+  // (~15s worst case) — the server-side checks remain the actual security
+  // boundary; this only closes the stale-open-tab UX gap.
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSuspended() {
+      try {
+        const res = await fetch("/api/v1/auth/status");
+        if (!res.ok || cancelled) return;
+        const { data } = await res.json();
+        if (cancelled || !data?.blocked) return;
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.push("/login?error=suspended");
+      } catch {
+        // Network hiccup — the next interval tick retries; server-side
+        // enforcement still applies to any real request in the meantime.
+      }
+    }
+    const intervalId = setInterval(checkSuspended, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [router]);
+
   async function handleLogout() {
     const supabase = createClient();
     await supabase.auth.signOut();

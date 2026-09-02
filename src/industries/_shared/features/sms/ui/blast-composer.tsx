@@ -24,7 +24,7 @@ import { CostPreviewDialog } from "./cost-preview-dialog";
 import { RecipientsPreviewDialog } from "./recipients-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
 import { smsSend, smsGet, SmsApiError } from "../lib/api-client";
-import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse } from "../lib/types";
+import type { SmsAudienceCountResponse, SmsBlastRow, SmsPreviewResponse, SmsSettings } from "../lib/types";
 
 // No pipeline-scoped list on this surface (the Audience picker targets leads
 // tenant-wide, not one list) — mirrors leads-table.tsx's "no active pipeline"
@@ -69,6 +69,22 @@ export function withDraft(tree: FilterTree, draft: FilterCondition | null): Filt
   };
 }
 
+type ComposerLeadList = { id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean };
+
+/** Which of the 4 picker categories a lead list belongs to — drives the
+ *  chip's prefix label (FilterOption.groupLabel, resolved by
+ *  resolvePrefixLabel in chip-label.ts) so a Leads Organize pick reads
+ *  "Leads Organize: X", not the shared field's generic "Stage: X". Mirrors
+ *  the email-campaigns composer's stageGroupLabel (#454) — same bug, same
+ *  fix, SMS side. Order matters: Archive/Delete are also off-funnel, so
+ *  they're checked before the generic isOffFunnelLeadList fallback. */
+function stageGroupLabel(list: ComposerLeadList): string {
+  if (list.is_staging) return "Leads Organize";
+  if (list.is_archive) return "Archive";
+  if (list.slug === "delete") return "Delete";
+  return "Stage";
+}
+
 /** Pure so the F-11 regression test can assert every key resolves to a
  *  non-empty option list from realistic fixture data without rendering. */
 export function buildAudienceOptionOverrides(input: {
@@ -76,7 +92,7 @@ export function buildAudienceOptionOverrides(input: {
   sourceFacet: { name: string; count: number }[];
   assigneeFacet: { name: string; count: number }[];
   roster: { user_id: string; name: string }[];
-  leadLists: { id: string; name: string; is_staging?: boolean; is_archive: boolean }[];
+  leadLists: ComposerLeadList[];
   fieldsOfStudy: string[];
   studyLevels: string[];
 }): Partial<Record<string, FilterOption[]>> {
@@ -98,9 +114,16 @@ export function buildAudienceOptionOverrides(input: {
     status: STATUS_OPTIONS,
     industry: PROSPECT_INDUSTRIES.map((ind) => ({ value: ind.value, label: ind.label })),
     tags: TAG_OPTIONS,
-    stage: input.leadLists
-      .filter((l) => !l.is_staging && !l.is_archive)
-      .map((l) => ({ value: l.id, label: l.name })),
+    // Every lead list, unfiltered — Stage, Leads Organize, Archive, and
+    // Delete all commit as { field: "stage", value: <list_id> } (see
+    // buildAudienceOptionOverrides' email-campaigns twin, #454). Narrowing
+    // this to only the 4 pipeline-stage lists (as it used to be) meant a
+    // Leads Organize / Archive / Delete list was never even offered as a
+    // Stage option here — SMS has no separate hierarchical picker the way
+    // email does, so this flat array IS the only source of Stage choices.
+    // groupLabel tags each option purely for chip/panel display; the
+    // committed condition is still always { field: "stage", value: l.id }.
+    stage: input.leadLists.map((l) => ({ value: l.id, label: l.name, groupLabel: stageGroupLabel(l) })),
   };
 }
 
@@ -149,7 +172,15 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
   const [sourceFacet, setSourceFacet] = useState<{ name: string; count: number }[]>([]);
   const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
   const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
-  const [leadLists, setLeadLists] = useState<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>([]);
+  const [leadLists, setLeadLists] = useState<ComposerLeadList[]>([]);
+  // Tenant's per-blast recipient cap (max_recipients_per_blast, admin-
+  // configurable 1-20,000, default 500 — SMS-PHASE3A-BRIEF.md §4). Fetched so
+  // the audience count line below can warn BEFORE Review & send, instead of
+  // the only signal being the server's 422 MAX_RECIPIENTS_EXCEEDED after the
+  // user has already gone through the full confirm flow (the actual client
+  // complaint: they only found out they were over the cap at the very last
+  // step, with no way to see it coming while still adjusting filters).
+  const [smsSettings, setSmsSettings] = useState<SmsSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,7 +191,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
       })
       .catch(() => void 0);
 
-    smsGet<{ id: string; name: string; is_staging?: boolean; is_archive: boolean }[]>("/api/v1/lead-lists")
+    smsGet<ComposerLeadList[]>("/api/v1/lead-lists")
       .then(({ data }) => {
         if (!cancelled) setLeadLists(data);
       })
@@ -179,6 +210,12 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     smsGet<{ user_id: string; name: string }[]>("/api/v1/team?minimal=1")
       .then(({ data }) => {
         if (!cancelled) setRoster(data);
+      })
+      .catch(() => void 0);
+
+    smsGet<SmsSettings>("/api/v1/sms/settings")
+      .then(({ data }) => {
+        if (!cancelled) setSmsSettings(data);
       })
       .catch(() => void 0);
 
@@ -277,6 +314,15 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     }
   }
 
+  // Null max_recipients_per_blast (settings not loaded yet) never blocks
+  // sending — this is an early-warning UX layer on top of the server's real
+  // enforcement (send/route.ts's MAX_RECIPIENTS_EXCEEDED), not a replacement
+  // for it, so a slow/failed settings fetch fails open here and still gets
+  // caught server-side.
+  const recipientCap = smsSettings?.max_recipients_per_blast ?? null;
+  const overCapBy = recipientCap !== null && audienceCount ? audienceCount.sendable - recipientCap : 0;
+  const isOverCap = overCapBy > 0;
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div className="flex flex-col gap-1.5">
@@ -318,16 +364,24 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
         ) : audienceCount && audienceCount.matched === 0 ? (
           <p className="text-xs font-medium text-amber-600 dark:text-amber-500">No leads match this filter.</p>
         ) : audienceCount ? (
-          <div className="flex items-center gap-2">
-            <p className="text-xs text-muted-foreground">{formatAudienceCountLine(audienceCount)}</p>
-            {audienceCount.sendable > 0 && (
-              <button
-                type="button"
-                onClick={() => setRecipientsPreviewOpen(true)}
-                className="text-xs font-medium text-primary underline-offset-2 hover:underline"
-              >
-                Preview recipients
-              </button>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">{formatAudienceCountLine(audienceCount)}</p>
+              {audienceCount.sendable > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setRecipientsPreviewOpen(true)}
+                  className="text-xs font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  Preview recipients
+                </button>
+              )}
+            </div>
+            {isOverCap && (
+              <p className="text-xs font-medium text-destructive">
+                Exceeds this tenant&apos;s {recipientCap}-recipient cap by {overCapBy} — narrow your filter to send, or ask an
+                owner/admin to raise the cap in SMS Settings.
+              </p>
             )}
           </div>
         ) : null}
@@ -335,7 +389,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
 
       {canSendSms && (
         <div className="flex items-center gap-2">
-          <Button onClick={() => setPreviewOpen(true)} disabled={!body.trim()}>
+          <Button onClick={() => setPreviewOpen(true)} disabled={!body.trim() || isOverCap}>
             Review &amp; send
           </Button>
         </div>

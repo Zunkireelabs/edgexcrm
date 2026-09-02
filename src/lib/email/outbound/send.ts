@@ -6,6 +6,7 @@ import { loadSuppressedEmails, normalizeEmail } from "./suppression";
 import { getOrCreateUnsubscribeToken, unsubscribeUrl, injectUnsubscribe } from "./unsubscribe";
 import { buildBulkEmailHeaders } from "./headers";
 import { getDailyCapStatus } from "./cap";
+import { acquireResendRateLimitSlot } from "./rate-limit";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { logger } from "@/lib/logger";
 
@@ -17,6 +18,14 @@ import { logger } from "@/lib/logger";
 const RECLAIM_THRESHOLD_MS = 15 * 60 * 1000; // §5.2
 const MAX_RECLAIM_ATTEMPTS = 3;
 const SEND_CONCURRENCY = 5;
+// A rate_limit_exceeded response is transient by definition (Resend saying
+// "not now", not "this address is bad") — retry it a few times with backoff
+// before giving up, instead of marking a perfectly good recipient permanently
+// 'failed' on the first 429. acquireResendRateLimitSlot() above should make
+// this rare in practice; this is the safety net for whatever still slips
+// through (e.g. another concurrent Resend caller in this same process).
+const MAX_RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_RETRY_BASE_MS = 300;
 
 interface QueuedEmailRow {
   id: string;
@@ -211,28 +220,43 @@ export async function sendQueuedEmailBatch(
       .eq("id", msg.id);
 
     try {
-      const { data, error: sendError } = await resend.emails.send({
-        from: sender.from,
-        ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
-        to: guarded.to,
-        subject: guarded.subject,
-        html: bodyWithFooter,
-        headers,
-      });
+      let rateLimitRetries = 0;
+      for (;;) {
+        await acquireResendRateLimitSlot();
+        const { data, error: sendError } = await resend.emails.send({
+          from: sender.from,
+          ...(sender.replyTo ? { replyTo: sender.replyTo } : {}),
+          to: guarded.to,
+          subject: guarded.subject,
+          html: bodyWithFooter,
+          headers,
+        });
 
-      if (sendError) {
+        if (sendError) {
+          // A 429 is Resend saying "not now", not "this address is bad" — a
+          // handful of retries with backoff recovers it instead of
+          // permanently failing a perfectly good recipient (the actual bug:
+          // every rate-limited row used to be marked 'failed' on the first
+          // hit, see this function's module comment).
+          if (sendError.name === "rate_limit_exceeded" && rateLimitRetries < MAX_RATE_LIMIT_RETRIES) {
+            rateLimitRetries += 1;
+            await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_BASE_MS * rateLimitRetries));
+            continue;
+          }
+          await db
+            .from("email_messages")
+            .update({ status: "failed", error_code: "provider_error", error_message: sendError.message })
+            .eq("id", msg.id);
+          return;
+        }
+
+        sent += 1;
         await db
           .from("email_messages")
-          .update({ status: "failed", error_code: "provider_error", error_message: sendError.message })
+          .update({ status: "sent", provider_message_id: data?.id ?? null, sent_at: new Date().toISOString() })
           .eq("id", msg.id);
         return;
       }
-
-      sent += 1;
-      await db
-        .from("email_messages")
-        .update({ status: "sent", provider_message_id: data?.id ?? null, sent_at: new Date().toISOString() })
-        .eq("id", msg.id);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       await db
