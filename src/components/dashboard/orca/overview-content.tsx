@@ -7,7 +7,6 @@ import {
   Bot,
   ListChecks,
   Plus,
-  ArrowRight,
   Activity,
   CheckCircle2,
   AlertCircle,
@@ -92,13 +91,6 @@ export function OverviewContent({ stats }: OverviewContentProps) {
         <h3 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h3>
         <div className="flex flex-wrap gap-3">
           <Link
-            href="/orca/roles"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Role
-          </Link>
-          <Link
             href="/orca/agents"
             className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700 transition-colors"
           >
@@ -111,13 +103,6 @@ export function OverviewContent({ stats }: OverviewContentProps) {
           >
             <Plus className="w-4 h-4" />
             Add Task
-          </Link>
-          <Link
-            href="/orca/compare"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-[#eb1600] hover:bg-[#cc1300] rounded-lg text-sm font-medium text-white transition-colors"
-          >
-            View Transformation
-            <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
       </div>
@@ -177,9 +162,9 @@ export function OverviewContent({ stats }: OverviewContentProps) {
       <div className="bg-gradient-to-r from-[#eb1600]/5 to-[#eb1600]/10 rounded-xl border border-[#eb1600]/20 p-5">
         <h3 className="text-sm font-semibold text-gray-900 mb-2">Getting Started with Orca</h3>
         <p className="text-sm text-gray-600 mb-4">
-          Set up your AI-powered organization in 4 steps:
+          Set up your AI-powered organization in 3 steps:
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           <Link
             href="/orca/structure"
             className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-[#eb1600]/30 transition-colors"
@@ -193,23 +178,11 @@ export function OverviewContent({ stats }: OverviewContentProps) {
             </div>
           </Link>
           <Link
-            href="/orca/roles"
-            className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-[#eb1600]/30 transition-colors"
-          >
-            <div className="w-8 h-8 bg-[#eb1600]/10 rounded-full flex items-center justify-center text-[#eb1600] font-semibold text-sm">
-              2
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-900">Create Roles</p>
-              <p className="text-xs text-gray-500">Human & agent roles</p>
-            </div>
-          </Link>
-          <Link
             href="/orca/tasks"
             className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-[#eb1600]/30 transition-colors"
           >
             <div className="w-8 h-8 bg-[#eb1600]/10 rounded-full flex items-center justify-center text-[#eb1600] font-semibold text-sm">
-              3
+              2
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">Assign Tasks</p>
@@ -221,7 +194,7 @@ export function OverviewContent({ stats }: OverviewContentProps) {
             className="flex items-center gap-3 p-3 bg-white rounded-lg border border-gray-200 hover:border-[#eb1600]/30 transition-colors"
           >
             <div className="w-8 h-8 bg-[#eb1600]/10 rounded-full flex items-center justify-center text-[#eb1600] font-semibold text-sm">
-              4
+              3
             </div>
             <div>
               <p className="text-sm font-medium text-gray-900">Configure Agents</p>

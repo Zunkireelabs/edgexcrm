@@ -1,8 +1,8 @@
 import { NextRequest } from "next/server";
 import { isAssistantEnabled, isAssistantEnabledForTenant } from "@/lib/ai/flag";
-import { authenticateRequest } from "@/lib/api/auth";
+import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
 import { scopedClient } from "@/lib/supabase/scoped";
-import { apiSuccess, apiUnauthorized, apiNotFound, apiServiceUnavailable } from "@/lib/api/response";
+import { apiSuccess, apiUnauthorized, apiNotFound, apiServiceUnavailable, apiForbidden } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 
 interface ConversationRow {
@@ -37,6 +37,9 @@ export async function GET(
   // Same 404 shape as the env-flag-off path above — a tenant without the
   // per-tenant grant (migration 174) is indistinguishable from AI being off.
   if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
+
+  // Interim Orca access gate — owner/admin only (matches the /orca/* layout).
+  if (!requireAdmin(auth)) return apiForbidden();
 
   const db = await scopedClient(auth);
 
@@ -93,6 +96,9 @@ export async function DELETE(
   // Same 404 shape as the env-flag-off path above — a tenant without the
   // per-tenant grant (migration 174) is indistinguishable from AI being off.
   if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
+
+  // Interim Orca access gate — owner/admin only (matches the /orca/* layout).
+  if (!requireAdmin(auth)) return apiForbidden();
 
   const db = await scopedClient(auth);
 

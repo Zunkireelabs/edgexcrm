@@ -11,10 +11,10 @@ vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: isAssistantEnabledMock,
   isAssistantEnabledForTenant: isAssistantEnabledForTenantMock,
 }));
-vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
+vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock, requireAdmin: (a: { role?: string }) => a?.role === "owner" || a?.role === "admin" }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 
-const FAKE_AUTH = { userId: "user-1", tenantId: "tenant-1" } as unknown as AuthContext;
+const FAKE_AUTH = { userId: "user-1", tenantId: "tenant-1", role: "owner" } as unknown as AuthContext;
 
 function fakeReq(): NextRequest {
   return {} as NextRequest;
@@ -48,6 +48,18 @@ describe("GET /api/v1/ai/conversations", () => {
 
     expect(res.status).toBe(404);
     expect(isAssistantEnabledForTenantMock).toHaveBeenCalledWith("tenant-1");
+    expect(scopedClientMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["counselor", "viewer"])("403s for a %s (interim Orca access gate)", async (role) => {
+    isAssistantEnabledMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
+    isAssistantEnabledForTenantMock.mockResolvedValue(true);
+
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq());
+
+    expect(res.status).toBe(403);
     expect(scopedClientMock).not.toHaveBeenCalled();
   });
 
