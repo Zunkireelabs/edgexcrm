@@ -14,7 +14,7 @@ const buildToolsetMock = vi.fn();
 const logErrorMock = vi.fn();
 const streamTextMock = vi.fn();
 
-vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
+vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock, requireAdmin: (a: { role?: string }) => a?.role === "owner" || a?.role === "admin" }));
 
 vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: vi.fn(() => true),
@@ -240,5 +240,36 @@ describe("streamErrorMessage", () => {
   it("falls back to the generic message for an unknown error", async () => {
     const { streamErrorMessage } = await import("./route");
     expect(streamErrorMessage(new Error("boom"))).toMatch(/something went wrong generating a response/i);
+  });
+});
+
+describe("POST /api/v1/ai/chat — interim Orca access gate (owner/admin only)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    checkRateLimitMock.mockReset().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+    scopedClientMock.mockReset().mockResolvedValue(fakeDb());
+    checkDailyBudgetMock.mockReset().mockResolvedValue({ overBudget: false, usedToday: 0, limit: 200_000 });
+    buildToolsetMock.mockReset().mockReturnValue([]);
+    getToolApprovalSecretMock.mockReset().mockReturnValue(undefined);
+    streamTextMock.mockReset().mockReturnValue({ toUIMessageStreamResponse: vi.fn(() => new Response(null, { status: 200 })) });
+  });
+  afterEach(() => vi.resetModules());
+
+  const MSG = [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }];
+
+  it.each(["counselor", "viewer"])("403s for a %s", async (role) => {
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq({ messages: MSG }));
+    expect(res.status).toBe(403);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["owner", "admin"])("allows a %s through the gate", async (role) => {
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
+    getToolApprovalSecretMock.mockReturnValue(undefined);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq({ messages: MSG }));
+    expect(res.status).toBe(200);
   });
 });

@@ -11,11 +11,11 @@ vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: isAssistantEnabledMock,
   isAssistantEnabledForTenant: isAssistantEnabledForTenantMock,
 }));
-vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
+vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock, requireAdmin: (a: { role?: string }) => a?.role === "owner" || a?.role === "admin" }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
 
-const OWNER_AUTH = { userId: "owner-1", tenantId: "tenant-1" } as unknown as AuthContext;
-const OTHER_USER_AUTH = { userId: "intruder-1", tenantId: "tenant-1" } as unknown as AuthContext;
+const OWNER_AUTH = { userId: "owner-1", tenantId: "tenant-1", role: "owner" } as unknown as AuthContext;
+const OTHER_USER_AUTH = { userId: "intruder-1", tenantId: "tenant-1", role: "admin" } as unknown as AuthContext;
 
 function fakeReq(): NextRequest {
   return {} as NextRequest;
@@ -61,6 +61,15 @@ describe("GET /api/v1/ai/conversations/[id]", () => {
     const res = await GET(fakeReq(), params("c1"));
     expect(res.status).toBe(404);
     expect(authenticateRequestMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["counselor", "viewer"])("403s for a %s (interim Orca access gate)", async (role) => {
+    isAssistantEnabledMock.mockReturnValue(true);
+    authenticateRequestMock.mockResolvedValue({ ...OWNER_AUTH, role });
+    const { GET } = await import("./route");
+    const res = await GET(fakeReq(), params("c1"));
+    expect(res.status).toBe(403);
+    expect(scopedClientMock).not.toHaveBeenCalled();
   });
 
   it("returns 404 when the env flag is on but the tenant lacks the per-tenant grant", async () => {
