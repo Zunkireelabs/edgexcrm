@@ -65,19 +65,9 @@ export async function POST(request: NextRequest) {
   }
 
   const destinationUrl = typeof body.destination_url === "string" ? body.destination_url.trim() : "";
-  const trackingUrl = typeof body.tracking_url === "string" ? body.tracking_url.trim() : "";
 
-  if (!destinationUrl || !trackingUrl) {
-    return apiValidationError({
-      destination_url: !destinationUrl ? ["Destination URL is required"] : [],
-      tracking_url: !trackingUrl ? ["Tracking URL is required"] : [],
-    });
-  }
-
-  try {
-    new URL(trackingUrl);
-  } catch {
-    return apiValidationError({ tracking_url: ["Must be a valid URL"] });
+  if (!destinationUrl) {
+    return apiValidationError({ destination_url: ["Destination URL is required"] });
   }
 
   const formId = typeof body.form_id === "string" && body.form_id ? body.form_id : null;
@@ -99,6 +89,9 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // tracking_url is NOT NULL but depends on the row's own id (it points at
+  // /r/{id}), so insert with a placeholder, then update once we have the id —
+  // the redirect route needs a real DB row to look up.
   const { data: inserted, error } = await db
     .from("utm_links")
     .insert({
@@ -107,7 +100,7 @@ export async function POST(request: NextRequest) {
       utm_source: utmSource,
       utm_medium: utmMedium,
       utm_campaign: utmCampaign,
-      tracking_url: trackingUrl,
+      tracking_url: destinationUrl,
       created_by: auth.userId,
     })
     .select("*, form:form_configs(name)")
@@ -118,8 +111,21 @@ export async function POST(request: NextRequest) {
     return apiError("DB_ERROR", "Failed to save UTM link", 500);
   }
 
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://edgex.zunkireelabs.com";
+  const trackingUrl = `${baseUrl}/r/${inserted.id}`;
+
+  const { error: updateError } = await db
+    .from("utm_links")
+    .update({ tracking_url: trackingUrl })
+    .eq("id", inserted.id);
+
+  if (updateError) {
+    log.error({ err: updateError }, "Failed to finalize utm_link tracking_url");
+    return apiError("DB_ERROR", "Failed to save UTM link", 500);
+  }
+
   const { form, ...row } = inserted as unknown as UtmLinkRow;
-  const link: UtmLink = { ...row, form_name: form?.name ?? null, submission_count: 0 };
+  const link: UtmLink = { ...row, tracking_url: trackingUrl, form_name: form?.name ?? null, submission_count: 0, click_count: 0 };
 
   log.info({ linkId: link.id }, "UTM link saved");
   return apiSuccess(link, 201);
