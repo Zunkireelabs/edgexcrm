@@ -30,8 +30,8 @@ const FIXTURE = {
     { user_id: "user-2", name: "Manjila" },
   ],
   leadLists: [
-    { id: "list-1", name: "Qualified", is_staging: false, is_archive: false },
-    { id: "list-2", name: "Migration QC", is_staging: true, is_archive: false },
+    { id: "list-1", name: "Qualified", slug: "qualified", is_staging: false, is_archive: false },
+    { id: "list-2", name: "Migration QC", slug: "migration-qc", is_staging: true, is_archive: false },
   ],
   fieldsOfStudy: ["Engineering & Technology", "Business & Management"],
   studyLevels: ["Undergraduate", "Postgraduate"],
@@ -76,15 +76,30 @@ describe("buildAudienceOptionOverrides — F-11 fix", () => {
   // bug but was added by PR #405 after the original F-11 brief was written,
   // so it wasn't in Sadin's original report — kept as a separate assertion
   // rather than folded into REPORTED_BROKEN_FIELDS.
-  it("resolves a non-empty option list for stage, excluding staging/archive lists", () => {
+  //
+  // SMS-Stage-parity fix (mirrors email-campaigns #454): this used to filter
+  // out is_staging/is_archive lists, so Leads Organize (e.g. "Migration QC"),
+  // Archive, and Delete lists never appeared as Stage options at all — SMS
+  // has no separate hierarchical picker the way email does, so this flat
+  // list IS the only source of Stage choices. Every list must now resolve,
+  // tagged with the groupLabel that drives its chip's "Leads Organize: X" /
+  // "Archive: X" / "Delete: X" prefix.
+  it("resolves every lead list as a stage option, including Leads Organize/Archive/Delete", () => {
     const overrides = buildAudienceOptionOverrides({
       ...FIXTURE,
       leadLists: [
-        { id: "list-1", name: "Qualified", is_staging: false, is_archive: false },
-        { id: "list-2", name: "Migration QC", is_staging: true, is_archive: false },
+        { id: "list-1", name: "Qualified", slug: "qualified", is_staging: false, is_archive: false },
+        { id: "list-2", name: "Migration QC", slug: "migration-qc", is_staging: true, is_archive: false },
+        { id: "list-3", name: "Archived", slug: "archived", is_staging: false, is_archive: true },
+        { id: "list-4", name: "Delete", slug: "delete", is_staging: false, is_archive: false },
       ],
     });
-    expect(overrides.stage).toEqual([{ value: "list-1", label: "Qualified" }]);
+    expect(overrides.stage).toEqual([
+      { value: "list-1", label: "Qualified", groupLabel: "Stage" },
+      { value: "list-2", label: "Migration QC", groupLabel: "Leads Organize" },
+      { value: "list-3", label: "Archived", groupLabel: "Archive" },
+      { value: "list-4", label: "Delete", groupLabel: "Delete" },
+    ]);
   });
 
   it("stage has no static registry `options` array either (same root cause class)", () => {
