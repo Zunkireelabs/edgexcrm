@@ -11,6 +11,7 @@ import {
   apiNotFound,
 } from "@/lib/api/response";
 import type { ActivityType, CallOutcome, LeadActivityRecord } from "@/types/database";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 const VALID_ACTIVITY_TYPES: ActivityType[] = ["call", "email", "meeting"];
 const VALID_CALL_OUTCOMES: CallOutcome[] = ["connected", "left_voicemail", "no_answer", "busy", "wrong_number"];
@@ -175,6 +176,9 @@ export async function POST(
     console.error("Error creating activity:", error);
     return apiValidationError({ activity: ["Failed to create activity"] });
   }
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, leadId);
 
   // Get user email
   const { data: user } = await supabase

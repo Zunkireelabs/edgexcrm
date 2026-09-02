@@ -15,7 +15,7 @@
 //                               a recorded lever, not this slice)
 import { generateText } from "ai";
 import { parseOffice } from "officeparser";
-import { model } from "@/lib/ai/provider";
+import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import type { ParsedDocument } from "./chunker";
 
 const OCR_PROMPT =
@@ -52,6 +52,7 @@ function totalTextLength(doc: ParsedDocument): number {
 async function ocrImage(bytes: Uint8Array, mimeType: string): Promise<ParsedResult> {
   const { text, usage } = await generateText({
     model: model("fast"),
+    providerOptions: aiRequestProviderOptions(),
     messages: [
       {
         role: "user",
@@ -69,6 +70,7 @@ async function ocrScannedPdf(bytes: Uint8Array): Promise<ParsedResult> {
   try {
     const { text, usage } = await generateText({
       model: model("fast"),
+      providerOptions: aiRequestProviderOptions(),
       messages: [
         {
           role: "user",

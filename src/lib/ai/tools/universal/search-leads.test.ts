@@ -85,7 +85,7 @@ describe("search_leads full-name query tokenization", () => {
     const orCalls: string[] = [];
     const db = fakeDb([SARAH_ROW], orCalls);
     await searchLeadsTool.execute(fixtureCtx(db), { query: "Sarah", limit: 20 });
-    expect(orCalls).toEqual(["first_name.ilike.%Sarah%,last_name.ilike.%Sarah%,email.ilike.%Sarah%,phone.ilike.%Sarah%"]);
+    expect(orCalls).toEqual(['first_name.ilike."%Sarah%",last_name.ilike."%Sarah%",email.ilike."%Sarah%",phone.ilike."%Sarah%"']);
   });
 
   it("builds one .or() group per token for a full-name query", async () => {
@@ -93,8 +93,8 @@ describe("search_leads full-name query tokenization", () => {
     const db = fakeDb([SARAH_ROW], orCalls);
     await searchLeadsTool.execute(fixtureCtx(db), { query: "Sarah Chen", limit: 20 });
     expect(orCalls).toEqual([
-      "first_name.ilike.%Sarah%,last_name.ilike.%Sarah%,email.ilike.%Sarah%,phone.ilike.%Sarah%",
-      "first_name.ilike.%Chen%,last_name.ilike.%Chen%,email.ilike.%Chen%,phone.ilike.%Chen%",
+      'first_name.ilike."%Sarah%",last_name.ilike."%Sarah%",email.ilike."%Sarah%",phone.ilike."%Sarah%"',
+      'first_name.ilike."%Chen%",last_name.ilike."%Chen%",email.ilike."%Chen%",phone.ilike."%Chen%"',
     ]);
   });
 
@@ -134,7 +134,7 @@ describe("search_leads display id matching", () => {
     const orCalls: string[] = [];
     const db = fakeDb([], orCalls);
     await searchLeadsTool.execute(fixtureCtx(db), { query: "Manisha", limit: 20 });
-    expect(orCalls).toEqual(["first_name.ilike.%Manisha%,last_name.ilike.%Manisha%,email.ilike.%Manisha%,phone.ilike.%Manisha%"]);
+    expect(orCalls).toEqual(['first_name.ilike."%Manisha%",last_name.ilike."%Manisha%",email.ilike."%Manisha%",phone.ilike."%Manisha%"']);
   });
 
   it("mixes an exact display-id match with fuzzy name matching across a multi-token query", async () => {
@@ -143,7 +143,7 @@ describe("search_leads display id matching", () => {
     await searchLeadsTool.execute(fixtureCtx(db), { query: "ADM-009 Sharma", limit: 20 });
     expect(orCalls).toEqual([
       "display_id.ilike.ADM-009",
-      "first_name.ilike.%Sharma%,last_name.ilike.%Sharma%,email.ilike.%Sharma%,phone.ilike.%Sharma%",
+      'first_name.ilike."%Sharma%",last_name.ilike."%Sharma%",email.ilike."%Sharma%",phone.ilike."%Sharma%"',
     ]);
   });
 });

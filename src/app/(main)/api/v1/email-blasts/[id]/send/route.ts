@@ -21,6 +21,18 @@ interface BlastRow {
   status: string;
 }
 
+// Each row upserted here carries a full copy of the rendered subject +
+// body_html, unlike SMS's short message bodies or suppression.ts's bare email
+// strings — so the same "don't put the whole audience in one request" problem
+// suppression.ts hit (see its CHUNK_SIZE comment) shows up here at a much
+// smaller row count. A single unchunked upsert of a few thousand real-size
+// HTML emails is tens of MB in one request and fails outright (observed
+// live on a 3,114-row Admizz blast — "Failed to materialize recipient
+// rows"). 100 keeps each request's payload small regardless of template
+// size or audience size; ON CONFLICT DO NOTHING makes re-running any
+// chunk (including a retry after a partial failure) safe.
+const MATERIALIZE_CHUNK_SIZE = 100;
+
 // POST /api/v1/email-blasts/[id]/send — OUTREACH-PHASE1-BRIEF.md §5. Order is
 // fixed and load-bearing, mirroring sms/blasts/[id]/send: re-resolve ->
 // materialize rows -> emit event. Do not reorder.
@@ -92,12 +104,13 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const newRows = [...audience.sendable.map((r) => toRow(r, "queued")), ...audience.suppressed.map((r) => toRow(r, "suppressed"))];
 
-  if (newRows.length > 0) {
+  for (let i = 0; i < newRows.length; i += MATERIALIZE_CHUNK_SIZE) {
+    const chunk = newRows.slice(i, i + MATERIALIZE_CHUNK_SIZE);
     const { error: upsertError } = await db
       .from("email_messages")
-      .upsert(newRows, { onConflict: "source_id,lead_id", ignoreDuplicates: true });
+      .upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true });
     if (upsertError) {
-      log.error({ err: upsertError, blastId: id }, "Failed to materialize email_messages rows");
+      log.error({ err: upsertError, blastId: id, chunkStart: i, chunkSize: chunk.length }, "Failed to materialize email_messages rows");
       return apiServiceUnavailable("Failed to materialize recipient rows");
     }
   }

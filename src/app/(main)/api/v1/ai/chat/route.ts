@@ -10,8 +10,8 @@ import {
   type UIMessage,
 } from "ai";
 import { isAssistantEnabled, isAssistantEnabledForTenant, getToolApprovalSecret } from "@/lib/ai/flag";
-import { authenticateRequest } from "@/lib/api/auth";
-import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited } from "@/lib/api/response";
+import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited, apiForbidden } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { checkDailyBudget } from "@/lib/ai/budget";
@@ -21,7 +21,7 @@ import { toAiSdkTools, buildToolApproval, buildDeniedWriteActionRows } from "@/l
 import { buildRefineToolInput } from "@/lib/ai/tools/refine-input";
 import { buildSystemPrompt } from "@/lib/ai/prompts/assistant";
 import { getIndustryAiConfig } from "@/industries/_loader";
-import { model } from "@/lib/ai/provider";
+import { model, aiRequestProviderOptions } from "@/lib/ai/provider";
 import { startTrace } from "@/lib/ai/telemetry";
 import { createRequestLogger } from "@/lib/logger";
 import type { ScopedClient } from "@/lib/supabase/scoped";
@@ -73,6 +73,10 @@ export async function POST(request: NextRequest) {
   // Same 404 shape as the env-flag-off path above — a tenant without the
   // per-tenant grant (migration 174) is indistinguishable from AI being off.
   if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
+
+  // Interim Orca access gate: Ask Orca is owner/admin only until per-user AI
+  // access levels ship. Matches the /orca/* layout gate.
+  if (!requireAdmin(auth)) return apiForbidden();
 
   const rate = await checkRateLimit(`ai_chat:${auth.userId}`, AI_CHAT_LIMIT);
   if (!rate.allowed) return apiRateLimited(rate.retryAfterSeconds);
@@ -150,6 +154,7 @@ export async function POST(request: NextRequest) {
 
   const result = streamText({
     model: model("agent"),
+    providerOptions: aiRequestProviderOptions(),
     system: systemPrompt,
     messages: modelMessages,
     tools,
@@ -221,6 +226,7 @@ export async function POST(request: NextRequest) {
               try {
                 const { text } = await generateText({
                   model: model("fast"),
+                  providerOptions: aiRequestProviderOptions(),
                   prompt: `Write a short 3-6 word title (no quotes, no trailing punctuation) summarizing this CRM assistant chat, based on the user's first message:\n\n"${firstUserText.slice(0, 500)}"`,
                 });
                 const title = text.trim().replace(/^"|"$/g, "").slice(0, 80);

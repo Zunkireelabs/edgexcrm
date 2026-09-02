@@ -1,5 +1,9 @@
 "use client";
 
+// MOCK + UNREACHABLE: rendered by no route. `/orca/compare` now 404s. This
+// file (MOCK_TASK_ROLES / MOCK_STATS / MOCK_HANDOFFS) is retained as the
+// starting point for the real version, pending the real data model.
+
 import { useState } from "react";
 import { GitCompare, Info } from "lucide-react";
 import { ModeToggle } from "./mode-toggle";

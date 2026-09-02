@@ -11,5 +11,10 @@ export default async function OrcaLayout({ children }: { children: React.ReactNo
   // layout, so gating here covers all of them in one place.
   if (!isAssistantEnabled() || !tenantData.tenant.ai_enabled) notFound();
 
+  // Interim access gate: the whole Orca surface (Ask Orca, the Fleet, the
+  // approval queue) is owner/admin only until per-user AI access levels are
+  // built. Page gate only — the matching AI API routes gate themselves.
+  if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
+
   return children;
 }

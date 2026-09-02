@@ -53,7 +53,10 @@ function fakeDb(opts: FakeDbOptions = {}) {
   const db = {
     from: (table: string) => {
       if (table === "leads") {
-        return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: opts.leadExists ? { id: "lead-1" } : null }) }) }) };
+        return {
+          select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: opts.leadExists ? { id: "lead-1" } : null }) }) }),
+          update: () => ({ eq: async () => ({ data: null, error: null }) }),
+        };
       }
       if (table === "deals") {
         return { select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: opts.dealExists ? { id: "deal-1" } : null }) }) }) };

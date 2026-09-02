@@ -84,6 +84,8 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                   <TableHead>Source</TableHead>
                   <TableHead>Medium</TableHead>
                   <TableHead>Campaign</TableHead>
+                  <TableHead className="text-right">Submissions</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -104,6 +106,8 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                     <TableCell>{link.utm_source ?? <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell>{link.utm_medium ?? <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell>{link.utm_campaign ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="text-right">{link.submission_count}</TableCell>
+                    <TableCell className="text-right">{link.click_count}</TableCell>
                     <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                       {formatRelativeTime(link.created_at)}
                     </TableCell>

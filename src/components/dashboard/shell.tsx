@@ -40,7 +40,6 @@ import {
   Network,
   ListChecks,
   ListTodo,
-  GitCompare,
   Plane,
   MapPin,
   Handshake,
@@ -108,11 +107,9 @@ const ORCA_NAV: Array<{ href: string; label: string; icon: LucideIcon; adminOnly
   { href: "/orca", label: "Overview", icon: LayoutDashboard },
   { href: "/orca/activity", label: "Ask Orca", icon: MessageSquare },
   { href: "/orca/structure", label: "Org Structure", icon: Network },
-  { href: "/orca/roles", label: "Roles", icon: Contact },
   { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
   { href: "/orca/agents", label: "Agents", icon: Bot },
   { href: "/orca/review", label: "Review", icon: Inbox, adminOnly: true },
-  { href: "/orca/compare", label: "Compare", icon: GitCompare },
 ];
 
 // Icon registry for industry-contributed nav items. Manifests reference
@@ -316,11 +313,16 @@ export function DashboardShell({
   leadLists = [],
   stagingLists = [],
   archiveLists = [],
-  aiAssistantEnabled = false,
+  aiAssistantEnabled: aiAssistantEnabledProp = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  // Interim Orca access gate: the entire Orca surface (mode switcher, nav,
+  // Ask-Orca assistant panel) is owner/admin only until per-user AI access
+  // levels ship. The matching /orca/* layout and AI API routes enforce the
+  // same rule server-side — this just keeps the UI consistent.
+  const aiAssistantEnabled = aiAssistantEnabledProp && (role === "owner" || role === "admin");
   // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
   // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
   // consistent with the (hidden) mode-switcher tab above.
@@ -376,6 +378,39 @@ export function DashboardShell({
   useEffect(() => {
     if (mounted) localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed, mounted]);
+
+  // Suspended-account watchdog. Suspension (migration 220) is already
+  // enforced server-side on every API call and every server-rendered
+  // navigation (buildUserAuthContext/getCurrentUserTenant both fail-closed) —
+  // but someone sitting on an already-loaded dashboard tab with no further
+  // navigation or fetch never hits either checkpoint, so they'd keep full
+  // access until they happened to click something. Poll the same
+  // /api/v1/auth/status endpoint the login page uses so a suspension takes
+  // effect within one interval even with zero interaction. Not instant
+  // (~15s worst case) — the server-side checks remain the actual security
+  // boundary; this only closes the stale-open-tab UX gap.
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSuspended() {
+      try {
+        const res = await fetch("/api/v1/auth/status");
+        if (!res.ok || cancelled) return;
+        const { data } = await res.json();
+        if (cancelled || !data?.blocked) return;
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.push("/login?error=suspended");
+      } catch {
+        // Network hiccup — the next interval tick retries; server-side
+        // enforcement still applies to any real request in the meantime.
+      }
+    }
+    const intervalId = setInterval(checkSuspended, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [router]);
 
   async function handleLogout() {
     const supabase = createClient();

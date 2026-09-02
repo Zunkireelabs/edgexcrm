@@ -184,6 +184,11 @@ export async function POST(request: NextRequest) {
 
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
+  // NOTE: not role-gated to owner/admin like the rest of the Orca surface.
+  // This is a read-only label resolver, already scoped per-caller (leads
+  // outside the caller's lead-scope resolve as NOT FOUND, undo refs are
+  // filtered to the caller's own most-recent action). Its only callers sit
+  // behind the /orca/* admin gate or the (admin-gated) AI chat approval flow.
 
   let body: { refs?: unknown };
   try {

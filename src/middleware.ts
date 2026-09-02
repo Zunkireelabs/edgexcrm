@@ -37,6 +37,12 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip auth for the UTM click-tracking redirect — hit by unauthenticated
+  // ad-click traffic, must never redirect to /login
+  if (request.nextUrl.pathname.startsWith("/r/")) {
+    return NextResponse.next();
+  }
+
   return await updateSession(request);
 }
 

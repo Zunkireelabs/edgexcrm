@@ -6,6 +6,7 @@ import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { createNotificationsExcept, NotificationTypes } from "@/lib/notifications";
 import { createAuditLog } from "@/lib/api/audit";
 import { createRequestLogger } from "@/lib/logger";
+import { touchLeadUpdatedAt } from "@/lib/leads/touch-updated-at";
 
 export interface CreateLeadNoteInput {
   content: string;
@@ -109,6 +110,9 @@ export async function createLeadNote(
     changes: { note_id: { old: null, new: note.id } },
     requestId,
   });
+
+  // Keep "Updated At" reflecting real activity, not just direct field edits.
+  await touchLeadUpdatedAt(supabase, auth.tenantId, leadId);
 
   // Notify mentioned users — but only those that genuinely belong to the
   // lead's branch/tenant (don't trust the client's id list blindly).
