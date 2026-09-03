@@ -11,9 +11,11 @@ const redirectMock = vi.fn(() => {
 
 vi.mock("next/navigation", () => ({ notFound: notFoundMock, redirect: redirectMock }));
 vi.mock("@/lib/supabase/queries", () => ({ getCurrentUserTenant: getCurrentUserTenantMock }));
-vi.mock("@/lib/ai/flag", () => ({
+// Only isAssistantEnabled is stubbed — requireOrcaAccess stays REAL so this
+// test bites if the owner-only predicate is ever widened (see #492).
+vi.mock("@/lib/ai/flag", async (importActual) => ({
+  ...(await importActual<typeof import("@/lib/ai/flag")>()),
   isAssistantEnabled: isAssistantEnabledMock,
-  requireOrcaAccess: (role?: string) => role === "owner",
 }));
 
 function tenant(role: string) {
