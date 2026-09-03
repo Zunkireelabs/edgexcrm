@@ -20,10 +20,19 @@ export async function computeSubmissionCounts(
     .select("intake_source, intake_medium, intake_campaign")
     .is("deleted_at", null);
 
+  console.log("[UTM-DEBUG] requested link keys:", links.map((l) => keyOf(l.utm_source, l.utm_medium, l.utm_campaign)));
+
   if (error || !leadRows) {
     console.error("computeSubmissionCounts: leads query failed", error);
+    console.log("[UTM-DEBUG] query errored — error object:", JSON.stringify(error));
     return countByKey;
   }
+
+  console.log("[UTM-DEBUG] leadRows fetched:", leadRows.length);
+  console.log(
+    "[UTM-DEBUG] raw intake fields of first 20 leads:",
+    JSON.stringify((leadRows as unknown[]).slice(0, 20))
+  );
 
   for (const row of leadRows as unknown as Array<{
     intake_source: string | null;
@@ -37,6 +46,8 @@ export async function computeSubmissionCounts(
     const key = `${s}|${m}|${c}`;
     countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
   }
+
+  console.log("[UTM-DEBUG] computed countByKey:", JSON.stringify(Array.from(countByKey.entries())));
 
   return countByKey;
 }
