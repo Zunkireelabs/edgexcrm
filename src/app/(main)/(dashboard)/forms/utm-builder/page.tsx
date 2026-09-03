@@ -29,6 +29,7 @@ export default async function UtmBuilderPage() {
     .order("created_at", { ascending: false });
 
   const rows = (rawLinks ?? []) as UtmLinkRow[];
+  console.log("[UTM-DEBUG] tenantData.tenant.id used for this page render:", tenantData.tenant.id, tenantData.tenant.slug);
   const db = await scopedClientForTenant(tenantData.tenant.id);
   const countByKey = await computeSubmissionCounts(db, rows);
   const initialLinks: UtmLink[] = rows.map(({ form, ...row }) => ({
