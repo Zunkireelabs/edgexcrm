@@ -93,6 +93,7 @@ export default async function DashboardLayout({
     stagingLists,
     allowedNavKeys,
     industryId: tenantData.tenant.industry_id ?? null,
+    role: tenantData.role,
     // Fold in the role check here (not inside buildNavIndex) so the builder's
     // seam and the other callers of aiAssistantEnabled stay consistent. Mirrors
     // the /orca/* layout gate — every Orca route 404s for non-owner/admin, so
@@ -106,6 +107,7 @@ export default async function DashboardLayout({
         tenant={tenantData.tenant}
         role={tenantData.role}
         industryId={tenantData.tenant.industry_id ?? null}
+        aiAssistantEnabled={aiAssistantEnabled}
       >
         <GlobalSearchProvider navIndex={navIndex}>
           <DashboardShell

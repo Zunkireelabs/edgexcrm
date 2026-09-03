@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { buildNavIndex } from "./build-nav-index";
+import { SETTINGS_CATEGORIES } from "@/components/dashboard/settings/modal/settings-registry";
 
 const BASE = {
   industrySidebarItems: [],
@@ -7,10 +8,18 @@ const BASE = {
   stagingLists: [],
   allowedNavKeys: null,
   industryId: "education_consultancy" as string | null,
+  role: "owner",
+  isOrcaAvailable: true,
 };
 
 function orcaEntries(isOrcaAvailable: boolean) {
   return buildNavIndex({ ...BASE, isOrcaAvailable }).filter((r) => r.id.startsWith("orca-"));
+}
+
+function settingsIds(opts: Partial<typeof BASE>) {
+  return buildNavIndex({ ...BASE, ...opts })
+    .filter((r) => r.id.startsWith("settings-") || r.id === "settings-root")
+    .map((r) => r.id);
 }
 
 describe("buildNavIndex — Orca palette entries", () => {
@@ -38,5 +47,54 @@ describe("buildNavIndex — Orca palette entries", () => {
     const hrefs = orcaEntries(true).map((r) => (r.action.kind === "route" ? r.action.href : null));
     expect(hrefs).not.toContain("/orca/roles");
     expect(hrefs).not.toContain("/orca/compare");
+  });
+});
+
+describe("buildNavIndex — Settings palette entries", () => {
+  it("owner sees every non-education tab plus ai-orca and leave", () => {
+    const ids = settingsIds({ role: "owner", industryId: "education_consultancy", isOrcaAvailable: true });
+    expect(ids).toContain("settings-root");
+    expect(ids).toContain("settings-ai-orca");
+    expect(ids).toContain("settings-leave");
+    expect(ids).toContain("settings-general");
+    expect(ids).toContain("settings-integrations");
+  });
+
+  it("counselor sees no settings entries at all — not even the parent", () => {
+    const ids = settingsIds({ role: "counselor" });
+    expect(ids).toEqual([]);
+  });
+
+  it("viewer sees no settings entries at all", () => {
+    const ids = settingsIds({ role: "viewer" });
+    expect(ids).toEqual([]);
+  });
+
+  it("owner without Orca available does not see the ai-orca tab", () => {
+    const ids = settingsIds({ role: "owner", isOrcaAvailable: false });
+    expect(ids).toContain("settings-root");
+    expect(ids).toContain("settings-general");
+    expect(ids).not.toContain("settings-ai-orca");
+  });
+
+  it("non-education owner does not see academic-operations or compliance", () => {
+    const ids = settingsIds({ role: "owner", industryId: "it_agency" });
+    expect(ids).not.toContain("settings-academic-operations");
+    expect(ids).not.toContain("settings-compliance");
+  });
+
+  it("education owner sees academic-operations and compliance", () => {
+    const ids = settingsIds({ role: "owner", industryId: "education_consultancy" });
+    expect(ids).toContain("settings-academic-operations");
+    expect(ids).toContain("settings-compliance");
+  });
+
+  it("drift guard: every registry category has a settings palette entry available to an owner", () => {
+    // Owner in education with Orca on — the maximally-permissive context, so
+    // every category's isVisible() passes and each must surface exactly once.
+    const ids = settingsIds({ role: "owner", industryId: "education_consultancy", isOrcaAvailable: true });
+    for (const cat of SETTINGS_CATEGORIES) {
+      expect(ids).toContain(`settings-${cat.key}`);
+    }
   });
 });

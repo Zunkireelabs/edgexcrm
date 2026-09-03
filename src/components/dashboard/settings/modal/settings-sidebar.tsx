@@ -10,8 +10,8 @@ interface SettingsSidebarProps {
 }
 
 export function SettingsSidebar({ activeTab, onTabChange }: SettingsSidebarProps) {
-  const { tenant, role, industryId, isEducation } = useSettingsModal();
-  const ctx = { role, industryId, isEducation };
+  const { tenant, role, industryId, isEducation, isSettingsAdmin, isOrcaAvailable } = useSettingsModal();
+  const ctx = { role, industryId, isEducation, isSettingsAdmin, isOrcaAvailable };
 
   const visibleCategories = SETTINGS_CATEGORIES.filter((c) => c.isVisible(ctx));
 
