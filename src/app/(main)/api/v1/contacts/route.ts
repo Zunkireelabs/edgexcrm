@@ -14,6 +14,7 @@ import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -43,15 +44,15 @@ export async function GET(request: NextRequest) {
   }
 
   if (q) {
-    // Strip characters that have special meaning in PostgREST .or() parsing
-    // (commas separate OR conditions; parens group; backslash escapes). Replace
-    // with spaces so the rest of the search string remains usable.
-    const safeQ = q.replace(/[,()\\]/g, " ").trim();
-    if (safeQ) {
-      query = query.or(
-        `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%,title.ilike.%${safeQ}%`
-      );
-    }
+    // Sanitised to a literal ilike operand — see src/lib/api/search-filter.ts.
+    const searchOr = buildIlikeOrFilter(
+      ["first_name", "last_name", "email", "title"],
+      q,
+    );
+    // A search that sanitises to nothing (e.g. `q=%`) is still a request to
+    // filter — return an empty list, never the whole tenant.
+    if (!searchOr) return apiSuccess([]);
+    query = query.or(searchOr);
   }
 
   const { data: contacts, error } = await query.order("last_name").order("first_name");

@@ -17,6 +17,30 @@ export interface GatingContext {
   role: string;
   industryId: string | null;
   isEducation: boolean;
+  /** role === "owner" || role === "admin" — settings is owner/admin-only (see settings/page.tsx). */
+  isSettingsAdmin: boolean;
+  /** aiAssistantEnabled && isSettingsAdmin — mirrors the /orca/* layout gate (layout.tsx). */
+  isOrcaAvailable: boolean;
+}
+
+/**
+ * Single source of truth for deriving a {@link GatingContext}. Both the settings
+ * modal sidebar and the ⌘K palette build their context through this so the two
+ * can never drift on how a role/industry/flag maps to tab visibility.
+ */
+export function makeGatingContext(input: {
+  role: string;
+  industryId: string | null;
+  aiAssistantEnabled: boolean;
+}): GatingContext {
+  const isSettingsAdmin = input.role === "owner" || input.role === "admin";
+  return {
+    role: input.role,
+    industryId: input.industryId,
+    isEducation: input.industryId === "education_consultancy",
+    isSettingsAdmin,
+    isOrcaAvailable: input.aiAssistantEnabled && isSettingsAdmin,
+  };
 }
 
 export interface SettingsCategory {
@@ -31,7 +55,7 @@ export interface SettingsCategory {
 // Panels are lazily imported for code-splitting.
 // React.lazy is declared here but the actual dynamic() call happens inside
 // settings-modal.tsx where "use client" is in scope.
-export const SETTINGS_CATEGORIES: Omit<SettingsCategory, "panel">[] = [
+export const SETTINGS_CATEGORIES = [
   {
     key: "general",
     label: "General",
@@ -42,7 +66,7 @@ export const SETTINGS_CATEGORIES: Omit<SettingsCategory, "panel">[] = [
     key: "ai-orca",
     label: "AI & Orca",
     icon: Bot,
-    isVisible: () => true,
+    isVisible: (ctx: GatingContext) => ctx.isOrcaAvailable,
   },
   {
     key: "organization",
@@ -92,7 +116,10 @@ export const SETTINGS_CATEGORIES: Omit<SettingsCategory, "panel">[] = [
     icon: FileCheck,
     isVisible: (ctx: GatingContext) => ctx.isEducation,
   },
-];
+] as const satisfies readonly Omit<SettingsCategory, "panel">[];
+
+/** Every registered settings category key — the single source for tab identity. */
+export type SettingsCategoryKey = (typeof SETTINGS_CATEGORIES)[number]["key"];
 
 // Icon map for external references
 export { Building2, Users };
