@@ -124,12 +124,20 @@ The `.or()` ilike search chain is written more than once, with different sanitiz
 |---|---|---|
 | `src/app/(main)/api/v1/leads/route.ts` | — | ✅ already through the compiler (`search` FieldDef, `registry/leads.ts:117`) |
 | `src/lib/ai/tools/universal/search-leads.ts` | 121-131 | per-token `.or()` groups, `display_id` special case |
-| `src/app/(main)/api/v1/integrations/crm/leads/route.ts` | 65-66 | **unsanitized** — `search` is interpolated straight into the PostgREST filter string |
+| `src/app/(main)/api/v1/integrations/crm/leads/route.ts` | 65-66 | ✅ sanitized via `buildIlikeOrFilter` (#476) — was **unsanitized** until 2026-09-02 |
 
-`integrations/crm/leads/route.ts:65` is the one that matters beyond tidiness. A `search` value
-containing `,` `)` or `.` escapes the value position and injects a predicate into the filter string.
-That is the top entry in the risk register ("PostgREST filter-string injection"), and this route is
-reachable with an **integration API key** (`crm_live_…`), i.e. by a third party.
+> **Updated 2026-09-03 — the security half of this phase is already done.** When this brief was
+> written, `integrations/crm/leads/route.ts:65` interpolated `search` straight into the filter
+> string: a value containing `,` `)` or `.` escaped the value position and injected a predicate,
+> reachable by a third party holding an **integration API key** (`crm_live_…`). That was the top
+> entry in the risk register ("PostgREST filter-string injection"). It was fixed out-of-band by
+> **#476** and **#479**, which introduced `buildIlikeOrFilter()` (`src/lib/api/search-filter.ts`)
+> and routed all six `.or()` search sites through it — including a `q=%` match-all bypass that
+> returned the whole tenant. **There is no open injection hole; do not go looking for one.**
+>
+> What remains of 2b.1 is **deduplication only** — the same search predicate is still written in
+> more than one place and can still drift. That is a maintainability win, not a security fix, so
+> re-rank it accordingly when you decide what to pick up.
 
 Route both call sites through the registry's `search` FieldDef via `compileFilter`. Keep
 `search-leads.ts`'s multi-token AND semantics — each token must match somewhere — and keep the
