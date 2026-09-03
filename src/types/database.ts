@@ -362,10 +362,12 @@ export interface UtmLink {
   utm_medium: string | null;
   utm_campaign: string | null;
   tracking_url: string;
+  click_count: number;
   created_by: string | null;
   created_at: string;
   // Joined from form_configs (set by API/server when listing)
   form_name?: string | null;
+  submission_count: number;
 }
 
 export interface FormConfig {

@@ -11,9 +11,10 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { computeSubmissionCounts, keyOf } from "@/lib/utm/submission-counts";
 import type { UtmLink } from "@/types/database";
 
-type UtmLinkRow = Omit<UtmLink, "form_name"> & {
+type UtmLinkRow = Omit<UtmLink, "form_name" | "submission_count"> & {
   form: { name: string } | null;
 };
 
@@ -37,9 +38,11 @@ export async function GET() {
   }
 
   const rows = (data ?? []) as unknown as UtmLinkRow[];
+  const countByKey = await computeSubmissionCounts(db, rows);
   const links: UtmLink[] = rows.map(({ form, ...row }) => ({
     ...row,
     form_name: form?.name ?? null,
+    submission_count: countByKey.get(keyOf(row.utm_source, row.utm_medium, row.utm_campaign)) ?? 0,
   }));
 
   return apiSuccess({ links });
@@ -62,19 +65,9 @@ export async function POST(request: NextRequest) {
   }
 
   const destinationUrl = typeof body.destination_url === "string" ? body.destination_url.trim() : "";
-  const trackingUrl = typeof body.tracking_url === "string" ? body.tracking_url.trim() : "";
 
-  if (!destinationUrl || !trackingUrl) {
-    return apiValidationError({
-      destination_url: !destinationUrl ? ["Destination URL is required"] : [],
-      tracking_url: !trackingUrl ? ["Tracking URL is required"] : [],
-    });
-  }
-
-  try {
-    new URL(trackingUrl);
-  } catch {
-    return apiValidationError({ tracking_url: ["Must be a valid URL"] });
+  if (!destinationUrl) {
+    return apiValidationError({ destination_url: ["Destination URL is required"] });
   }
 
   const formId = typeof body.form_id === "string" && body.form_id ? body.form_id : null;
@@ -96,9 +89,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  // Generate the id up front so tracking_url (which points at /r/{id}) can be
+  // set in the same insert — avoids a second update() call, and the orphaned
+  // placeholder-URL row that a failure between the two would leave behind.
+  const linkId = crypto.randomUUID();
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://edgex.zunkireelabs.com";
+  const trackingUrl = `${baseUrl}/r/${linkId}`;
+
   const { data: inserted, error } = await db
     .from("utm_links")
     .insert({
+      id: linkId,
       form_id: formId,
       destination_url: destinationUrl,
       utm_source: utmSource,
@@ -116,7 +117,7 @@ export async function POST(request: NextRequest) {
   }
 
   const { form, ...row } = inserted as unknown as UtmLinkRow;
-  const link: UtmLink = { ...row, form_name: form?.name ?? null };
+  const link: UtmLink = { ...row, form_name: form?.name ?? null, submission_count: 0, click_count: 0 };
 
   log.info({ linkId: link.id }, "UTM link saved");
   return apiSuccess(link, 201);

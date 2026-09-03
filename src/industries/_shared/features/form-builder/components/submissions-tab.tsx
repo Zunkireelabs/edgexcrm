@@ -71,6 +71,10 @@ function sourceCampaign(row: SubmissionRow): string {
   return parts.length ? parts.join(" / ") : "—";
 }
 
+function utmDetail(row: SubmissionRow): string {
+  return [row.intake_source, row.intake_medium, row.intake_campaign].filter(Boolean).join(" / ") || "—";
+}
+
 export function SubmissionsTab({ formConfigId, active, onTotalChange }: SubmissionsTabProps) {
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -287,6 +291,7 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
                 <TableHead>Email</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Source / Campaign</TableHead>
+                <TableHead>UTM</TableHead>
                 <TableHead>Status</TableHead>
               </TableRow>
             </TableHeader>
@@ -328,6 +333,7 @@ export function SubmissionsTab({ formConfigId, active, onTotalChange }: Submissi
                   <TableCell className="text-sm text-muted-foreground">{row.email || "—"}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{row.phone || "—"}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{sourceCampaign(row)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{utmDetail(row)}</TableCell>
                   <TableCell>
                     {row.matched_existing ? (
                       <Badge variant="secondary" className="text-xs">
