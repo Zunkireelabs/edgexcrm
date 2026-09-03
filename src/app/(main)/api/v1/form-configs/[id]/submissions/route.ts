@@ -6,6 +6,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { dayBoundsInTz } from "@/lib/filters/compile";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -188,23 +189,31 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
   const dateRange = buildDateRangeFilter(from, to, tz);
   const matchedFilter = resolveMatchedFilter(matched);
 
+  // Sanitised to a literal ilike operand — see src/lib/api/search-filter.ts.
+  const searchOr = q ? buildIlikeOrFilter(["first_name", "last_name", "email", "phone"], q) : null;
+  // `q` was supplied but sanitises to nothing (e.g. `q=%`): the caller asked to
+  // filter, so return an empty result set — never the whole form's submissions.
+  if (q && !searchOr) {
+    if (format === "csv") {
+      return new Response(toCsv([], new Map()), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": `attachment; filename="form-${id}-submissions.csv"`,
+        },
+      });
+    }
+    const emptyLimit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 50));
+    return apiPaginated([], { page: 1, pageSize: emptyLimit, total: 0, totalPages: 1 });
+  }
+
   function buildQuery(pageFrom: number, pageTo: number, withCount: boolean) {
     let query = db
       .from("lead_submissions")
       .select(SELECT_COLUMNS, withCount ? { count: "exact" } : undefined)
       .eq("form_config_id", id);
 
-    if (q) {
-      // Strip characters that have special meaning in PostgREST .or() parsing
-      // (commas separate OR conditions; parens group; backslash escapes) — same
-      // convention as src/app/(main)/api/v1/contacts/route.ts.
-      const safeQ = q.replace(/[,()\\]/g, " ").trim();
-      if (safeQ) {
-        query = query.or(
-          `first_name.ilike.%${safeQ}%,last_name.ilike.%${safeQ}%,email.ilike.%${safeQ}%,phone.ilike.%${safeQ}%`
-        );
-      }
-    }
+    if (searchOr) query = query.or(searchOr);
     if (matchedFilter !== undefined) query = query.eq("matched_existing", matchedFilter);
     if (dateRange.gte) query = query.gte("created_at", dateRange.gte);
     if (dateRange.lt) query = query.lt("created_at", dateRange.lt);
