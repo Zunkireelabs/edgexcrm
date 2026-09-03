@@ -13,12 +13,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { AdvancedFilterBar } from "@/components/filters/advanced-filter-bar";
-import type { FilterOption } from "@/components/filters/types";
+import type { FilterOption, HierarchicalFieldGroups } from "@/components/filters/types";
 import { leadFields } from "@/lib/filters/registry/leads";
 import { useEduTaxonomy } from "@/hooks/use-edu-taxonomy";
 import { EMPTY_TREE, type CompileCtx, type FilterCondition, type FilterTree } from "@/lib/filters/types";
 import { conditionSchema } from "@/lib/filters/schema";
 import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-industries";
+import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { CharacterCounter } from "./character-counter";
 import { CostPreviewDialog } from "./cost-preview-dialog";
 import { RecipientsPreviewDialog } from "./recipients-preview-dialog";
@@ -127,17 +128,46 @@ export function buildAudienceOptionOverrides(input: {
   };
 }
 
+/** "Leads Organize" (is_staging=true) vs "Stage" (is_staging=false) groups
+ *  for the "Add filter" picker's stage field — mirrors the leads-page
+ *  sidebar grouping. Adapted from the email-campaigns composer's
+ *  buildStageHierarchy (#454) now that this composer has the same
+ *  is_staging/is_archive/slug data (#465) to build it from — brings the SMS
+ *  "Add filter" menu to parity with email's grouping.
+ *
+ *  Deliberately NOT identical to email's version: stages here carry no
+ *  `statusOptions`. FilterFieldPicker hides the flat "Status" field the
+ *  moment any hierarchical stage has status leaves attached (so it isn't
+ *  offered twice) — fine for email, which has no separate standalone Status
+ *  use, but SMS audiences are commonly built on "Status = X" alone, and that
+ *  flat filter must keep working exactly as it does today. Leaving
+ *  statusOptions empty keeps every Stage a plain (non-expandable) leaf, so
+ *  the flat Status field stays visible under BASIC, unaffected. */
+function buildStageHierarchy(leadLists: ComposerLeadList[], isAdmin: boolean): HierarchicalFieldGroups {
+  const archiveList = leadLists.find((l) => !l.is_staging && l.is_archive === true);
+  const deleteList = leadLists.find((l) => !l.is_staging && l.slug === "delete");
+  return {
+    orgLists: isAdmin ? leadLists.filter((l) => l.is_staging && !l.is_archive).map((l) => ({ value: l.id, label: l.name })) : [],
+    stages: leadLists
+      .filter((l) => !l.is_staging && !isOffFunnelLeadList(l))
+      .map((l) => ({ value: l.id, label: l.name, statusOptions: [] })),
+    archive: archiveList ? { value: archiveList.id, label: archiveList.name } : null,
+    deleteList: deleteList ? { value: deleteList.id, label: deleteList.name } : null,
+  };
+}
+
 interface BlastComposerProps {
   blast: SmsBlastRow;
   onSent: () => void;
   canSendSms: boolean;
   sandboxed: boolean;
+  isAdmin: boolean;
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 800;
 const PREVIEW_DEBOUNCE_MS = 600;
 
-export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastComposerProps) {
+export function BlastComposer({ blast, onSent, canSendSms, sandboxed, isAdmin }: BlastComposerProps) {
   const router = useRouter();
 
   const [name, setName] = useState(blast.name);
@@ -229,6 +259,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
     () => buildAudienceOptionOverrides({ forms, sourceFacet, assigneeFacet, roster, leadLists, fieldsOfStudy: eduFieldsOfStudy, studyLevels: eduStudyLevels }),
     [forms, sourceFacet, assigneeFacet, roster, leadLists, eduFieldsOfStudy, eduStudyLevels]
   );
+  const hierarchicalGroups = useMemo(() => ({ stage: buildStageHierarchy(leadLists, isAdmin) }), [leadLists, isAdmin]);
 
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const previewTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -358,6 +389,7 @@ export function BlastComposer({ blast, onSent, canSendSms, sandboxed }: BlastCom
           allowGroups={false}
           optionOverrides={audienceOptionOverrides}
           onDraftConditionChange={setDraftCondition}
+          hierarchicalGroups={hierarchicalGroups}
         />
         {audienceCountLoading ? (
           <p className="text-xs text-muted-foreground">Counting matches…</p>
