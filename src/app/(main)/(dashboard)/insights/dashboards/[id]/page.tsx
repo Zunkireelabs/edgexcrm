@@ -26,10 +26,11 @@ export default async function InsightsDashboardViewPage({
   const { id } = await params;
   const { from } = await searchParams;
   const now = new Date();
-  const createdAfter = resolveDateRangeFrom(from, now);
 
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
+
+  const createdAfter = resolveDateRangeFrom(from, now, tenantData.tenant.timezone);
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.INSIGHTS)) notFound();
   if (!canSeeNav(tenantData.permissions, "/insights/dashboards")) redirect("/dashboard");
 
