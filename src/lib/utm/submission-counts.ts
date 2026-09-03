@@ -8,6 +8,13 @@ export function keyOf(source: string | null, medium: string | null, campaign: st
   return `${norm(source)}|${norm(medium)}|${norm(campaign)}`;
 }
 
+// PostgREST caps an unpaged select at 1000 rows. Admizz alone has 16k+ leads,
+// so a plain .select() here silently only ever saw an arbitrary slice of old
+// data — recently created leads (the ones a fresh tracking link actually
+// produces) were never even fetched, let alone matched. Page through the
+// full table instead.
+const PAGE_SIZE = 1000;
+
 export async function computeSubmissionCounts(
   db: ScopedClient,
   links: Array<{ utm_source: string | null; utm_medium: string | null; utm_campaign: string | null }>
@@ -15,39 +22,36 @@ export async function computeSubmissionCounts(
   const countByKey = new Map<string, number>();
   if (links.length === 0) return countByKey;
 
-  const { data: leadRows, error } = await db
-    .from("leads")
-    .select("intake_source, intake_medium, intake_campaign")
-    .is("deleted_at", null);
+  let offset = 0;
+  for (;;) {
+    const { data: leadRows, error } = await db
+      .from("leads")
+      .select("intake_source, intake_medium, intake_campaign")
+      .is("deleted_at", null)
+      .range(offset, offset + PAGE_SIZE - 1);
 
-  console.log("[UTM-DEBUG] requested link keys:", links.map((l) => keyOf(l.utm_source, l.utm_medium, l.utm_campaign)));
+    if (error) {
+      console.error("computeSubmissionCounts: leads query failed", error);
+      break;
+    }
+    if (!leadRows || leadRows.length === 0) break;
 
-  if (error || !leadRows) {
-    console.error("computeSubmissionCounts: leads query failed", error);
-    console.log("[UTM-DEBUG] query errored — error object:", JSON.stringify(error));
-    return countByKey;
+    for (const row of leadRows as unknown as Array<{
+      intake_source: string | null;
+      intake_medium: string | null;
+      intake_campaign: string | null;
+    }>) {
+      const s = norm(row.intake_source);
+      const m = norm(row.intake_medium);
+      const c = norm(row.intake_campaign);
+      if (!s && !m && !c) continue;
+      const key = `${s}|${m}|${c}`;
+      countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
+    }
+
+    if (leadRows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
   }
-
-  console.log("[UTM-DEBUG] leadRows fetched:", leadRows.length);
-  console.log(
-    "[UTM-DEBUG] raw intake fields of first 20 leads:",
-    JSON.stringify((leadRows as unknown[]).slice(0, 20))
-  );
-
-  for (const row of leadRows as unknown as Array<{
-    intake_source: string | null;
-    intake_medium: string | null;
-    intake_campaign: string | null;
-  }>) {
-    const s = norm(row.intake_source);
-    const m = norm(row.intake_medium);
-    const c = norm(row.intake_campaign);
-    if (!s && !m && !c) continue;
-    const key = `${s}|${m}|${c}`;
-    countByKey.set(key, (countByKey.get(key) ?? 0) + 1);
-  }
-
-  console.log("[UTM-DEBUG] computed countByKey:", JSON.stringify(Array.from(countByKey.entries())));
 
   return countByKey;
 }
