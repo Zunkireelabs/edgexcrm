@@ -24,7 +24,7 @@ export function groupByUtmField(
   }
 
   const sorted = Object.entries(counts)
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]): UtmBucket => ({ name, count }))
     .sort((a, b) => b.count - a.count);
 
   if (sorted.length <= TOP_N) return sorted;
