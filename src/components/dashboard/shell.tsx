@@ -79,6 +79,7 @@ import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 import { ReviewNavBadge } from "@/components/dashboard/orca/review-nav-badge";
+import { requireOrcaAccess } from "@/lib/ai/orca-access";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -319,10 +320,11 @@ export function DashboardShell({
   const pathname = usePathname();
   const router = useRouter();
   // Interim Orca access gate: the entire Orca surface (mode switcher, nav,
-  // Ask-Orca assistant panel) is owner/admin only until per-user AI access
-  // levels ship. The matching /orca/* layout and AI API routes enforce the
-  // same rule server-side — this just keeps the UI consistent.
-  const aiAssistantEnabled = aiAssistantEnabledProp && (role === "owner" || role === "admin");
+  // Ask-Orca assistant panel) is OWNER ONLY until per-user AI access levels
+  // ship (first Admizz prod exposure — admin excluded). The matching /orca/*
+  // layout and AI API routes enforce the same rule server-side — this just
+  // keeps the UI consistent.
+  const aiAssistantEnabled = aiAssistantEnabledProp && requireOrcaAccess(role);
   // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
   // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
   // consistent with the (hidden) mode-switcher tab above.
@@ -937,7 +939,7 @@ export function DashboardShell({
           )
         ) : (
           <>
-            {ORCA_NAV.filter((item) => !item.adminOnly || role === "owner" || role === "admin").map((item) =>
+            {ORCA_NAV.filter((item) => !item.adminOnly || requireOrcaAccess(role)).map((item) =>
               item.href === "/orca/review"
                 ? renderNavItem({ ...item, badgeSlot: <ReviewNavBadge /> })
                 : renderNavItem(item),

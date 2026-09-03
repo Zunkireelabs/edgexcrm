@@ -8,7 +8,7 @@ import { SettingsModalProvider } from "@/contexts/settings-modal-context";
 import { GlobalSearchProvider } from "@/contexts/global-search-context";
 import { getIndustrySidebarItems, getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { isAssistantEnabled } from "@/lib/ai/flag";
+import { isAssistantEnabled, requireOrcaAccess } from "@/lib/ai/flag";
 import { canAccessList, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { isOffFunnelLeadList } from "@/lib/leads/list-funnel";
 import { buildNavIndex } from "@/components/dashboard/search/build-nav-index";
@@ -43,6 +43,10 @@ export default async function DashboardLayout({
   // Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts.
   // tenantData.tenant is already loaded above, so this is free (no extra query).
   const aiAssistantEnabled = isAssistantEnabled() && tenantData.tenant.ai_enabled;
+  // Orca surface is OWNER ONLY for the first prod exposure (admin excluded) —
+  // narrower than isLayoutAdmin, which also gates Leads Organise buckets and
+  // must not be touched. See src/lib/ai/orca-access.ts.
+  const isOrcaAvailable = aiAssistantEnabled && requireOrcaAccess(tenantData.role);
 
   const [formConfigs, branches, cookieStore, allLeadLists] = await Promise.all([
     getFormConfigsForTenant(tenantData.tenant.id),
@@ -94,11 +98,13 @@ export default async function DashboardLayout({
     allowedNavKeys,
     industryId: tenantData.tenant.industry_id ?? null,
     role: tenantData.role,
-    // Fold in the role check here (not inside buildNavIndex) so the builder's
-    // seam and the other callers of aiAssistantEnabled stay consistent. Mirrors
-    // the /orca/* layout gate — every Orca route 404s for non-owner/admin, so
-    // the ⌘K palette must not list them.
-    isOrcaAvailable: aiAssistantEnabled && isLayoutAdmin,
+    // Two distinct inputs now: the raw AI flag (env + tenant grant) drives the
+    // settings-tab gate (isSettingsAdmin stays owner-or-admin), while
+    // isOrcaAvailable is the narrower owner-only Orca gate. These used to be
+    // the same value; #482 assumed that. Mirrors the /orca/* layout gate —
+    // every Orca route 404s for a non-owner, so the ⌘K palette must not list them.
+    aiAssistantEnabled,
+    isOrcaAvailable,
   });
 
   return (

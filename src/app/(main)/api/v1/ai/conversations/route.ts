@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
-import { isAssistantEnabled, isAssistantEnabledForTenant } from "@/lib/ai/flag";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { isAssistantEnabled, isAssistantEnabledForTenant, requireOrcaAccess } from "@/lib/ai/flag";
+import { authenticateRequest } from "@/lib/api/auth";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { apiSuccess, apiUnauthorized, apiNotFound, apiServiceUnavailable, apiForbidden } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
@@ -28,8 +28,8 @@ export async function GET(_request: NextRequest) {
   // per-tenant grant (migration 174) is indistinguishable from AI being off.
   if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
 
-  // Interim Orca access gate — owner/admin only (matches the /orca/* layout).
-  if (!requireAdmin(auth)) return apiForbidden();
+  // Interim Orca access gate — OWNER ONLY (matches the /orca/* layout).
+  if (!requireOrcaAccess(auth.role)) return apiForbidden();
 
   const db = await scopedClient(auth);
 
