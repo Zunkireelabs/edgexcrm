@@ -1,5 +1,10 @@
 import type { SidebarEntry, SidebarItem } from "@/industries/_types";
 import type { LeadList } from "@/types/database";
+import {
+  SETTINGS_CATEGORIES,
+  makeGatingContext,
+  type SettingsCategoryKey,
+} from "@/components/dashboard/settings/modal/settings-registry";
 
 export type NavAction =
   | { kind: "route"; href: string }
@@ -14,18 +19,26 @@ export interface NavResult {
   action: NavAction;
 }
 
-// Human-friendly labels and keyword hints per settings tab ID
-const SETTINGS_TABS: { id: string; label: string; keywords: string[]; educationOnly?: boolean }[] = [
-  { id: "general", label: "General Settings", keywords: ["general", "profile", "branding", "tenant"] },
-  { id: "ai-orca", label: "AI & Orca", keywords: ["ai", "orca", "assistant", "intelligence", "llm"] },
-  { id: "organization", label: "Organization", keywords: ["organization", "company", "org", "billing"] },
-  { id: "team-roles", label: "Team & Roles", keywords: ["team", "roles", "members", "invite", "staff", "users"] },
-  { id: "lead-management", label: "Lead Management", keywords: ["leads", "pipeline", "stages", "lists", "management"] },
-  { id: "academic-operations", label: "Academic Operations", keywords: ["academic", "education", "university", "courses", "intake"], educationOnly: true },
-  { id: "communications", label: "Communications", keywords: ["email", "sms", "communications", "notifications", "messaging"] },
-  { id: "integrations", label: "Integrations", keywords: ["integrations", "api", "webhook", "connect", "third-party"] },
-  { id: "compliance", label: "Compliance", keywords: ["compliance", "gdpr", "consent", "legal", "privacy"] },
-];
+// Palette-specific data the settings registry does not carry: the search
+// keywords, plus the deliberately longer labels ("General Settings" reads
+// better than a bare "General" in a flat result list). Typed against the
+// registry's keys so a missing or extra key is a compile error — this is
+// what stops the palette drifting from SETTINGS_CATEGORIES.
+const SETTINGS_PALETTE: Record<
+  SettingsCategoryKey,
+  { label: string; keywords: string[] }
+> = {
+  "general": { label: "General Settings", keywords: ["general", "profile", "branding", "tenant"] },
+  "ai-orca": { label: "AI & Orca", keywords: ["ai", "orca", "assistant", "intelligence", "llm"] },
+  "organization": { label: "Organization", keywords: ["organization", "company", "org", "billing"] },
+  "team-roles": { label: "Team & Roles", keywords: ["team", "roles", "members", "invite", "staff", "users"] },
+  "lead-management": { label: "Lead Management", keywords: ["leads", "pipeline", "stages", "lists", "management"] },
+  "leave": { label: "Leave", keywords: ["leave", "time off", "holiday", "absence", "pto"] },
+  "academic-operations": { label: "Academic Operations", keywords: ["academic", "education", "university", "courses", "intake"] },
+  "communications": { label: "Communications", keywords: ["email", "sms", "communications", "notifications", "messaging"] },
+  "integrations": { label: "Integrations", keywords: ["integrations", "api", "webhook", "connect", "third-party"] },
+  "compliance": { label: "Compliance", keywords: ["compliance", "gdpr", "consent", "legal", "privacy"] },
+};
 
 interface BuildNavIndexOptions {
   industrySidebarItems: readonly SidebarEntry[];
@@ -33,6 +46,7 @@ interface BuildNavIndexOptions {
   stagingLists: Pick<LeadList, "id" | "name" | "slug">[];
   allowedNavKeys: string[] | null;
   industryId: string | null;
+  role: string;
   isOrcaAvailable: boolean;
 }
 
@@ -46,10 +60,13 @@ export function buildNavIndex({
   stagingLists,
   allowedNavKeys,
   industryId,
+  role,
   isOrcaAvailable,
 }: BuildNavIndexOptions): NavResult[] {
   const results: NavResult[] = [];
-  const isEducation = industryId === "education_consultancy";
+  // isOrcaAvailable already folds in the aiAssistantEnabled + owner/admin check
+  // (see layout.tsx), so pass it straight through as the flag input.
+  const gatingCtx = makeGatingContext({ role, industryId, aiAssistantEnabled: isOrcaAvailable });
 
   // ── Universal pages ──────────────────────────────────────────
   const universalPages = [
@@ -144,27 +161,33 @@ export function buildNavIndex({
   }
 
   // ── Settings ──────────────────────────────────────────────────
-  // Top-level entry
-  results.push({
-    id: "settings-root",
-    label: "Settings",
-    group: "Settings",
-    icon: "Settings",
-    keywords: ["settings", "preferences", "config", "configure"],
-    action: { kind: "settings" },
-  });
-
-  // One entry per settings tab
-  for (const tab of SETTINGS_TABS) {
-    if (tab.educationOnly && !isEducation) continue;
+  // Settings is owner/admin-only (settings/page.tsx redirects, the bootstrap
+  // API 403s), so non-admins get no Settings entries at all — not the parent,
+  // not any tab.
+  if (gatingCtx.isSettingsAdmin) {
     results.push({
-      id: `settings-${tab.id}`,
-      label: tab.label,
+      id: "settings-root",
+      label: "Settings",
       group: "Settings",
       icon: "Settings",
-      keywords: ["settings", ...tab.keywords],
-      action: { kind: "settings", tab: tab.id },
+      keywords: ["settings", "preferences", "config", "configure"],
+      action: { kind: "settings" },
     });
+
+    // One entry per visible settings tab — derived from the registry so the
+    // palette can never list a tab the modal won't render (or miss one it will).
+    for (const cat of SETTINGS_CATEGORIES) {
+      if (!cat.isVisible(gatingCtx)) continue;
+      const palette = SETTINGS_PALETTE[cat.key];
+      results.push({
+        id: `settings-${cat.key}`,
+        label: palette.label,
+        group: "Settings",
+        icon: "Settings",
+        keywords: ["settings", ...palette.keywords],
+        action: { kind: "settings", tab: cat.key },
+      });
+    }
   }
 
   // TODO Phase 2+: Add "Actions" / "Ask Orca" group here for AI-native palette actions

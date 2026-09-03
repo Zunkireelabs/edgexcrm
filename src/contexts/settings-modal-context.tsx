@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Tenant, Industry } from "@/types/database";
 import type { NavCatalogItem, WidgetCatalogItem } from "@/lib/settings/catalogs";
+import { makeGatingContext } from "@/components/dashboard/settings/modal/settings-registry";
 
 export interface BootstrapData {
   industry: Industry | null;
@@ -33,6 +34,8 @@ interface SettingsModalContextValue {
   role: string;
   industryId: string | null;
   isEducation: boolean;
+  isSettingsAdmin: boolean;
+  isOrcaAvailable: boolean;
   bootstrapData: BootstrapData | null;
   bootstrapLoading: boolean;
 }
@@ -52,6 +55,8 @@ export function useSettingsModal(): SettingsModalContextValue {
       role: "",
       industryId: null,
       isEducation: false,
+      isSettingsAdmin: false,
+      isOrcaAvailable: false,
       bootstrapData: null,
       bootstrapLoading: false,
     };
@@ -91,6 +96,8 @@ interface SettingsModalProviderProps {
   tenant: Tenant;
   role: string;
   industryId: string | null;
+  /** From layout.tsx: isAssistantEnabled() && tenant.ai_enabled. */
+  aiAssistantEnabled: boolean;
 }
 
 export function SettingsModalProvider({
@@ -98,11 +105,13 @@ export function SettingsModalProvider({
   tenant,
   role,
   industryId,
+  aiAssistantEnabled,
 }: SettingsModalProviderProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const isEducation = industryId === "education_consultancy";
+  const gatingCtx = makeGatingContext({ role, industryId, aiAssistantEnabled });
+  const { isEducation, isSettingsAdmin, isOrcaAvailable } = gatingCtx;
 
   const [bootstrapData, setBootstrapData] = useState<BootstrapData | null>(null);
   const [bootstrapLoading, setBootstrapLoading] = useState(false);
@@ -172,6 +181,8 @@ export function SettingsModalProvider({
         role,
         industryId,
         isEducation,
+        isSettingsAdmin,
+        isOrcaAvailable,
         bootstrapData,
         bootstrapLoading,
       }}
