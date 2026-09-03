@@ -89,7 +89,7 @@ export function HomeContent({
   }, [router, userId]);
 
   return (
-    <div className="px-4 pt-3 pb-6 max-w-6xl mx-auto w-full">
+    <div className="space-y-6">
       <GreetingHeader userName={userName} />
 
       <AttentionSummary
@@ -100,7 +100,7 @@ export function HomeContent({
         outreachDue={outreachDue}
       />
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {isItAgency && (
           <div>
             <h2 className="text-sm font-semibold text-muted-foreground mb-2">My Work</h2>
@@ -110,17 +110,30 @@ export function HomeContent({
             </div>
           </div>
         )}
-        <ScheduleCard schedule={schedule} />
-        <TasksCard
-          initialOpen={openTasks}
-          initialDone={doneTasks}
-          currentUserId={userId}
-          onComplete={handleComplete}
-          onDelete={handleDelete}
-          onCreated={handleCreated}
-        />
-        <MyLeadsCard leads={myLeads} />
-        <InboxSnapshotCard snapshot={inboxSnapshot} />
+
+        <div>
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Today</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <ScheduleCard schedule={schedule} />
+            <TasksCard
+              initialOpen={openTasks}
+              initialDone={doneTasks}
+              currentUserId={userId}
+              onComplete={handleComplete}
+              onDelete={handleDelete}
+              onCreated={handleCreated}
+            />
+          </div>
+        </div>
+
+        <div>
+          <h2 className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-2">Leads &amp; Messages</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <MyLeadsCard leads={myLeads} />
+            <InboxSnapshotCard snapshot={inboxSnapshot} />
+          </div>
+        </div>
+
         <RecentActivityCard notifications={recentActivity} />
       </div>
     </div>

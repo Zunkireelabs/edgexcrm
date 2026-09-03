@@ -1,15 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { X } from "lucide-react";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 import { UtmBarChart } from "./utm-bar-chart";
 import type { UtmField } from "../lib/aggregation";
-import {
-  UTM_DATE_FILTER_OPTIONS,
-  getUtmDateCutoff,
-  type UtmDateFilter,
-} from "../lib/date-range";
 
 interface UtmAnalyticsSectionProps {
   leads: LeadUtmRow[];
@@ -30,17 +25,10 @@ const FILTER_CHIP_LABELS: Record<UtmField, string> = {
 };
 
 export function UtmAnalyticsSection({ leads }: UtmAnalyticsSectionProps) {
-  const [dateFilter, setDateFilter] = useState<UtmDateFilter>("month");
   const [selected, setSelected] = useState<Selections>(EMPTY_SELECTIONS);
 
-  const dateFilteredLeads = useMemo(() => {
-    const cutoff = getUtmDateCutoff(dateFilter);
-    if (!cutoff) return leads;
-    return leads.filter((lead) => new Date(lead.created_at) >= cutoff);
-  }, [leads, dateFilter]);
-
   function applySelections(except: UtmField): LeadUtmRow[] {
-    return dateFilteredLeads.filter((lead) => {
+    return leads.filter((lead) => {
       for (const field of Object.keys(selected) as UtmField[]) {
         if (field === except) continue;
         const value = selected[field];
@@ -65,29 +53,11 @@ export function UtmAnalyticsSection({ leads }: UtmAnalyticsSectionProps) {
 
   return (
     <section className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-base font-semibold">UTM Attribution</h2>
-          <p className="text-sm text-muted-foreground">
-            Click a bar to filter the other charts.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-1.5 rounded-lg border border-border bg-background p-1">
-          {UTM_DATE_FILTER_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setDateFilter(option.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                dateFilter === option.value
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h2 className="text-base font-semibold">UTM Attribution</h2>
+        <p className="text-sm text-muted-foreground">
+          Click a bar to filter the other charts.
+        </p>
       </div>
 
       {hasActiveFilters && (

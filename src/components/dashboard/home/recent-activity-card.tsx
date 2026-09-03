@@ -12,7 +12,7 @@ interface RecentActivityCardProps {
 
 export function RecentActivityCard({ notifications }: RecentActivityCardProps) {
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
       </CardHeader>

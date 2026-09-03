@@ -18,7 +18,7 @@ export function ScheduleCard({ schedule }: ScheduleCardProps) {
   const empty = schedule.length === 0;
 
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Schedule</CardTitle>
       </CardHeader>

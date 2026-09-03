@@ -57,14 +57,14 @@ export const WIDGET_KEYS = WIDGET_CATALOG.map((w) => w.key);
 // always stands alone. Leads by Status carries a wide, per-stage funnel
 // visualization that needs more than a one-third column to stay legible —
 // "wide" (2/3) — and shares its row with Leads by Source ("half", 1/3),
-// filling that row's 3 units exactly. Leads by Counselor is "half" too, but
-// since the prior row is already full it starts its own row as a single
-// (1/3-width) column, with the remaining 2 columns left blank.
+// filling that row's 3 units exactly. Leads by Counselor is "wide" too (its
+// horizontal per-member bars need the same room as the funnel), so it starts
+// its own row at 2/3 width, with the remaining 1/3 column left blank.
 export const WIDGET_SIZE: Record<string, WidgetSize> = {
   stats: "full",
   "leads-by-stage": "wide",
   "leads-by-source": "half",
-  "leads-by-counselor": "half",
+  "leads-by-counselor": "wide",
   utm: "full",
   "delivery-health": "full",
   "projects-by-status": "half",
@@ -136,3 +136,18 @@ export function getWidgetCatalog(industryId: string | null): WidgetDef[] {
   const allowed = industryId === "it_agency" ? IT_AGENCY_WIDGET_KEYS : LEAD_WIDGET_KEYS;
   return WIDGET_CATALOG.filter((w) => allowed.has(w.key));
 }
+
+// Auto-relevance map: which KPI metric keys (see computeLegacyKpiStats in
+// stats-cards.tsx) are worth showing alongside a given content widget. Not
+// user-configurable — a dashboard that includes "leads-by-stage" automatically
+// gets its relevant KPI row rendered above it (see relevantKpiKeys in
+// dashboard-view.tsx), so the KPI row never shows tiles unrelated to what's
+// actually on the dashboard. Only listed for widgets that have a lead-KPI
+// relationship; "stats" itself is the full block and is excluded there so it
+// doesn't duplicate an auto-derived row.
+export const WIDGET_RELEVANT_KPIS: Record<string, string[]> = {
+  "leads-by-stage": ["total", "new", "contacted", "enrolled", "rejected"],
+  "leads-by-source": ["total", "active-sources"],
+  "leads-by-counselor": ["total", "team-members", "unassigned"],
+  utm: ["total", "active-sources"],
+};

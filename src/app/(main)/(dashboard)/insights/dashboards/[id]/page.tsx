@@ -4,22 +4,29 @@ import {
   getLeadUtmRows,
   getTeamMembers,
   getPipelineStages,
+  getLeadListsByTenant,
   getFormConfigsForTenant,
 } from "@/lib/supabase/queries";
 import { getLeadAggregates, resolveSourceCounts } from "@/lib/leads/aggregates";
 import { createServiceClient } from "@/lib/supabase/server";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
-import { canSeeNav, leadQueryScope } from "@/lib/api/permissions";
+import { canAccessList, canSeeNav, leadQueryScope } from "@/lib/api/permissions";
 import { DashboardView } from "@/industries/_shared/features/insights/pages/dashboard-view";
+import { resolveDateRangeFrom } from "@/industries/_shared/features/insights/lib/date-range-presets";
 import type { Dashboard } from "@/types/database";
 
 export default async function InsightsDashboardViewPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
 }) {
   const { id } = await params;
+  const { from } = await searchParams;
+  const now = new Date();
+  const createdAfter = resolveDateRangeFrom(from, now);
 
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
@@ -75,13 +82,21 @@ export default async function InsightsDashboardViewPage({
   // not a pre-aggregated count) — only fetch it when this dashboard actually uses it,
   // so tenants without the widget (Zunkiree/Mobilise, it_agency) pay nothing for it.
   const needsUtmRows = dashboard.widgets.includes("utm");
-  const [aggregates, utmRows, teamMembers, stages, formConfigs] = await Promise.all([
-    getLeadAggregates(tenantData.tenant.id, scope, new Date()),
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const [aggregates, utmRows, teamMembers, stages, allLists, formConfigs] = await Promise.all([
+    getLeadAggregates(tenantData.tenant.id, { ...scope, createdAfter }, now),
     needsUtmRows ? getLeadUtmRows(tenantData.tenant.id, scope) : Promise.resolve([]),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
+    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([]),
     getFormConfigsForTenant(tenantData.tenant.id),
   ]);
+
+  // Same access filter as the leads page's stage dropdowns — admin-only lists are
+  // simply absent from the chart, not rendered-then-hidden.
+  const lists = allLists.filter(
+    (l) => !l.is_archive && canAccessList(permissions, l.access, positionId, l.id)
+  );
 
   const memberMap = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.email]));
   const memberNames = Object.fromEntries(teamMembers.map((m) => [m.user_id, m.name]));
@@ -94,6 +109,7 @@ export default async function InsightsDashboardViewPage({
       aggregates={aggregates}
       sourceCounts={sourceCounts}
       utmRows={utmRows}
+      lists={lists}
       stages={stages}
       memberMap={memberMap}
       memberNames={memberNames}
@@ -102,6 +118,7 @@ export default async function InsightsDashboardViewPage({
       industryId={tenantData.tenant.industry_id}
       currentUserId={userId}
       currentTenantUserId={currentTenantUserId}
+      dateFilterActive={createdAfter !== null}
     />
   );
 }

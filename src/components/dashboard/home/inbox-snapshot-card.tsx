@@ -14,7 +14,7 @@ export function InboxSnapshotCard({ snapshot }: InboxSnapshotCardProps) {
   const { items, unreadCount } = snapshot;
 
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">
