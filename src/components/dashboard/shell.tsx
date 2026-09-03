@@ -1033,9 +1033,7 @@ export function DashboardShell({
     >
       {/* App card — the whole CRM as one floating rounded object (framed only when AI is on) */}
       <div
-        className={`flex flex-1 min-w-0 bg-sidebar-bg transition-all duration-500 ease-out ${
-          aiAssistantEnabled ? "md:overflow-hidden" : ""
-        } ${
+        className={`flex flex-1 min-w-0 md:overflow-hidden bg-sidebar-bg transition-all duration-500 ease-out ${
           aiAssistantEnabled && isAssistantOpen
             ? "md:rounded-2xl md:shadow-[0_0_0_1px_#00001d13,0_6px_20px_rgba(0,0,0,0.06)]"
             : "md:rounded-none md:shadow-none"
@@ -1114,7 +1112,7 @@ export function DashboardShell({
           <div className="flex-1 min-w-0 overflow-hidden flex">
             {/* Main content - shrinks when AI panel opens */}
             <main
-              className={`flex-1 min-h-0 overflow-auto bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
+              className={`flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
                 isLeadsFullBleed ? "mr-3 mb-3" : "p-4 mr-3 mb-3"
               }`}
               style={{ borderRadius: "var(--radius-lg)", border: "2px solid #00001d13" }}
