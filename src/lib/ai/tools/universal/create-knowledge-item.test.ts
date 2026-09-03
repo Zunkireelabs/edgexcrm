@@ -11,7 +11,10 @@ const { isIngestionEnabledMock, inngestSendMock, createAuditLogMock, emitEventMo
   emitEventMock: vi.fn(async () => "event-1"),
 }));
 
-vi.mock("@/lib/ai/flag", () => ({ isIngestionEnabled: isIngestionEnabledMock }));
+vi.mock("@/lib/ai/flag", () => ({
+  isIngestionEnabled: isIngestionEnabledMock,
+  requireOrcaAccess: (role?: string) => role === "owner",
+}));
 vi.mock("@/lib/ai/ingestion/inngest", () => ({ inngest: { send: inngestSendMock } }));
 vi.mock("@/lib/api/audit", () => ({ createAuditLog: createAuditLogMock, emitEvent: emitEventMock }));
 
@@ -134,11 +137,11 @@ describe("create_knowledge_item — input schema", () => {
 describe("create_knowledge_item — execute", () => {
   const input = { knowledgeBaseId: KB_ID, title: "Q3 pricing notes", content: "Discount cap is 15%." } as never;
 
-  it("refuses a non-admin caller before touching the DB", async () => {
+  it.each(["admin", "counselor"] as const)("refuses a non-owner (%s) caller before touching the DB", async (role) => {
     const { db } = makeFakeDb({ kbExists: true });
-    const ctx = fixtureCtx(db, { auth: fixtureAuth({ role: "counselor" }) });
+    const ctx = fixtureCtx(db, { auth: fixtureAuth({ role }) });
     const result = await createKnowledgeItemTool.execute(ctx, input);
-    expect(result).toEqual({ error: "Only tenant admins can add items to a knowledge base." });
+    expect(result).toEqual({ error: "Only the tenant owner can add items to a knowledge base via Orca." });
   });
 
   it("unknown knowledgeBaseId lists accessible KB names, no cross-tenant oracle", async () => {

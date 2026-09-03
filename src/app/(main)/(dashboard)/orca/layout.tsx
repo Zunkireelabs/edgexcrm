@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { getCurrentUserTenant } from "@/lib/supabase/queries";
-import { isAssistantEnabled } from "@/lib/ai/flag";
+import { isAssistantEnabled, requireOrcaAccess } from "@/lib/ai/flag";
 
 export default async function OrcaLayout({ children }: { children: React.ReactNode }) {
   const tenantData = await getCurrentUserTenant();
@@ -12,9 +12,10 @@ export default async function OrcaLayout({ children }: { children: React.ReactNo
   if (!isAssistantEnabled() || !tenantData.tenant.ai_enabled) notFound();
 
   // Interim access gate: the whole Orca surface (Ask Orca, the Fleet, the
-  // approval queue) is owner/admin only until per-user AI access levels are
-  // built. Page gate only — the matching AI API routes gate themselves.
-  if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
+  // approval queue) is OWNER ONLY until per-user AI access levels are built
+  // (first Admizz prod exposure — admin excluded). Page gate only — the
+  // matching AI API routes gate themselves.
+  if (!requireOrcaAccess(tenantData.role)) notFound();
 
   return children;
 }
