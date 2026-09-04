@@ -20,6 +20,7 @@ vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: vi.fn(() => true),
   isAssistantEnabledForTenant: vi.fn(async () => true),
   getToolApprovalSecret: getToolApprovalSecretMock,
+  requireOrcaAccess: (role?: string) => role === "owner",
 }));
 
 vi.mock("@/lib/api/rate-limit", () => ({
@@ -243,7 +244,7 @@ describe("streamErrorMessage", () => {
   });
 });
 
-describe("POST /api/v1/ai/chat — interim Orca access gate (owner/admin only)", () => {
+describe("POST /api/v1/ai/chat — interim Orca access gate (OWNER ONLY)", () => {
   beforeEach(() => {
     authenticateRequestMock.mockReset();
     checkRateLimitMock.mockReset().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
@@ -257,7 +258,7 @@ describe("POST /api/v1/ai/chat — interim Orca access gate (owner/admin only)",
 
   const MSG = [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }];
 
-  it.each(["counselor", "viewer"])("403s for a %s", async (role) => {
+  it.each(["admin", "counselor", "viewer"])("403s for a %s (owner-only)", async (role) => {
     authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
     const { POST } = await import("./route");
     const res = await POST(fakeReq({ messages: MSG }));
@@ -265,8 +266,8 @@ describe("POST /api/v1/ai/chat — interim Orca access gate (owner/admin only)",
     expect(streamTextMock).not.toHaveBeenCalled();
   });
 
-  it.each(["owner", "admin"])("allows a %s through the gate", async (role) => {
-    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
+  it("allows an owner through the gate", async () => {
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role: "owner" });
     getToolApprovalSecretMock.mockReturnValue(undefined);
     const { POST } = await import("./route");
     const res = await POST(fakeReq({ messages: MSG }));

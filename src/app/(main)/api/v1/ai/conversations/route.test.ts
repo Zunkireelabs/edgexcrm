@@ -10,6 +10,7 @@ const scopedClientMock = vi.fn();
 vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: isAssistantEnabledMock,
   isAssistantEnabledForTenant: isAssistantEnabledForTenantMock,
+  requireOrcaAccess: (role?: string) => role === "owner",
 }));
 vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock, requireAdmin: (a: { role?: string }) => a?.role === "owner" || a?.role === "admin" }));
 vi.mock("@/lib/supabase/scoped", () => ({ scopedClient: scopedClientMock }));
@@ -51,7 +52,7 @@ describe("GET /api/v1/ai/conversations", () => {
     expect(scopedClientMock).not.toHaveBeenCalled();
   });
 
-  it.each(["counselor", "viewer"])("403s for a %s (interim Orca access gate)", async (role) => {
+  it.each(["admin", "counselor", "viewer"])("403s for a %s (interim Orca access gate — owner only)", async (role) => {
     isAssistantEnabledMock.mockReturnValue(true);
     authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
     isAssistantEnabledForTenantMock.mockResolvedValue(true);

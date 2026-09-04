@@ -9,8 +9,8 @@ import {
   ToolCallNotFoundForApprovalError,
   type UIMessage,
 } from "ai";
-import { isAssistantEnabled, isAssistantEnabledForTenant, getToolApprovalSecret } from "@/lib/ai/flag";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { isAssistantEnabled, isAssistantEnabledForTenant, getToolApprovalSecret, requireOrcaAccess } from "@/lib/ai/flag";
+import { authenticateRequest } from "@/lib/api/auth";
 import { apiUnauthorized, apiValidationError, apiNotFound, apiRateLimited, apiForbidden } from "@/lib/api/response";
 import { checkRateLimit, AI_CHAT_LIMIT } from "@/lib/api/rate-limit";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -74,9 +74,10 @@ export async function POST(request: NextRequest) {
   // per-tenant grant (migration 174) is indistinguishable from AI being off.
   if (!(await isAssistantEnabledForTenant(auth.tenantId))) return apiNotFound();
 
-  // Interim Orca access gate: Ask Orca is owner/admin only until per-user AI
-  // access levels ship. Matches the /orca/* layout gate.
-  if (!requireAdmin(auth)) return apiForbidden();
+  // Interim Orca access gate: Ask Orca is OWNER ONLY until per-user AI access
+  // levels ship (first Admizz prod exposure — admin excluded). Matches the
+  // /orca/* layout gate and requireOrcaAccess everywhere else.
+  if (!requireOrcaAccess(auth.role)) return apiForbidden();
 
   const rate = await checkRateLimit(`ai_chat:${auth.userId}`, AI_CHAT_LIMIT);
   if (!rate.allowed) return apiRateLimited(rate.retryAfterSeconds);

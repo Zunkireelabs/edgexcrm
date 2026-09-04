@@ -47,6 +47,11 @@ interface BuildNavIndexOptions {
   allowedNavKeys: string[] | null;
   industryId: string | null;
   role: string;
+  /** Raw AI gate (env kill switch + tenants.ai_enabled) — drives the settings
+   *  "AI & Orca" tab, which stays owner-or-admin via isSettingsAdmin. */
+  aiAssistantEnabled: boolean;
+  /** Narrower owner-only Orca gate — drives the Orca palette entries. Differs
+   *  from aiAssistantEnabled now (#482 assumed they matched). */
   isOrcaAvailable: boolean;
 }
 
@@ -61,12 +66,14 @@ export function buildNavIndex({
   allowedNavKeys,
   industryId,
   role,
+  aiAssistantEnabled,
   isOrcaAvailable,
 }: BuildNavIndexOptions): NavResult[] {
   const results: NavResult[] = [];
-  // isOrcaAvailable already folds in the aiAssistantEnabled + owner/admin check
-  // (see layout.tsx), so pass it straight through as the flag input.
-  const gatingCtx = makeGatingContext({ role, industryId, aiAssistantEnabled: isOrcaAvailable });
+  // The settings-tab gate keys off the raw AI flag (its "AI & Orca" tab stays
+  // owner-or-admin via isSettingsAdmin); the Orca palette entries below key off
+  // the narrower owner-only isOrcaAvailable.
+  const gatingCtx = makeGatingContext({ role, industryId, aiAssistantEnabled });
 
   // ── Universal pages ──────────────────────────────────────────
   const universalPages = [

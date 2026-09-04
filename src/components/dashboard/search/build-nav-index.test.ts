@@ -9,6 +9,9 @@ const BASE = {
   allowedNavKeys: null,
   industryId: "education_consultancy" as string | null,
   role: "owner",
+  // Raw AI gate (env + tenant grant) — drives the "AI & Orca" settings tab.
+  aiAssistantEnabled: true,
+  // Narrower owner-only gate — drives the Orca palette entries.
   isOrcaAvailable: true,
 };
 
@@ -70,11 +73,24 @@ describe("buildNavIndex — Settings palette entries", () => {
     expect(ids).toEqual([]);
   });
 
-  it("owner without Orca available does not see the ai-orca tab", () => {
-    const ids = settingsIds({ role: "owner", isOrcaAvailable: false });
+  it("owner without AI enabled does not see the ai-orca tab", () => {
+    const ids = settingsIds({ role: "owner", aiAssistantEnabled: false, isOrcaAvailable: false });
     expect(ids).toContain("settings-root");
     expect(ids).toContain("settings-general");
     expect(ids).not.toContain("settings-ai-orca");
+  });
+
+  it("admin (AI enabled) sees settings tabs but NOT ai-orca, and no Orca palette entries", () => {
+    // The trap regression: isSettingsAdmin stays owner-or-admin (admin keeps
+    // every other tab), but the owner-only Orca gate hides ai-orca and every
+    // orca-* palette link from an admin.
+    const all = buildNavIndex({ ...BASE, role: "admin", aiAssistantEnabled: true, isOrcaAvailable: false });
+    const ids = all.map((r) => r.id);
+    expect(ids).toContain("settings-root");
+    expect(ids).toContain("settings-general");
+    expect(ids).toContain("settings-integrations");
+    expect(ids).not.toContain("settings-ai-orca");
+    expect(all.some((r) => r.id.startsWith("orca-"))).toBe(false);
   });
 
   it("non-education owner does not see academic-operations or compliance", () => {

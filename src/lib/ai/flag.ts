@@ -1,5 +1,10 @@
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
 
+// Re-exported so the owner-only Orca gate lives beside the other AI gates.
+// Defined in its own zero-dependency module (orca-access.ts) so client
+// bundles can import it without dragging in this file's server-only deps.
+export { requireOrcaAccess } from "./orca-access";
+
 // Phase 1A defines the flag only; 1B/1C gate the chat route and UI on it.
 export function isAssistantEnabled(): boolean {
   return process.env.AI_ASSISTANT_ENABLED === "true";

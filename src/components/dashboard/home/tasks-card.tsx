@@ -30,7 +30,7 @@ export function TasksCard({
   const today = toLocalDateString(new Date());
 
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">My Tasks</CardTitle>

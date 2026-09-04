@@ -9,7 +9,7 @@ import {
   LeadsByCounselorChart,
 } from "@/components/dashboard/charts";
 import { UtmAnalyticsSection } from "@/industries/education-consultancy/features/utm-analytics/components/utm-analytics-section";
-import type { PipelineStage } from "@/types/database";
+import type { LeadList, PipelineStage } from "@/types/database";
 import type { LeadAggregates } from "@/lib/leads/aggregates";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 import type { DeliveryWidgetProps } from "@/industries/it-agency/features/delivery-dashboard/widgets/types";
@@ -124,12 +124,17 @@ interface DashboardRendererProps {
    * loader. UtmAnalyticsSection is the one widget here that still needs row-level
    * data (interactive cross-filtering), not a pre-aggregated count. */
   utmRows: LeadUtmRow[];
+  lists: LeadList[];
+  /** Status-view color lookup only — see LeadsByStageChart's `stages` prop docstring. */
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
   currentUserId?: string | null;
   currentTenantUserId?: string | null;
   industryId?: string | null;
+  /** True when the dashboard's top-right date filter is set to something other than
+   * "All time" — passed through to the "stats" widget only, see StatsCards.hideTrend. */
+  hideTrend?: boolean;
 }
 
 export function DashboardRenderer({
@@ -137,12 +142,14 @@ export function DashboardRenderer({
   aggregates,
   sourceCounts,
   utmRows,
+  lists,
   stages,
   memberMap,
   memberNames,
   currentUserId,
   currentTenantUserId,
   industryId,
+  hideTrend,
 }: DashboardRendererProps) {
   // Defense-in-depth: delivery widgets only resolve for it_agency dashboards,
   // even if a delivery key somehow ends up in a non-it_agency dashboard's
@@ -175,10 +182,11 @@ export function DashboardRenderer({
           aggregates={aggregates}
           teamMemberCount={Object.keys(memberMap).length}
           activeSourceCount={Object.keys(sourceCounts).length}
+          hideTrend={hideTrend}
         />
       );
     case "leads-by-stage":
-      return <LeadsByStageChart status={aggregates.status} stages={stages} />;
+      return <LeadsByStageChart status={aggregates.status} list={aggregates.list} lists={lists} stages={stages} />;
     case "leads-by-source":
       return <LeadsBySourceChart sourceCounts={sourceCounts} />;
     case "leads-by-counselor":

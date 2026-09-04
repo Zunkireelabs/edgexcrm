@@ -1,5 +1,6 @@
 import type { lazy, ComponentType } from "react";
 import type { LucideIcon } from "lucide-react";
+import { requireOrcaAccess } from "@/lib/ai/orca-access";
 import {
   Building2,
   Bot,
@@ -19,7 +20,12 @@ export interface GatingContext {
   isEducation: boolean;
   /** role === "owner" || role === "admin" — settings is owner/admin-only (see settings/page.tsx). */
   isSettingsAdmin: boolean;
-  /** aiAssistantEnabled && isSettingsAdmin — mirrors the /orca/* layout gate (layout.tsx). */
+  /**
+   * aiAssistantEnabled && requireOrcaAccess(role) — OWNER ONLY, deliberately
+   * narrower than isSettingsAdmin (owner-or-admin). These two genuinely differ
+   * now: #482 assumed they were the same. The "AI & Orca" settings tab gates on
+   * this, so an admin sees no AI tab while still seeing every other tab.
+   */
   isOrcaAvailable: boolean;
 }
 
@@ -39,7 +45,8 @@ export function makeGatingContext(input: {
     industryId: input.industryId,
     isEducation: input.industryId === "education_consultancy",
     isSettingsAdmin,
-    isOrcaAvailable: input.aiAssistantEnabled && isSettingsAdmin,
+    // Owner-only — narrower than isSettingsAdmin on purpose (see the type doc).
+    isOrcaAvailable: input.aiAssistantEnabled && requireOrcaAccess(input.role),
   };
 }
 
