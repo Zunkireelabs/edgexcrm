@@ -2,19 +2,31 @@
 
 import Link from "next/link";
 import { Bell } from "lucide-react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardAction, CardContent } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/format-relative-time";
 import type { RecentActivityItem } from "@/lib/supabase/queries";
 
 interface RecentActivityCardProps {
   notifications: RecentActivityItem[];
+  onViewAll?: () => void;
 }
 
-export function RecentActivityCard({ notifications }: RecentActivityCardProps) {
+export function RecentActivityCard({ notifications, onViewAll }: RecentActivityCardProps) {
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <CardTitle className="text-sm font-semibold">Recent Activity</CardTitle>
+        {onViewAll && (
+          <CardAction>
+            <button
+              type="button"
+              onClick={onViewAll}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              View all activity
+            </button>
+          </CardAction>
+        )}
       </CardHeader>
       <CardContent className="pt-0">
         {notifications.length === 0 ? (

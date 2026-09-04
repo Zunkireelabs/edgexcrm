@@ -1,10 +1,10 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
-import { getCurrentUserTenant, getTeamMembers, getPipelineStages, getFormConfigsForTenant, getBranchIds } from "@/lib/supabase/queries";
+import { getCurrentUserTenant, getTeamMembers, getPipelineStages, getLeadListsByTenant, getFormConfigsForTenant, getBranchIds } from "@/lib/supabase/queries";
 import { getLeadAggregates, resolveSourceCounts } from "@/lib/leads/aggregates";
 import { StatsCards } from "@/components/dashboard/stats-cards";
 import { LeadsByStageChart, LeadsBySourceChart, LeadsByCounselorChart } from "@/components/dashboard/charts";
-import { canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
+import { canAccessList, canSeeNav, canSeeWidget, leadQueryScope, resolveEffectiveBranch } from "@/lib/api/permissions";
 import { CapitalRaiseDashboard } from "@/industries/real-estate/features/capital-raise/capital-raise-dashboard";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
@@ -34,7 +34,7 @@ export default async function DashboardPage() {
     redirect("/insights/dashboards");
   }
 
-  const { permissions } = tenantData;
+  const { permissions, positionId } = tenantData;
 
   const cookieStore = await cookies();
   const branchCookieVal = cookieStore.get("edgex_branch")?.value ?? null;
@@ -49,12 +49,22 @@ export default async function DashboardPage() {
     scope.branchId = effectiveBranch;
   }
 
-  const [aggregates, teamMembers, stages, formConfigs] = await Promise.all([
+  const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+
+  const [aggregates, teamMembers, stages, allLists, formConfigs] = await Promise.all([
     getLeadAggregates(tenantData.tenant.id, scope, new Date()),
     getTeamMembers(tenantData.tenant.id),
     getPipelineStages(tenantData.tenant.id),
+    hasLeadLists ? getLeadListsByTenant(tenantData.tenant.id) : Promise.resolve([]),
     getFormConfigsForTenant(tenantData.tenant.id),
   ]);
+
+  // Same access filter as the leads page's stage dropdowns — admin-only lists
+  // (Migration QC, staging imports, etc.) are simply absent from the chart, not
+  // rendered-then-hidden. Archived lists don't belong in a "current stage" funnel.
+  const lists = allLists.filter(
+    (l) => !l.is_archive && canAccessList(permissions, l.access, positionId, l.id)
+  );
 
   const memberMap = Object.fromEntries(
     teamMembers.map((m) => [m.user_id, m.email])
@@ -81,7 +91,7 @@ export default async function DashboardPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 gap-6">
         {canSeeWidget(permissions, "leads-by-stage") && (
-          <LeadsByStageChart status={aggregates.status} stages={stages} />
+          <LeadsByStageChart status={aggregates.status} list={aggregates.list} lists={lists} stages={stages} />
         )}
         {canSeeWidget(permissions, "leads-by-source") && (
           <LeadsBySourceChart sourceCounts={sourceCounts} />

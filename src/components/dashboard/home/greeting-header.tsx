@@ -21,12 +21,12 @@ export function GreetingHeader({ userName }: GreetingHeaderProps) {
 
   return (
     <div className="mb-6">
-      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1">
-        {dateStr}
-      </p>
-      <h1 className="text-2xl font-semibold text-foreground">
+      <h1 className="text-2xl font-semibold text-foreground mb-1">
         {getGreeting()}, {userName}
       </h1>
+      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+        {dateStr}
+      </p>
     </div>
   );
 }

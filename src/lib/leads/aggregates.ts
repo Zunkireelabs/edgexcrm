@@ -52,6 +52,11 @@ export interface AggregateScope {
   /** Scope every dimension to a funnel's stage-lists — FunnelKanbanBoard's column
    * counts (the `list` dimension, one count per list in the set). */
   listIdAny?: string[] | null;
+  /** Lower bound on `created_at`, applied across every dimension — the insights
+   * dashboard's date filter. Mirrors SourceFacetParams.createdAfter (same RPC param,
+   * p_created_after); no upper bound exists yet (lead_aggregates has no
+   * p_created_before), so this is "from date to now" only. */
+  createdAfter?: Date | null;
 }
 
 const SEP = "\x1f";
@@ -204,6 +209,7 @@ export async function getLeadAggregates(
   if (scope?.excludeOtherType) params.p_exclude_other_type = true;
   if (scope?.listIdEq) params.p_list_id_eq = scope.listIdEq;
   if (scope?.listIdAny && scope.listIdAny.length > 0) params.p_list_id_any = scope.listIdAny;
+  if (scope?.createdAfter) params.p_created_after = scope.createdAfter.toISOString();
 
   const { data, error } = await supabase.rpc("lead_aggregates", params);
   if (error) {

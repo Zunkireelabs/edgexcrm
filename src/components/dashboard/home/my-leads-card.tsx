@@ -23,7 +23,7 @@ export function MyLeadsCard({ leads, unreadLeadIds }: MyLeadsCardProps) {
   const display = sorted.slice(0, 8);
 
   return (
-    <Card>
+    <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle className="text-sm font-semibold">My Leads</CardTitle>

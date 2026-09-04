@@ -1147,6 +1147,7 @@ export interface RecentActivityItem {
   link: string | null;
   read_at: string | null;
   created_at: string;
+  entity_type: string;
 }
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -1185,7 +1186,7 @@ export async function getMyRecentActivity(
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(8);
+    .limit(30);
 
   if (error || !data) return [];
   const rows = data as Array<{
@@ -1223,6 +1224,7 @@ export async function getMyRecentActivity(
     // Past actions render as a neutral (non-alert) dot.
     read_at: r.created_at,
     created_at: r.created_at,
+    entity_type: r.entity_type,
   }));
 }
 

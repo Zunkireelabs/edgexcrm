@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { LayoutDashboard, Plus, ChevronDown, Check, Settings, Trash2 } from "lucide-react";
+import { LayoutDashboard, Plus, ChevronDown, Check, Settings, Trash2, MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DashboardBuilderDialog } from "./dashboard-builder-dialog";
 import type { Dashboard } from "@/types/database";
@@ -25,7 +25,9 @@ export function DashboardSwitcher({
   const [builderOpen, setBuilderOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const actionsRef = useRef<HTMLDivElement>(null);
 
   // dashboards arrive sorted by sort_order ASC, created_at ASC — first entry is the default
   const defaultId = dashboards[0]?.id;
@@ -35,12 +37,15 @@ export function DashboardSwitcher({
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false);
       }
+      if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
     }
-    if (isOpen) {
+    if (isOpen || actionsOpen) {
       document.addEventListener("mousedown", handleClickOutside);
       return () => document.removeEventListener("mousedown", handleClickOutside);
     }
-  }, [isOpen]);
+  }, [isOpen, actionsOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -162,26 +167,42 @@ export function DashboardSwitcher({
         </div>
 
         {canManage && (
-          <>
+          <div ref={actionsRef} className="relative">
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={openEdit}
-              title="Dashboard Settings"
+              onClick={() => setActionsOpen(!actionsOpen)}
+              title="More options"
+              aria-expanded={actionsOpen}
+              aria-haspopup="true"
             >
-              <Settings className="h-4 w-4" />
+              <MoreVertical className="h-4 w-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              onClick={handleDelete}
-              disabled={deleting}
-              title="Delete Dashboard"
-              className="text-red-600 hover:text-red-700 hover:bg-red-50"
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </>
+
+            {actionsOpen && (
+              <div className="absolute right-0 top-full mt-1 w-40 bg-white rounded-lg shadow-lg border border-gray-200 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => { openEdit(); setActionsOpen(false); }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    <Settings className="h-3.5 w-3.5" />
+                    Settings
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { handleDelete(); setActionsOpen(false); }}
+                    disabled={deleting}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </div>
 
