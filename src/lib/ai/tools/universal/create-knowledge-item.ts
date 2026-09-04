@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { requireAdmin } from "@/lib/api/auth";
-import { isIngestionEnabled } from "@/lib/ai/flag";
+import { isIngestionEnabled, requireOrcaAccess } from "@/lib/ai/flag";
 import { inngest } from "@/lib/ai/ingestion/inngest";
 import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { assertUserAuth } from "@/lib/ai/agent-auth";
@@ -46,7 +45,7 @@ type CreateKnowledgeItemInput = z.infer<typeof inputSchema>;
 export const createKnowledgeItemTool: AgentTool<CreateKnowledgeItemInput> = {
   id: "create_knowledge_item",
   description:
-    "Save a note as a new item in one of the tenant's knowledge bases (admin-only — a non-admin caller's proposal " +
+    "Save a note as a new item in one of the tenant's knowledge bases (owner-only — a non-owner caller's proposal " +
     "will be refused). This is a write action: the user is shown the full title and content and must approve " +
     "before it runs. The item is permanently marked as AI-written; once indexed, search_knowledge will surface it " +
     "with an explicit AI-written marker and treat it as unverified rather than as human-authored company policy. " +
@@ -58,8 +57,10 @@ export const createKnowledgeItemTool: AgentTool<CreateKnowledgeItemInput> = {
     const { db, auth, toolCallId, runId } = ctx;
     assertUserAuth(auth);
 
-    if (!requireAdmin(auth)) {
-      return { error: "Only tenant admins can add items to a knowledge base." };
+    // Owner-only, in lockstep with every other Orca gate site — this tool only
+    // runs from Ask Orca, which is itself owner-only for the first prod exposure.
+    if (!requireOrcaAccess(auth.role)) {
+      return { error: "Only the tenant owner can add items to a knowledge base via Orca." };
     }
 
     const { data: kb } = await db

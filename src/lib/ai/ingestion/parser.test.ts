@@ -7,7 +7,10 @@ const { generateTextMock, parseOfficeMock } = vi.hoisted(() => ({
 
 vi.mock("ai", () => ({ generateText: generateTextMock }));
 vi.mock("officeparser", () => ({ parseOffice: parseOfficeMock }));
-vi.mock("@/lib/ai/provider", () => ({ model: vi.fn((kind: string) => `fake-model:${kind}`) }));
+vi.mock("@/lib/ai/provider", () => ({
+  model: vi.fn((kind: string) => `fake-model:${kind}`),
+  aiRequestProviderOptions: () => ({ openai: { store: false } }),
+}));
 
 import { parseFileBytes, parseLink, htmlToText, ScannedPdfUnsupportedError } from "./parser";
 
@@ -74,6 +77,7 @@ describe("parseFileBytes — mime routing", () => {
     const call = generateTextMock.mock.calls[0][0];
     const filePart = call.messages[0].content.find((p: { type: string }) => p.type === "file");
     expect(filePart.mediaType).toBe("application/pdf");
+    expect(call.providerOptions).toEqual({ openai: { store: false } });
   });
 
   it("marks a scanned PDF failed (via ScannedPdfUnsupportedError) when the provider rejects the file part", async () => {
@@ -92,6 +96,7 @@ describe("parseFileBytes — mime routing", () => {
     const call = generateTextMock.mock.calls[0][0];
     const imagePart = call.messages[0].content.find((p: { type: string }) => p.type === "image");
     expect(imagePart.mediaType).toBe("image/png");
+    expect(call.providerOptions).toEqual({ openai: { store: false } });
   });
 
   it("throws for an unsupported mime type", async () => {

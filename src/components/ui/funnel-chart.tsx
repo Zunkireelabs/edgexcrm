@@ -79,6 +79,12 @@ export interface FunnelGradientStop {
 }
 
 export interface FunnelStage {
+  /** Stable unique key for React reconciliation across data-array swaps (e.g. switching
+   * chart modes). Falls back to `label`, but two stages can legitimately share a
+   * display label (e.g. two differently-configured pipeline stages both named "New") —
+   * pass a real id whenever the caller has one, or segments will misreconcile and
+   * visibly drift/duplicate on re-render. */
+  id?: string;
   label: string;
   value: number;
   // Overrides `value` for the segment's shape/sizing only — value, displayValue and the
@@ -720,12 +726,16 @@ export function FunnelChart({
   const first = data[0];
   if (!first) return null;
 
-  // `max`/`shapeMax` are split deliberately: `max` drives the true percentage badge and must
-  // always reflect the real first-stage value, while `shapeMax` (and `visualValue` below) may be
-  // artificially rescaled by the caller so a small stage's segment stays visible next to a much
-  // larger one — the badge stays accurate even when the shape doesn't scale linearly.
-  const max = first.value;
-  const shapeMax = first.visualValue ?? first.value;
+  // `max`/`shapeMax` are split deliberately: `max` drives the true percentage badge, `shapeMax`
+  // drives segment height/taper (which may be a caller-rescaled `visualValue`, not the raw
+  // value, so a small stage's segment stays visible next to a much larger one). Both must be
+  // the dataset's actual largest, not the first entry's own size — a funnel ordered by a fixed
+  // real-world sequence (not by volume) can legitimately start on a stage that's 0 or small,
+  // and sizing everything relative to that one entry rather than the true max either divides
+  // by zero (badges) or blows every other segment's height up to many multiples of the
+  // container (shape), which is the same class of bug, just visible in a different place.
+  const max = Math.max(...data.map((d) => d.value), 1);
+  const shapeMax = Math.max(...data.map((d) => d.visualValue ?? d.value), 1);
   const n = data.length;
   const norms = data.map((d) => (d.visualValue ?? d.value) / shapeMax);
   const horiz = orientation === "horizontal";
@@ -774,7 +784,7 @@ export function FunnelChart({
                       <rect
                         fill={bandColor}
                         height={H}
-                        key={`band-${stage.label}`}
+                        key={`band-${stage.id ?? stage.label}`}
                         width={segW}
                         x={x}
                         y={0}
@@ -786,7 +796,7 @@ export function FunnelChart({
                     <rect
                       fill={bandColor}
                       height={segH}
-                      key={`band-${stage.label}`}
+                      key={`band-${stage.id ?? stage.label}`}
                       width={W}
                       x={0}
                       y={y}
@@ -820,7 +830,7 @@ export function FunnelChart({
                   gradientStops={stage.gradient}
                   hovered={hoveredIndex === i}
                   index={i}
-                  key={stage.label}
+                  key={stage.id ?? stage.label}
                   layers={layers}
                   normEnd={normEnd}
                   normStart={normStart}
@@ -837,7 +847,7 @@ export function FunnelChart({
                   gradientStops={stage.gradient}
                   hovered={hoveredIndex === i}
                   index={i}
-                  key={stage.label}
+                  key={stage.id ?? stage.label}
                   layers={layers}
                   normEnd={normEnd}
                   normStart={normStart}
@@ -905,7 +915,7 @@ export function FunnelChart({
               <motion.div
                 animate={{ opacity: isDimmed ? 0.4 : 1 }}
                 className="absolute cursor-pointer"
-                key={`lbl-${stage.label}`}
+                key={`lbl-${stage.id ?? stage.label}`}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex(null)}
                 style={{ ...posStyle, zIndex: 20 }}

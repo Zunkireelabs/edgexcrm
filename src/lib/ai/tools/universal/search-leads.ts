@@ -11,6 +11,7 @@ import {
 } from "./lib/lead-visibility";
 import { formatLeadRow } from "./lib/format";
 import { optionalFilterString, optionalString, optionalUuid } from "./lib/sanitize";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 
 const DISPLAY_ID_RE = /^[A-Z]{2,5}-\d+$/i;
 
@@ -116,19 +117,31 @@ export const searchLeadsTool: AgentTool<z.infer<typeof inputSchema>> = {
     if (input.createdBefore) query = query.lte("created_at", input.createdBefore);
 
     if (input.query) {
-      const sanitized = input.query.replace(/[,().]/g, "");
       // Split into tokens so a full-name query ("Sarah Chen") matches — no single
       // column holds the full name. Each token gets its own .or() group; chained
       // .or() calls AND together in PostgREST, so every token must match somewhere.
       // Diverges from GET /api/v1/leads, which still does single-string matching.
-      const tokens = sanitized.split(/\s+/).filter(Boolean).slice(0, 4);
+      // Each token is neutralised to a literal ilike operand by buildIlikeOrFilter
+      // (see src/lib/api/search-filter.ts) so model-supplied `, . ( ) "` can't be
+      // parsed as PostgREST expression syntax.
+      const tokens = input.query.split(/\s+/).filter(Boolean).slice(0, 4);
       for (const token of tokens) {
         // A display-id-shaped token (e.g. "ADM-009") is an unambiguous identifier —
         // match it exactly against display_id instead of competing with the fuzzy
-        // name/email/phone columns, which would never match it anyway.
-        query = DISPLAY_ID_RE.test(token)
-          ? query.or(`display_id.ilike.${token}`)
-          : query.or(`first_name.ilike.%${token}%,last_name.ilike.%${token}%,email.ilike.%${token}%,phone.ilike.%${token}%`);
+        // name/email/phone columns, which would never match it anyway. The regex
+        // gate leaves no expression metacharacters in the token.
+        if (DISPLAY_ID_RE.test(token)) {
+          query = query.or(`display_id.ilike.${token}`);
+          continue;
+        }
+        const tokenOr = buildIlikeOrFilter(
+          ["first_name", "last_name", "email", "phone"],
+          token,
+        );
+        // A token that sanitises to nothing (e.g. "%") can't match anything —
+        // don't silently drop it and widen the result set.
+        if (!tokenOr) return { total: 0, leads: [] };
+        query = query.or(tokenOr);
       }
     }
 

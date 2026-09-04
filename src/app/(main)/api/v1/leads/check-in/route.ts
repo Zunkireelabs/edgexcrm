@@ -11,6 +11,7 @@ import {
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { getTeamMembers } from "@/lib/supabase/queries";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 
 // GET /api/v1/leads/check-in?q=<email_or_phone>
 // Live search for check-in: matches email or phone (partial, case-insensitive)
@@ -21,6 +22,12 @@ export async function GET(request: NextRequest) {
 
   const q = request.nextUrl.searchParams.get("q")?.trim();
   if (!q || q.length < 3) {
+    return apiValidationError({ q: ["Query must be at least 3 characters"] });
+  }
+
+  // Sanitised to a literal ilike operand — see src/lib/api/search-filter.ts.
+  const searchOr = buildIlikeOrFilter(["email", "phone"], q);
+  if (!searchOr) {
     return apiValidationError({ q: ["Query must be at least 3 characters"] });
   }
 
@@ -37,7 +44,7 @@ export async function GET(request: NextRequest) {
     `)
     .eq("tenant_id", auth.tenantId)
     .is("deleted_at", null)
-    .or(`email.ilike.%${q}%,phone.ilike.%${q}%`)
+    .or(searchOr)
     .order("created_at", { ascending: false })
     .limit(5);
 

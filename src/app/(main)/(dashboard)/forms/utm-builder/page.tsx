@@ -1,13 +1,15 @@
 import { redirect, notFound } from "next/navigation";
 import { getCurrentUserTenant, getFormConfigsForTenant } from "@/lib/supabase/queries";
 import { createServiceClient } from "@/lib/supabase/server";
+import { scopedClientForTenant } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 import { UtmBuilderPageClient } from "@/industries/_shared/features/form-builder/components/utm-builder-page-client";
 import { canSeeNav } from "@/lib/api/permissions";
+import { computeSubmissionCounts, keyOf } from "@/lib/utm/submission-counts";
 import type { UtmLink } from "@/types/database";
 
-type UtmLinkRow = Omit<UtmLink, "form_name"> & {
+type UtmLinkRow = Omit<UtmLink, "form_name" | "submission_count"> & {
   form: { name: string } | null;
 };
 
@@ -26,9 +28,14 @@ export default async function UtmBuilderPage() {
     .eq("tenant_id", tenantData.tenant.id)
     .order("created_at", { ascending: false });
 
-  const initialLinks: UtmLink[] = ((rawLinks ?? []) as UtmLinkRow[]).map(
-    ({ form, ...row }) => ({ ...row, form_name: form?.name ?? null }),
-  );
+  const rows = (rawLinks ?? []) as UtmLinkRow[];
+  const db = await scopedClientForTenant(tenantData.tenant.id);
+  const countByKey = await computeSubmissionCounts(db, rows);
+  const initialLinks: UtmLink[] = rows.map(({ form, ...row }) => ({
+    ...row,
+    form_name: form?.name ?? null,
+    submission_count: countByKey.get(keyOf(row.utm_source, row.utm_medium, row.utm_campaign)) ?? 0,
+  }));
 
   return (
     <div className="space-y-6 max-w-3xl">

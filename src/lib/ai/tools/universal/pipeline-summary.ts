@@ -1,6 +1,5 @@
 import { z } from "zod";
 import { canAccessPipeline } from "@/lib/api/permissions";
-import { assertUserAuth } from "@/lib/ai/agent-auth";
 import type { AgentTool } from "../types";
 import { resolveLeadVisibilityPlan, applyLeadVisibilityPlan } from "./lib/lead-visibility";
 import { optionalString, optionalUuid } from "./lib/sanitize";
@@ -15,12 +14,17 @@ export const pipelineSummaryTool: AgentTool<z.infer<typeof inputSchema>> = {
   id: "pipeline_summary",
   description:
     "Counts of leads per pipeline stage and per list (\"Stage\" in the UI) for one pipeline, scoped to " +
-    "what the current user can see. Use for questions like \"how many leads are in each stage?\".",
+    "what the calling actor can see. Use for questions like \"how many leads are in each stage?\".",
   inputSchema,
   scope: "read",
   async execute(ctx, input) {
+    // Phase 5.1b (doc 03 §1): scoped by auth.permissions — canAccessPipeline
+    // below plus resolveLeadVisibilityPlan/applyLeadVisibilityPlan, all of
+    // which accept both a real user's AuthContext and a background agent's
+    // AgentAuthContext. No assertUserAuth gate needed on this read tool: it
+    // reads no session-only fields, and an agent with a `leadScope:"own"` /
+    // no-userId position fails safe to "sees nothing" inside the plan.
     const { db, auth } = ctx;
-    assertUserAuth(auth);
 
     let pipelineId: string | null = null;
     if (input.pipelineId) {

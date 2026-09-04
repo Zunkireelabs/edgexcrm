@@ -46,7 +46,11 @@ export function IntegrationsPanel() {
   }, []);
 
   return (
-    <PanelContent>
+    // wide: the API-keys table has 6 columns (Actions last); the default
+    // max-w-3xl clips it inside the modal. max-w-none lets it use the full
+    // modal width; ApiKeysManager's own overflow-x-auto is the fallback for
+    // many keys / very long names / narrow viewports.
+    <PanelContent wide>
       <PanelSection>
         {loading ? (
           <div className="h-24 bg-gray-100 rounded-lg animate-pulse" />

@@ -84,12 +84,15 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                   <TableHead>Source</TableHead>
                   <TableHead>Medium</TableHead>
                   <TableHead>Campaign</TableHead>
+                  <TableHead className="text-right">Submissions</TableHead>
+                  <TableHead className="text-right">Clicks</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {links.map((link) => (
+                {links.map((link) => {
+                  return (
                   <TableRow key={link.id}>
                     <TableCell title={link.tracking_url} className="max-w-[200px]">
                       <div className="font-medium truncate">
@@ -97,19 +100,28 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                           <span className="text-muted-foreground italic">External URL</span>
                         )}
                       </div>
-                      <div className="text-xs text-muted-foreground truncate">
-                        {link.destination_url}
+                      <div className="flex items-center gap-1 group">
+                        <div className="text-xs text-muted-foreground truncate">
+                          {link.destination_url}
+                        </div>
+                        <CopyButton
+                          value={link.tracking_url}
+                          label="Tracking link"
+                          className="h-4 w-4 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                        />
                       </div>
                     </TableCell>
                     <TableCell>{link.utm_source ?? <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell>{link.utm_medium ?? <span className="text-muted-foreground">—</span>}</TableCell>
                     <TableCell>{link.utm_campaign ?? <span className="text-muted-foreground">—</span>}</TableCell>
+                    <TableCell className="text-right">{link.submission_count}</TableCell>
+                    <TableCell className="text-right">{link.click_count}</TableCell>
                     <TableCell className="text-muted-foreground text-xs whitespace-nowrap">
                       {formatRelativeTime(link.created_at)}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <CopyButton value={link.tracking_url} label="Tracking link" />
+                        <CopyButton value={link.destination_url} label="Destination page" />
                         <Button
                           variant="ghost"
                           size="icon"
@@ -122,7 +134,8 @@ export const UtmLinkList = forwardRef<UtmLinkListHandle, UtmLinkListProps>(
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                  );
+                })}
               </TableBody>
             </Table>
           )}

@@ -22,9 +22,11 @@ export default async function SmsBlastRoute({ params }: RouteParams) {
   if (!(await isSmsEnabledForTenant(tenantData.tenant.id))) notFound();
   if (!tenantData.permissions.canSendSms) notFound();
 
+  const isAdmin = tenantData.role === "owner" || tenantData.role === "admin";
+
   return (
     <div className="flex flex-col gap-6 p-6">
-      <BlastWorkspace blastId={id} canSendSms={tenantData.permissions.canSendSms} sandboxed={isSmsSandbox()} />
+      <BlastWorkspace blastId={id} canSendSms={tenantData.permissions.canSendSms} sandboxed={isSmsSandbox()} isAdmin={isAdmin} />
     </div>
   );
 }

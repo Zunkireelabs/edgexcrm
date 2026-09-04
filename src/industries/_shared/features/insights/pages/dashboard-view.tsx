@@ -3,8 +3,10 @@
 import React from "react";
 import { DashboardRenderer } from "../components/dashboard-renderer";
 import { DashboardSwitcher } from "../components/dashboard-switcher";
-import { WIDGET_SIZE, type WidgetSize } from "../lib/widget-catalog";
-import type { Dashboard, PipelineStage } from "@/types/database";
+import { DateRangeFilter } from "../components/date-range-filter";
+import { WIDGET_SIZE, WIDGET_RELEVANT_KPIS, type WidgetSize } from "../lib/widget-catalog";
+import { KpiTile } from "@/components/dashboard/stats-cards";
+import type { Dashboard, LeadList, PipelineStage } from "@/types/database";
 import type { LeadAggregates } from "@/lib/leads/aggregates";
 import type { LeadUtmRow } from "@/lib/supabase/queries";
 
@@ -17,9 +19,14 @@ const GROUP_CLASS: Partial<Record<WidgetSize, string>> = {
   stat: "grid grid-cols-2 md:grid-cols-4 gap-4",
 };
 const ROW_GRID_CLASS = "grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6";
+// A row of exactly two "half" widgets only fills 2 of ROW_GRID_CLASS's 3 xl
+// columns, leaving a blank third column instead of splitting 50/50 on wide
+// screens. Give that specific case its own 2-column grid so it always
+// renders as a true 50/50 split, at every breakpoint.
+const TWO_HALF_ROW_GRID_CLASS = "grid grid-cols-1 lg:grid-cols-2 gap-6";
 
 // Applied to a "wide" widget's own wrapper so it spans 2 of the 3 row columns.
-const WIDE_ITEM_CLASS = "lg:col-span-2 xl:col-span-2";
+const WIDE_ITEM_CLASS = "flex flex-col [&>*]:flex-1 lg:col-span-2 xl:col-span-2";
 
 const ROW_UNITS: Partial<Record<WidgetSize, number>> = { wide: 2, half: 1 };
 const ROW_CAPACITY = 3;
@@ -47,12 +54,31 @@ interface RendererProps {
   aggregates: LeadAggregates;
   sourceCounts: Record<string, number>;
   utmRows: LeadUtmRow[];
+  lists: LeadList[];
+  /** Status-view color lookup only — see LeadsByStageChart's `stages` prop docstring. */
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
   currentUserId?: string | null;
   currentTenantUserId?: string | null;
   industryId?: string | null;
+  hideTrend?: boolean;
+}
+
+// Auto-derives which KPI tiles are relevant to the content widgets actually on this
+// dashboard (see WIDGET_RELEVANT_KPIS) — not itself a widget, so it's never part of
+// dashboard.widgets and never a manual checkbox in the builder. This is what makes
+// picking "Leads by Status" for a dashboard automatically surface its relevant KPI row,
+// instead of a fixed 9-tile block or a separate per-KPI widget the user has to add.
+// Skipped when the full "stats" block is already on the dashboard, so the row never
+// duplicates it.
+function relevantKpiKeys(widgets: string[]): string[] {
+  if (widgets.includes("stats")) return [];
+  const keys = new Set<string>();
+  for (const w of widgets) {
+    for (const k of WIDGET_RELEVANT_KPIS[w] ?? []) keys.add(k);
+  }
+  return Array.from(keys);
 }
 
 function renderWidgets(widgets: string[], props: RendererProps) {
@@ -66,8 +92,9 @@ function renderWidgets(widgets: string[], props: RendererProps) {
     if (size === "wide" || size === "half") {
       const { group, nextIndex } = packRowGroup(widgets, i);
       i = nextIndex;
+      const isTwoHalfRow = group.length === 2 && group.every((w) => w.size === "half");
       result.push(
-        <div key={`row-group-${group[0].key}`} className={ROW_GRID_CLASS}>
+        <div key={`row-group-${group[0].key}`} className={isTwoHalfRow ? TWO_HALF_ROW_GRID_CLASS : ROW_GRID_CLASS}>
           {group.map(({ key: k, size: s }) =>
             s === "wide" ? (
               <div key={k} className={WIDE_ITEM_CLASS}>
@@ -112,6 +139,8 @@ interface DashboardViewProps {
   aggregates: LeadAggregates;
   sourceCounts: Record<string, number>;
   utmRows: LeadUtmRow[];
+  lists: LeadList[];
+  /** Status-view color lookup only — see LeadsByStageChart's `stages` prop docstring. */
   stages: PipelineStage[];
   memberMap: Record<string, string>;
   memberNames?: Record<string, string>;
@@ -120,6 +149,10 @@ interface DashboardViewProps {
   industryId: string | null;
   currentUserId?: string | null;
   currentTenantUserId?: string | null;
+  /** True when the `?from=` search param resolved to something other than "all" —
+   * see date-range-presets.ts. Suppresses trend badges tenant-wide on this render,
+   * since the RPC's week buckets don't respect the filter. */
+  dateFilterActive?: boolean;
 }
 
 export function DashboardView({
@@ -127,6 +160,7 @@ export function DashboardView({
   aggregates,
   sourceCounts,
   utmRows,
+  lists,
   stages,
   memberMap,
   memberNames,
@@ -135,15 +169,21 @@ export function DashboardView({
   industryId,
   currentUserId,
   currentTenantUserId,
+  dateFilterActive,
 }: DashboardViewProps) {
+  const kpiKeys = relevantKpiKeys(dashboard.widgets);
+
   return (
     <div className="space-y-6">
-      <DashboardSwitcher
-        dashboards={visibleDashboards}
-        currentDashboard={dashboard}
-        canManage={canManage}
-        industryId={industryId}
-      />
+      <div className="flex items-center justify-between gap-2">
+        <DashboardSwitcher
+          dashboards={visibleDashboards}
+          currentDashboard={dashboard}
+          canManage={canManage}
+          industryId={industryId}
+        />
+        <DateRangeFilter />
+      </div>
 
       {dashboard.description && (
         <p className="text-sm text-gray-500">{dashboard.description}</p>
@@ -153,16 +193,32 @@ export function DashboardView({
         <p className="text-gray-500">This dashboard has no widgets configured.</p>
       ) : (
         <div className="space-y-6">
+          {kpiKeys.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {kpiKeys.map((k) => (
+                <KpiTile
+                  key={k}
+                  metricKey={k}
+                  aggregates={aggregates}
+                  teamMemberCount={Object.keys(memberMap).length}
+                  activeSourceCount={Object.keys(sourceCounts).length}
+                  hideTrend={dateFilterActive}
+                />
+              ))}
+            </div>
+          )}
           {renderWidgets(dashboard.widgets, {
             aggregates,
             sourceCounts,
             utmRows,
+            lists,
             stages,
             memberMap,
             memberNames,
             currentUserId,
             currentTenantUserId,
             industryId,
+            hideTrend: dateFilterActive,
           })}
         </div>
       )}

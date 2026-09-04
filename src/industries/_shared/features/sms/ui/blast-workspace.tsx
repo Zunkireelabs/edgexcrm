@@ -16,9 +16,10 @@ interface BlastWorkspaceProps {
   blastId: string;
   canSendSms: boolean;
   sandboxed: boolean;
+  isAdmin: boolean;
 }
 
-export function BlastWorkspace({ blastId, canSendSms, sandboxed }: BlastWorkspaceProps) {
+export function BlastWorkspace({ blastId, canSendSms, sandboxed, isAdmin }: BlastWorkspaceProps) {
   const [blast, setBlast] = useState<SmsBlastRow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -44,7 +45,7 @@ export function BlastWorkspace({ blastId, canSendSms, sandboxed }: BlastWorkspac
 
       {blast && !loading && (
         blast.status === "draft" ? (
-          <BlastComposer blast={blast} onSent={load} canSendSms={canSendSms} sandboxed={sandboxed} />
+          <BlastComposer blast={blast} onSent={load} canSendSms={canSendSms} sandboxed={sandboxed} isAdmin={isAdmin} />
         ) : (
           <BlastDetail blast={blast} canSendSms={canSendSms} onRefresh={load} />
         )

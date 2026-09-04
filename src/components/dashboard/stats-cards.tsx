@@ -81,9 +81,14 @@ interface StatCardProps {
   /** Clean, short tile: label + number + trend badge only — no icon, no "vs last week"
    * footer. Used for the 8-tile grid so it reads as a tight row, not a stack of full cards. */
   compact?: boolean;
+  /** Suppresses the "vs last week" trend badge/footer. The RPC's this-week/last-week
+   * buckets are fixed now-7d/now-14d windows that don't respect a custom date filter
+   * (see AggregateScope.createdAfter) — showing them against a filtered range would
+   * read as a real comparison it isn't. */
+  hideTrend?: boolean;
 }
 
-function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlighted, isActive, clickable, onClick, size = "default", suffix = "", compact = false }: StatCardProps) {
+export function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlighted, isActive, clickable, onClick, size = "default", suffix = "", compact = false, hideTrend = false }: StatCardProps) {
   const trend = thisWeek > lastWeek ? "up" : thisWeek < lastWeek ? "down" : "neutral";
   const pct = lastWeek === 0 ? (thisWeek === 0 ? 0 : 100) : Math.round(((thisWeek - lastWeek) / lastWeek) * 100);
   const pctLabel = `${pct >= 0 ? "+" : ""}${pct}%`;
@@ -106,7 +111,7 @@ function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlig
   if (compact) {
     return (
       <Card
-        className={`flex h-full flex-col gap-1 border-0 py-3 shadow-sm transition-colors ${highlighted ? "bg-sidebar-primary/10" : "bg-sidebar-bg"} ${isActive ? "ring-2 ring-primary ring-offset-2" : ""} ${clickable ? "cursor-pointer" : ""}`}
+        className={`flex h-full flex-col gap-1 border-0 pt-3 pb-3 shadow-sm transition-colors overflow-hidden ${highlighted ? "bg-sidebar-primary/10" : "bg-sidebar-bg"} ${isActive ? "ring-2 ring-primary ring-offset-2" : ""} ${clickable ? "cursor-pointer" : ""}`}
         onClick={onClick}
       >
         <div className="flex items-center justify-between px-4">
@@ -118,7 +123,7 @@ function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlig
             {count}
             {suffix}
           </span>
-          {trendBadge}
+          {!hideTrend && trendBadge}
         </div>
       </Card>
     );
@@ -126,7 +131,7 @@ function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlig
 
   return (
     <Card
-      className={`h-full flex flex-col border-0 shadow-sm transition-colors ${highlighted ? "bg-sidebar-primary/10" : "bg-sidebar-bg"} ${isActive ? "ring-2 ring-primary ring-offset-2" : ""} ${clickable ? "cursor-pointer" : ""}`}
+      className={`h-full flex flex-col border-0 shadow-sm transition-colors ${highlighted ? "bg-sidebar-primary/10" : "bg-white"} ${isActive ? "ring-2 ring-primary ring-offset-2" : ""} ${clickable ? "cursor-pointer" : ""}`}
       onClick={onClick}
     >
       <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -142,12 +147,14 @@ function StatCard({ label, count, thisWeek, lastWeek, Icon, iconDelayMs, highlig
             {count}
             {suffix}
           </span>
-          {trendBadge}
+          {!hideTrend && trendBadge}
         </div>
-        <div className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
-          Vs last week: {lastWeek}
-          {suffix}
-        </div>
+        {!hideTrend && (
+          <div className="mt-3 border-t border-border pt-2 text-xs text-muted-foreground">
+            Vs last week: {lastWeek}
+            {suffix}
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -182,6 +189,62 @@ function sumBuckets(list: WeekBucketCounts[]): WeekBucketCounts {
   );
 }
 
+export interface LegacyKpiTile {
+  key: string;
+  label: string;
+  Icon: LucideIcon;
+  suffix: string;
+  count: number;
+  thisWeek: number;
+  lastWeek: number;
+}
+
+/**
+ * Same hardcoded-status tile set as StatsCards' legacy fallback branch below, factored
+ * out so the Insights dashboard builder can offer these as individually selectable
+ * "kpi-*" widgets (see widget-catalog.ts) instead of only the fixed 9-tile "stats" block.
+ */
+export function computeLegacyKpiStats(
+  aggregates: LeadAggregates,
+  teamMemberCount?: number,
+  activeSourceCount?: number,
+): Record<string, LegacyKpiTile> {
+  const totalBucket = sumBuckets(Object.values(aggregates.status));
+  const bucketFor = (statusKey: string) => aggregates.status[statusKey] ?? emptyBucket();
+
+  const unassignedCount = aggregates.counselor["(unassigned)"] ?? 0;
+  const conversionRate =
+    totalBucket.all === 0 ? 0 : Math.round((bucketFor("enrolled").all / totalBucket.all) * 100);
+
+  // No week-bucketed source data exists for unassigned/active-sources/team-members/
+  // conversion-rate (RPC dimensions are point-in-time counts, not this-week/last-week
+  // like `status`) — pin this-week === last-week so the trend badge renders a flat
+  // "neutral" arrow instead of a fabricated up/down signal.
+  const pointInTime: Record<string, number> = {
+    unassigned: unassignedCount,
+    "active-sources": activeSourceCount ?? 0,
+    "team-members": teamMemberCount ?? 0,
+    "conversion-rate": conversionRate,
+  };
+
+  const tiles: Record<string, LegacyKpiTile> = {};
+  for (const { key, label, Icon } of [...LEGACY_STATS, ...LEGACY_EXTRA_STATS]) {
+    const bucket = key in pointInTime
+      ? { all: pointInTime[key], thisWeek: pointInTime[key], lastWeek: pointInTime[key] }
+      : bucketFor(key === "total" ? "" : key);
+    tiles[key] = {
+      key,
+      label,
+      Icon,
+      suffix: key === "conversion-rate" ? "%" : "",
+      count: key === "total" ? totalBucket.all : bucket.all,
+      thisWeek: key === "total" ? totalBucket.thisWeek : bucket.thisWeek,
+      lastWeek: key === "total" ? totalBucket.lastWeek : bucket.lastWeek,
+    };
+  }
+  return tiles;
+}
+
 /**
  * Reproduces matchesStage()'s dispatch (a lead counts toward a stage if its
  * stage_id matches, else — only when stage_id is null — if its status matches the
@@ -210,9 +273,49 @@ interface StatsCardsProps {
   /** Legacy-branch-only extra — count of distinct lead sources, from the same `sourceCounts`
    * the Leads-by-Source widget already receives. */
   activeSourceCount?: number;
+  /** True when the dashboard's top-right date filter is set to something other than
+   * "All time" — see DateRangeFilter. Suppresses every card's trend badge/footer at
+   * once (see StatCardProps.hideTrend for why). */
+  hideTrend?: boolean;
 }
 
-export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, teamMemberCount, activeSourceCount }: StatsCardsProps) {
+interface KpiTileProps {
+  /** Key from LEGACY_STATS/LEGACY_EXTRA_STATS — see widget-catalog.ts's "kpi-*" entries. */
+  metricKey: string;
+  aggregates: LeadAggregates;
+  teamMemberCount?: number;
+  activeSourceCount?: number;
+  hideTrend?: boolean;
+}
+
+/** Single-metric tile for the Insights dashboard builder — lets a custom dashboard pick
+ * just the KPIs relevant to the other widgets it has, instead of the fixed 9-tile "stats"
+ * block. Reuses the same computation and StatCard as StatsCards' legacy branch. */
+export function KpiTile({ metricKey, aggregates, teamMemberCount, activeSourceCount, hideTrend = false }: KpiTileProps) {
+  const tiles = computeLegacyKpiStats(aggregates, teamMemberCount, activeSourceCount);
+  const tile = tiles[metricKey];
+  if (!tile) return null;
+
+  return (
+    <StatCard
+      label={tile.label}
+      count={tile.count}
+      thisWeek={tile.thisWeek}
+      lastWeek={tile.lastWeek}
+      Icon={tile.Icon}
+      iconDelayMs={0}
+      highlighted={metricKey === "total"}
+      isActive={false}
+      clickable={false}
+      onClick={() => {}}
+      suffix={tile.suffix}
+      compact
+      hideTrend={hideTrend}
+    />
+  );
+}
+
+export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, teamMemberCount, activeSourceCount, hideTrend = false }: StatsCardsProps) {
   const handleClick = (key: string) => {
     if (!onFilterClick) return;
     if (key === "total") {
@@ -268,6 +371,7 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
               isActive={isActive}
               clickable={!!onFilterClick}
               onClick={() => handleClick(key)}
+              hideTrend={hideTrend}
             />
           );
         })}
@@ -276,52 +380,7 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
   }
 
   // Legacy fallback (hardcoded statuses) — used by the Insights "Stats cards" widget
-  const totalBucket = sumBuckets(Object.values(aggregates.status));
-  const bucketFor = (statusKey: string) => aggregates.status[statusKey] ?? emptyBucket();
-
-  const unassignedCount = aggregates.counselor["(unassigned)"] ?? 0;
-  const conversionRate =
-    totalBucket.all === 0 ? 0 : Math.round((bucketFor("enrolled").all / totalBucket.all) * 100);
-
-  const counts: Record<string, number> = {
-    total: totalBucket.all,
-    new: bucketFor("new").all,
-    contacted: bucketFor("contacted").all,
-    enrolled: bucketFor("enrolled").all,
-    rejected: bucketFor("rejected").all,
-    unassigned: unassignedCount,
-    "active-sources": activeSourceCount ?? 0,
-    "team-members": teamMemberCount ?? 0,
-    "conversion-rate": conversionRate,
-  };
-
-  const thisWeekCounts: Record<string, number> = {
-    total: totalBucket.thisWeek,
-    new: bucketFor("new").thisWeek,
-    contacted: bucketFor("contacted").thisWeek,
-    enrolled: bucketFor("enrolled").thisWeek,
-    rejected: bucketFor("rejected").thisWeek,
-    // No week-bucketed source data exists for these four (RPC dimensions are point-in-time
-    // counts, not this-week/last-week like `status`) — pin this-week === last-week so the
-    // trend badge renders a flat "neutral" arrow instead of a fabricated up/down signal.
-    unassigned: unassignedCount,
-    "active-sources": activeSourceCount ?? 0,
-    "team-members": teamMemberCount ?? 0,
-    "conversion-rate": conversionRate,
-  };
-
-  const lastWeekCounts: Record<string, number> = {
-    total: totalBucket.lastWeek,
-    new: bucketFor("new").lastWeek,
-    contacted: bucketFor("contacted").lastWeek,
-    enrolled: bucketFor("enrolled").lastWeek,
-    rejected: bucketFor("rejected").lastWeek,
-    unassigned: unassignedCount,
-    "active-sources": activeSourceCount ?? 0,
-    "team-members": teamMemberCount ?? 0,
-    "conversion-rate": conversionRate,
-  };
-
+  const tiles = computeLegacyKpiStats(aggregates, teamMemberCount, activeSourceCount);
   const [totalStat, ...gridStats] = [...LEGACY_STATS, ...LEGACY_EXTRA_STATS];
 
   return (
@@ -329,9 +388,9 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
       <div className="md:w-56 md:flex-shrink-0">
         <StatCard
           label={totalStat.label}
-          count={counts[totalStat.key]}
-          thisWeek={thisWeekCounts[totalStat.key]}
-          lastWeek={lastWeekCounts[totalStat.key]}
+          count={tiles[totalStat.key].count}
+          thisWeek={tiles[totalStat.key].thisWeek}
+          lastWeek={tiles[totalStat.key].lastWeek}
           Icon={totalStat.Icon}
           iconDelayMs={0}
           highlighted
@@ -339,9 +398,10 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
           clickable={!!onFilterClick}
           onClick={() => handleClick(totalStat.key)}
           size="lg"
+          hideTrend={hideTrend}
         />
       </div>
-      <div className="grid flex-1 grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid flex-1 grid-cols-2 gap-4 md:grid-cols-4 px-4">
         {gridStats.map(({ key, label, Icon }, index) => {
           const isActive = activeFilter === key;
 
@@ -349,17 +409,18 @@ export function StatsCards({ aggregates, stages, onFilterClick, activeFilter, te
             <StatCard
               key={key}
               label={label}
-              count={counts[key]}
-              thisWeek={thisWeekCounts[key]}
-              lastWeek={lastWeekCounts[key]}
+              count={tiles[key].count}
+              thisWeek={tiles[key].thisWeek}
+              lastWeek={tiles[key].lastWeek}
               Icon={Icon}
               iconDelayMs={(index + 1) * 60}
               highlighted={false}
               isActive={isActive}
               clickable={!!onFilterClick}
               onClick={() => handleClick(key)}
-              suffix={key === "conversion-rate" ? "%" : ""}
+              suffix={tiles[key].suffix}
               compact
+              hideTrend={hideTrend}
             />
           );
         })}

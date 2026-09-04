@@ -28,11 +28,18 @@ export async function getCurrentUserTenant(): Promise<{
 
   const { data: membership } = await supabase
     .from("tenant_users")
-    .select("tenant_id, role, position_id, branch_id, positions(permissions, name, slug), tenants(*)")
+    .select("tenant_id, role, position_id, branch_id, suspended_at, positions(permissions, name, slug), tenants(*)")
     .eq("user_id", user.id)
     .single();
 
   if (!membership) return null;
+  // A suspended member (migration 220) is treated identically to "no
+  // membership" — same fail-closed shape as buildUserAuthContext() in
+  // src/lib/api/auth.ts (the API-route enforcement point). This is the
+  // SEPARATE Server Component path every dashboard page/layout calls
+  // directly instead of going through authenticateRequest(), so both need
+  // the same check or a suspended user still gets the full dashboard here.
+  if ((membership as { suspended_at?: string | null }).suspended_at) return null;
 
   const tenant = Array.isArray(membership.tenants)
     ? membership.tenants[0] ?? null
@@ -1140,6 +1147,7 @@ export interface RecentActivityItem {
   link: string | null;
   read_at: string | null;
   created_at: string;
+  entity_type: string;
 }
 
 const AUDIT_ACTION_LABELS: Record<string, string> = {
@@ -1178,7 +1186,7 @@ export async function getMyRecentActivity(
     .eq("tenant_id", tenantId)
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(8);
+    .limit(30);
 
   if (error || !data) return [];
   const rows = data as Array<{
@@ -1216,6 +1224,7 @@ export async function getMyRecentActivity(
     // Past actions render as a neutral (non-alert) dot.
     read_at: r.created_at,
     created_at: r.created_at,
+    entity_type: r.entity_type,
   }));
 }
 

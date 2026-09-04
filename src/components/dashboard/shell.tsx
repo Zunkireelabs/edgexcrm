@@ -40,7 +40,6 @@ import {
   Network,
   ListChecks,
   ListTodo,
-  GitCompare,
   Plane,
   MapPin,
   Handshake,
@@ -80,6 +79,7 @@ import { LeadFunnelNavGroup } from "@/components/dashboard/lead-funnel-nav-group
 import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav-group";
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 import { ReviewNavBadge } from "@/components/dashboard/orca/review-nav-badge";
+import { requireOrcaAccess } from "@/lib/ai/orca-access";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -108,11 +108,9 @@ const ORCA_NAV: Array<{ href: string; label: string; icon: LucideIcon; adminOnly
   { href: "/orca", label: "Overview", icon: LayoutDashboard },
   { href: "/orca/activity", label: "Ask Orca", icon: MessageSquare },
   { href: "/orca/structure", label: "Org Structure", icon: Network },
-  { href: "/orca/roles", label: "Roles", icon: Contact },
   { href: "/orca/tasks", label: "Tasks", icon: ListChecks },
   { href: "/orca/agents", label: "Agents", icon: Bot },
   { href: "/orca/review", label: "Review", icon: Inbox, adminOnly: true },
-  { href: "/orca/compare", label: "Compare", icon: GitCompare },
 ];
 
 // Icon registry for industry-contributed nav items. Manifests reference
@@ -316,11 +314,17 @@ export function DashboardShell({
   leadLists = [],
   stagingLists = [],
   archiveLists = [],
-  aiAssistantEnabled = false,
+  aiAssistantEnabled: aiAssistantEnabledProp = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
   const router = useRouter();
+  // Interim Orca access gate: the entire Orca surface (mode switcher, nav,
+  // Ask-Orca assistant panel) is OWNER ONLY until per-user AI access levels
+  // ship (first Admizz prod exposure — admin excluded). The matching /orca/*
+  // layout and AI API routes enforce the same rule server-side — this just
+  // keeps the UI consistent.
+  const aiAssistantEnabled = aiAssistantEnabledProp && requireOrcaAccess(role);
   // AI-disabled tenants never get the Orca nav mode, even mid-navigation to a
   // /orca/* URL that the orca layout gate is about to 404 — keeps the sidebar
   // consistent with the (hidden) mode-switcher tab above.
@@ -376,6 +380,39 @@ export function DashboardShell({
   useEffect(() => {
     if (mounted) localStorage.setItem("sidebar-collapsed", String(sidebarCollapsed));
   }, [sidebarCollapsed, mounted]);
+
+  // Suspended-account watchdog. Suspension (migration 220) is already
+  // enforced server-side on every API call and every server-rendered
+  // navigation (buildUserAuthContext/getCurrentUserTenant both fail-closed) —
+  // but someone sitting on an already-loaded dashboard tab with no further
+  // navigation or fetch never hits either checkpoint, so they'd keep full
+  // access until they happened to click something. Poll the same
+  // /api/v1/auth/status endpoint the login page uses so a suspension takes
+  // effect within one interval even with zero interaction. Not instant
+  // (~15s worst case) — the server-side checks remain the actual security
+  // boundary; this only closes the stale-open-tab UX gap.
+  useEffect(() => {
+    let cancelled = false;
+    async function checkSuspended() {
+      try {
+        const res = await fetch("/api/v1/auth/status");
+        if (!res.ok || cancelled) return;
+        const { data } = await res.json();
+        if (cancelled || !data?.blocked) return;
+        const supabase = createClient();
+        await supabase.auth.signOut();
+        router.push("/login?error=suspended");
+      } catch {
+        // Network hiccup — the next interval tick retries; server-side
+        // enforcement still applies to any real request in the meantime.
+      }
+    }
+    const intervalId = setInterval(checkSuspended, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [router]);
 
   async function handleLogout() {
     const supabase = createClient();
@@ -902,7 +939,7 @@ export function DashboardShell({
           )
         ) : (
           <>
-            {ORCA_NAV.filter((item) => !item.adminOnly || role === "owner" || role === "admin").map((item) =>
+            {ORCA_NAV.filter((item) => !item.adminOnly || requireOrcaAccess(role)).map((item) =>
               item.href === "/orca/review"
                 ? renderNavItem({ ...item, badgeSlot: <ReviewNavBadge /> })
                 : renderNavItem(item),
@@ -996,9 +1033,7 @@ export function DashboardShell({
     >
       {/* App card — the whole CRM as one floating rounded object (framed only when AI is on) */}
       <div
-        className={`flex flex-1 min-w-0 bg-sidebar-bg transition-all duration-500 ease-out ${
-          aiAssistantEnabled ? "md:overflow-hidden" : ""
-        } ${
+        className={`flex flex-1 min-w-0 md:overflow-hidden bg-sidebar-bg transition-all duration-500 ease-out ${
           aiAssistantEnabled && isAssistantOpen
             ? "md:rounded-2xl md:shadow-[0_0_0_1px_#00001d13,0_6px_20px_rgba(0,0,0,0.06)]"
             : "md:rounded-none md:shadow-none"
@@ -1077,7 +1112,7 @@ export function DashboardShell({
           <div className="flex-1 min-w-0 overflow-hidden flex">
             {/* Main content - shrinks when AI panel opens */}
             <main
-              className={`flex-1 min-h-0 overflow-auto bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
+              className={`flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-gutter:stable] bg-content-bg transition-all duration-500 ease-out print:overflow-visible print:h-auto print:p-0 print:m-0 print:border-0 print:rounded-none ${
                 isLeadsFullBleed ? "mr-3 mb-3" : "p-4 mr-3 mb-3"
               }`}
               style={{ borderRadius: "var(--radius-lg)", border: "2px solid #00001d13" }}

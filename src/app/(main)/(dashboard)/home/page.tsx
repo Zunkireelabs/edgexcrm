@@ -14,6 +14,7 @@ import { canManageHR } from "@/lib/api/permissions";
 import { HomeContent } from "@/components/dashboard/home/home-content";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { deriveHomeTip } from "@/lib/home/tips";
 
 export default async function HomePage() {
   const user = await getCachedUser();
@@ -26,6 +27,7 @@ export default async function HomePage() {
   const isEducation = tenant.industry_id === "education_consultancy";
   const isItAgency = tenant.industry_id === "it_agency";
   const outreachEnabled = getFeatureAccess(tenant.industry_id, FEATURES.OUTREACH);
+  const applicationTrackingEnabled = getFeatureAccess(tenant.industry_id, FEATURES.APPLICATION_TRACKING);
 
   const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, outreachDue, tenantUserResult] =
     await Promise.all([
@@ -49,6 +51,13 @@ export default async function HomePage() {
   const fullName = (meta?.name ?? meta?.full_name) as string | undefined;
   const userName = fullName?.trim().split(" ")[0] || user.email?.split("@")[0] || "there";
 
+  const tip = deriveHomeTip({
+    openTasks: tasks.open,
+    schedule,
+    leads: myLeads,
+    unreadCount: inboxSnapshot.unreadCount,
+  });
+
   return (
     <HomeContent
       userId={userId}
@@ -60,9 +69,11 @@ export default async function HomePage() {
       inboxSnapshot={inboxSnapshot}
       isEducation={isEducation}
       isItAgency={isItAgency}
+      applicationTrackingEnabled={applicationTrackingEnabled}
       currentTenantUserId={currentTenantUserId}
       leaveSummary={leaveSummary}
       outreachDue={outreachDue}
+      tip={tip}
     />
   );
 }

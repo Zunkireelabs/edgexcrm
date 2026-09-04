@@ -14,12 +14,13 @@ const buildToolsetMock = vi.fn();
 const logErrorMock = vi.fn();
 const streamTextMock = vi.fn();
 
-vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock }));
+vi.mock("@/lib/api/auth", () => ({ authenticateRequest: authenticateRequestMock, requireAdmin: (a: { role?: string }) => a?.role === "owner" || a?.role === "admin" }));
 
 vi.mock("@/lib/ai/flag", () => ({
   isAssistantEnabled: vi.fn(() => true),
   isAssistantEnabledForTenant: vi.fn(async () => true),
   getToolApprovalSecret: getToolApprovalSecretMock,
+  requireOrcaAccess: (role?: string) => role === "owner",
 }));
 
 vi.mock("@/lib/api/rate-limit", () => ({
@@ -47,7 +48,10 @@ vi.mock("@/lib/ai/prompts/assistant", () => ({ buildSystemPrompt: vi.fn(() => "s
 
 vi.mock("@/industries/_loader", () => ({ getIndustryAiConfig: vi.fn(() => undefined) }));
 
-vi.mock("@/lib/ai/provider", () => ({ model: vi.fn(() => "fake-model") }));
+vi.mock("@/lib/ai/provider", () => ({
+  model: vi.fn(() => "fake-model"),
+  aiRequestProviderOptions: vi.fn(() => ({ openai: { store: false } })),
+}));
 
 vi.mock("@/lib/ai/telemetry", () => ({ startTrace: vi.fn(() => ({ span: vi.fn(), end: vi.fn() })) }));
 
@@ -166,6 +170,15 @@ describe("POST /api/v1/ai/chat — tool approval signing (experimental_toolAppro
     expect(callArgs.experimental_toolApprovalSecret).toBe("a".repeat(64));
   });
 
+  it("passes store:false through to streamText so OpenAI does not retain prompt/completion content", async () => {
+    const { POST } = await import("./route");
+    await POST(fakeReq({ messages: MESSAGES }));
+
+    expect(streamTextMock).toHaveBeenCalledTimes(1);
+    const callArgs = streamTextMock.mock.calls[0][0];
+    expect(callArgs.providerOptions).toEqual({ openai: { store: false } });
+  });
+
   it("passes undefined through to streamText when the secret is unset — signing stays off", async () => {
     getToolApprovalSecretMock.mockReturnValue(undefined);
 
@@ -199,5 +212,65 @@ describe("POST /api/v1/ai/chat — tool approval signing (experimental_toolAppro
     expect(logErrorMock).not.toHaveBeenCalledWith(
       expect.stringContaining("write tools active without AI_TOOL_APPROVAL_SECRET"),
     );
+  });
+
+  it("passes a per-write-tool refineToolInput map to streamText", async () => {
+    getToolApprovalSecretMock.mockReturnValue("a".repeat(64));
+    buildToolsetMock.mockReturnValue(writeToolset());
+
+    const { POST } = await import("./route");
+    await POST(fakeReq({ messages: MESSAGES }));
+
+    const callArgs = streamTextMock.mock.calls[0][0];
+    expect(typeof callArgs.experimental_refineToolInput.update_lead).toBe("function");
+    // The refiner drops undefined keys so the signed input matches the
+    // JSON-round-tripped input on approve.
+    expect(callArgs.experimental_refineToolInput.update_lead({ id: "1", note: undefined })).toEqual({ id: "1" });
+  });
+});
+
+describe("streamErrorMessage", () => {
+  it("names an approval-verification failure instead of the generic retry copy", async () => {
+    const { streamErrorMessage } = await import("./route");
+    const { InvalidToolApprovalSignatureError } = await vi.importActual<typeof import("ai")>("ai");
+    const err = new InvalidToolApprovalSignatureError({ approvalId: "a", toolCallId: "c", reason: "invalid signature" });
+    expect(streamErrorMessage(err)).toMatch(/approval couldn't be verified/i);
+    expect(streamErrorMessage(err)).not.toMatch(/generating a response/i);
+  });
+
+  it("falls back to the generic message for an unknown error", async () => {
+    const { streamErrorMessage } = await import("./route");
+    expect(streamErrorMessage(new Error("boom"))).toMatch(/something went wrong generating a response/i);
+  });
+});
+
+describe("POST /api/v1/ai/chat — interim Orca access gate (OWNER ONLY)", () => {
+  beforeEach(() => {
+    authenticateRequestMock.mockReset();
+    checkRateLimitMock.mockReset().mockResolvedValue({ allowed: true, retryAfterSeconds: 0 });
+    scopedClientMock.mockReset().mockResolvedValue(fakeDb());
+    checkDailyBudgetMock.mockReset().mockResolvedValue({ overBudget: false, usedToday: 0, limit: 200_000 });
+    buildToolsetMock.mockReset().mockReturnValue([]);
+    getToolApprovalSecretMock.mockReset().mockReturnValue(undefined);
+    streamTextMock.mockReset().mockReturnValue({ toUIMessageStreamResponse: vi.fn(() => new Response(null, { status: 200 })) });
+  });
+  afterEach(() => vi.resetModules());
+
+  const MSG = [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }];
+
+  it.each(["admin", "counselor", "viewer"])("403s for a %s (owner-only)", async (role) => {
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role });
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq({ messages: MSG }));
+    expect(res.status).toBe(403);
+    expect(streamTextMock).not.toHaveBeenCalled();
+  });
+
+  it("allows an owner through the gate", async () => {
+    authenticateRequestMock.mockResolvedValue({ ...FAKE_AUTH, role: "owner" });
+    getToolApprovalSecretMock.mockReturnValue(undefined);
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq({ messages: MSG }));
+    expect(res.status).toBe(200);
   });
 });

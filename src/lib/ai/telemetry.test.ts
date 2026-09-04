@@ -322,10 +322,57 @@ describe("telemetry", () => {
         traceId: "r1",
         name: "review_outcome",
         value: 0.5,
+        // Operational `key=value;key=value` comment survives maskComment intact —
+        // the score label is useless if `decision`/`kind` come through masked.
         comment: "decision=edited_accepted;kind=draft_email",
       });
       // after() has no request scope in this test — falls back to direct flush.
       expect(flushAsyncMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("scoreRun masks a PII-shaped comment before it reaches client.score — it is NOT sent verbatim", async () => {
+      const { scoreRun } = await import("./telemetry");
+
+      scoreRun("r1", "review_outcome", 0, "reviewer said email manisha@example.com re: Manisha Rai");
+
+      expect(scoreMock).toHaveBeenCalledOnce();
+      const sent = scoreMock.mock.calls[0][0].comment as string;
+      expect(sent).toBe("[masked]");
+      expect(sent).not.toContain("manisha@example.com");
+      expect(sent).not.toContain("Manisha Rai");
+    });
+
+    it("scoreRun masks a non-safe key inside an otherwise-operational comment, keeps the safe ones", async () => {
+      const { scoreRun } = await import("./telemetry");
+
+      scoreRun("r1", "review_outcome", 0, "decision=accepted;kind=draft_email;note=call John Smith back");
+
+      expect(scoreMock.mock.calls[0][0].comment).toBe("decision=accepted;kind=draft_email;note=[masked]");
+    });
+
+    it("scoreRun passes undefined comment straight through (no maskComment call)", async () => {
+      const { scoreRun } = await import("./telemetry");
+
+      scoreRun("r1", "output_produced", 1);
+
+      expect(scoreMock).toHaveBeenCalledWith({ traceId: "r1", name: "output_produced", value: 1, comment: undefined });
+    });
+  });
+
+  describe("maskComment()", () => {
+    it("keeps a well-formed operational comment verbatim", async () => {
+      const { maskComment } = await import("./telemetry");
+      expect(maskComment("decision=edited_accepted;kind=draft_email")).toBe("decision=edited_accepted;kind=draft_email");
+    });
+
+    it("fails closed to [masked] for a free-text (non key=value) comment", async () => {
+      const { maskComment } = await import("./telemetry");
+      expect(maskComment("please review the note about jane@example.com")).toBe("[masked]");
+    });
+
+    it("masks only the non-safe pairs in a mixed comment", async () => {
+      const { maskComment } = await import("./telemetry");
+      expect(maskComment("decision=accepted;email=jane@example.com")).toBe("decision=accepted;email=[masked]");
     });
   });
 });

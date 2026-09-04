@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X } from "lucide-react";
+import { UserPlus, Trash2, Clock, Users, Copy, Pencil, Check, X, Ban, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { Branch } from "@/types/database";
@@ -34,6 +34,10 @@ interface TeamMember {
   default_hourly_rate: number | null;
   cost_rate: number | null;
   created_at: string;
+  // Migration 220 — set = blocked from logging in, tenant_users row stays in
+  // place so their name keeps resolving on assigned leads/activity/notes,
+  // unlike "Remove from Team" (a hard delete).
+  suspended_at: string | null;
 }
 
 interface Invite {
@@ -254,6 +258,50 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
     }
   }
 
+  // Unlike removeMember, this NEVER filters the member out of `members` — the
+  // whole point is to keep their tenant_users row (and therefore their name,
+  // resolved live off this same roster everywhere else in the app) intact.
+  async function suspendMember(memberUserId: string) {
+    if (
+      !confirm(
+        "Suspend this member? They will be blocked from logging in, but their name stays visible on leads assigned to them."
+      )
+    )
+      return;
+    try {
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, suspend: true }),
+      });
+      if (!res.ok) throw new Error();
+      const { data } = await res.json();
+      toast.success("Member suspended");
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === memberUserId ? { ...m, suspended_at: data.suspended_at } : m))
+      );
+    } catch {
+      toast.error("Failed to suspend member");
+    }
+  }
+
+  async function unsuspendMember(memberUserId: string) {
+    try {
+      const res = await fetch("/api/v1/team", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: memberUserId, suspend: false }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success("Member unsuspended");
+      setMembers((prev) =>
+        prev.map((m) => (m.user_id === memberUserId ? { ...m, suspended_at: null } : m))
+      );
+    } catch {
+      toast.error("Failed to unsuspend member");
+    }
+  }
+
   function startEditingRate(member: TeamMember) {
     setEditingRateFor(member.user_id);
     setRateInput(member.default_hourly_rate != null ? String(member.default_hourly_rate) : "");
@@ -344,12 +392,19 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
             {members.map((member) => (
               <div
                 key={member.id}
-                className="flex items-center justify-between py-2 border-b last:border-0"
+                className={`flex items-center justify-between py-2 border-b last:border-0 ${member.suspended_at ? "opacity-60" : ""}`}
               >
                 <div className="flex items-center gap-3">
                   <MemberAvatar userId={member.user_id} name={member.name || member.email} size={32} />
                   <div>
-                    <p className="text-sm font-medium">{member.name || member.email}</p>
+                    <p className="text-sm font-medium flex items-center gap-2">
+                      {member.name || member.email}
+                      {member.suspended_at && (
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                          Suspended
+                        </Badge>
+                      )}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       Joined {new Date(member.created_at).toLocaleDateString()}
                     </p>
@@ -574,6 +629,19 @@ export function TeamManagement({ role, userId, industryId, maxBranches = 1 }: Te
                         </Button>
                       </div>
                     )
+                  )}
+                  {isAdmin && member.user_id !== userId && member.role !== "owner" && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        member.suspended_at ? unsuspendMember(member.user_id) : suspendMember(member.user_id)
+                      }
+                      title={member.suspended_at ? "Unsuspend — restore login access" : "Suspend — block login, keep their name on leads"}
+                    >
+                      {member.suspended_at ? <RotateCcw className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
+                    </Button>
                   )}
                   {isAdmin && member.user_id !== userId && member.role !== "owner" && (
                     <Button

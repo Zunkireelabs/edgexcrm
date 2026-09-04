@@ -116,13 +116,13 @@ registerAgentDefinition(dailyDigestAgent);
  * agent goes through (D1's "no new actor type" decision).
  *
  * toolIds per D9 (verified, not assumed — see the 5.5 brief §2 D9 and the
- * slice's report): reads are get_lead/search_leads/team_lookup, each proven
- * to run cleanly under an AgentAuthContext (no assertUserAuth, no auth.userId
- * read). pipeline_summary is DELIBERATELY EXCLUDED — despite the brief's
- * starting assumption that lead-triage/daily-digest already exercise it under
- * agent auth, it still calls assertUserAuth(auth) (pipeline-summary.ts) and
- * would throw for any AgentAuthContext caller; daily-digest declaring it as a
- * toolId does not mean it has ever actually succeeded under agent auth.
+ * slice's report): reads are get_lead/search_leads/team_lookup/pipeline_summary,
+ * each proven to run cleanly under an AgentAuthContext (no assertUserAuth, no
+ * auth.userId read). pipeline_summary was previously excluded because it still
+ * called assertUserAuth(auth) and threw for any AgentAuthContext caller; Phase 7
+ * (7.3) made it agent-safe — it now scopes purely via auth.permissions +
+ * resolveLeadVisibilityPlan, the same path get_lead/search_leads use — so it is
+ * back in the read set the 5.5 brief's D9 originally assumed it would be in.
  * Writes are create_task/update_lead_stage/assign_lead — every one has an
  * APPROVAL_EXECUTORS entry (approval-gate.ts), the hard rule this registry
  * entry must satisfy so an agent_human approval can never resolve to "no
@@ -138,7 +138,7 @@ export const mcpClientAgent: AgentDefinition = {
     "integration API key. Every write it proposes is queued for human review or approval exactly like any " +
     "other agent's — it never executes a write inline.",
   triggers: [],
-  toolIds: ["get_lead", "search_leads", "team_lookup", "create_task", "update_lead_stage", "assign_lead"],
+  toolIds: ["get_lead", "search_leads", "team_lookup", "pipeline_summary", "create_task", "update_lead_stage", "assign_lead"],
   outputKinds: ["write_action_proposal"],
   // Never sent to any model — an MCP client's model is external and never
   // calls into runAgent()/generateText(). Kept only so AgentDefinition's

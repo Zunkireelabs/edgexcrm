@@ -6,6 +6,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES, INDUSTRIES } from "@/industries/_registry";
 import { shouldRestrictToSelf } from "@/lib/api/permissions";
 import { assertUserAuth } from "@/lib/ai/agent-auth";
+import { buildIlikeOrFilter } from "@/lib/api/search-filter";
 
 const inputSchema = z.object({
   query: optionalString(z.string().max(200).optional()).describe(
@@ -96,10 +97,15 @@ export const searchApplicationsTool: AgentTool<z.infer<typeof inputSchema>> = {
     }
 
     if (input.query) {
-      const sanitized = input.query.replace(/[,().%]/g, "");
-      const tokens = sanitized.split(/\s+/).filter(Boolean).slice(0, 4);
+      // Each token is neutralised to a literal ilike operand by buildIlikeOrFilter
+      // (see src/lib/api/search-filter.ts) so model-supplied `, . ( ) "` can't be
+      // parsed as PostgREST expression syntax.
+      const tokens = input.query.split(/\s+/).filter(Boolean).slice(0, 4);
       for (const token of tokens) {
-        query = query.or(`university_name.ilike.%${token}%,program_name.ilike.%${token}%`);
+        const tokenOr = buildIlikeOrFilter(["university_name", "program_name"], token);
+        // A token that sanitises to nothing (e.g. "%") can't match anything.
+        if (!tokenOr) return { total: 0, applications: [] };
+        query = query.or(tokenOr);
       }
     }
 

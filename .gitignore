@@ -52,6 +52,12 @@ nextdev.log
 
 # temp screenshots
 temp_ss/
+image.png
+image copy.png
+image copy */
+image copy*.png
+*-out.log
+.gstack/
 
 # Claude Code harness runtime files (per-developer; skills/ stays tracked)
 .claude/scheduled_tasks.lock
