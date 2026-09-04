@@ -152,4 +152,4 @@ erDiagram
 - Application tracking: `src/industries/education-consultancy/features/application-tracking/`, `api/v1/applications/*`, migs `057`/`064`/`066`/`089`
 - Funnel & routing: `src/components/pipeline/ListFunnelBoard.tsx`, `features/new-leads-triage/position-routing.ts`, `lead-assignment-chain.ts`, mig `059`
 - Leads services: `src/lib/leads/*`; scoring `src/lib/ai/scoring-engine.ts`
-- Business docs: `docs/FEATURE-CATALOG.md`, `docs/APPLICATION-TRACKING-BRIEF.md`, `docs/CAMPAIGNS-BRIEF.md`
+- Business docs: `docs/FEATURE-CATALOG.md`, `docs/APPLICATION-TRACKING-BRIEF.md`, `docs/archive/features/CAMPAIGNS-BRIEF.md`
