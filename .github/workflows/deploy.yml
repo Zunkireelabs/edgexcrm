@@ -239,6 +239,14 @@ jobs:
               echo "LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY"
               echo "LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY"
               echo "LANGFUSE_BASE_URL=https://cloud.langfuse.com"
+              # Tags every trace/observation with its origin environment. Without this
+              # the SDK falls back to "default" and prod + stage traces are
+              # INDISTINGUISHABLE in the shared Langfuse project — which matters
+              # because stage carries real un-anonymised Admizz PII, so an
+              # Admizz-tenant trace could have come from either box. Read
+              # automatically by langfuse@3 (getEnv("LANGFUSE_TRACING_ENVIRONMENT"));
+              # must match /^(?!langfuse)[a-z0-9_-]+$/ or the SDK rejects it.
+              echo "LANGFUSE_TRACING_ENVIRONMENT=production"
               echo "# --- END AI env ---"
             } >> .env.local
             # Native email inbound (docs/email-productionization/INBOUND-SPINE-BRIEF.md)
