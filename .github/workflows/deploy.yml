@@ -221,7 +221,10 @@ jobs:
             # AI_WRITE_TOOLS_ENABLED — Phase 4 write tools stay DARK on prod (unmerged,
             # behind hard gates + decision queue). Still double-gated per feature: a
             # tenant also needs tenants.ai_enabled (mig 174) before any token is sent,
-            # so only opted-in tenants (currently zunkireelabs-crm) are affected.
+            # so only opted-in tenants are affected. As of 2026-09-04 that is TWO
+            # tenants: zunkireelabs-crm and admizz (migration 223 granted Admizz on
+            # written client consent — see D5-DISCLOSURE-AND-NOTICE.md). Orca is also
+            # owner-only (requireOrcaAccess, #492), so admins/counsellors see nothing.
             # AI_PROVIDER is pinned (never inferred from which key exists) — it
             # determines which third party receives customer data, so changing it is a
             # disclosure event.
