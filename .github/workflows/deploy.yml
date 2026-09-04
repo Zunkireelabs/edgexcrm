@@ -147,11 +147,19 @@ jobs:
     runs-on: ubuntu-latest
     # Waits on migrate: proceeds when it succeeded (migrations applied) OR was
     # skipped (no migrations in this push); never deploys when migrate failed,
-    # so new code can't land on a half-migrated DB.
-    needs: [build-push, migrate]
+    # so new code can't land on a half-migrated DB. Also requires migrate-check
+    # to have SUCCEEDED (not just not-failed): migrate-check failing or being
+    # cancelled leaves `migrate` skipped (a job whose `needs` failed is itself
+    # skipped), which without this line would read as the benign "no migrations
+    # in this push" case and deploy anyway — the fail-open bug fixed here.
+    # migrate-check must be listed in `needs:` for `needs.migrate-check.result`
+    # to resolve to anything other than null (GitHub Actions only populates
+    # `needs.<job>` for jobs actually declared in `needs:`).
+    needs: [build-push, migrate-check, migrate]
     if: >-
       always() &&
       needs.build-push.result == 'success' &&
+      needs.migrate-check.result == 'success' &&
       (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
     environment: production
     steps:

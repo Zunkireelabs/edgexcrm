@@ -11,6 +11,7 @@ import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-butto
 import { AssigneeSelector, AssigneeChip } from "@/components/dashboard/leads/assignee-selector";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
 import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
 
 // Fixed cap for the mobile card-style sub-block (not part of desktop column resize).
 export const EMAIL_MOBILE_WIDTH = 140;
@@ -166,7 +167,7 @@ const STATIC_COLUMNS: LeadColumn[] = [
               className="flex-1 block min-w-0 text-sm font-medium text-[#0f0f10] hover:underline"
             >
               <TruncatedText
-                text={`${lead.first_name || ""} ${lead.last_name || ""}`.trim() || "—"}
+                text={getLeadFullName(lead, "—")}
               />
             </Link>
             <button
