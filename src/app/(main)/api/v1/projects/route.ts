@@ -4,7 +4,6 @@ import {
   apiSuccess,
   apiUnauthorized,
   apiForbidden,
-  apiNotFound,
   apiError,
   apiValidationError,
 } from "@/lib/api/response";
@@ -17,6 +16,7 @@ import { createAuditLog, emitEvent } from "@/lib/api/audit";
 import { computePctComplete } from "@/lib/projects/health";
 
 const PROJECT_STATUSES = ["planning", "active", "in_review", "delivered", "on_hold", "cancelled"];
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
@@ -91,32 +91,46 @@ export async function POST(request: NextRequest) {
 
   const { valid, errors } = validate(body, {
     name: [required("name"), maxLength(255)],
-    account_id: [required("account_id"), isUUID()],
+    account_id: [isUUID()],
+    owner_id: [isUUID()],
     status: [isIn(PROJECT_STATUSES)],
     notes: [optionalMaxLength(2000)],
   });
-  if (!valid) return apiValidationError(errors);
+  const validationErrors: Record<string, string[]> = { ...errors };
+  for (const field of ["start_date", "target_end_date"] as const) {
+    if (body[field] !== undefined && body[field] !== null) {
+      if (typeof body[field] !== "string" || !ISO_DATE_RE.test(body[field] as string)) {
+        validationErrors[field] = ["Must be a valid ISO date YYYY-MM-DD or null"];
+      }
+    }
+  }
+  if (!valid || Object.keys(validationErrors).length > 0) return apiValidationError(validationErrors);
 
   const db = await scopedClient(auth);
 
-  // Verify account belongs to this tenant
-  const { data: account } = await db
-    .from("accounts")
-    .select("id")
-    .eq("id", String(body.account_id))
-    .maybeSingle();
-  if (!account) return apiNotFound("Account");
+  // Verify account belongs to this tenant (when supplied — internal projects omit it)
+  if (body.account_id != null) {
+    const { data: account } = await db
+      .from("accounts")
+      .select("id")
+      .eq("id", String(body.account_id))
+      .maybeSingle();
+    if (!account) return apiError("INVALID_ACCOUNT", "Account not found in this tenant", 400);
+  }
 
   const { data: created, error } = await db
     .from("projects")
     .insert({
-      account_id: String(body.account_id),
+      account_id: body.account_id != null ? String(body.account_id) : null,
       name: String(body.name).trim(),
       status: body.status ? String(body.status) : "active",
       default_rate:
         body.default_rate != null ? Number(body.default_rate) : null,
       is_billable: body.is_billable !== false,
       notes: body.notes ? String(body.notes).trim() : null,
+      owner_id: body.owner_id != null ? String(body.owner_id) : null,
+      start_date: body.start_date != null ? String(body.start_date) : null,
+      target_end_date: body.target_end_date != null ? String(body.target_end_date) : null,
     })
     .select()
     .single();

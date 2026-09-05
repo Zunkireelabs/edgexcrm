@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef, useEffect } from "react";
-import { Search, LayoutGrid, TableProperties } from "lucide-react";
+import { Search, LayoutGrid, TableProperties, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type FilterOption } from "@/components/ui/filter-dropdown";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
@@ -19,6 +20,8 @@ interface WorkspaceHeaderProps {
   team: TeamMember[];
   projectCount: number;
   onClearFilters: () => void;
+  canCreate: boolean;
+  onNewProject: () => void;
 }
 
 export function WorkspaceHeader({
@@ -28,6 +31,8 @@ export function WorkspaceHeader({
   team,
   projectCount,
   onClearFilters,
+  canCreate,
+  onNewProject,
 }: WorkspaceHeaderProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const onFilterChangeRef = useRef(onFilterChange);
@@ -135,21 +140,29 @@ export function WorkspaceHeader({
       {/* Title row */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Projects</h1>
-        <Tabs
-          value={filters.view}
-          onValueChange={(v) => onFilterChange({ view: v as WorkspaceFilters["view"] })}
-        >
-          <TabsList>
-            <TabsTrigger value="board" className="gap-1.5 text-xs">
-              <LayoutGrid className="h-3.5 w-3.5" />
-              Board
-            </TabsTrigger>
-            <TabsTrigger value="table" className="gap-1.5 text-xs">
-              <TableProperties className="h-3.5 w-3.5" />
-              Table
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <Tabs
+            value={filters.view}
+            onValueChange={(v) => onFilterChange({ view: v as WorkspaceFilters["view"] })}
+          >
+            <TabsList>
+              <TabsTrigger value="board" className="gap-1.5 text-xs">
+                <LayoutGrid className="h-3.5 w-3.5" />
+                Board
+              </TabsTrigger>
+              <TabsTrigger value="table" className="gap-1.5 text-xs">
+                <TableProperties className="h-3.5 w-3.5" />
+                Table
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {canCreate && (
+            <Button size="sm" onClick={onNewProject}>
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              New project
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Toolbar card */}

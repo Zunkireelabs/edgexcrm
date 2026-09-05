@@ -12,9 +12,9 @@ import {
   closestCorners,
 } from "@dnd-kit/core";
 import { toast } from "sonner";
-import { LayoutGrid } from "lucide-react";
 import type { ProjectStatus } from "@/types/database";
 import { ProjectColumn, COLUMN_ORDER } from "../project-column";
+import { ProjectsEmptyState } from "./projects-empty-state";
 import { ProjectCard, type ProjectWithAccount } from "../project-card";
 import type { TeamMember } from "../../hooks/use-projects";
 import type { WorkspaceFilters } from "../../hooks/use-workspace-filters";
@@ -46,6 +46,9 @@ interface BoardViewProps {
   onProjectUpdated: (updated: ProjectWithAccount) => void;
   onRefetch: () => void;
   onClearFilters: () => void;
+  hasAnyProjects: boolean;
+  canCreate: boolean;
+  onNewProject: () => void;
 }
 
 export function BoardView({
@@ -56,6 +59,9 @@ export function BoardView({
   onProjectUpdated,
   onRefetch,
   onClearFilters,
+  hasAnyProjects,
+  canCreate,
+  onNewProject,
 }: BoardViewProps) {
   const visibleColumns: ProjectStatus[] = useMemo(() => {
     const base: ProjectStatus[] = filters.showCancelled
@@ -148,17 +154,12 @@ export function BoardView({
 
   if (projects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-        <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">No projects match these filters.</p>
-        <button
-          type="button"
-          onClick={onClearFilters}
-          className="text-xs text-blue-600 hover:underline underline-offset-2"
-        >
-          Clear filters
-        </button>
-      </div>
+      <ProjectsEmptyState
+        hasAnyProjects={hasAnyProjects}
+        canCreate={canCreate}
+        onNewProject={onNewProject}
+        onClearFilters={onClearFilters}
+      />
     );
   }
 

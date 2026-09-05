@@ -60,7 +60,8 @@ export async function POST(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  // Task creation is open to all tenant members (brief: "let employees get
+  // started"). Budget/margin-bearing actions stay admin-only elsewhere.
 
   let body: Record<string, unknown>;
   try {
@@ -94,7 +95,8 @@ export async function POST(request: NextRequest, { params }: Props) {
   if (!project) return apiNotFound("Project");
 
   const assigneeId = body.assignee_id ? String(body.assignee_id) : null;
-  if (assigneeId && assigneeId !== auth.userId) {
+  const assigneeIsOther = !!assigneeId && assigneeId !== auth.userId;
+  if (assigneeIsOther) {
     const { data: member } = await db
       .from("tenant_users")
       .select("user_id")
@@ -102,7 +104,10 @@ export async function POST(request: NextRequest, { params }: Props) {
       .maybeSingle();
     if (!member) return apiValidationError({ assignee_id: ["Not a member of this tenant"] });
   }
-  const assignedById = assigneeId && assigneeId !== auth.userId ? auth.userId : null;
+  // Always stamp the creator so they can edit their own task later
+  // (own-vs-admin rule in tasks/[id]/route.ts keys off assignee_id OR
+  // assigned_by_id). Never taken from the body.
+  const assignedById = auth.userId;
 
   // Get next position
   const { data: posResult } = await db
@@ -125,7 +130,9 @@ export async function POST(request: NextRequest, { params }: Props) {
       status: "todo",
       estimated_minutes:
         body.estimated_minutes != null ? Number(body.estimated_minutes) : null,
-      is_billable: body.is_billable !== false,
+      // is_billable is budget-bearing — non-admins can't set it, task defaults
+      // to billable (matches the is_billable handling in PATCH).
+      is_billable: requireAdmin(auth) ? body.is_billable !== false : true,
       position: nextPosition,
       assignee_id: assigneeId,
       assigned_by_id: assignedById,
@@ -156,7 +163,7 @@ export async function POST(request: NextRequest, { params }: Props) {
     }),
   ]);
 
-  if (assignedById) {
+  if (assigneeIsOther) {
     createNotificationsExcept(auth.userId, [
       {
         tenantId: auth.tenantId,

@@ -50,7 +50,6 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {
@@ -96,7 +95,7 @@ export async function PATCH(request: NextRequest, { params }: Props) {
   const db = await scopedClient(auth);
   const { data: existing } = await db
     .from("tasks")
-    .select("id, title, assignee_id, project_id")
+    .select("id, title, assignee_id, assigned_by_id, project_id")
     .eq("id", id)
     .maybeSingle();
   if (!existing) return apiNotFound("Task");
@@ -104,8 +103,40 @@ export async function PATCH(request: NextRequest, { params }: Props) {
     id: string;
     title: string;
     assignee_id: string | null;
+    assigned_by_id: string | null;
     project_id: string | null;
   };
+
+  // Own-vs-admin authorization — same shape as canEdit() in
+  // src/app/(main)/api/v1/time-entries/[id]/route.ts. Admin/owner: full field
+  // set. Non-admin: their own task (assignee or the person who assigned it),
+  // OR an unassigned task (claimable team work) — with a restricted field set:
+  // no title/position, no is_billable, and no assigning to anyone but self.
+  const isAdmin = requireAdmin(auth);
+  const ownsTask =
+    existingTask.assignee_id === auth.userId || existingTask.assigned_by_id === auth.userId;
+  const isUnassigned = existingTask.assignee_id === null;
+  if (!isAdmin && !ownsTask && !isUnassigned) return apiForbidden();
+
+  const NON_ADMIN_FIELDS = new Set([
+    "status",
+    "due_date",
+    "estimated_minutes",
+    "tags",
+    "description",
+    "priority",
+  ]);
+  if (!isAdmin) {
+    if (body.is_billable !== undefined) return apiForbidden();
+    if ("assignee_id" in body) {
+      const target = body.assignee_id ? String(body.assignee_id) : null;
+      if (target !== auth.userId) return apiForbidden();
+    }
+    for (const key of Object.keys(body)) {
+      if (key === "assignee_id") continue; // handled above (self-only)
+      if (!NON_ADMIN_FIELDS.has(key)) return apiForbidden();
+    }
+  }
 
   const patch: Record<string, unknown> = {};
   if (body.title !== undefined) patch.title = String(body.title).trim();

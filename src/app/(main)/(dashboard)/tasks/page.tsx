@@ -9,5 +9,5 @@ export default async function TasksRoute() {
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD)) notFound();
 
-  return <TasksWorkspacePage />;
+  return <TasksWorkspacePage role={tenantData.role} currentUserId={tenantData.userId} />;
 }

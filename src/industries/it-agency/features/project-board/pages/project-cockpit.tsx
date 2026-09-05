@@ -25,11 +25,12 @@ import type { ProjectStatus } from "@/types/database";
 interface ProjectCockpitPageProps {
   projectId: string;
   role: string;
+  currentUserId: string;
   // Tenant slug, for the AI-synth vision-preview flag (lib/ai-preview.ts).
   tenantSlug: string | null;
 }
 
-export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockpitPageProps) {
+export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug }: ProjectCockpitPageProps) {
   const isAdmin = role === "owner" || role === "admin";
   const aiPreviewEnabled = AI_SYNTH_PREVIEW.enabledFor(tenantSlug, isAdmin);
   const [activeTab, setActiveTab] = useState("overview");
@@ -114,7 +115,7 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
             </TabsContent>
             <TabsContent value="tasks" className="mt-4">
               <ActiveTimersProvider>
-                <TasksSection projectId={projectId} isAdmin={isAdmin} />
+                <TasksSection projectId={projectId} isAdmin={isAdmin} currentUserId={currentUserId} />
               </ActiveTimersProvider>
             </TabsContent>
             <TabsContent value="reports" className="mt-4">

@@ -182,6 +182,24 @@ When closing a session, push this block's content into a new dated session entry
 
 ---
 
+## it_agency Delivery — self-serve on-ramps (Projects & Tasks) — 2026-09-05
+
+**Branch `feature/it-agency-delivery-self-serve`, PR to stage, mig 224. Not merged — awaiting review + hands-on local verification.**
+
+The delivery engine was already shipped; the problem was on-ramps and permissions, not missing features. This round:
+
+- **Migration 224** — `ALTER TABLE projects ALTER COLUMN account_id DROP NOT NULL` (precedent: `032_personal_tasks.sql`). Enables **internal projects** (`account_id IS NULL`, rendered as "Internal" everywhere the account name would show). Rides the deploy pipeline — not hand-applied.
+- **`POST /api/v1/projects`** — `account_id` optional; accepts `owner_id` / `start_date` / `target_end_date`; explicit tenant-scoped account existence check (400 on a bad/foreign id). Still `owner|admin`.
+- **`PATCH /api/v1/tasks/[id]`** — replaced blanket `requireAdmin` with **own-vs-admin** (copied from `time-entries/[id]/route.ts` `canEdit()`). Non-admin: assignee **or** assigner, restricted to `status`/`due_date`/`estimated_minutes`/`tags`/`description`/`priority`; `is_billable` + reassignment + `DELETE` stay admin.
+- **`POST /api/v1/projects/[id]/tasks`** — dropped `requireAdmin`; open to all members; `assigned_by_id` stamped server-side.
+- **UI** — `ProjectForm` promoted `accounts/` → `project-board/components/` and extended (Client/Internal toggle, account combobox, owner picker, dates); new `TaskCreateDialog` (required Project picker); `+ New Project` on `/projects` (owner/admin), `+ New Task` on `/tasks` + cockpit (all members); `/tasks` threads `role` + `currentUserId` and renders non-editable rows as **read-only text** instead of controls that 403; `/tasks` defaults to *my open work* (assignee=me, To Do + In Progress; explicit URL params still win) + a Mine/Everyone toggle; timer/log-time row icons already had tooltips; empty-state copy split (create CTA only on a truly-empty board, "clear filters" on a filter miss).
+- **Tests** — new `api/v1/tasks/[id]`, `api/v1/projects`, `api/v1/projects/[id]/tasks` route suites (17 cases incl. own-vs-admin, claim-unassigned, non-admin DELETE 403, no-account create, foreign-account 400, `assigned_by_id` from session). `npm run test` (1924 tests), `npm run build`, `npm run lint` (0 errors) all green.
+- **Local verification DONE** (OrbStack + local Supabase, mig 224 applied to local DB, `test-agency` it_agency tenant): owner created an internal + a client-picker project → cockpit header reads "Internal", shows on Board + Table; created tasks from `/tasks` dialog (submit blocked with no project) and cockpit inline form. **Non-admin session** (viewer `member.gaps`): `/tasks` opens with no red toasts, own/unassigned-task controls editable and save 200, someone-else's task renders as read-only text, `+ New task` works (auto-assigns self, `assigned_by_id` stamped so it stays editable), no `+ New project` button. Null-account sweep clean on `/projects` board+table, cockpit, `/time-tracking`, `/approvals`, `/resourcing` (+ allocated a member to the internal project), `/resourcing/utilization`. Only server log noise = Inngest `fetch failed` domain-event emission (no local Inngest; explicitly non-blocking, pre-existing).
+- **Review round applied** (Opus): missing `wantMyWorkDefault` dep on `setFilters` useCallback; `assigned_by_id` now stamped unconditionally from the session on task create; non-admins may claim an unassigned task (set `assignee_id` to self) — server + `canEditTask` mirror; non-admin `is_billable` in the create body ignored.
+- **Owed before merge:** deal→project convert flow + `/accounts/[id]` Projects tab not re-walked (both always set `account_id`, so out of the nullable-change blast radius — lower risk). Confirm delivery migs 128/130–136 are on prod before the eventual stage→main promotion so 224 doesn't land on a schema missing its ancestors.
+
+---
+
 ## Outreach Phase 1 — email blast surface (dark) — 2026-08-23
 
 Successor to Phase 0's send spine: a one-shot bulk-email blast surface (composer → audience filter → review/confirm → send → live status), gated behind the same `EMAIL_OUTBOUND_ENABLED` + `bulk_email_enabled` double-gate, so it ships dark on prod exactly like Phase 0.
