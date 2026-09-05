@@ -32,7 +32,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
   const [committingPlan, setCommittingPlan] = useState(false);
 
   useEffect(() => {
-    fetch("/api/v1/team")
+    fetch("/api/v1/team?minimal=1")
       .then((r) => r.json())
       .then((json) => setTeam(json.data ?? []))
       .catch(() => toast.error("Failed to load team"));

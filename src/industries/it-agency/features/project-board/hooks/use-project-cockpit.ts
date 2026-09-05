@@ -6,14 +6,14 @@ import type { Project, ProjectEvent } from "@/types/database";
 
 interface TeamMember {
   user_id: string;
-  email: string;
+  name: string;
 }
 
 export function useProjectCockpit(projectId: string) {
   const [project, setProject] = useState<Project | null>(null);
   const [events, setEvents] = useState<ProjectEvent[]>([]);
   const [accountName, setAccountName] = useState<string | null>(null);
-  const [ownerEmail, setOwnerEmail] = useState<string | null>(null);
+  const [ownerName, setOwnerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (silent = false) => {
@@ -28,7 +28,7 @@ export function useProjectCockpit(projectId: string) {
       setEvents(eRes.data ?? []);
 
       if (loadedProject) {
-        const tRes = await fetch(`/api/v1/team`).then((r) => r.json());
+        const tRes = await fetch(`/api/v1/team?minimal=1`).then((r) => r.json());
         if (loadedProject.account_id) {
           const aRes = await fetch(`/api/v1/accounts/${loadedProject.account_id}`).then((r) => r.json());
           setAccountName(aRes.data?.name ?? null);
@@ -37,7 +37,7 @@ export function useProjectCockpit(projectId: string) {
           setAccountName("Internal");
         }
         const team: TeamMember[] = tRes.data ?? [];
-        setOwnerEmail(team.find((m) => m.user_id === loadedProject.owner_id)?.email ?? null);
+        setOwnerName(team.find((m) => m.user_id === loadedProject.owner_id)?.name ?? null);
       }
     } catch {
       toast.error("Failed to load project");
@@ -104,7 +104,7 @@ export function useProjectCockpit(projectId: string) {
     project,
     events,
     accountName,
-    ownerEmail,
+    ownerName,
     loading,
     // Silent — used to refresh in-place after a mutation elsewhere on the
     // page (e.g. a change request approval); must not remount the tree and

@@ -119,13 +119,13 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
       result.push({ member, ownedProjects, openTasks });
     }
 
-    // Sort: open tasks desc → owned projects desc → email asc
+    // Sort: open tasks desc → owned projects desc → name asc
     result.sort((a, b) => {
       const taskDiff = b.openTasks.length - a.openTasks.length;
       if (taskDiff !== 0) return taskDiff;
       const projDiff = b.ownedProjects.length - a.ownedProjects.length;
       if (projDiff !== 0) return projDiff;
-      return a.member.email.localeCompare(b.member.email);
+      return a.member.name.localeCompare(b.member.name);
     });
 
     return result;
@@ -192,7 +192,7 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
               type="button"
               onClick={() => toggleExpand(member.user_id)}
               aria-expanded={expanded}
-              aria-label={`${member.email}, ${ownedProjects.length} projects, ${openTasks.length} open tasks`}
+              aria-label={`${member.name}, ${ownedProjects.length} projects, ${openTasks.length} open tasks`}
               className="w-full flex items-center gap-3 px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
             >
               {expanded ? (
@@ -200,9 +200,9 @@ export function MembersView({ filters, team, projects, accountMap, onClearFilter
               ) : (
                 <ChevronRight className="h-4 w-4 text-gray-400 shrink-0" />
               )}
-              <MemberAvatar userId={member.user_id} name={member.name || member.email.split("@")[0]} size={32} />
+              <MemberAvatar userId={member.user_id} name={member.name} size={32} />
               <span className="text-sm font-medium text-[#0f0f10] truncate flex-1">
-                {member.email}
+                {member.name}
               </span>
               <span className="text-xs text-muted-foreground ml-2 shrink-0 whitespace-nowrap">
                 Projects ({ownedProjects.length}) &nbsp;·&nbsp; Open tasks ({openTasks.length})

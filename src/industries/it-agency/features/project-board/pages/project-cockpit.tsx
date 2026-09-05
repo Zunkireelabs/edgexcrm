@@ -38,7 +38,7 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug 
     project,
     events,
     accountName,
-    ownerEmail,
+    ownerName,
     loading,
     refetch,
     refetchEvents,
@@ -83,7 +83,7 @@ export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug 
         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
           {accountName && <span>{accountName}</span>}
           {project.engagement_model && <span>· {project.engagement_model.replace("_", " ")}</span>}
-          {ownerEmail && <span>· Owner: {ownerEmail}</span>}
+          {ownerName && <span>· Owner: {ownerName}</span>}
           {project.target_end_date && <span>· Due {project.target_end_date}</span>}
         </div>
       </div>

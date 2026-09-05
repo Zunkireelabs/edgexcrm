@@ -33,7 +33,7 @@ export function TasksSection({ projectId, isAdmin, currentUserId }: TasksSection
     setLoading(true);
     Promise.all([
       fetch(`/api/v1/projects/${projectId}/tasks`).then((r) => r.json()),
-      fetch("/api/v1/team").then((r) => r.json()),
+      fetch("/api/v1/team?minimal=1").then((r) => r.json()),
     ])
       .then(([tasksRes, teamRes]) => {
         setTasks(tasksRes.data ?? []);
