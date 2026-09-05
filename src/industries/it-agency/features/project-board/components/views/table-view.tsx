@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { ArrowUp, ArrowDown, ArrowUpDown, LayoutGrid } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -12,6 +12,7 @@ import {
 import type { ProjectWithAccount } from "../project-card";
 import type { TeamMember } from "../../hooks/use-projects";
 import { ProjectRow } from "../project-row";
+import { ProjectsEmptyState } from "./projects-empty-state";
 
 type SortKey = "name" | "account_name" | "owner" | "status" | "updated_at";
 type SortDir = "asc" | "desc";
@@ -27,9 +28,21 @@ interface TableViewProps {
   teamMap: Map<string, TeamMember>;
   onProjectUpdated: (updated: ProjectWithAccount) => void;
   onClearFilters: () => void;
+  hasAnyProjects: boolean;
+  canCreate: boolean;
+  onNewProject: () => void;
 }
 
-export function TableView({ projects, team, teamMap, onProjectUpdated, onClearFilters }: TableViewProps) {
+export function TableView({
+  projects,
+  team,
+  teamMap,
+  onProjectUpdated,
+  onClearFilters,
+  hasAnyProjects,
+  canCreate,
+  onNewProject,
+}: TableViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("updated_at");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -56,17 +69,12 @@ export function TableView({ projects, team, teamMap, onProjectUpdated, onClearFi
 
   if (projects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
-        <LayoutGrid className="h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">No projects match these filters.</p>
-        <button
-          type="button"
-          onClick={onClearFilters}
-          className="text-xs text-gray-600 hover:text-[#0f0f10] hover:underline underline-offset-2"
-        >
-          Clear filters
-        </button>
-      </div>
+      <ProjectsEmptyState
+        hasAnyProjects={hasAnyProjects}
+        canCreate={canCreate}
+        onNewProject={onNewProject}
+        onClearFilters={onClearFilters}
+      />
     );
   }
 

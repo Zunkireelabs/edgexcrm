@@ -43,12 +43,22 @@ const TASK_STATUS_OPTIONS: { value: TaskStatus; label: string }[] = [
 interface TaskRowProps {
   task: Task;
   isAdmin: boolean;
+  /** When supplied, a non-admin may edit a task they're the assignee of, or
+   *  that they assigned — mirrors the server rule in
+   *  src/app/(main)/api/v1/tasks/[id]/route.ts. Delete stays admin-only. */
+  currentUserId?: string;
   team?: TeamMember[];
   onUpdate: (task: Task) => void;
   onDelete: (taskId: string) => void;
 }
 
-export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRowProps) {
+export function TaskRow({ task, isAdmin, currentUserId, team = [], onUpdate, onDelete }: TaskRowProps) {
+  const canEdit =
+    isAdmin ||
+    (!!currentUserId &&
+      (task.assignee_id === null ||
+        task.assignee_id === currentUserId ||
+        task.assigned_by_id === currentUserId));
   const { isTaskRunning, isPending, startTimer, stopTimer, now } = useActiveTimersContext();
   const running = isTaskRunning(task.id);
   const timerPending = isPending(task.id);
@@ -162,6 +172,17 @@ export function TaskRow({ task, isAdmin, team = [], onUpdate, onDelete }: TaskRo
           onChange={handleAssigneeChange}
           disabled={!isAdmin}
         />
+        {canEdit && !isAdmin && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={handleEditOpen}
+            title="Edit task"
+          >
+            <Pencil className="h-3.5 w-3.5" />
+          </Button>
+        )}
         <TooltipProvider>
           <Tooltip>
             <TooltipTrigger asChild>

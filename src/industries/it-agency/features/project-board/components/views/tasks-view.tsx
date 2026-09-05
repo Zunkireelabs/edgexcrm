@@ -77,9 +77,20 @@ interface TasksViewProps {
   poolTags: string[];
   refetchTags: () => Promise<void>;
   onClearFilters: () => void;
+  isAdmin: boolean;
+  currentUserId: string;
 }
 
-export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters }: TasksViewProps) {
+/** Mirrors the server rule in src/app/(main)/api/v1/tasks/[id]/route.ts:
+ *  admins edit everything; a member may edit a task they're the assignee of,
+ *  that they assigned, or that is unassigned (claimable team work). */
+function canEditTask(task: TaskWithProject, isAdmin: boolean, currentUserId: string): boolean {
+  if (isAdmin) return true;
+  if (task.assignee_id === null) return true;
+  return task.assignee_id === currentUserId || task.assigned_by_id === currentUserId;
+}
+
+export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters, isAdmin, currentUserId }: TasksViewProps) {
   const [tasks, setTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -252,7 +263,9 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
     return (
       <div className="flex flex-col items-center justify-center py-16 gap-2 text-center">
         <ListTodo className="h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">No tasks match these filters.</p>
+        <p className="text-sm text-muted-foreground">
+          No tasks match your filters. Use <span className="font-medium">New task</span> above to add one.
+        </p>
         <button
           type="button"
           onClick={onClearFilters}
@@ -327,6 +340,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
                   task={task}
                   team={team}
                   poolTags={poolTags}
+                  canEdit={canEditTask(task, isAdmin, currentUserId)}
                   onStatusChange={handleStatusChange}
                   onAssigneeChange={handleAssigneeChange}
                   onPriorityChange={handlePriorityChange}
@@ -358,6 +372,7 @@ interface TaskRowProps {
   task: TaskWithProject;
   team: TeamMember[];
   poolTags: string[];
+  canEdit: boolean;
   onStatusChange: (id: string, s: TaskStatus) => void;
   onAssigneeChange: (id: string, uid: string | null) => void;
   onPriorityChange: (id: string, p: TaskPriority) => void;
@@ -371,6 +386,7 @@ function TaskRow({
   task,
   team,
   poolTags,
+  canEdit,
   onStatusChange,
   onAssigneeChange,
   onPriorityChange,
@@ -479,19 +495,23 @@ function TaskRow({
 
       {/* Status */}
       <TableCell className="border-r border-gray-100">
-        <Select
-          value={task.status}
-          onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
-        >
-          <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 gap-1 w-auto focus:ring-0 shadow-none hover:bg-gray-100 rounded px-1.5">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.entries(TASK_STATUS_LABELS) as [TaskStatus, string][]).map(([v, lbl]) => (
-              <SelectItem key={v} value={v} className="text-xs">{lbl}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {canEdit ? (
+          <Select
+            value={task.status}
+            onValueChange={(v) => onStatusChange(task.id, v as TaskStatus)}
+          >
+            <SelectTrigger className="h-6 text-xs border-0 bg-transparent p-0 gap-1 w-auto focus:ring-0 shadow-none hover:bg-gray-100 rounded px-1.5">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.entries(TASK_STATUS_LABELS) as [TaskStatus, string][]).map(([v, lbl]) => (
+                <SelectItem key={v} value={v} className="text-xs">{lbl}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <span className="text-xs text-gray-600 px-1.5">{TASK_STATUS_LABELS[task.status]}</span>
+        )}
       </TableCell>
 
       {/* Assignee */}
@@ -500,6 +520,7 @@ function TaskRow({
           assigneeId={task.assignee_id}
           team={team}
           onChange={(uid) => onAssigneeChange(task.id, uid)}
+          disabled={!canEdit}
           showName
         />
       </TableCell>
@@ -508,48 +529,71 @@ function TaskRow({
       <TableCell className="border-r border-gray-100">
         <PriorityPill
           priority={task.priority}
-          onChange={(p) => onPriorityChange(task.id, p)}
+          onChange={canEdit ? (p) => onPriorityChange(task.id, p) : undefined}
+          readOnly={!canEdit}
         />
       </TableCell>
 
       {/* Due date */}
       <TableCell className="border-r border-gray-100">
-        <input
-          type="date"
-          value={task.due_date ?? ""}
-          onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
-          aria-label="Due date"
-          className={[
-            "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
-            isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
-          ].join(" ")}
-        />
+        {canEdit ? (
+          <input
+            type="date"
+            value={task.due_date ?? ""}
+            onChange={(e) => onDueDateChange(task.id, e.target.value || null)}
+            aria-label="Due date"
+            className={[
+              "text-xs border rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent",
+              isOverdue ? "text-red-600 border-red-200" : "border-gray-200 text-gray-700",
+            ].join(" ")}
+          />
+        ) : (
+          <span className={`text-xs ${isOverdue ? "text-red-600" : "text-gray-600"}`}>
+            {task.due_date ?? "—"}
+          </span>
+        )}
       </TableCell>
 
       {/* Estimate (hours) */}
       <TableCell className="border-r border-gray-100">
-        <input
-          type="number"
-          min="0"
-          step="0.25"
-          value={estimateInput}
-          onChange={(e) => setEstimateInput(e.target.value)}
-          onBlur={commitEstimate}
-          placeholder="—"
-          aria-label="Estimated hours"
-          className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
-        />
+        {canEdit ? (
+          <input
+            type="number"
+            min="0"
+            step="0.25"
+            value={estimateInput}
+            onChange={(e) => setEstimateInput(e.target.value)}
+            onBlur={commitEstimate}
+            placeholder="—"
+            aria-label="Estimated hours"
+            className="w-14 text-xs border border-gray-200 rounded px-1.5 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring bg-transparent text-gray-700"
+          />
+        ) : (
+          <span className="text-xs text-gray-600">{estimateInput || "—"}</span>
+        )}
       </TableCell>
 
       {/* Tags */}
       <TableCell className="max-w-[200px]">
-        <TagMultiPicker
-          size="sm"
-          value={task.tags}
-          onChange={(next) => onTagsChange(task.id, next)}
-          allTags={poolTags}
-          placeholder="+ tag"
-        />
+        {canEdit ? (
+          <TagMultiPicker
+            size="sm"
+            value={task.tags}
+            onChange={(next) => onTagsChange(task.id, next)}
+            allTags={poolTags}
+            placeholder="+ tag"
+          />
+        ) : task.tags.length > 0 ? (
+          <div className="flex flex-wrap gap-1">
+            {task.tags.map((t) => (
+              <span key={t} className="text-[11px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                {t}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <span className="text-xs text-gray-400">—</span>
+        )}
       </TableCell>
     </TableRow>
   );

@@ -28,11 +28,14 @@ export function useProjectCockpit(projectId: string) {
       setEvents(eRes.data ?? []);
 
       if (loadedProject) {
-        const [aRes, tRes] = await Promise.all([
-          fetch(`/api/v1/accounts/${loadedProject.account_id}`).then((r) => r.json()),
-          fetch(`/api/v1/team`).then((r) => r.json()),
-        ]);
-        setAccountName(aRes.data?.name ?? null);
+        const tRes = await fetch(`/api/v1/team`).then((r) => r.json());
+        if (loadedProject.account_id) {
+          const aRes = await fetch(`/api/v1/accounts/${loadedProject.account_id}`).then((r) => r.json());
+          setAccountName(aRes.data?.name ?? null);
+        } else {
+          // Internal project — no client account (migration 224).
+          setAccountName("Internal");
+        }
         const team: TeamMember[] = tRes.data ?? [];
         setOwnerEmail(team.find((m) => m.user_id === loadedProject.owner_id)?.email ?? null);
       }

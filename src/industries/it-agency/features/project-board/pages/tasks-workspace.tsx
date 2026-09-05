@@ -10,9 +10,15 @@ import { TasksView } from "../components/views/tasks-view";
 import { MembersView } from "../components/views/members-view";
 import { ActiveTimersProvider } from "@/industries/it-agency/features/time-tracking/hooks/use-active-timers";
 
-function TasksWorkspaceInner() {
-  const { projects, accounts, team, accountMap, teamMap, loading } = useProjects();
-  const { filters, setFilters } = useWorkspaceFilters("tasks");
+interface TasksWorkspacePageProps {
+  role: string;
+  currentUserId: string;
+}
+
+function TasksWorkspaceInner({ role, currentUserId }: TasksWorkspacePageProps) {
+  const isAdmin = role === "owner" || role === "admin";
+  const { projects, accounts, team, accountMap, teamMap, loading, refetch } = useProjects();
+  const { filters, setFilters } = useWorkspaceFilters("tasks", { currentUserId });
   const { tags: poolTags, refetchTags } = useTaskTags();
 
   function handleClearFilters() {
@@ -44,6 +50,9 @@ function TasksWorkspaceInner() {
         team={team}
         poolTags={poolTags}
         onClearFilters={handleClearFilters}
+        currentUserId={currentUserId}
+        projects={projects}
+        onTaskCreated={refetch}
       />
 
       {filters.view === "members" ? (
@@ -63,6 +72,8 @@ function TasksWorkspaceInner() {
             poolTags={poolTags}
             refetchTags={refetchTags}
             onClearFilters={handleClearFilters}
+            isAdmin={isAdmin}
+            currentUserId={currentUserId}
           />
         </ActiveTimersProvider>
       )}
@@ -70,7 +81,7 @@ function TasksWorkspaceInner() {
   );
 }
 
-export function TasksWorkspacePage() {
+export function TasksWorkspacePage(props: TasksWorkspacePageProps) {
   return (
     <Suspense
       fallback={
@@ -79,7 +90,7 @@ export function TasksWorkspacePage() {
         </div>
       }
     >
-      <TasksWorkspaceInner />
+      <TasksWorkspaceInner {...props} />
     </Suspense>
   );
 }

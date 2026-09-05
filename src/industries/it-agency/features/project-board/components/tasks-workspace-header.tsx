@@ -1,13 +1,15 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { Search, ListTodo, Users } from "lucide-react";
+import { useRef, useEffect, useState } from "react";
+import { Search, ListTodo, Users, Plus } from "lucide-react";
 import { TagMultiPicker } from "./tag-multi-picker";
+import { TaskCreateDialog } from "./task-create-dialog";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type FilterOption } from "@/components/ui/filter-dropdown";
 import { FilterMenu, FilterChips, type FilterDef } from "@/components/ui/filter-menu";
 import type { Account, TaskStatus, TaskPriority } from "@/types/database";
-import type { TeamMember } from "../hooks/use-projects";
+import type { TeamMember, ProjectWithMetrics } from "../hooks/use-projects";
 import type { WorkspaceFilters } from "../hooks/use-workspace-filters";
 import { ALL_SENTINEL, TASK_STATUS_CHIPS, PRIORITY_CHIPS, DUE_OPTIONS } from "../lib/filter-options";
 
@@ -18,6 +20,9 @@ interface TasksWorkspaceHeaderProps {
   team: TeamMember[];
   poolTags: string[];
   onClearFilters: () => void;
+  currentUserId: string;
+  projects: ProjectWithMetrics[];
+  onTaskCreated: () => void;
 }
 
 export function TasksWorkspaceHeader({
@@ -27,7 +32,12 @@ export function TasksWorkspaceHeader({
   team,
   poolTags,
   onClearFilters,
+  currentUserId,
+  projects,
+  onTaskCreated,
 }: TasksWorkspaceHeaderProps) {
+  const [createOpen, setCreateOpen] = useState(false);
+  const mine = filters.assignee === currentUserId;
   const searchRef = useRef<HTMLInputElement>(null);
   const onFilterChangeRef = useRef(onFilterChange);
   useEffect(() => { onFilterChangeRef.current = onFilterChange; });
@@ -144,22 +154,55 @@ export function TasksWorkspaceHeader({
       {/* Title row */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Tasks</h1>
-        <Tabs
-          value={filters.view}
-          onValueChange={(v) => onFilterChange({ view: v as WorkspaceFilters["view"] })}
-        >
-          <TabsList>
-            <TabsTrigger value="tasks" className="gap-1.5 text-xs">
-              <ListTodo className="h-3.5 w-3.5" />
-              List
-            </TabsTrigger>
-            <TabsTrigger value="members" className="gap-1.5 text-xs">
-              <Users className="h-3.5 w-3.5" />
-              By member
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex rounded-md border border-input overflow-hidden text-xs">
+            <button
+              type="button"
+              aria-pressed={mine}
+              onClick={() => onFilterChange({ assignee: currentUserId })}
+              className={`px-2.5 py-1 ${mine ? "bg-foreground text-background" : "bg-background text-muted-foreground hover:text-foreground"}`}
+            >
+              Mine
+            </button>
+            <button
+              type="button"
+              aria-pressed={!mine}
+              onClick={() => onFilterChange({ assignee: ALL_SENTINEL })}
+              className={`px-2.5 py-1 border-l border-input ${!mine ? "bg-foreground text-background" : "bg-background text-muted-foreground hover:text-foreground"}`}
+            >
+              Everyone
+            </button>
+          </div>
+          <Tabs
+            value={filters.view}
+            onValueChange={(v) => onFilterChange({ view: v as WorkspaceFilters["view"] })}
+          >
+            <TabsList>
+              <TabsTrigger value="tasks" className="gap-1.5 text-xs">
+                <ListTodo className="h-3.5 w-3.5" />
+                List
+              </TabsTrigger>
+              <TabsTrigger value="members" className="gap-1.5 text-xs">
+                <Users className="h-3.5 w-3.5" />
+                By member
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            New task
+          </Button>
+        </div>
       </div>
+
+      <TaskCreateDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        projects={projects}
+        team={team}
+        currentUserId={currentUserId}
+        onSuccess={onTaskCreated}
+      />
 
       {/* Toolbar card */}
       <div className="shrink-0">

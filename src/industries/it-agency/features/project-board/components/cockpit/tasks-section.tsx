@@ -15,9 +15,10 @@ import type { Task } from "@/types/database";
 interface TasksSectionProps {
   projectId: string;
   isAdmin: boolean;
+  currentUserId: string;
 }
 
-export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
+export function TasksSection({ projectId, isAdmin, currentUserId }: TasksSectionProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +97,7 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
             </span>
           )}
         </h2>
-        {isAdmin && !addingTask && (
+        {!addingTask && (
           <Button size="sm" onClick={() => setAddingTask(true)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add task
@@ -113,11 +114,9 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
           ) : tasks.length === 0 && !addingTask ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               No tasks yet.
-              {isAdmin && (
-                <Button variant="link" size="sm" className="ml-1 p-0 h-auto" onClick={() => setAddingTask(true)}>
-                  Add the first one.
-                </Button>
-              )}
+              <Button variant="link" size="sm" className="ml-1 p-0 h-auto" onClick={() => setAddingTask(true)}>
+                Add the first one.
+              </Button>
             </div>
           ) : (
             <div className="divide-y">
@@ -126,6 +125,7 @@ export function TasksSection({ projectId, isAdmin }: TasksSectionProps) {
                   key={task.id}
                   task={task}
                   isAdmin={isAdmin}
+                  currentUserId={currentUserId}
                   team={team}
                   onUpdate={handleTaskUpdated}
                   onDelete={handleTaskDeleted}
