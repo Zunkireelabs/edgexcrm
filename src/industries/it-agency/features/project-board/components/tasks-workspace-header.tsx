@@ -84,7 +84,7 @@ export function TasksWorkspaceHeader({
 
   const assigneeOptions: FilterOption[] = [
     { value: ALL_SENTINEL, label: "All assignees" },
-    ...team.map((m) => ({ value: m.user_id, label: m.name || m.email.split("@")[0] })),
+    ...team.map((m) => ({ value: m.user_id, label: m.name })),
   ];
 
   function toggleTaskStatus(value: TaskStatus) {

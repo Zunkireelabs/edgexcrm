@@ -162,8 +162,8 @@ export function ProjectCard({ project, teamMap, hoursMap, isDragOverlay = false 
           <HealthDot project={project} />
         </div>
         {owner ? (
-          <span title={owner.email} className="inline-flex">
-            <MemberAvatar userId={owner.user_id} name={owner.name || owner.email.split("@")[0]} size={24} />
+          <span title={owner.name} className="inline-flex">
+            <MemberAvatar userId={owner.user_id} name={owner.name} size={24} />
           </span>
         ) : (
           <div

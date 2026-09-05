@@ -5,10 +5,6 @@ import { Check, UserCircle2, X } from "lucide-react";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 
-function memberLabel(m: TeamMember): string {
-  return m.name || m.email.split("@")[0];
-}
-
 interface OwnerPickerProps {
   ownerId: string | null;
   team: TeamMember[];
@@ -38,8 +34,8 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
 
   if (disabled) {
     return owner ? (
-      <span title={owner.email} className="inline-flex">
-        <MemberAvatar userId={owner.user_id} name={memberLabel(owner)} size={28} />
+      <span title={owner.name} className="inline-flex">
+        <MemberAvatar userId={owner.user_id} name={owner.name} size={28} />
       </span>
     ) : (
       <UserCircle2 className="h-5 w-5 text-muted-foreground/40" />
@@ -52,10 +48,10 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
         type="button"
         onClick={() => setOpen((o) => !o)}
         className="inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors hover:ring-2 hover:ring-blue-300"
-        title={owner?.email ?? "Set owner"}
+        title={owner?.name ?? "Set owner"}
       >
         {owner ? (
-          <MemberAvatar userId={owner.user_id} name={memberLabel(owner)} size={28} />
+          <MemberAvatar userId={owner.user_id} name={owner.name} size={28} />
         ) : (
           <UserCircle2 className="h-4 w-4 text-muted-foreground/50" />
         )}
@@ -71,8 +67,8 @@ export function OwnerPicker({ ownerId, team, onChange, disabled }: OwnerPickerPr
                 onClick={() => handleSelect(m.user_id)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
               >
-                <MemberAvatar userId={m.user_id} name={memberLabel(m)} />
-                <span className="truncate text-gray-700">{memberLabel(m)}</span>
+                <MemberAvatar userId={m.user_id} name={m.name} />
+                <span className="truncate text-gray-700">{m.name}</span>
                 {m.user_id === ownerId && <Check className="h-3 w-3 text-blue-600 ml-auto shrink-0" />}
               </button>
             ))}

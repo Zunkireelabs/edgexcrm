@@ -56,8 +56,8 @@ export function TableView({
       let aVal: string;
       let bVal: string;
       if (sortKey === "owner") {
-        aVal = (a.owner_id ? teamMap.get(a.owner_id)?.email : "") ?? "";
-        bVal = (b.owner_id ? teamMap.get(b.owner_id)?.email : "") ?? "";
+        aVal = (a.owner_id ? teamMap.get(a.owner_id)?.name : "") ?? "";
+        bVal = (b.owner_id ? teamMap.get(b.owner_id)?.name : "") ?? "";
       } else {
         aVal = String(a[sortKey] ?? "");
         bVal = String(b[sortKey] ?? "");

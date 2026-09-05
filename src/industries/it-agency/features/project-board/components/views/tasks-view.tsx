@@ -144,9 +144,9 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
           cmp = a.status.localeCompare(b.status);
           break;
         case "assignee": {
-          const aEmail = a.assignee_id ? (teamMap.get(a.assignee_id)?.email ?? "") : "";
-          const bEmail = b.assignee_id ? (teamMap.get(b.assignee_id)?.email ?? "") : "";
-          cmp = aEmail.localeCompare(bEmail);
+          const aName = a.assignee_id ? (teamMap.get(a.assignee_id)?.name ?? "") : "";
+          const bName = b.assignee_id ? (teamMap.get(b.assignee_id)?.name ?? "") : "";
+          cmp = aName.localeCompare(bName);
           break;
         }
         case "priority":
