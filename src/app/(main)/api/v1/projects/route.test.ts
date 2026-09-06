@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { UserRole } from "@/types/database";
 import type { NextRequest } from "next/server";
 
 // POST /api/v1/projects — account_id optional (internal projects, mig 224),
 // tenant-scoped account existence check, creation stays owner|admin.
 
 const auth = vi.hoisted(() => ({
-  current: { userId: "u-1", email: "a@b.c", tenantId: "tenant-A", role: "admin", industryId: "it_agency" } as Record<string, string>,
+  current: { userId: "u-1", email: "a@b.c", tenantId: "tenant-A", role: "admin", industryId: "it_agency" } as Record<string, unknown>,
 }));
 
 vi.mock("@/lib/api/auth", () => ({
-  authenticateRequest: vi.fn(async () => auth.current),
+  authenticateRequest: vi.fn(async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    return {
+      ...auth.current,
+      permissions: auth.current.permissions ?? resolvePermissions(auth.current.role as UserRole, null),
+    };
+  }),
   requireAdmin: (a: { role: string }) => a.role === "owner" || a.role === "admin",
 }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
@@ -47,6 +54,13 @@ beforeEach(() => {
   state.insertArgs = null;
 });
 
+const NEUTRAL_POS = {
+  nav: { mode: "all" as const },
+  pipelines: { mode: "all" as const },
+  leadScope: "all" as const,
+  dashboard: { widgets: { mode: "all" as const } },
+};
+
 describe("POST /api/v1/projects", () => {
   it("creates an internal project with no account_id", async () => {
     const res = await POST(req({ name: "Internal site refresh" }));
@@ -77,9 +91,25 @@ describe("POST /api/v1/projects", () => {
     expect(res.status).toBe(400);
   });
 
-  it("a non-admin member is forbidden", async () => {
+  it("a non-admin member with no position is forbidden (behaviour-neutral default)", async () => {
     auth.current.role = "member";
     const res = await POST(req({ name: "X" }));
     expect(res.status).toBe(403);
+  });
+
+  it("a member on a position WITHOUT canManageProjects is forbidden", async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    auth.current.role = "viewer";
+    auth.current.permissions = resolvePermissions("viewer", NEUTRAL_POS);
+    const res = await POST(req({ name: "X" }));
+    expect(res.status).toBe(403);
+  });
+
+  it("a member on a position WITH canManageProjects can create", async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    auth.current.role = "viewer";
+    auth.current.permissions = resolvePermissions("viewer", { ...NEUTRAL_POS, canManageProjects: true });
+    const res = await POST(req({ name: "Delivery-lead project" }));
+    expect(res.status).toBe(201);
   });
 });

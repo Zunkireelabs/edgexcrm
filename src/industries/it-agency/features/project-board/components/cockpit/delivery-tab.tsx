@@ -17,12 +17,12 @@ import type { TeamMember } from "../../hooks/use-projects";
 
 interface DeliveryTabProps {
   projectId: string;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onProjectChanged: () => void;
   onEventRecorded: () => void;
 }
 
-export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecorded }: DeliveryTabProps) {
+export function DeliveryTab({ projectId, canManageProjects, onProjectChanged, onEventRecorded }: DeliveryTabProps) {
   const issuesState = useProjectIssues(projectId);
   const milestonesState = useProjectMilestones(projectId);
   const changeRequestsState = useProjectChangeRequests(projectId);
@@ -96,7 +96,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
 
   return (
     <div className="flex flex-col gap-4">
-      {isAdmin && (
+      {canManageProjects && (
         <div className="flex items-center justify-end">
           <Button variant="outline" size="sm" onClick={handleCommitPlan} disabled={committingPlan}>
             {committingPlan ? (
@@ -112,7 +112,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
         <IssuesPanel
           issues={issuesState.issues}
           loading={issuesState.loading}
-          isAdmin={isAdmin}
+          canManageProjects={canManageProjects}
           onCreate={issuesState.createIssue}
           onResolve={(id) => issuesState.updateIssue(id, { status: "resolved" })}
           onPromoteToChangeRequest={handlePromoteToChangeRequest}
@@ -120,7 +120,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
         <RisksPanel
           risks={risksState.risks}
           loading={risksState.loading}
-          isAdmin={isAdmin}
+          canManageProjects={canManageProjects}
           team={team}
           onCreate={handleCreateRisk}
           onUpdate={handleUpdateRisk}
@@ -128,7 +128,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
         <MilestonesPanel
           milestones={milestonesState.milestones}
           loading={milestonesState.loading}
-          isAdmin={isAdmin}
+          canManageProjects={canManageProjects}
           onCreate={milestonesState.createMilestone}
           onAccept={handleAcceptMilestone}
           onReject={(id) => milestonesState.rejectMilestone(id)}
@@ -138,7 +138,7 @@ export function DeliveryTab({ projectId, isAdmin, onProjectChanged, onEventRecor
           <ChangeRequestsPanel
             changeRequests={changeRequestsState.changeRequests}
             loading={changeRequestsState.loading}
-            isAdmin={isAdmin}
+            canManageProjects={canManageProjects}
             prefill={crPrefill}
             onPrefillConsumed={() => setCrPrefill(null)}
             onCreate={changeRequestsState.createChangeRequest}

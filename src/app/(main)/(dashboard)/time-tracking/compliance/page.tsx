@@ -8,7 +8,7 @@ export default async function TimeTrackingComplianceRoute() {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.TIME_TRACKING)) notFound();
-  if (tenantData.role !== "owner" && tenantData.role !== "admin") notFound();
+  if (!tenantData.permissions.canApproveTime) notFound();
 
   return <CompliancePage />;
 }

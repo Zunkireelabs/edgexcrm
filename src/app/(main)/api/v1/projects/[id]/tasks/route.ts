@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
+import { canManageBilling } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -130,9 +131,10 @@ export async function POST(request: NextRequest, { params }: Props) {
       status: "todo",
       estimated_minutes:
         body.estimated_minutes != null ? Number(body.estimated_minutes) : null,
-      // is_billable is budget-bearing — non-admins can't set it, task defaults
-      // to billable (matches the is_billable handling in PATCH).
-      is_billable: requireAdmin(auth) ? body.is_billable !== false : true,
+      // is_billable is budget-bearing — only callers with billing capability
+      // (owner/admin, or a position granting canManageBilling) can set it;
+      // otherwise the task defaults to billable (matches PATCH handling).
+      is_billable: canManageBilling(auth.permissions) ? body.is_billable !== false : true,
       position: nextPosition,
       assignee_id: assigneeId,
       assigned_by_id: assignedById,

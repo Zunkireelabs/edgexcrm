@@ -21,6 +21,7 @@ export default async function ProjectsRoute({ searchParams }: ProjectsRouteProps
     <ProjectWorkspacePage
       tenantId={tenantData.tenant.id}
       role={tenantData.role}
+      canManageProjects={tenantData.permissions.canManageProjects}
     />
   );
 }

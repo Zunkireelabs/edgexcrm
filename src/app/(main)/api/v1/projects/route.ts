@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
+import { canManageProjects } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -80,7 +81,7 @@ export async function POST(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canManageProjects(auth.permissions)) return apiForbidden();
 
   let body: Record<string, unknown>;
   try {

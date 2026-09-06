@@ -20,6 +20,8 @@ export default async function ProjectCockpitRoute({ params }: Props) {
       role={tenantData.role}
       currentUserId={tenantData.userId}
       tenantSlug={tenantData.tenant.slug}
+      canManageProjects={tenantData.permissions.canManageProjects}
+      canManageBilling={tenantData.permissions.canManageBilling}
     />
   );
 }

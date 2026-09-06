@@ -36,13 +36,13 @@ function slaAge(openedAt: string, resolvedAt: string | null): string {
 interface IssuesPanelProps {
   issues: ProjectIssue[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onResolve: (issueId: string) => Promise<boolean>;
   onPromoteToChangeRequest: (issue: ProjectIssue) => void;
 }
 
-export function IssuesPanel({ issues, loading, isAdmin, onCreate, onResolve, onPromoteToChangeRequest }: IssuesPanelProps) {
+export function IssuesPanel({ issues, loading, canManageProjects, onCreate, onResolve, onPromoteToChangeRequest }: IssuesPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [kind, setKind] = useState<IssueKind>("query");
@@ -74,7 +74,7 @@ export function IssuesPanel({ issues, loading, isAdmin, onCreate, onResolve, onP
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Client queries &amp; issues</CardTitle>
-        {isAdmin && (
+        {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Raise
@@ -82,7 +82,7 @@ export function IssuesPanel({ issues, loading, isAdmin, onCreate, onResolve, onP
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && isAdmin && (
+        {adding && canManageProjects && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Input placeholder="What's the query or issue?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <div className="flex gap-2 flex-wrap">
@@ -136,7 +136,7 @@ export function IssuesPanel({ issues, loading, isAdmin, onCreate, onResolve, onP
                 </p>
               </div>
             </div>
-            {isAdmin && (
+            {canManageProjects && (
               <div className="flex items-center gap-1 flex-shrink-0">
                 <Button variant="ghost" size="sm" onClick={() => onPromoteToChangeRequest(issue)} title="Promote to change request">
                   <ArrowUpRight className="h-3.5 w-3.5" />

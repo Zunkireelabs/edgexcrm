@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { UserRole } from "@/types/database";
 import type { NextRequest } from "next/server";
 
 // Own-vs-admin authorization on PATCH /api/v1/tasks/:id (brief Phase 2a).
@@ -11,11 +12,17 @@ const auth = vi.hoisted(() => ({
     tenantId: "tenant-A",
     role: "admin",
     industryId: "it_agency",
-  } as Record<string, string>,
+  } as Record<string, unknown>,
 }));
 
 vi.mock("@/lib/api/auth", () => ({
-  authenticateRequest: vi.fn(async () => auth.current),
+  authenticateRequest: vi.fn(async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    return {
+      ...auth.current,
+      permissions: auth.current.permissions ?? resolvePermissions(auth.current.role as UserRole, null),
+    };
+  }),
   requireAdmin: (a: { role: string }) => a.role === "owner" || a.role === "admin",
 }));
 
@@ -106,11 +113,26 @@ describe("PATCH /api/v1/tasks/:id — own-vs-admin", () => {
     expect(res.status).toBe(403);
   });
 
-  it("DELETE stays admin-only — a member (even the assignee) is forbidden", async () => {
+  it("DELETE — a member with no delivery position (even the assignee) is forbidden", async () => {
     auth.current.userId = "u-assignee";
     auth.current.role = "member";
     const res = await DELETE({} as unknown as NextRequest, { params });
     expect(res.status).toBe(403);
+  });
+
+  it("DELETE — a member on a position granting canManageProjects can delete", async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    auth.current.userId = "u-delivery-lead";
+    auth.current.role = "viewer";
+    auth.current.permissions = resolvePermissions("viewer", {
+      nav: { mode: "all" },
+      pipelines: { mode: "all" },
+      leadScope: "all",
+      dashboard: { widgets: { mode: "all" } },
+      canManageProjects: true,
+    });
+    const res = await DELETE({} as unknown as NextRequest, { params });
+    expect(res.status).toBe(200);
   });
 
   const CLAIMER = "44444444-4444-4444-4444-444444444444";

@@ -13,10 +13,10 @@ import { ActiveTimersProvider } from "@/industries/it-agency/features/time-track
 interface TasksWorkspacePageProps {
   role: string;
   currentUserId: string;
+  canManageProjects: boolean;
 }
 
-function TasksWorkspaceInner({ role, currentUserId }: TasksWorkspacePageProps) {
-  const isAdmin = role === "owner" || role === "admin";
+function TasksWorkspaceInner({ currentUserId, canManageProjects }: TasksWorkspacePageProps) {
   const { projects, accounts, team, accountMap, teamMap, loading, refetch } = useProjects();
   const { filters, setFilters } = useWorkspaceFilters("tasks", { currentUserId });
   const { tags: poolTags, refetchTags } = useTaskTags();
@@ -72,7 +72,7 @@ function TasksWorkspaceInner({ role, currentUserId }: TasksWorkspacePageProps) {
             poolTags={poolTags}
             refetchTags={refetchTags}
             onClearFilters={handleClearFilters}
-            isAdmin={isAdmin}
+            canManageProjects={canManageProjects}
             currentUserId={currentUserId}
           />
         </ActiveTimersProvider>

@@ -20,11 +20,11 @@ interface ReconciliationPanelProps {
   tasks: TaskReconciliation[];
   rollup: ReconciliationRollup | null;
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onReconcile: (taskId: string) => Promise<boolean>;
 }
 
-export function ReconciliationPanel({ tasks, rollup, loading, isAdmin, onReconcile }: ReconciliationPanelProps) {
+export function ReconciliationPanel({ tasks, rollup, loading, canManageProjects, onReconcile }: ReconciliationPanelProps) {
   return (
     <Card>
       <CardHeader>
@@ -45,7 +45,7 @@ export function ReconciliationPanel({ tasks, rollup, loading, isAdmin, onReconci
                   <th className="font-medium py-1.5 pr-3">Est.</th>
                   <th className="font-medium py-1.5 pr-3">Actual</th>
                   <th className="font-medium py-1.5 pr-3">Variance</th>
-                  {isAdmin && <th className="font-medium py-1.5" />}
+                  {canManageProjects && <th className="font-medium py-1.5" />}
                 </tr>
               </thead>
               <tbody>
@@ -59,7 +59,7 @@ export function ReconciliationPanel({ tasks, rollup, loading, isAdmin, onReconci
                     <td className={`py-1.5 pr-3 font-medium ${varianceColor(t.variance_pct)}`}>
                       {t.variance_pct != null ? `${t.variance_pct > 0 ? "+" : ""}${t.variance_pct}%` : "—"}
                     </td>
-                    {isAdmin && (
+                    {canManageProjects && (
                       <td className="py-1.5">
                         <Button variant="ghost" size="sm" onClick={() => onReconcile(t.task_id)} title="Reconcile — record in timeline">
                           <RefreshCw className="h-3.5 w-3.5" />
