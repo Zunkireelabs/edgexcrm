@@ -24,11 +24,12 @@ function fakeReq(): NextRequest {
   return {} as unknown as NextRequest;
 }
 
-function fakeDb(opts: { blastStatus?: string } = {}) {
+function fakeDb(opts: { blastStatus?: string; failUpsertOnce?: boolean; failUpsertAlways?: boolean } = {}) {
   // key = `${source_id}:${lead_id}` — models the real DB's
   // uq_email_message_source_lead (source_id, lead_id) unique index.
   const messages = new Map<string, Record<string, unknown>>();
   let upsertCallCount = 0;
+  let upsertFailuresLeft = opts.failUpsertOnce ? 1 : 0;
   const blastRow = {
     id: "blast-1",
     subject_template: "Hi {{first_name}}",
@@ -71,6 +72,10 @@ function fakeDb(opts: { blastStatus?: string } = {}) {
           upsert: (rows: Record<string, unknown>[], options: { onConflict: string; ignoreDuplicates?: boolean }) => {
             upsertCallCount++;
             expect(options.onConflict).toBe("source_id,lead_id");
+            if (opts.failUpsertAlways || upsertFailuresLeft > 0) {
+              upsertFailuresLeft--;
+              return Promise.resolve({ data: null, error: { message: "connection reset", code: "08006" } });
+            }
             for (const row of rows) {
               const key = `${row.source_id}:${row.lead_id}`;
               if (options.ignoreDuplicates && messages.has(key)) continue; // ON CONFLICT DO NOTHING
@@ -167,6 +172,51 @@ describe("POST /api/v1/email-blasts/[id]/send", () => {
     expect(res.status).toBe(200);
     expect(fake.messages.size).toBe(250); // every row landed, none dropped by chunking
     expect(fake.upsertCallCountGetter()).toBe(3); // never one call for the whole audience
+  });
+
+  it("retries a chunk that fails transiently, and still succeeds", async () => {
+    const fake = fakeDb({ failUpsertOnce: true });
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 2,
+        sendable: [audienceRow("lead-1", "a@example.com"), audienceRow("lead-2", "b@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+
+    expect(res.status).toBe(200); // the transient failure was retried, not surfaced to the caller
+    expect(fake.messages.size).toBe(2); // no rows lost
+    expect(fake.upsertCallCountGetter()).toBe(2); // 1 failed attempt + 1 successful retry
+  });
+
+  it("gives up after exhausting retries and returns a response with a log-correlatable ref", async () => {
+    const fake = fakeDb({ failUpsertAlways: true });
+    requireEmailCampaignsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 1,
+        sendable: [audienceRow("lead-1", "a@example.com")],
+        suppressed: [],
+        excluded: { noEmail: 0, malformed: 0, suppressed: 0, duplicateEmail: 0 },
+      },
+    });
+
+    const { POST } = await import("./route");
+    const res = await POST(fakeReq(), { params });
+    const json = (await res.json()) as { error: { message: string } };
+
+    expect(res.status).toBe(503);
+    // A future incident must be findable in logs without a timestamp guess —
+    // the exact gap that made the 2026-09-06 prod failures unrecoverable.
+    expect(json.error.message).toMatch(/ref: [0-9a-f-]{36}/);
+    expect(fake.messages.size).toBe(0); // nothing landed — a retry can safely re-attempt every row
   });
 
   it("rejects sending a non-draft blast", async () => {
