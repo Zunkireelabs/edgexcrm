@@ -43,6 +43,30 @@ ALTER TABLE invite_tokens DROP CONSTRAINT IF EXISTS invite_tokens_role_check;
 ALTER TABLE invite_tokens ADD CONSTRAINT invite_tokens_role_check
   CHECK (role IN ('admin', 'viewer', 'counselor', 'staff'));
 
+-- Post-condition: exactly ONE role CHECK per table. invite_tokens.role's original
+-- constraint was inline + auto-named (003_phase2a_saas_ops.sql:35). If Postgres
+-- named it anything other than `invite_tokens_role_check`, the DROP above was a
+-- no-op, the ADD landed under a free name, and the table now carries TWO role
+-- checks — the surviving old one still rejecting 'staff'. Fail the migrate job
+-- here instead of shipping a latent 500 on the first own-scope invite.
+DO $$
+DECLARE n int;
+BEGIN
+  SELECT count(*) INTO n FROM pg_constraint
+   WHERE conrelid = 'invite_tokens'::regclass AND contype = 'c'
+     AND pg_get_constraintdef(oid) ILIKE '%role%';
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'mig 226: expected exactly 1 role check on invite_tokens, found %', n;
+  END IF;
+
+  SELECT count(*) INTO n FROM pg_constraint
+   WHERE conrelid = 'tenant_users'::regclass AND contype = 'c'
+     AND pg_get_constraintdef(oid) ILIKE '%role%';
+  IF n <> 1 THEN
+    RAISE EXCEPTION 'mig 226: expected exactly 1 role check on tenant_users, found %', n;
+  END IF;
+END $$;
+
 DO $$
 DECLARE
   tu_counselor  int;
