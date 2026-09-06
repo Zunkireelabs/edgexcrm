@@ -22,15 +22,17 @@
 -- ORDER MATTERS INSIDE THIS FILE: UPDATE first, THEN narrow. Narrowing before the
 -- backfill would fail the CHECK on the surviving 'counselor' rows.
 --
--- Expected before-counts (read verbatim from B1's stage migrate log, deploy run
+-- Reference before-counts (read verbatim from B1's stage migrate log, deploy run
 -- for b3e3a29e, the "Apply pending migrations" step):
 --   mig 226: tenant_users.role  = counselor: 19 row(s)
 --   mig 226: invite_tokens.role = counselor: 12 row(s)
--- This migration asserts the observed 'counselor' count matches those numbers
--- before it runs the UPDATE. If they disagree, rows changed between the two
--- deploys — the migration RAISEs and the migrate job fails; investigate, do not
--- force past it. (Stage-only guard: on the prod promotion the observed counts will
--- legitimately differ — see the DO block for how it is scoped.)
+-- Step 1 logs the observed 'counselor' counts next to those numbers as
+-- informational output. It does NOT hard-fail on a mismatch: prod is a different
+-- database (stage is a 2026-06-21 clone; the two have diverged for months), so a
+-- different — including higher — count on the prod promotion is legitimate, not a
+-- failure. The real guarantees are step 4 (exactly-one role check per table) and
+-- step 5 (zero counselor rows remain, or RAISE). More legacy rows than expected is
+-- not a hazard — the backfill converts every one of them, which is the goal.
 --
 -- Additive-to-data only in the sense that no row is deleted; the role VALUE is
 -- rewritten in place. Wrapped in BEGIN/COMMIT. Idempotent: a re-run finds 0
@@ -52,13 +54,14 @@
 
 BEGIN;
 
--- ── 1. Pre-condition: observed 'counselor' count must match B1's stage log ──────
--- Scoped so it only fires when the numbers are meaningfully wrong. On the prod
--- promotion the observed counts differ legitimately (different DB) — so the guard
--- only hard-fails when it sees MORE 'counselor' rows than B1's log recorded, which
--- would mean new legacy rows appeared after B1 shipped (the code no longer writes
--- 'counselor', so that should be impossible). Fewer is tolerated (someone could
--- have hand-fixed a row) but still logged.
+-- ── 1. Observed 'counselor' counts — INFORMATIONAL ONLY ───────────────────────
+-- Logs the observed counts next to B1's stage numbers so the promotion reviewer
+-- can eyeball them. Deliberately does NOT RAISE on a mismatch: prod is a
+-- different database from stage (stage is a 2026-06-21 clone and the two have
+-- diverged for months), so a different — including higher — 'counselor' count on
+-- the prod promotion is legitimate, not a failure condition. A higher count just
+-- means more legacy rows for step 2 to convert, which is exactly the goal.
+-- Correctness is enforced by step 4 and step 5, not here.
 DO $$
 DECLARE
   tu_counselor int;
@@ -69,15 +72,8 @@ BEGIN
   SELECT count(*) INTO tu_counselor FROM tenant_users  WHERE role = 'counselor';
   SELECT count(*) INTO it_counselor FROM invite_tokens WHERE role = 'counselor';
 
-  RAISE NOTICE 'mig 227: BEFORE — tenant_users.role = counselor: % row(s) (B1 log: %)', tu_counselor, tu_expected;
-  RAISE NOTICE 'mig 227: BEFORE — invite_tokens.role = counselor: % row(s) (B1 log: %)', it_counselor, it_expected;
-
-  IF tu_counselor > tu_expected THEN
-    RAISE EXCEPTION 'mig 227: tenant_users has % counselor rows, MORE than B1''s logged %; new legacy rows appeared after B1 — investigate, do not force', tu_counselor, tu_expected;
-  END IF;
-  IF it_counselor > it_expected THEN
-    RAISE EXCEPTION 'mig 227: invite_tokens has % counselor rows, MORE than B1''s logged %; new legacy rows appeared after B1 — investigate, do not force', it_counselor, it_expected;
-  END IF;
+  RAISE NOTICE 'mig 227: BEFORE — tenant_users.role = counselor: % row(s) (B1 stage log: %)', tu_counselor, tu_expected;
+  RAISE NOTICE 'mig 227: BEFORE — invite_tokens.role = counselor: % row(s) (B1 stage log: %)', it_counselor, it_expected;
 END $$;
 
 -- ── 2. Backfill: counselor -> staff (UPDATE BEFORE narrowing) ──────────────────
