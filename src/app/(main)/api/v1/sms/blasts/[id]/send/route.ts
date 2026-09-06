@@ -6,6 +6,7 @@ import { resolveAudience, type AudienceRow } from "@/lib/sms/audience";
 import { loadTenantSmsSettings } from "@/lib/sms/settings";
 import { composeRecipientMessage } from "@/lib/sms/compose";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
+import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
 import { inngest } from "@/lib/inngest/client";
 import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
@@ -20,6 +21,25 @@ interface BlastRow {
   audience_filter: FilterTree | null;
   status: string;
 }
+
+// SMS rows are small (a phone number + a short rendered message), so this
+// never hit the payload-size problem email's MATERIALIZE_CHUNK_SIZE=100 was
+// built for — but a live 828-recipient blast still failed at "Failed to
+// materialize recipient rows" (2026-09-06), and the plain single-insert()
+// this route used gave zero visibility into why and zero ability to retry
+// or resume. Chunking + retry here is the same resilience email's send
+// route has (materializeInChunks, src/lib/outbound/materialize-chunks.ts):
+// a transient failure on one chunk no longer kills the entire send.
+const MATERIALIZE_CHUNK_SIZE = 200;
+
+// Mirrors resolveAudienceCore's own comment (src/lib/outbound/audience.ts):
+// PostgREST silently caps an unpaged select at 1000 rows. This query is only
+// checking "which leads are already materialized for this blast" — read on
+// a RETRY of a large (real Admizz-scale) blast, so leaving it unpaged would
+// silently treat rows past the first 1000 as new, re-inserting them and
+// hitting the (blast_id, lead_id) unique index — the exact failure this
+// route exists to avoid on a retry.
+const EXISTING_ROWS_PAGE_SIZE = 1000;
 
 // POST /api/v1/sms/blasts/[id]/send — SMS-PHASE3A-BRIEF.md §6. Order is
 // fixed and load-bearing: re-resolve -> materialize rows -> enforce cap ->
@@ -83,15 +103,22 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   // no way to pass a matching predicate through PostgREST's upsert). Skip
   // already-materialized (blast_id, lead_id) pairs at the application layer
   // instead and plain-insert() only what's new.
-  const { data: existingRows, error: existingError } = await db
-    .from("sms_messages")
-    .select("lead_id")
-    .eq("blast_id", id);
-  if (existingError) {
-    log.error({ err: existingError, blastId: id }, "Failed to check already-materialized sms_messages rows");
-    return apiServiceUnavailable("Failed to check existing recipient rows");
+  const existingRows: { lead_id: string | null }[] = [];
+  for (let offset = 0; ; offset += EXISTING_ROWS_PAGE_SIZE) {
+    const { data, error: existingError } = await db
+      .from("sms_messages")
+      .select("lead_id")
+      .eq("blast_id", id)
+      .range(offset, offset + EXISTING_ROWS_PAGE_SIZE - 1);
+    if (existingError) {
+      log.error({ err: existingError, blastId: id }, "Failed to check already-materialized sms_messages rows");
+      return apiServiceUnavailable("Failed to check existing recipient rows");
+    }
+    const page = (data ?? []) as unknown as { lead_id: string | null }[];
+    existingRows.push(...page);
+    if (page.length < EXISTING_ROWS_PAGE_SIZE) break;
   }
-  const alreadyMaterialized = new Set(((existingRows ?? []) as unknown as { lead_id: string | null }[]).map((r) => r.lead_id));
+  const alreadyMaterialized = new Set(existingRows.map((r) => r.lead_id));
 
   async function composeRow(row: AudienceRow, status: "queued" | "suppressed") {
     const composed = await composeRecipientMessage(db, auth.tenantId, settings, blastRow.body, row);
@@ -126,10 +153,17 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   const newRows = [...queuedRows, ...suppressedRows];
 
   if (newRows.length > 0) {
-    const { error: insertError } = await db.from("sms_messages").insert(newRows);
-    if (insertError) {
-      log.error({ err: insertError, blastId: id }, "Failed to materialize sms_messages rows");
-      return apiServiceUnavailable("Failed to materialize recipient rows");
+    const materializeResult = await materializeInChunks(newRows, async (chunk) => db.from("sms_messages").insert(chunk), {
+      chunkSize: MATERIALIZE_CHUNK_SIZE,
+      onRetry: ({ chunkIndex, attempt, error }) =>
+        log.warn({ blastId: id, chunkIndex, attempt, err: error }, "Retrying sms_messages chunk after a transient failure"),
+    });
+    if (!materializeResult.ok) {
+      log.error(
+        { err: materializeResult.error, blastId: id, chunkIndex: materializeResult.failedChunkIndex, chunkSize: materializeResult.failedChunkSize },
+        "Failed to materialize sms_messages rows"
+      );
+      return apiServiceUnavailable(`Failed to materialize recipient rows (ref: ${requestId})`);
     }
   }
 
