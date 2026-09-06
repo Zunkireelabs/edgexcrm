@@ -115,7 +115,7 @@ function humanAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     userId: "user-1",
     email: "human@example.com",
     tenantId: "tenant-1",
-    role: "counselor",
+    role: "staff",
     industryId: "it_agency",
     positionId: null,
     positionSlug: null,

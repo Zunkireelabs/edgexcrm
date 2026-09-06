@@ -184,7 +184,7 @@ describe("resolveAudience — permission scoping (the whole reason this goes thr
       canSendSms: false,
       dashboardWidgets: null,
     };
-    const auth = baseAuth({ role: "counselor", permissions: counselorPermissions });
+    const auth = baseAuth({ role: "staff", permissions: counselorPermissions });
 
     const result = await resolveAudience(auth, EMPTY_TREE, { user, service: instrumentedService, db });
 

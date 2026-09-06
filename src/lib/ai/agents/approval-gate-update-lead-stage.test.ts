@@ -142,7 +142,7 @@ const ADMIN_USER: TenantUserRow = {
 const COUNSELOR_USER: TenantUserRow = {
   user_id: "counselor-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: null,
   branch_id: null,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },

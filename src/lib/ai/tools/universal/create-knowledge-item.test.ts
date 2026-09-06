@@ -137,7 +137,7 @@ describe("create_knowledge_item — input schema", () => {
 describe("create_knowledge_item — execute", () => {
   const input = { knowledgeBaseId: KB_ID, title: "Q3 pricing notes", content: "Discount cap is 15%." } as never;
 
-  it.each(["admin", "counselor"] as const)("refuses a non-owner (%s) caller before touching the DB", async (role) => {
+  it.each(["admin", "staff"] as const)("refuses a non-owner (%s) caller before touching the DB", async (role) => {
     const { db } = makeFakeDb({ kbExists: true });
     const ctx = fixtureCtx(db, { auth: fixtureAuth({ role }) });
     const result = await createKnowledgeItemTool.execute(ctx, input);

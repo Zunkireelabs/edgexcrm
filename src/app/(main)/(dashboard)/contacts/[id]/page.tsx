@@ -22,7 +22,7 @@ export default async function ContactDetailRoute({ params }: Props) {
   return (
     <ContactDetailPage
       tenantId={tenantData.tenant.id}
-      role={tenantData.role as "owner" | "admin" | "viewer" | "counselor" | "staff"}
+      role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
       contactId={id}
     />
   );

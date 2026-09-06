@@ -324,7 +324,7 @@ export default async function LeadsPage({
           pipeline={pipeline}
           stages={listPipelineResult.stages}
           initialColumns={kanbanColumnsForBoards}
-          role={tenantData.role as "owner" | "admin" | "viewer" | "counselor" | "staff"}
+          role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
           userId={tenantData.userId}
           tenantId={tenantData.tenant.id}
           teamMembers={teamMembers}
@@ -387,7 +387,7 @@ export default async function LeadsPage({
         memberNames={memberNames}
         stages={stages}
         formMap={formMap}
-        role={tenantData.role as "owner" | "admin" | "viewer" | "counselor" | "staff"}
+        role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
         tenantId={tenantData.tenant.id}
         teamMembers={teamMembers}
         entities={entities}

@@ -47,7 +47,7 @@ export interface SidebarItem {
    * level — this just hides the nav entry. Absent = visible to all
    * roles in the tenant.
    */
-  minRoles?: readonly ("owner" | "admin" | "viewer" | "counselor" | "staff")[];
+  minRoles?: readonly ("owner" | "admin" | "viewer" | "staff")[];
   /**
    * If present, only show to users whose positionSlug is in the list OR
    * whose baseTier is "owner" or "admin" (admins always pass). Absent = no

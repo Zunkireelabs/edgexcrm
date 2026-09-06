@@ -144,7 +144,7 @@ const ADMIN_USER: TenantUserRow = {
 const COUNSELOR_USER: TenantUserRow = {
   user_id: "counselor-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: null,
   branch_id: null,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },
@@ -153,7 +153,7 @@ const COUNSELOR_USER: TenantUserRow = {
 const ASSIGNEE_USER: TenantUserRow = {
   user_id: "assignee-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: null,
   branch_id: null,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },
@@ -165,7 +165,7 @@ const ASSIGNEE_USER: TenantUserRow = {
 const LEAD_EXEC_USER: TenantUserRow = {
   user_id: "lead-exec-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: "pos-lead-exec",
   branch_id: BRANCH_A,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },
@@ -176,7 +176,7 @@ const LEAD_EXEC_USER: TenantUserRow = {
 const LEAD_EXEC_PEER: TenantUserRow = {
   user_id: "lead-exec-peer-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: "pos-lead-exec",
   branch_id: BRANCH_A,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },
@@ -188,7 +188,7 @@ const LEAD_EXEC_PEER: TenantUserRow = {
 const COUNSELOR_TARGET: TenantUserRow = {
   user_id: "counselor-target-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: null,
   branch_id: BRANCH_A,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },

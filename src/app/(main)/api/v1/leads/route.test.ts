@@ -79,7 +79,7 @@ function authFixture(overrides: Partial<AuthContext> = {}): AuthContext {
     userId: "user-1",
     email: "human@example.com",
     tenantId: "tenant-1",
-    role: "counselor",
+    role: "staff",
     industryId: "it_agency",
     positionId: null,
     positionSlug: null,
@@ -407,7 +407,7 @@ describe("GET /api/v1/leads — facets=source (dashboard-aggregates review fixes
     authenticateRequestMock.mockResolvedValue(
       authFixture({
         userId: "",
-        role: "counselor",
+        role: "staff",
         permissions: permissions({ leadScope: "own" }),
       }),
     );
@@ -624,7 +624,7 @@ describe("GET /api/v1/leads — sort/count/list/funnel/recycle-bin (LEADS-SERVER
   it("a staging list is 403 for a non-admin/owner even under an otherwise-open access mode", async () => {
     getFeatureAccessMock.mockReturnValue(true);
     authenticateRequestMock.mockResolvedValue(
-      authFixture({ userId: "user-1", role: "counselor", permissions: permissions({ leadScope: "own" }) }),
+      authFixture({ userId: "user-1", role: "staff", permissions: permissions({ leadScope: "own" }) }),
     );
     createServiceClientMock.mockResolvedValue(
       fakeDbWithLists({

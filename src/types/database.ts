@@ -1,8 +1,8 @@
-// `counselor` is the legacy value for the own-scope member tier, renamed to `staff`
-// in Phase B. Both are accepted between PR B1 and B2 (migration 227 backfills the
-// rows and drops `counselor` from here + the DB CHECK). normalizeRole() maps the
-// legacy value at every DB read boundary.
-export type UserRole = "owner" | "admin" | "viewer" | "counselor" | "staff";
+// `staff` is the own-scope member tier — a member scoped to their own leads.
+// Renamed from the legacy value `counselor` in Phase B (migration 227 backfilled
+// the rows and dropped `counselor` from the DB CHECK). normalizeRole() remains the
+// validating boundary at every DB read.
+export type UserRole = "owner" | "admin" | "viewer" | "staff";
 
 // Industry types for tenant classification
 export type IndustryId =
@@ -532,7 +532,7 @@ export interface InviteToken {
   id: string;
   tenant_id: string;
   email: string;
-  role: "admin" | "viewer" | "counselor" | "staff";
+  role: "admin" | "viewer" | "staff";
   token: string;
   expires_at: string;
   accepted_at: string | null;
