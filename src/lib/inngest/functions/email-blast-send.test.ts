@@ -18,6 +18,7 @@ interface FakeMessageRow {
 function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
   const messages = messageRows.map((r) => ({ ...r }));
   const blastUpdateCalls: Record<string, unknown>[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
 
   return {
     db: {
@@ -34,9 +35,25 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
           };
         }
         if (table === "email_messages") {
+          const rangeNode = {
+            range: (from: number, to: number) => {
+              const statuses = messages.map((m) => ({ status: m.status }));
+              return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+            },
+          };
           return {
             select: () => ({
-              eq: () => ({ eq: () => Promise.resolve({ data: messages.map((m) => ({ status: m.status })), error: null }) }),
+              eq: () => ({
+                eq: () => ({
+                  // offset pagination needs a deterministic total order —
+                  // paginate.ts's ORDERING CONTRACT. Record the call so the
+                  // test can assert .order fires before .range.
+                  order: (col: string, opts: unknown) => {
+                    orderCalls.push({ col, opts });
+                    return rangeNode;
+                  },
+                }),
+              }),
             }),
           };
         }
@@ -44,6 +61,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
       },
     },
     blastUpdateCalls,
+    orderCalls,
   };
 }
 
@@ -74,6 +92,35 @@ describe("computeBlastCounts — throttle-branch counter staleness regression", 
     expect(counts.failed).toBe(1);
     expect(counts.suppressed).toBe(1);
     expect(counts.cancelled).toBe(0);
+  });
+
+  it("counts every row across a real Admizz-scale (3000+) blast, not just the first 1000 (PostgREST page-cap trap)", async () => {
+    // The 3,118-row email blast that motivated this branch is already past
+    // PostgREST's 1000-row unpaged-select cap — an unpaginated query here
+    // would show a wrong live count on the "Throttled" banner mid-send and a
+    // wrong final tally once the blast completes.
+    const rows: FakeMessageRow[] = [
+      ...Array.from({ length: 2000 }, () => ({ status: "sent" })),
+      ...Array.from({ length: 1118 }, () => ({ status: "queued" })),
+    ];
+    const fake = fakeDb("throttled", rows);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { computeBlastCounts } = await import("./email-blast-send");
+
+    const counts = await computeBlastCounts("tenant-1", "blast-large");
+
+    expect(counts.sent).toBe(2000);
+  });
+
+  it("orders the paged query by a deterministic key before ranging (offset paging over an unordered result skips/dupes boundary rows)", async () => {
+    const fake = fakeDb("throttled", [{ status: "sent" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { computeBlastCounts } = await import("./email-blast-send");
+
+    await computeBlastCounts("tenant-1", "blast-1");
+
+    expect(fake.orderCalls.length).toBeGreaterThan(0);
+    expect(fake.orderCalls[0]).toEqual({ col: "id", opts: { ascending: true } });
   });
 });
 

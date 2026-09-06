@@ -22,6 +22,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
   const messages = messageRows.map((r) => ({ ...r }));
   const blastUpdateCalls: Record<string, unknown>[] = [];
   const settleCalls: Record<string, unknown>[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
   let messagesCancelCalled = false;
 
   return {
@@ -49,7 +50,21 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
                 },
               }),
             }),
-            select: () => ({ eq: () => Promise.resolve({ data: messages.map((m) => ({ status: m.status })), error: null }) }),
+            select: () => ({
+              eq: () => ({
+                // offset paging needs a deterministic total order — paginate.ts
+                // ORDERING CONTRACT. Recorded so the test asserts .order before .range.
+                order: (col: string, opts: unknown) => {
+                  orderCalls.push({ col, opts });
+                  return {
+                    range: (from: number, to: number) => {
+                      const statuses = messages.map((m) => ({ status: m.status }));
+                      return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+                    },
+                  };
+                },
+              }),
+            }),
           };
         }
         throw new Error(`unexpected table: ${table}`);
@@ -61,6 +76,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
     },
     blastUpdateCalls,
     settleCalls,
+    orderCalls,
     messagesCancelCalledGetter: () => messagesCancelCalled,
   };
 }
@@ -127,5 +143,35 @@ describe("finalizeBlast — F-1 regression", () => {
     expect(result.finalStatus).toBe("sent");
     expect(result.failed).toBe(0);
     expect(result.cancelled).toBe(0);
+  });
+
+  it("counts every row across a real Admizz-scale (1500+) blast, not just the first 1000 (PostgREST page-cap trap)", async () => {
+    // The status-count query above is paginated for the same reason the
+    // send route's already-materialized check is: an unpaged select silently
+    // caps at 1000 rows, which would under-report sent/failed and could pick
+    // the wrong finalStatus for a blast the size Admizz actually sends.
+    const rows: FakeMessageRow[] = [
+      ...Array.from({ length: 1200 }, () => ({ status: "submitted" })),
+      ...Array.from({ length: 300 }, () => ({ status: "failed" })),
+    ];
+    const fake = fakeDb("queued", rows);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeBlast } = await import("./sms-blast-send");
+
+    const result = await finalizeBlast("tenant-1", "blast-4", 1500, 1500, null);
+
+    expect(result.sent).toBe(1200);
+    expect(result.failed).toBe(300);
+    expect(result.finalStatus).toBe("partially_failed"); // failed > 0 and sent > 0
+  });
+
+  it("orders the paged status query by a deterministic key before ranging", async () => {
+    const fake = fakeDb("queued", [{ status: "submitted" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeBlast } = await import("./sms-blast-send");
+
+    await finalizeBlast("tenant-1", "blast-5", 1, 1, null);
+
+    expect(fake.orderCalls).toContainEqual({ col: "id", opts: { ascending: true } });
   });
 });

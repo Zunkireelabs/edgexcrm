@@ -70,7 +70,7 @@ describe("loadSuppressedPhones / suppressPhone", () => {
     expect(result.size).toBe(1);
   });
 
-  it("loadSuppressedPhones issues exactly one query for the whole batch, not one per recipient", async (ctx) => {
+  it("loadSuppressedPhones issues exactly one query for a batch under the chunk size, not one per recipient", async (ctx) => {
     if (!localDbAvailable) {
       ctx.skip();
       return;
@@ -98,6 +98,47 @@ describe("loadSuppressedPhones / suppressPhone", () => {
     await loadSuppressedPhones(counting as unknown as typeof raw, tenantId, phones);
 
     expect(selectCalls).toBe(1);
+  });
+
+  it("loadSuppressedPhones chunks a batch over the chunk size, and never 414s (URI too long)", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    // Reproduces a live bug found 2026-09-06 investigating "Failed to
+    // materialize recipient rows": this function issued ONE unchunked
+    // PostgREST `in` filter over the whole audience, which 414s ("URI too
+    // long") between 400-450 bare +E.164 phone numbers against local
+    // PostgREST — confirmed empirically, and a real Admizz SMS audience
+    // (thousands of leads) exceeds that by a wide margin. Email's identical
+    // twin (loadSuppressedEmails) already learned this lesson and chunks at
+    // 150; this was never mirrored here despite this file's own header
+    // calling them "direct analogues" of each other.
+    const { loadSuppressedPhones } = await import("./suppression");
+    const raw = localScopedClient(tenantId);
+
+    let selectCalls = 0;
+    const counting = {
+      ...raw,
+      from(table: string) {
+        const inner = raw.from(table);
+        return {
+          ...inner,
+          select: (...args: Parameters<typeof inner.select>) => {
+            selectCalls += 1;
+            return inner.select(...args);
+          },
+        };
+      },
+    };
+
+    // 700 phones -> 3 chunks of 300 (300 + 300 + 100), never one 700-phone request.
+    const phones = Array.from({ length: 700 }, (_, i) => `+97798${String(10000000 + i).padStart(8, "0")}`);
+    const result = await loadSuppressedPhones(counting as unknown as typeof raw, tenantId, phones);
+
+    expect(selectCalls).toBe(3);
+    expect(result.size).toBe(0); // none of these synthetic phones are actually suppressed
   });
 
   it("suppressPhone is idempotent — a repeated suppress for the same phone does not error or duplicate", async (ctx) => {
