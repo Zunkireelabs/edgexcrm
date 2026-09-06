@@ -10,8 +10,10 @@
 -- (see src/lib/ai/flag.ts) — that lands separately via PR #289. Either order is
 -- safe: whichever applies first, the other gate keeps Orca dark.
 --
--- Expected before/after: public.tenants row count UNCHANGED. Exactly 1 row
--- flipped false -> true (slug 'admizz'). Re-running is a no-op.
+-- Expected before/after: public.tenants row count UNCHANGED. Where the
+-- 'admizz' tenant exists: exactly 1 row flipped false -> true. Where it
+-- doesn't (fresh local replays, throwaway DBs): 0 rows change, skip logged
+-- via RAISE NOTICE. Re-running is a no-op either way.
 --
 -- Rollback:
 --   UPDATE public.tenants SET ai_enabled = false WHERE slug = 'admizz';
@@ -29,8 +31,10 @@ BEGIN
   SELECT count(*) INTO before_count FROM public.tenants WHERE ai_enabled;
   SELECT count(*) INTO matched      FROM public.tenants WHERE slug = 'admizz';
 
-  IF matched <> 1 THEN
-    RAISE EXCEPTION 'Expected exactly 1 tenant with slug=admizz, found %', matched;
+  IF matched > 1 THEN
+    RAISE EXCEPTION 'Expected at most 1 tenant with slug=admizz, found %', matched;
+  ELSIF matched = 0 THEN
+    RAISE NOTICE 'No tenant with slug=admizz; skipping ai_enabled grant (fresh replay).';
   END IF;
 
   UPDATE public.tenants
