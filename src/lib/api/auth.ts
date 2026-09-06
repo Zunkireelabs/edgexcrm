@@ -1,7 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/types/database";
-import { resolvePermissions, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
+import { resolvePermissions, normalizeRole, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { cookies } from "next/headers";
 import type { LeadMembership } from "@/lib/leads/branch-membership";
@@ -90,7 +90,8 @@ export async function buildUserAuthContext(
     : membership.positions;
   const positionPermissions = (positionEmbed?.permissions ?? null) as PositionPermissions | null;
   const positionSlug = positionEmbed?.slug ?? null;
-  const permissions = resolvePermissions(membership.role as UserRole, positionPermissions);
+  const normalizedRole = normalizeRole(membership.role);
+  const permissions = resolvePermissions(normalizedRole, positionPermissions);
   const resolvedBranchId = membership.branch_id ?? null;
 
   const memberIds =
@@ -108,7 +109,7 @@ export async function buildUserAuthContext(
     userId,
     email: resolvedEmail,
     tenantId: membership.tenant_id,
-    role: membership.role as UserRole,
+    role: normalizedRole,
     industryId: tenantsEmbed?.industry_id ?? null,
     positionId: membership.position_id ?? null,
     positionSlug,
@@ -275,7 +276,7 @@ export function requireLeadAccess(
 }
 
 export function isCounselorOrAbove(auth: AuthContext): boolean {
-  return auth.role === "owner" || auth.role === "admin" || auth.role === "counselor";
+  return auth.role === "owner" || auth.role === "admin" || auth.role === "staff";
 }
 
 export async function resolvePositionSlug(

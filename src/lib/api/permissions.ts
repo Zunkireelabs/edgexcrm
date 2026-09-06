@@ -42,9 +42,13 @@ export interface ResolvedPermissions {
 }
 
 export function resolvePermissions(
-  role: UserRole,
+  rawRole: UserRole,
   positionPermissions: PositionPermissions | null,
 ): ResolvedPermissions {
+  // Defensive: legacy `counselor` rows still exist between PR B1 and B2. Every DB
+  // read boundary normalizes, but normalize here too so a missed call site can't
+  // silently widen an own-scope member to the whole tenant.
+  const role = normalizeRole(rawRole);
   const baseTier: ResolvedPermissions["baseTier"] =
     role === "owner" ? "owner" : role === "admin" ? "admin" : "member";
 
@@ -73,7 +77,7 @@ export function resolvePermissions(
 
   // No position configured → derive from role (reproduces today's behavior exactly).
   if (!positionPermissions) {
-    const leadScope = role === "counselor" ? "own" : "all";
+    const leadScope = role === "staff" ? "own" : "all";
     return {
       baseTier: "member",
       allowedNavKeys: null,
@@ -82,9 +86,9 @@ export function resolvePermissions(
       leadScope,
       sharedPoolListIds: new Set(),
       canAssignLeads: false,
-      canEditLeads: role === "counselor", // counselors edit own; viewers don't
-      canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
-      canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
+      canEditLeads: role === "staff", // own-scope staff edit own; viewers don't
+      canManageApplications: role === "staff", // own-scope staff can manage by default; viewers cannot
+      canManageClasses: role === "staff", // own-scope staff can manage by default; viewers cannot
       canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
       canSendSms: false, // only owner/admin send SMS blasts by default
@@ -242,6 +246,15 @@ export function resolveEffectiveBranch(
   return validBranchIds.includes(cookieVal) ? cookieVal : null;
 }
 
+/**
+ * Legacy `counselor` role rows still exist until migration 227 backfills them.
+ * Normalize at every DB read boundary so application code only ever sees `staff`.
+ * Delete the counselor branch in PR B2, after the backfill.
+ */
+export function normalizeRole(raw: string): UserRole {
+  return raw === "counselor" ? "staff" : (raw as UserRole);
+}
+
 // ── Role derivation (positions → legacy role) ──────────────────────
 export function deriveRole(
   baseTier: "owner" | "admin" | "member",
@@ -249,7 +262,7 @@ export function deriveRole(
 ): UserRole {
   if (baseTier === "owner") return "owner";
   if (baseTier === "admin") return "admin";
-  return leadScope === "own" ? "counselor" : "viewer";
+  return leadScope === "own" ? "staff" : "viewer";
 }
 
 // ── Position permissions shape validator ───────────────────────────
