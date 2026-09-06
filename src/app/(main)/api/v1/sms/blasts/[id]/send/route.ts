@@ -7,6 +7,7 @@ import { loadTenantSmsSettings } from "@/lib/sms/settings";
 import { composeRecipientMessage } from "@/lib/sms/compose";
 import { mapWithConcurrency } from "@/lib/sms/concurrency";
 import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
+import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { inngest } from "@/lib/inngest/client";
 import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
@@ -177,19 +178,27 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   // Full total across existing + newly-materialized queued rows — correct on
   // both a first send and a retry (not just the delta this call inserted).
-  const { data: queuedTotalsRows, error: totalsError } = await db
-    .from("sms_messages")
-    .select("estimated_credits")
-    .eq("blast_id", id)
-    .eq("status", "queued");
-  if (totalsError) {
+  // Paginated: an unpaged select here silently caps at PostgREST's 1000-row
+  // default (same class of bug fixed above for existingRows/EXISTING_ROWS_PAGE_SIZE)
+  // — a real Admizz-scale blast (thousands of queued rows) would under-total
+  // and under-reserve credits for the tail of the audience.
+  let queuedTotalsRows: { estimated_credits: number | null }[];
+  try {
+    queuedTotalsRows = await fetchAllRows<{ estimated_credits: number | null }>(
+      (offset, limit) =>
+        db
+          .from("sms_messages")
+          .select("estimated_credits")
+          .eq("blast_id", id)
+          .eq("status", "queued")
+          .range(offset, offset + limit - 1) as unknown as Promise<PageResult<{ estimated_credits: number | null }>>,
+      EXISTING_ROWS_PAGE_SIZE
+    );
+  } catch (totalsError) {
     log.error({ err: totalsError, blastId: id }, "Failed to total queued sms_messages credits");
     return apiServiceUnavailable("Failed to total recipient credits");
   }
-  const estimatedCredits = ((queuedTotalsRows ?? []) as unknown as { estimated_credits: number | null }[]).reduce(
-    (sum, r) => sum + (r.estimated_credits ?? 0),
-    0
-  );
+  const estimatedCredits = queuedTotalsRows.reduce((sum, r) => sum + (r.estimated_credits ?? 0), 0);
 
   // 4. Reserve — idempotent by ref_id (blastId), a retried step is a safe no-op.
   const { data: reserveResult, error: reserveError } = await db.rpc("sms_credits_reserve", {

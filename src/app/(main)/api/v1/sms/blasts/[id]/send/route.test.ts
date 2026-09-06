@@ -75,13 +75,12 @@ function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: str
             }
             return {
               eq: () => ({
-                eq: () =>
-                  Promise.resolve({
-                    data: messages
-                      .filter((m) => m.status === "queued")
-                      .map((m) => ({ estimated_credits: m.estimated_credits })),
-                    error: null,
-                  }),
+                eq: () => ({
+                  range: (from: number, to: number) => {
+                    const queued = messages.filter((m) => m.status === "queued").map((m) => ({ estimated_credits: m.estimated_credits }));
+                    return Promise.resolve({ data: queued.slice(from, to + 1), error: null });
+                  },
+                }),
               }),
             };
           },
@@ -330,6 +329,41 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
     expect(res.status).toBe(200);
     expect(fake.messages).toHaveLength(1001); // 1000 pre-existing + exactly 1 new — no duplicates
     expect(fake.insertCallCount()).toBe(1); // only the 1 genuinely-new row was inserted
+  });
+
+  it("totals estimated_credits across all queued rows, not just the first 1000 (PostgREST page-cap trap)", async () => {
+    // The credit-total query (route.ts, right before sms_credits_reserve) is
+    // paginated for the same reason the already-materialized check above is:
+    // an unpaged select silently caps at 1000 rows, which would under-total
+    // credits and under-reserve for the tail of a real Admizz-scale blast.
+    // 1500 pre-existing queued rows (1 credit each) + 1 new one must total
+    // 1501, not 1000 or 1.
+    const fake = fakeDb();
+    for (let i = 0; i < 1500; i++) fake.messages.push({ lead_id: `existing-${i}`, status: "queued", estimated_credits: 1 });
+    loadTenantSmsSettingsMock.mockResolvedValue({
+      sender_label: null,
+      optout_footer: null,
+      timezone: null,
+      quiet_hours_start: 8,
+      quiet_hours_end: 20,
+      quiet_hours_enabled: true,
+      max_recipients_per_blast: 2000,
+      low_credit_threshold: 200,
+    });
+    requireSmsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    const sendable = [...Array.from({ length: 1500 }, (_, i) => sendableRow(`existing-${i}`)), sendableRow("new-1")];
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 1501, sendable, suppressed: [], excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 } },
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(fakeReq(), { params });
+    const json = (await res.json()) as { data: { blast: { estimated_credits: number; reserved_credits: number } } };
+
+    expect(res.status).toBe(200);
+    expect(json.data.blast.estimated_credits).toBe(1501);
+    expect(json.data.blast.reserved_credits).toBe(1501);
   });
 
   it("a non-draft blast is rejected before any audience re-resolution", async () => {

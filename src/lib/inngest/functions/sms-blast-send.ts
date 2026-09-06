@@ -1,5 +1,6 @@
 import { inngest } from "@/lib/inngest/client";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { sendQueuedBatch } from "@/lib/sms/send";
 import { loadTenantSmsSettings, resolveTenantTimezone } from "@/lib/sms/settings";
 import { resolveSendWindow } from "@/lib/sms/quiet-hours";
@@ -91,8 +92,17 @@ export async function finalizeBlast(
     logger.error({ err: settleError, tenantId, blastId }, "[sms-blast-send] sms_credits_settle failed");
   }
 
-  const { data: statusRows } = await db.from("sms_messages").select("status").eq("blast_id", blastId);
-  const rows = (statusRows ?? []) as unknown as MessageStatusRow[];
+  // Paginated: an unpaged select here silently caps at PostgREST's 1000-row
+  // default — a real Admizz-scale blast (thousands of rows) would report
+  // wrong sent/failed/cancelled/suppressed counts and could pick the wrong
+  // finalStatus off a truncated view of the blast.
+  const rows = await fetchAllRows<MessageStatusRow>((offset, limit) =>
+    db
+      .from("sms_messages")
+      .select("status")
+      .eq("blast_id", blastId)
+      .range(offset, offset + limit - 1) as unknown as Promise<PageResult<MessageStatusRow>>
+  );
   const sent = rows.filter((r) => r.status === "submitted" || r.status === "delivered").length;
   const failed = rows.filter((r) => r.status === "failed").length;
   const cancelled = rows.filter((r) => r.status === "cancelled").length;

@@ -67,11 +67,12 @@ function fakeScoped(messages: FakeMessage[]) {
         return {
           select: () => ({
             eq: (col: string, val: string) => ({
-              in: () =>
-                Promise.resolve({
-                  data: messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit })),
-                  error: null,
-                }),
+              in: () => ({
+                range: (from: number, to: number) => {
+                  const filtered = messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit }));
+                  return Promise.resolve({ data: filtered.slice(from, to + 1), error: null });
+                },
+              }),
             }),
           }),
         };
@@ -151,5 +152,24 @@ describe("smsCreditReaper", () => {
     const candidates = await findUnsettledTerminalBlasts();
 
     expect(candidates).toEqual([]);
+  });
+
+  it("totals charged credits across a real Admizz-scale (1500+) blast, not just the first 1000 (PostgREST page-cap trap)", async () => {
+    // The charged-credits query is paginated for the same reason the send
+    // route's credit-total query is (src/lib/supabase/paginate.ts): an
+    // unpaged select silently caps at 1000 rows, which would under-total
+    // provider_credit and settle the reservation against the wrong actual.
+    const blast: FakeBlast = { id: "blast-big", tenant_id: "tenant-1", reserved_credits: 2000, status: "sent" };
+    createServiceClientMock.mockResolvedValue(fakeService([blast], []));
+
+    const messages: FakeMessage[] = Array.from({ length: 1500 }, () => ({ blast_id: "blast-big", status: "delivered", provider_credit: 1 }));
+    const scoped = fakeScoped(messages);
+    scopedClientForTenantMock.mockResolvedValue(scoped.db);
+
+    const { reapBlast } = await import("./sms-credit-reaper");
+    const outcome = await reapBlast(blast);
+
+    expect(outcome).toMatchObject({ blastId: "blast-big", actual: 1500 });
+    expect(scoped.rpcCalls[0].args.p_actual).toBe(1500);
   });
 });

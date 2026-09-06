@@ -155,7 +155,11 @@ describe("POST /api/v1/sms/blasts/[id]/cancel", () => {
         }
         if (table === "sms_messages") {
           return {
-            select: () => ({ eq: () => Promise.resolve({ data: statusRows, error: null }) }),
+            select: () => ({
+              eq: () => ({
+                range: (from: number, to: number) => Promise.resolve({ data: statusRows.slice(from, to + 1), error: null }),
+              }),
+            }),
             update: () => ({ eq: () => ({ in: () => Promise.resolve({ error: null }) }) }),
           };
         }

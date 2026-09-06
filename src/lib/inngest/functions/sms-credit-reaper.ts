@@ -1,6 +1,7 @@
 import { inngest } from "@/lib/inngest/client";
 import { createServiceClient } from "@/lib/supabase/server";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { isSmsEnabled } from "@/lib/sms/flag";
 import { logger } from "@/lib/logger";
 
@@ -64,13 +65,24 @@ export async function findUnsettledTerminalBlasts(): Promise<TerminalBlastRow[]>
 export async function reapBlast(blast: TerminalBlastRow): Promise<{ blastId: string; actual: number; diff: number } | null> {
   const db = await scopedClientForTenant(blast.tenant_id);
 
-  const { data: chargedRows, error: chargedError } = await db
-    .from("sms_messages")
-    .select("provider_credit")
-    .eq("blast_id", blast.id)
-    .in("status", ["submitted", "delivered"]);
-  if (chargedError) throw new Error(`sms-credit-reaper: failed to total charged credits for blast ${blast.id}: ${chargedError.message}`);
-  const actual = ((chargedRows ?? []) as unknown as CreditRow[]).reduce((sum, r) => sum + (r.provider_credit ?? 0), 0);
+  // Paginated: an unpaged select here silently caps at PostgREST's 1000-row
+  // default (same class of bug fixed across the send/finalize path — see
+  // src/lib/supabase/paginate.ts) — a real Admizz-scale blast would
+  // under-total charged credits and settle against the wrong actual.
+  let chargedRows: CreditRow[];
+  try {
+    chargedRows = await fetchAllRows<CreditRow>((offset, limit) =>
+      db
+        .from("sms_messages")
+        .select("provider_credit")
+        .eq("blast_id", blast.id)
+        .in("status", ["submitted", "delivered"])
+        .range(offset, offset + limit - 1) as unknown as Promise<PageResult<CreditRow>>
+    );
+  } catch (chargedError) {
+    throw new Error(`sms-credit-reaper: failed to total charged credits for blast ${blast.id}: ${(chargedError as Error).message}`);
+  }
+  const actual = chargedRows.reduce((sum, r) => sum + (r.provider_credit ?? 0), 0);
 
   const reserved = blast.reserved_credits ?? 0;
   const { data: settleResult, error: settleError } = await db.rpc("sms_credits_settle", {
