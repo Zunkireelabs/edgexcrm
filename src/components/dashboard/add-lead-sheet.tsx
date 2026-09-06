@@ -223,7 +223,7 @@ export function AddLeadSheet({
         ...initialFormData,
         stageId: defaultStage?.id || "",
         listId: lockedList ? lockedList.id : validDefaultListId,
-        assignedTo: role === "counselor" ? currentUserId : "",
+        assignedTo: role === "staff" ? currentUserId : "",
         ownerId: currentUserId,
         // Always seed from creator's own branch first; fall back to active branch switcher
         branchId: userBranchId || selectedBranchId || "",

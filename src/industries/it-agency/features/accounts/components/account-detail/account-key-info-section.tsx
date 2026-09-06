@@ -195,7 +195,7 @@ export function AccountKeyInfoSection({
                   )
                 }
               />
-              {role === "counselor" && (
+              {role === "staff" && (
                 <p className="text-[11px] text-muted-foreground -mt-1">Your hours only</p>
               )}
             </>

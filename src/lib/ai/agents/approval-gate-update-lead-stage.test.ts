@@ -573,7 +573,7 @@ describe("runWriteApprovalGate — update_lead_stage execution (5.4c-2a)", () =>
 
     expect(applyLeadPatchMock).toHaveBeenCalledTimes(1);
     const authArg = applyLeadPatchMock.mock.calls[0][0];
-    expect(authArg).toMatchObject({ userId: "counselor-1", role: "counselor" });
+    expect(authArg).toMatchObject({ userId: "counselor-1", role: "staff" });
     expect(client._lead()).toMatchObject({ id: LEAD_ID, list_id: null, assigned_to: "someone-else" }); // unchanged
 
     expect(aiWriteActions).toHaveLength(1);
