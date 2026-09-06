@@ -14,11 +14,11 @@ import type { Task } from "@/types/database";
 
 interface TasksSectionProps {
   projectId: string;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   currentUserId: string;
 }
 
-export function TasksSection({ projectId, isAdmin, currentUserId }: TasksSectionProps) {
+export function TasksSection({ projectId, canManageProjects, currentUserId }: TasksSectionProps) {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [loading, setLoading] = useState(true);
@@ -124,7 +124,7 @@ export function TasksSection({ projectId, isAdmin, currentUserId }: TasksSection
                 <TaskRow
                   key={task.id}
                   task={task}
-                  isAdmin={isAdmin}
+                  isAdmin={canManageProjects}
                   currentUserId={currentUserId}
                   team={team}
                   onUpdate={handleTaskUpdated}

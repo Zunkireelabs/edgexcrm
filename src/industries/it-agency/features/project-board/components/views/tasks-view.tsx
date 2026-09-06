@@ -77,20 +77,20 @@ interface TasksViewProps {
   poolTags: string[];
   refetchTags: () => Promise<void>;
   onClearFilters: () => void;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   currentUserId: string;
 }
 
 /** Mirrors the server rule in src/app/(main)/api/v1/tasks/[id]/route.ts:
  *  admins edit everything; a member may edit a task they're the assignee of,
  *  that they assigned, or that is unassigned (claimable team work). */
-function canEditTask(task: TaskWithProject, isAdmin: boolean, currentUserId: string): boolean {
-  if (isAdmin) return true;
+function canEditTask(task: TaskWithProject, canManageProjects: boolean, currentUserId: string): boolean {
+  if (canManageProjects) return true;
   if (task.assignee_id === null) return true;
   return task.assignee_id === currentUserId || task.assigned_by_id === currentUserId;
 }
 
-export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters, isAdmin, currentUserId }: TasksViewProps) {
+export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onClearFilters, canManageProjects, currentUserId }: TasksViewProps) {
   const [tasks, setTasks] = useState<TaskWithProject[]>([]);
   const [loading, setLoading] = useState(true);
   const [sortKey, setSortKey] = useState<SortKey>("due_date");
@@ -340,7 +340,7 @@ export function TasksView({ filters, team, teamMap, poolTags, refetchTags, onCle
                   task={task}
                   team={team}
                   poolTags={poolTags}
-                  canEdit={canEditTask(task, isAdmin, currentUserId)}
+                  canEdit={canEditTask(task, canManageProjects, currentUserId)}
                   onStatusChange={handleStatusChange}
                   onAssigneeChange={handleAssigneeChange}
                   onPriorityChange={handlePriorityChange}

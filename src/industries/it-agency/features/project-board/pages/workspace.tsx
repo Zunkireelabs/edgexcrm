@@ -15,11 +15,12 @@ import type { Project, ProjectStatus } from "@/types/database";
 interface ProjectWorkspacePageProps {
   tenantId: string;
   role: string;
+  canManageProjects: boolean;
 }
 
-function WorkspaceInner({ tenantId: _tenantId, role }: ProjectWorkspacePageProps) {
+function WorkspaceInner({ tenantId: _tenantId, canManageProjects }: ProjectWorkspacePageProps) {
   const router = useRouter();
-  const canCreate = role === "owner" || role === "admin";
+  const canCreate = canManageProjects;
   const [createOpen, setCreateOpen] = useState(false);
   const { projects, accounts, team, accountMap, teamMap, hoursMap, loading, refetch, setProjects } =
     useProjects();

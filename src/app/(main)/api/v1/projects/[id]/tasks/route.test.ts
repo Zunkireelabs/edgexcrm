@@ -1,15 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type { UserRole } from "@/types/database";
 import type { NextRequest } from "next/server";
 
 // POST /api/v1/projects/:id/tasks — open to all tenant members (brief Phase 2b).
 // assigned_by_id is stamped from the session, never the body.
 
 const auth = vi.hoisted(() => ({
-  current: { userId: "u-me", email: "a@b.c", tenantId: "tenant-A", role: "member", industryId: "it_agency" } as Record<string, string>,
+  current: { userId: "u-me", email: "a@b.c", tenantId: "tenant-A", role: "member", industryId: "it_agency" } as Record<string, unknown>,
 }));
 
 vi.mock("@/lib/api/auth", () => ({
-  authenticateRequest: vi.fn(async () => auth.current),
+  authenticateRequest: vi.fn(async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    return {
+      ...auth.current,
+      permissions: auth.current.permissions ?? resolvePermissions(auth.current.role as UserRole, null),
+    };
+  }),
   requireAdmin: (a: { role: string }) => a.role === "owner" || a.role === "admin",
 }));
 vi.mock("@/industries/_loader", () => ({ getFeatureAccess: () => true }));
@@ -73,9 +80,24 @@ describe("POST /api/v1/projects/:id/tasks", () => {
     expect((state.insertArgs as { assigned_by_id: unknown }).assigned_by_id).toBe("u-me");
   });
 
-  it("a non-admin's is_billable in the body is ignored (defaults billable)", async () => {
+  it("a member without billing capability: is_billable in the body is ignored (defaults billable)", async () => {
     const res = await POST(req({ title: "Free work", is_billable: false }), { params });
     expect(res.status).toBe(201);
     expect((state.insertArgs as { is_billable: unknown }).is_billable).toBe(true);
+  });
+
+  it("a member on a position granting canManageBilling can set is_billable:false", async () => {
+    const { resolvePermissions } = await import("@/lib/api/permissions");
+    auth.current.role = "viewer";
+    auth.current.permissions = resolvePermissions("viewer", {
+      nav: { mode: "all" },
+      pipelines: { mode: "all" },
+      leadScope: "all",
+      dashboard: { widgets: { mode: "all" } },
+      canManageBilling: true,
+    });
+    const res = await POST(req({ title: "Non-billable spike", is_billable: false }), { params });
+    expect(res.status).toBe(201);
+    expect((state.insertArgs as { is_billable: unknown }).is_billable).toBe(false);
   });
 });

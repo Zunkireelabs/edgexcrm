@@ -31,14 +31,14 @@ const LIFECYCLE_ACTIONS: Record<MilestoneStatus, Array<{ to: MilestoneStatus; la
 interface MilestonesPanelProps {
   milestones: ProjectMilestone[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onAccept: (milestoneId: string) => Promise<boolean>;
   onReject: (milestoneId: string) => Promise<boolean>;
   onTransition: (milestoneId: string, to: string) => Promise<boolean>;
 }
 
-export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAccept, onReject, onTransition }: MilestonesPanelProps) {
+export function MilestonesPanel({ milestones, loading, canManageProjects, onCreate, onAccept, onReject, onTransition }: MilestonesPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -72,7 +72,7 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Milestones</CardTitle>
-        {isAdmin && (
+        {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add
@@ -80,7 +80,7 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && isAdmin && (
+        {adding && canManageProjects && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Input placeholder="Milestone title" value={title} onChange={(e) => setTitle(e.target.value)} />
             <div className="flex gap-2">
@@ -131,7 +131,7 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
                   {cfg.label}
                 </span>
-                {isAdmin && m.status === "submitted" && (
+                {canManageProjects && m.status === "submitted" && (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => onAccept(m.id)} disabled={isTransitioning} title="Accept">
                       <Check className="h-3.5 w-3.5 text-green-600" />
@@ -141,7 +141,7 @@ export function MilestonesPanel({ milestones, loading, isAdmin, onCreate, onAcce
                     </Button>
                   </>
                 )}
-                {isAdmin &&
+                {canManageProjects &&
                   lifecycleActions.map((action) => {
                     const Icon = action.icon;
                     const subtle = m.status === "submitted"; // "Pull back" reads as secondary next to Accept/Reject

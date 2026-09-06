@@ -14,6 +14,9 @@ export interface PositionPermissions {
   canManageHR?: boolean;                                           // controls org-wide HR access (all employee_profiles/departments/skills/allocations). Absent ⇒ default per resolver (self/direct-reports only).
   canExport?: boolean;                                            // controls access to the leads Export button. Absent => default per resolver (owner/admin only).
   canSendSms?: boolean;                                           // controls write access to the SMS blast feature. Absent => default per resolver (owner/admin only).
+  canManageProjects?: boolean;                                    // controls write access to it_agency delivery: projects + sub-resources, task delete/reconcile. Absent ⇒ default per resolver (owner/admin only).
+  canApproveTime?: boolean;                                       // controls time-entry approve/reject, compliance, the approvals queue. Absent ⇒ default per resolver (owner/admin only).
+  canManageBilling?: boolean;                                     // controls project invoices + the is_billable task field guard. Absent ⇒ default per resolver (owner/admin only).
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -32,6 +35,9 @@ export interface ResolvedPermissions {
   canManageHR: boolean;
   canExport: boolean;
   canSendSms: boolean;
+  canManageProjects: boolean;                   // it_agency delivery write access
+  canApproveTime: boolean;                      // time approvals / compliance
+  canManageBilling: boolean;                    // project invoices + is_billable guard
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
@@ -58,6 +64,9 @@ export function resolvePermissions(
       canManageHR: true,
       canExport: true,
       canSendSms: true,
+      canManageProjects: true,
+      canApproveTime: true,
+      canManageBilling: true,
       dashboardWidgets: null,
     };
   }
@@ -79,6 +88,9 @@ export function resolvePermissions(
       canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
       canSendSms: false, // only owner/admin send SMS blasts by default
+      canManageProjects: false, // delivery write access — position must explicitly grant it
+      canApproveTime: false, // time approvals — position must explicitly grant it
+      canManageBilling: false, // project billing — position must explicitly grant it
       dashboardWidgets: null,
     };
   }
@@ -99,6 +111,9 @@ export function resolvePermissions(
     canManageHR: p.canManageHR === true,
     canExport: false, // export is owner/admin only; position config cannot grant it
     canSendSms: false, // sending SMS is owner/admin only; position config cannot grant it
+    canManageProjects: p.canManageProjects === true,
+    canApproveTime: p.canApproveTime === true,
+    canManageBilling: p.canManageBilling === true,
     dashboardWidgets:
       p.dashboard && p.dashboard.widgets && p.dashboard.widgets.mode === "allow"
         ? new Set(p.dashboard.widgets.keys)
@@ -140,6 +155,15 @@ export function canManageClasses(p: ResolvedPermissions): boolean {
 }
 export function canManageHR(p: ResolvedPermissions): boolean {
   return p.canManageHR;
+}
+export function canManageProjects(p: ResolvedPermissions): boolean {
+  return p.canManageProjects;
+}
+export function canApproveTime(p: ResolvedPermissions): boolean {
+  return p.canApproveTime;
+}
+export function canManageBilling(p: ResolvedPermissions): boolean {
+  return p.canManageBilling;
 }
 // canEnrollStudents moved to src/lib/api/class-attendance.ts — it now reads the
 // class_managers grant table (admin-managed, per-user) instead of this hardcoded
@@ -324,6 +348,21 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canSendSms (optional)
   if (p.canSendSms !== undefined && typeof p.canSendSms !== "boolean") {
     return "permissions.canSendSms must be a boolean";
+  }
+
+  // canManageProjects (optional)
+  if (p.canManageProjects !== undefined && typeof p.canManageProjects !== "boolean") {
+    return "permissions.canManageProjects must be a boolean";
+  }
+
+  // canApproveTime (optional)
+  if (p.canApproveTime !== undefined && typeof p.canApproveTime !== "boolean") {
+    return "permissions.canApproveTime must be a boolean";
+  }
+
+  // canManageBilling (optional)
+  if (p.canManageBilling !== undefined && typeof p.canManageBilling !== "boolean") {
+    return "permissions.canManageBilling must be a boolean";
   }
 
   // dashboard

@@ -61,11 +61,11 @@ function relativeTime(iso: string): string {
 interface TimelinePanelProps {
   events: ProjectEvent[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onAddRetroLesson: (lesson: string) => Promise<boolean>;
 }
 
-export function TimelinePanel({ events, loading, isAdmin, onAddRetroLesson }: TimelinePanelProps) {
+export function TimelinePanel({ events, loading, canManageProjects, onAddRetroLesson }: TimelinePanelProps) {
   const [adding, setAdding] = useState(false);
   const [lesson, setLesson] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -87,7 +87,7 @@ export function TimelinePanel({ events, loading, isAdmin, onAddRetroLesson }: Ti
           <CardTitle className="text-sm">Institutional memory</CardTitle>
           <CardDescription>Every decision this project has made, in order.</CardDescription>
         </div>
-        {isAdmin && (
+        {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Retro lesson
@@ -95,7 +95,7 @@ export function TimelinePanel({ events, loading, isAdmin, onAddRetroLesson }: Ti
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && isAdmin && (
+        {adding && canManageProjects && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Textarea
               value={lesson}

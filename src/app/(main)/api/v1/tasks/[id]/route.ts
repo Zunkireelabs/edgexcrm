@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { canManageProjects } from "@/lib/api/permissions";
 import {
   apiSuccess,
   apiUnauthorized,
@@ -214,7 +215,7 @@ export async function DELETE(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.ACCOUNTS)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canManageProjects(auth.permissions)) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { data: existing } = await db

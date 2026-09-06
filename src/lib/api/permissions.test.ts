@@ -6,6 +6,10 @@ import {
   shouldRestrictToSelf,
   isSharedPoolList,
   deriveRole,
+  canManageProjects,
+  canApproveTime,
+  canManageBilling,
+  validatePositionPermissions,
   type PositionPermissions,
   type ResolvedPermissions,
 } from "./permissions";
@@ -22,6 +26,9 @@ describe("resolvePermissions", () => {
     canManageApplications: true,
     canManageClasses: true,
     canManageHR: true,
+    canManageProjects: true,
+    canApproveTime: true,
+    canManageBilling: true,
     canExport: false,
     canSendSms: false,
     dashboard: { widgets: { mode: "allow", keys: ["widget-1"] } },
@@ -132,6 +139,9 @@ function resolved(overrides: Partial<ResolvedPermissions> = {}): ResolvedPermiss
     canManageApplications: false,
     canManageClasses: false,
     canManageHR: false,
+    canManageProjects: false,
+    canApproveTime: false,
+    canManageBilling: false,
     canExport: false,
     canSendSms: false,
     dashboardWidgets: null,
@@ -271,5 +281,79 @@ describe("deriveRole", () => {
 
   it('baseTier "member" with leadScope "team" -> "viewer"', () => {
     expect(deriveRole("member", "team")).toBe("viewer");
+  });
+});
+
+describe("delivery capability keys (canManageProjects / canApproveTime / canManageBilling)", () => {
+  // A behaviour-neutral member position blob (everything "all", no delivery flags) —
+  // mirrors what mig 225 seeds for Team Member / Viewer on it_agency.
+  const neutralMember: PositionPermissions = {
+    nav: { mode: "all" },
+    pipelines: { mode: "all" },
+    leadScope: "all",
+    dashboard: { widgets: { mode: "all" } },
+  };
+
+  const KEYS = [
+    ["canManageProjects", canManageProjects],
+    ["canApproveTime", canApproveTime],
+    ["canManageBilling", canManageBilling],
+  ] as const;
+
+  it("owner and admin get all three true regardless of position", () => {
+    for (const role of ["owner", "admin"] as const) {
+      for (const withPos of [null, neutralMember]) {
+        const r = resolvePermissions(role, withPos);
+        expect(r.canManageProjects).toBe(true);
+        expect(r.canApproveTime).toBe(true);
+        expect(r.canManageBilling).toBe(true);
+      }
+    }
+  });
+
+  it("a member with NO position gets all three false — the behaviour-neutrality guard", () => {
+    for (const role of ["counselor", "viewer"] as const) {
+      const r = resolvePermissions(role, null);
+      expect(r.canManageProjects).toBe(false);
+      expect(r.canApproveTime).toBe(false);
+      expect(r.canManageBilling).toBe(false);
+    }
+  });
+
+  it("a member on a behaviour-neutral position (mig 225 defaults) gets all three false", () => {
+    const r = resolvePermissions("viewer", neutralMember);
+    expect(r.canManageProjects).toBe(false);
+    expect(r.canApproveTime).toBe(false);
+    expect(r.canManageBilling).toBe(false);
+  });
+
+  it("each key resolves true only when the position JSONB sets it exactly true", () => {
+    for (const [key, helper] of KEYS) {
+      expect(helper(resolvePermissions("viewer", { ...neutralMember, [key]: true }))).toBe(true);
+      expect(helper(resolvePermissions("viewer", { ...neutralMember, [key]: false }))).toBe(false);
+      // garbage / truthy-but-not-true ⇒ false
+      expect(
+        helper(resolvePermissions("viewer", { ...neutralMember, [key]: "yes" } as unknown as PositionPermissions)),
+      ).toBe(false);
+      expect(
+        helper(resolvePermissions("viewer", { ...neutralMember, [key]: 1 } as unknown as PositionPermissions)),
+      ).toBe(false);
+    }
+  });
+
+  it("keys are independent — granting one does not grant the others", () => {
+    const r = resolvePermissions("viewer", { ...neutralMember, canManageProjects: true });
+    expect(r.canManageProjects).toBe(true);
+    expect(r.canApproveTime).toBe(false);
+    expect(r.canManageBilling).toBe(false);
+  });
+
+  it("validatePositionPermissions rejects a non-boolean for each key", () => {
+    for (const [key] of KEYS) {
+      expect(validatePositionPermissions({ ...neutralMember, [key]: "true" })).toMatch(
+        new RegExp(`${key} must be a boolean`),
+      );
+      expect(validatePositionPermissions({ ...neutralMember, [key]: true })).toBeNull();
+    }
   });
 });
