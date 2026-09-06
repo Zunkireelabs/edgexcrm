@@ -206,7 +206,9 @@ export function CheckInPage({ tenantId, pipelines, stages, teamMembers, allBranc
     allBranchMembers.map((m) => [m.user_id, m.name || m.email.split("@")[0]]),
   );
   const isCounselor = (m: TeamMember) =>
-    m.position_slug === "counselor" || (m.position_slug == null && m.role === "counselor");
+    // position_slug "counselor" = Admizz's job title (unchanged); role "staff" =
+    // the own-scope access tier (renamed from "counselor" in Phase B).
+    m.position_slug === "counselor" || (m.position_slug == null && m.role === "staff");
   const counselorMembers = industryId !== "travel_agency"
     ? allBranchMembers.filter(isCounselor)
     : allBranchMembers;

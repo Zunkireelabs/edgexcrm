@@ -6,6 +6,7 @@ import {
   shouldRestrictToSelf,
   isSharedPoolList,
   deriveRole,
+  normalizeRole,
   canManageProjects,
   canApproveTime,
   canManageBilling,
@@ -260,6 +261,28 @@ describe("isSharedPoolList", () => {
   });
 });
 
+describe("normalizeRole (Phase B role rename seam)", () => {
+  it("passes every role through untouched (validating identity boundary post-227)", () => {
+    expect(normalizeRole("viewer")).toBe("viewer");
+    expect(normalizeRole("owner")).toBe("owner");
+    expect(normalizeRole("admin")).toBe("admin");
+    expect(normalizeRole("staff")).toBe("staff");
+  });
+});
+
+describe("resolvePermissions — position-less role rename guard (Phase B)", () => {
+  it('"staff" with no position resolves own-scope + canEditLeads', () => {
+    const r = resolvePermissions("staff", null);
+    expect(r.leadScope).toBe("own");
+    expect(r.canEditLeads).toBe(true);
+  });
+  it('"viewer" with no position stays all-scope — NOT widened, NOT narrowed', () => {
+    const r = resolvePermissions("viewer", null);
+    expect(r.leadScope).toBe("all");
+    expect(r.canEditLeads).toBe(false);
+  });
+});
+
 describe("deriveRole", () => {
   it('baseTier "owner" -> "owner" regardless of leadScope', () => {
     expect(deriveRole("owner", "own")).toBe("owner");
@@ -271,8 +294,8 @@ describe("deriveRole", () => {
     expect(deriveRole("admin", "team")).toBe("admin");
   });
 
-  it('baseTier "member" with leadScope "own" -> "counselor"', () => {
-    expect(deriveRole("member", "own")).toBe("counselor");
+  it('baseTier "member" with leadScope "own" -> "staff"', () => {
+    expect(deriveRole("member", "own")).toBe("staff");
   });
 
   it('baseTier "member" with leadScope "all" -> "viewer"', () => {
@@ -312,7 +335,7 @@ describe("delivery capability keys (canManageProjects / canApproveTime / canMana
   });
 
   it("a member with NO position gets all three false — the behaviour-neutrality guard", () => {
-    for (const role of ["counselor", "viewer"] as const) {
+    for (const role of ["staff", "viewer"] as const) {
       const r = resolvePermissions(role, null);
       expect(r.canManageProjects).toBe(false);
       expect(r.canApproveTime).toBe(false);

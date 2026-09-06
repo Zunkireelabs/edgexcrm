@@ -42,9 +42,14 @@ export interface ResolvedPermissions {
 }
 
 export function resolvePermissions(
-  role: UserRole,
+  rawRole: UserRole,
   positionPermissions: PositionPermissions | null,
 ): ResolvedPermissions {
+  // normalizeRole is now a validating identity boundary (the backfill in migration
+  // 227 removed every legacy `counselor` row). Kept as the single seam where the
+  // next role migration plugs in — and so a missed call site can't silently widen
+  // an own-scope member to the whole tenant.
+  const role = normalizeRole(rawRole);
   const baseTier: ResolvedPermissions["baseTier"] =
     role === "owner" ? "owner" : role === "admin" ? "admin" : "member";
 
@@ -73,7 +78,7 @@ export function resolvePermissions(
 
   // No position configured → derive from role (reproduces today's behavior exactly).
   if (!positionPermissions) {
-    const leadScope = role === "counselor" ? "own" : "all";
+    const leadScope = role === "staff" ? "own" : "all";
     return {
       baseTier: "member",
       allowedNavKeys: null,
@@ -82,9 +87,9 @@ export function resolvePermissions(
       leadScope,
       sharedPoolListIds: new Set(),
       canAssignLeads: false,
-      canEditLeads: role === "counselor", // counselors edit own; viewers don't
-      canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
-      canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
+      canEditLeads: role === "staff", // own-scope staff edit own; viewers don't
+      canManageApplications: role === "staff", // own-scope staff can manage by default; viewers cannot
+      canManageClasses: role === "staff", // own-scope staff can manage by default; viewers cannot
       canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
       canSendSms: false, // only owner/admin send SMS blasts by default
@@ -242,6 +247,17 @@ export function resolveEffectiveBranch(
   return validBranchIds.includes(cookieVal) ? cookieVal : null;
 }
 
+/**
+ * Validating boundary for the raw `tenant_users.role` / `invite_tokens.role`
+ * string read out of the DB. Migration 227 backfilled the last legacy `counselor`
+ * rows to `staff`, so there is no live mapping today — this is the identity/cast
+ * seam kept at every DB read boundary, the single place the next role migration
+ * plugs its mapping into.
+ */
+export function normalizeRole(raw: string): UserRole {
+  return raw as UserRole;
+}
+
 // ── Role derivation (positions → legacy role) ──────────────────────
 export function deriveRole(
   baseTier: "owner" | "admin" | "member",
@@ -249,7 +265,7 @@ export function deriveRole(
 ): UserRole {
   if (baseTier === "owner") return "owner";
   if (baseTier === "admin") return "admin";
-  return leadScope === "own" ? "counselor" : "viewer";
+  return leadScope === "own" ? "staff" : "viewer";
 }
 
 // ── Position permissions shape validator ───────────────────────────
