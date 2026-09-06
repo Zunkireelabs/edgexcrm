@@ -77,6 +77,7 @@ export async function computeBlastCounts(tenantId: string, blastId: string): Pro
       .select("status")
       .eq("source", "blast")
       .eq("source_id", blastId)
+      .order("id", { ascending: true })
       .range(offset, offset + limit - 1) as unknown as Promise<PageResult<MessageStatusRow>>
   );
   return {

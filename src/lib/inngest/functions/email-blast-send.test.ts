@@ -18,6 +18,7 @@ interface FakeMessageRow {
 function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
   const messages = messageRows.map((r) => ({ ...r }));
   const blastUpdateCalls: Record<string, unknown>[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
 
   return {
     db: {
@@ -34,13 +35,22 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
           };
         }
         if (table === "email_messages") {
+          const rangeNode = {
+            range: (from: number, to: number) => {
+              const statuses = messages.map((m) => ({ status: m.status }));
+              return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+            },
+          };
           return {
             select: () => ({
               eq: () => ({
                 eq: () => ({
-                  range: (from: number, to: number) => {
-                    const statuses = messages.map((m) => ({ status: m.status }));
-                    return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+                  // offset pagination needs a deterministic total order —
+                  // paginate.ts's ORDERING CONTRACT. Record the call so the
+                  // test can assert .order fires before .range.
+                  order: (col: string, opts: unknown) => {
+                    orderCalls.push({ col, opts });
+                    return rangeNode;
                   },
                 }),
               }),
@@ -51,6 +61,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
       },
     },
     blastUpdateCalls,
+    orderCalls,
   };
 }
 
@@ -99,6 +110,17 @@ describe("computeBlastCounts — throttle-branch counter staleness regression", 
     const counts = await computeBlastCounts("tenant-1", "blast-large");
 
     expect(counts.sent).toBe(2000);
+  });
+
+  it("orders the paged query by a deterministic key before ranging (offset paging over an unordered result skips/dupes boundary rows)", async () => {
+    const fake = fakeDb("throttled", [{ status: "sent" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { computeBlastCounts } = await import("./email-blast-send");
+
+    await computeBlastCounts("tenant-1", "blast-1");
+
+    expect(fake.orderCalls.length).toBeGreaterThan(0);
+    expect(fake.orderCalls[0]).toEqual({ col: "id", opts: { ascending: true } });
   });
 });
 

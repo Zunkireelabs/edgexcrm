@@ -104,20 +104,27 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   // no way to pass a matching predicate through PostgREST's upsert). Skip
   // already-materialized (blast_id, lead_id) pairs at the application layer
   // instead and plain-insert() only what's new.
-  const existingRows: { lead_id: string | null }[] = [];
-  for (let offset = 0; ; offset += EXISTING_ROWS_PAGE_SIZE) {
-    const { data, error: existingError } = await db
-      .from("sms_messages")
-      .select("lead_id")
-      .eq("blast_id", id)
-      .range(offset, offset + EXISTING_ROWS_PAGE_SIZE - 1);
-    if (existingError) {
-      log.error({ err: existingError, blastId: id }, "Failed to check already-materialized sms_messages rows");
-      return apiServiceUnavailable("Failed to check existing recipient rows");
-    }
-    const page = (data ?? []) as unknown as { lead_id: string | null }[];
-    existingRows.push(...page);
-    if (page.length < EXISTING_ROWS_PAGE_SIZE) break;
+  // fetchAllRows (not a hand-rolled loop — paginate.ts's own comment says
+  // use the helper) with an explicit deterministic order: offset paging over
+  // an unordered result can skip a row at a page boundary, and a skipped row
+  // here means that lead is treated as new, re-inserted, and fails the
+  // (blast_id, lead_id) unique index — the exact retry failure this route
+  // exists to avoid.
+  let existingRows: { lead_id: string | null }[];
+  try {
+    existingRows = await fetchAllRows<{ lead_id: string | null }>(
+      (offset, limit) =>
+        db
+          .from("sms_messages")
+          .select("lead_id")
+          .eq("blast_id", id)
+          .order("id", { ascending: true })
+          .range(offset, offset + limit - 1) as unknown as Promise<PageResult<{ lead_id: string | null }>>,
+      EXISTING_ROWS_PAGE_SIZE
+    );
+  } catch (existingError) {
+    log.error({ err: existingError, blastId: id }, "Failed to check already-materialized sms_messages rows");
+    return apiServiceUnavailable("Failed to check existing recipient rows");
   }
   const alreadyMaterialized = new Set(existingRows.map((r) => r.lead_id));
 
@@ -191,6 +198,7 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
           .select("estimated_credits")
           .eq("blast_id", id)
           .eq("status", "queued")
+          .order("id", { ascending: true })
           .range(offset, offset + limit - 1) as unknown as Promise<PageResult<{ estimated_credits: number | null }>>,
       EXISTING_ROWS_PAGE_SIZE
     );

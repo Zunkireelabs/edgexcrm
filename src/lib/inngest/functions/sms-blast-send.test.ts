@@ -22,6 +22,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
   const messages = messageRows.map((r) => ({ ...r }));
   const blastUpdateCalls: Record<string, unknown>[] = [];
   const settleCalls: Record<string, unknown>[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
   let messagesCancelCalled = false;
 
   return {
@@ -51,9 +52,16 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
             }),
             select: () => ({
               eq: () => ({
-                range: (from: number, to: number) => {
-                  const statuses = messages.map((m) => ({ status: m.status }));
-                  return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+                // offset paging needs a deterministic total order — paginate.ts
+                // ORDERING CONTRACT. Recorded so the test asserts .order before .range.
+                order: (col: string, opts: unknown) => {
+                  orderCalls.push({ col, opts });
+                  return {
+                    range: (from: number, to: number) => {
+                      const statuses = messages.map((m) => ({ status: m.status }));
+                      return Promise.resolve({ data: statuses.slice(from, to + 1), error: null });
+                    },
+                  };
                 },
               }),
             }),
@@ -68,6 +76,7 @@ function fakeDb(initialBlastStatus: string, messageRows: FakeMessageRow[]) {
     },
     blastUpdateCalls,
     settleCalls,
+    orderCalls,
     messagesCancelCalledGetter: () => messagesCancelCalled,
   };
 }
@@ -154,5 +163,15 @@ describe("finalizeBlast — F-1 regression", () => {
     expect(result.sent).toBe(1200);
     expect(result.failed).toBe(300);
     expect(result.finalStatus).toBe("partially_failed"); // failed > 0 and sent > 0
+  });
+
+  it("orders the paged status query by a deterministic key before ranging", async () => {
+    const fake = fakeDb("queued", [{ status: "submitted" }]);
+    scopedClientForTenantMock.mockResolvedValue(fake.db);
+    const { finalizeBlast } = await import("./sms-blast-send");
+
+    await finalizeBlast("tenant-1", "blast-5", 1, 1, null);
+
+    expect(fake.orderCalls).toContainEqual({ col: "id", opts: { ascending: true } });
   });
 });

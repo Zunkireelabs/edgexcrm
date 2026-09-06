@@ -77,6 +77,7 @@ export async function reapBlast(blast: TerminalBlastRow): Promise<{ blastId: str
         .select("provider_credit")
         .eq("blast_id", blast.id)
         .in("status", ["submitted", "delivered"])
+        .order("id", { ascending: true })
         .range(offset, offset + limit - 1) as unknown as Promise<PageResult<CreditRow>>
     );
   } catch (chargedError) {

@@ -101,6 +101,7 @@ export async function finalizeBlast(
       .from("sms_messages")
       .select("status")
       .eq("blast_id", blastId)
+      .order("id", { ascending: true })
       .range(offset, offset + limit - 1) as unknown as Promise<PageResult<MessageStatusRow>>
   );
   const sent = rows.filter((r) => r.status === "submitted" || r.status === "delivered").length;

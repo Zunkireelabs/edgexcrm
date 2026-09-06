@@ -61,6 +61,7 @@ function fakeService(blasts: FakeBlast[], settledRefIds: string[]) {
 
 function fakeScoped(messages: FakeMessage[]) {
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
   const db = {
     from(table: string) {
       if (table === "sms_messages") {
@@ -68,9 +69,15 @@ function fakeScoped(messages: FakeMessage[]) {
           select: () => ({
             eq: (col: string, val: string) => ({
               in: () => ({
-                range: (from: number, to: number) => {
-                  const filtered = messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit }));
-                  return Promise.resolve({ data: filtered.slice(from, to + 1), error: null });
+                // offset paging needs a deterministic total order — paginate.ts ORDERING CONTRACT.
+                order: (ocol: string, opts: unknown) => {
+                  orderCalls.push({ col: ocol, opts });
+                  return {
+                    range: (from: number, to: number) => {
+                      const filtered = messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit }));
+                      return Promise.resolve({ data: filtered.slice(from, to + 1), error: null });
+                    },
+                  };
                 },
               }),
             }),
@@ -84,7 +91,7 @@ function fakeScoped(messages: FakeMessage[]) {
       return Promise.resolve({ data: { ok: true, diff: (args.p_reserved as number) - (args.p_actual as number) }, error: null });
     },
   };
-  return { db, rpcCalls };
+  return { db, rpcCalls, orderCalls };
 }
 
 describe("smsCreditReaper", () => {
@@ -171,5 +178,17 @@ describe("smsCreditReaper", () => {
 
     expect(outcome).toMatchObject({ blastId: "blast-big", actual: 1500 });
     expect(scoped.rpcCalls[0].args.p_actual).toBe(1500);
+  });
+
+  it("orders the paged charged-credits query by a deterministic key before ranging", async () => {
+    const blast: FakeBlast = { id: "blast-ord", tenant_id: "tenant-1", reserved_credits: 5, status: "sent" };
+    createServiceClientMock.mockResolvedValue(fakeService([blast], []));
+    const scoped = fakeScoped([{ blast_id: "blast-ord", status: "delivered", provider_credit: 1 }]);
+    scopedClientForTenantMock.mockResolvedValue(scoped.db);
+
+    const { reapBlast } = await import("./sms-credit-reaper");
+    await reapBlast(blast);
+
+    expect(scoped.orderCalls).toContainEqual({ col: "id", opts: { ascending: true } });
   });
 });

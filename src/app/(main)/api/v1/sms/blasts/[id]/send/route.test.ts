@@ -40,6 +40,7 @@ function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: str
   let insertCallCount = 0;
   let insertFailuresLeft = opts.failInsertOnce ? 1 : 0;
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  const orderCalls: { q: string; col: string; opts: unknown }[] = [];
   let reserveResult: ReserveResult = { ok: true, balance: 1000, reserved: 0 };
   const blastRow = { id: "blast-1", body: opts.body ?? "Hi {{first_name}}", audience_filter: null, status: opts.blastStatus ?? "draft" };
 
@@ -66,9 +67,14 @@ function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: str
             if (cols === "lead_id") {
               return {
                 eq: () => ({
-                  range: (from: number, to: number) => {
-                    const page = messages.slice(from, to + 1).map((m) => ({ lead_id: m.lead_id }));
-                    return Promise.resolve({ data: page, error: null });
+                  order: (col: string, opts: unknown) => {
+                    orderCalls.push({ q: "lead_id", col, opts });
+                    return {
+                      range: (from: number, to: number) => {
+                        const page = messages.slice(from, to + 1).map((m) => ({ lead_id: m.lead_id }));
+                        return Promise.resolve({ data: page, error: null });
+                      },
+                    };
                   },
                 }),
               };
@@ -76,9 +82,14 @@ function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: str
             return {
               eq: () => ({
                 eq: () => ({
-                  range: (from: number, to: number) => {
-                    const queued = messages.filter((m) => m.status === "queued").map((m) => ({ estimated_credits: m.estimated_credits }));
-                    return Promise.resolve({ data: queued.slice(from, to + 1), error: null });
+                  order: (col: string, opts: unknown) => {
+                    orderCalls.push({ q: "estimated_credits", col, opts });
+                    return {
+                      range: (from: number, to: number) => {
+                        const queued = messages.filter((m) => m.status === "queued").map((m) => ({ estimated_credits: m.estimated_credits }));
+                        return Promise.resolve({ data: queued.slice(from, to + 1), error: null });
+                      },
+                    };
                   },
                 }),
               }),
@@ -108,6 +119,7 @@ function fakeDb(opts: { blastStatus?: string; maxRecipients?: number; body?: str
     messages,
     insertCallCount: () => insertCallCount,
     rpcCalls,
+    orderCalls,
     setReserveResult: (r: ReserveResult) => {
       reserveResult = r;
     },
@@ -364,6 +376,22 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
     expect(res.status).toBe(200);
     expect(json.data.blast.estimated_credits).toBe(1501);
     expect(json.data.blast.reserved_credits).toBe(1501);
+  });
+
+  it("both paged queries apply a deterministic .order('id') before .range() — offset paging over an unordered result skips/dupes boundary rows", async () => {
+    const fake = fakeDb();
+    requireSmsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 1, sendable: [sendableRow("1")], suppressed: [], excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 } },
+    });
+    const { POST } = await import("./route");
+
+    const res = await POST(fakeReq(), { params });
+    expect(res.status).toBe(200);
+
+    expect(fake.orderCalls).toContainEqual({ q: "lead_id", col: "id", opts: { ascending: true } });
+    expect(fake.orderCalls).toContainEqual({ q: "estimated_credits", col: "id", opts: { ascending: true } });
   });
 
   it("a non-draft blast is rejected before any audience re-resolution", async () => {
