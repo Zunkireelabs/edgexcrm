@@ -176,13 +176,15 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- 8. Counselor user. Must come AFTER positions (7) — tenant_users.position_id FKs to positions(id).
---    Counselor-scoped API routes force assignedTo = auth.userId, so a counselor
---    with no assigned leads sees an empty list and every scoping test passes
---    vacuously. Step 9 gives them a real, bounded slice.
+--    The base role is `staff` (own-scope member tier — renamed from `counselor`
+--    in Phase B, migration 227); the "Counselor" job title lives on the position.
+--    Own-scope API routes force assignedTo = auth.userId, so a member with no
+--    assigned leads sees an empty list and every scoping test passes vacuously.
+--    Step 9 gives them a real, bounded slice.
 INSERT INTO public.tenant_users (tenant_id, user_id, role, position_id)
-VALUES ('$TENANT_ID', '$COUNSELOR_UID', 'counselor', '$COUNSELOR_POSITION_ID')
+VALUES ('$TENANT_ID', '$COUNSELOR_UID', 'staff', '$COUNSELOR_POSITION_ID')
 ON CONFLICT (tenant_id, user_id) DO UPDATE
-  SET role = 'counselor', position_id = EXCLUDED.position_id;
+  SET role = 'staff', position_id = EXCLUDED.position_id;
 
 -- 9. Assign a bounded slice to the counselor: ADM-009..ADM-014 are IN scope,
 --    everything else stays unassigned and is OUT of scope. Write-tool refusal
@@ -199,7 +201,7 @@ SQL
 echo ""
 echo "✅ Education tenant seeded."
 echo "   Owner:     $EMAIL / $PASSWORD"
-echo "   Counselor: $COUNSELOR_EMAIL / $PASSWORD  (role=counselor, leadScope=own)"
+echo "   Counselor: $COUNSELOR_EMAIL / $PASSWORD  (role=staff, position=counselor, leadScope=own)"
 echo "   Tenant:    Admizz Local (education_consultancy)"
 echo "   Leads:     30 across Pre-qualified / Qualified / Prospects / Applications"
 echo "              ADM-009..ADM-014 assigned to the counselor (in scope);"

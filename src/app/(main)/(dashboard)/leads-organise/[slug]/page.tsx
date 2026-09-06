@@ -170,7 +170,7 @@ export default async function LeadsOrganiseCockpitPage({
         memberNames={memberNames}
         stages={stages}
         formMap={formMap}
-        role={tenantData.role as "owner" | "admin" | "viewer" | "counselor" | "staff"}
+        role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
         tenantId={tenantData.tenant.id}
         teamMembers={teamMembers}
         entities={entities}

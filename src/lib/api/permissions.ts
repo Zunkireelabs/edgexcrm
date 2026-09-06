@@ -45,9 +45,10 @@ export function resolvePermissions(
   rawRole: UserRole,
   positionPermissions: PositionPermissions | null,
 ): ResolvedPermissions {
-  // Defensive: legacy `counselor` rows still exist between PR B1 and B2. Every DB
-  // read boundary normalizes, but normalize here too so a missed call site can't
-  // silently widen an own-scope member to the whole tenant.
+  // normalizeRole is now a validating identity boundary (the backfill in migration
+  // 227 removed every legacy `counselor` row). Kept as the single seam where the
+  // next role migration plugs in — and so a missed call site can't silently widen
+  // an own-scope member to the whole tenant.
   const role = normalizeRole(rawRole);
   const baseTier: ResolvedPermissions["baseTier"] =
     role === "owner" ? "owner" : role === "admin" ? "admin" : "member";
@@ -247,12 +248,14 @@ export function resolveEffectiveBranch(
 }
 
 /**
- * Legacy `counselor` role rows still exist until migration 227 backfills them.
- * Normalize at every DB read boundary so application code only ever sees `staff`.
- * Delete the counselor branch in PR B2, after the backfill.
+ * Validating boundary for the raw `tenant_users.role` / `invite_tokens.role`
+ * string read out of the DB. Migration 227 backfilled the last legacy `counselor`
+ * rows to `staff`, so there is no live mapping today — this is the identity/cast
+ * seam kept at every DB read boundary, the single place the next role migration
+ * plugs its mapping into.
  */
 export function normalizeRole(raw: string): UserRole {
-  return raw === "counselor" ? "staff" : (raw as UserRole);
+  return raw as UserRole;
 }
 
 // ── Role derivation (positions → legacy role) ──────────────────────

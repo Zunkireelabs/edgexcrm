@@ -400,7 +400,11 @@ export async function applyLeadPatch(
       : ((memberCheck as unknown as { positions: { slug: string } | null }).positions);
     const targetSlug = (posEmbed as { slug?: string } | null)?.slug ?? null;
     const targetRole = (memberCheck as unknown as { role?: string }).role ?? null;
-    const effectiveSlug = targetSlug ?? targetRole;
+    // Legacy fallback: before positions existed, a position-less own-scope member
+    // WAS the education "counselor" chain slot, keyed off role. Phase B renamed that
+    // role value `counselor` -> `staff`; map it back so the chain check keeps
+    // treating a position-less own-scope member exactly as it did pre-rename.
+    const effectiveSlug = targetSlug ?? (targetRole === "staff" ? "counselor" : targetRole);
     const targetBranchId = (memberCheck as unknown as { branch_id?: string | null }).branch_id ?? null;
 
     const isChainCaller =
@@ -429,8 +433,9 @@ export async function applyLeadPatch(
       const prevEmbed = Array.isArray((prevHolder as unknown as { positions: unknown } | null)?.positions)
         ? ((prevHolder as unknown as { positions: Array<{ slug: string }> }).positions[0] ?? null)
         : ((prevHolder as unknown as { positions: { slug: string } | null } | null)?.positions ?? null);
+      const prevRole = (prevHolder as unknown as { role?: string } | null)?.role ?? null;
       const prevSlug = (prevEmbed as { slug?: string } | null)?.slug
-        ?? (prevHolder as unknown as { role?: string } | null)?.role ?? null;
+        ?? (prevRole === "staff" ? "counselor" : prevRole);
       const prevBranchId = (prevHolder as unknown as { branch_id?: string | null } | null)?.branch_id ?? null;
       const okPeer =
         effectiveSlug != null &&

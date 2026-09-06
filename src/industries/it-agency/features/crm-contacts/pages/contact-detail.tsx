@@ -66,7 +66,7 @@ interface ContactWithJoins extends Contact {
 
 interface ContactDetailPageProps {
   tenantId: string;
-  role: "owner" | "admin" | "viewer" | "counselor" | "staff";
+  role: "owner" | "admin" | "viewer" | "staff";
   contactId: string;
 }
 
