@@ -1,39 +1,38 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { getEmailTransportMode, sendStubEmail } from "./transport";
 
-const ORIGINAL_ENV = { ...process.env };
-
 afterEach(() => {
-  process.env = { ...ORIGINAL_ENV };
+  vi.unstubAllEnvs();
+  delete process.env.EMAIL_TRANSPORT;
 });
 
 describe("getEmailTransportMode", () => {
   it("defaults to stub when NODE_ENV is not production and EMAIL_TRANSPORT is unset", () => {
-    process.env.NODE_ENV = "test";
+    vi.stubEnv("NODE_ENV", "test");
     delete process.env.EMAIL_TRANSPORT;
     expect(getEmailTransportMode()).toBe("stub");
   });
 
   it("defaults to resend when NODE_ENV is production and EMAIL_TRANSPORT is unset", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     delete process.env.EMAIL_TRANSPORT;
     expect(getEmailTransportMode()).toBe("resend");
   });
 
   it("an explicit EMAIL_TRANSPORT=resend reaches the provider even outside production", () => {
-    process.env.NODE_ENV = "development";
+    vi.stubEnv("NODE_ENV", "development");
     process.env.EMAIL_TRANSPORT = "resend";
     expect(getEmailTransportMode()).toBe("resend");
   });
 
   it("an explicit EMAIL_TRANSPORT=stub stays stubbed even in production — a deliberate dry run", () => {
-    process.env.NODE_ENV = "production";
+    vi.stubEnv("NODE_ENV", "production");
     process.env.EMAIL_TRANSPORT = "stub";
     expect(getEmailTransportMode()).toBe("stub");
   });
 
   it("an unrecognized EMAIL_TRANSPORT value is ignored, falling back to the NODE_ENV default — fail closed, not fail open", () => {
-    process.env.NODE_ENV = "test";
+    vi.stubEnv("NODE_ENV", "test");
     process.env.EMAIL_TRANSPORT = "typo-value";
     expect(getEmailTransportMode()).toBe("stub");
   });
