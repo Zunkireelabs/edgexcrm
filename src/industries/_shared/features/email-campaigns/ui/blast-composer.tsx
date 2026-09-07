@@ -30,7 +30,7 @@ import { PROSPECT_INDUSTRIES } from "@/industries/it-agency/leads/prospect-indus
 import { RecipientsPreviewDialog } from "./recipients-preview-dialog";
 import { SendConfirmDialog } from "./send-confirm-dialog";
 import { emailBlastSend, emailBlastGet, EmailBlastApiError } from "../lib/api-client";
-import type { EmailBlastAudienceCountResponse, EmailBlastRow, EmailBlastPreviewResponse } from "../lib/types";
+import type { EmailBlastAudienceCountResponse, EmailBlastRow, EmailBlastPreviewResponse, EmailBlastSettings } from "../lib/types";
 
 // Same fallback options as the SMS composer — no per-pipeline list on this
 // surface, and the same status/tag vocabulary leads-table.tsx offers.
@@ -190,6 +190,11 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
   const [assigneeFacet, setAssigneeFacet] = useState<{ name: string; count: number }[]>([]);
   const [roster, setRoster] = useState<{ user_id: string; name: string }[]>([]);
   const [leadLists, setLeadLists] = useState<{ id: string; name: string; slug: string; is_staging?: boolean; is_archive: boolean }[]>([]);
+  // Tenant's per-blast recipient cap (F4, docs/BLAST-F3-F4-FIX-BRIEF.md) —
+  // mirrors the SMS composer's smsSettings fetch exactly, so the audience
+  // count line can warn BEFORE Review & send, not leave the server's 422
+  // MAX_RECIPIENTS_EXCEEDED as the only signal.
+  const [emailSettings, setEmailSettings] = useState<EmailBlastSettings | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -219,6 +224,12 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
     emailBlastGet<{ user_id: string; name: string }[]>("/api/v1/team?minimal=1")
       .then(({ data }) => {
         if (!cancelled) setRoster(data);
+      })
+      .catch(() => void 0);
+
+    emailBlastGet<EmailBlastSettings>("/api/v1/email-blasts/settings")
+      .then(({ data }) => {
+        if (!cancelled) setEmailSettings(data);
       })
       .catch(() => void 0);
 
@@ -315,6 +326,14 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
     }
   }
 
+  // Null max_recipients_per_blast (settings not loaded yet) never blocks
+  // sending — early-warning UX layer on top of the server's real enforcement
+  // (send/route.ts's MAX_RECIPIENTS_EXCEEDED), not a replacement for it, so a
+  // slow/failed settings fetch fails open here and is still caught server-side.
+  const recipientCap = emailSettings?.max_recipients_per_blast ?? null;
+  const overCapBy = recipientCap !== null && audienceCount ? audienceCount.sendable - recipientCap : 0;
+  const isOverCap = overCapBy > 0;
+
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       <div className="flex flex-col gap-1.5">
@@ -380,13 +399,19 @@ export function BlastComposer({ blast, onSent, canSendEmail, isAdmin }: BlastCom
                 Preview recipients
               </button>
             )}
+            {isOverCap && (
+              <p className="text-xs font-medium text-destructive">
+                Exceeds this tenant&apos;s {recipientCap}-recipient cap by {overCapBy} — narrow your filter to send, or ask an
+                owner/admin to raise the cap in Settings → Communications.
+              </p>
+            )}
           </div>
         ) : null}
       </div>
 
       {canSendEmail && (
         <div className="flex items-center gap-2">
-          <Button onClick={openReviewAndSend} disabled={!subject.trim() || !body.trim() || previewLoading}>
+          <Button onClick={openReviewAndSend} disabled={!subject.trim() || !body.trim() || previewLoading || isOverCap}>
             {previewLoading ? "Preparing…" : "Review & send"}
           </Button>
         </div>
