@@ -12,9 +12,11 @@ interface TaskListProps {
   currentUserId: string;
   context: TaskComposerContext;
   emptyLabel?: string;
+  /** Gates whether a project-linked task's chip links to the cockpit — see TaskContextChip. Resolve via getFeatureAccess at the page shell; never re-derive client-side. */
+  projectBoardEnabled?: boolean;
 }
 
-export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No tasks yet." }: TaskListProps) {
+export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No tasks yet.", projectBoardEnabled = false }: TaskListProps) {
   const [tasks, setTasks] = useState<TaskRowItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -77,6 +79,7 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
               task={task}
               today={today}
               showAssignee
+              projectBoardEnabled={projectBoardEnabled}
               onComplete={handleComplete}
               onDelete={handleDelete}
             />
@@ -102,6 +105,7 @@ export function TaskList({ fetchUrl, currentUserId, context, emptyLabel = "No ta
                   today={today}
                   completed
                   showAssignee
+                  projectBoardEnabled={projectBoardEnabled}
                   onComplete={handleComplete}
                   onDelete={handleDelete}
                 />

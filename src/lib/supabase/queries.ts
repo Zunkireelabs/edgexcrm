@@ -967,6 +967,25 @@ export async function getMyTasks(tenantId: string, userId: string): Promise<MyTa
   };
 }
 
+/**
+ * task_id -> active_timer id, for the caller's own running timers only.
+ * Used to seed Home's per-row timer buttons with the right initial state
+ * (e.g. a timer left running from a previous session) without a client
+ * round-trip. Server-rendered, so this only ever runs when the page has
+ * already gated on FEATURES.TIME_TRACKING — no request for tenants without it.
+ */
+export async function getMyActiveTimers(tenantId: string, userId: string): Promise<Record<string, string>> {
+  const supabase = await createServiceClient();
+  const { data, error } = await supabase
+    .from("active_timers")
+    .select("id, task_id")
+    .eq("tenant_id", tenantId)
+    .eq("user_id", userId);
+
+  if (error || !data) return {};
+  return Object.fromEntries(data.map((t) => [t.task_id as string, t.id as string]));
+}
+
 export interface EmailSnapshotItem {
   id: string;
   from_email: string;

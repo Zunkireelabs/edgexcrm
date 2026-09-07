@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { GreetingHeader } from "./greeting-header";
 import { ScheduleCard } from "./schedule-card";
 import { ScheduleTabContent } from "./schedule-tab-content";
-import { TasksTabContent } from "./tasks-tab-content";
+import { TasksTabContent, type FilterKey } from "./tasks-tab-content";
 import { TasksCard } from "./tasks-card";
 import { MyLeadsCard } from "./my-leads-card";
 import { InboxSnapshotCard } from "./inbox-snapshot-card";
@@ -16,7 +16,9 @@ import { LayoutGrid, Grip } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { toLocalDateString } from "@/lib/date";
+import { addDays } from "@/lib/hr/dates";
+import { groupTasksByDue } from "@/lib/home/task-grouping";
+import { TIMERS_CHANGED_EVENT } from "@/lib/timers/timer-events";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem, LeaveHomeSummary } from "@/lib/supabase/queries";
 import type { HomeTip } from "@/lib/home/tips";
 import type { Lead, TaskStatus } from "@/types/database";
@@ -46,7 +48,12 @@ interface HomeContentProps {
   recentActivity: RecentActivityItem[];
   inboxSnapshot: InboxSnapshot;
   isEducation: boolean;
-  isItAgency: boolean;
+  /** Tenant-local "today" as YYYY-MM-DD — see todayInTz in @/lib/hr/dates. */
+  todayISO: string;
+  projectBoardEnabled: boolean;
+  timeTrackingEnabled: boolean;
+  /** task_id -> active_timer id, for tasks with a timer already running. */
+  runningTimersByTask: Record<string, string>;
   applicationTrackingEnabled: boolean;
   currentTenantUserId: string | null;
   leaveSummary: LeaveHomeSummary;
@@ -70,7 +77,10 @@ export function HomeContent({
   myLeads,
   recentActivity,
   inboxSnapshot,
-  isItAgency,
+  todayISO,
+  projectBoardEnabled,
+  timeTrackingEnabled,
+  runningTimersByTask,
   applicationTrackingEnabled,
   currentTenantUserId,
   tip,
@@ -79,6 +89,7 @@ export function HomeContent({
   const [openTasks, setOpenTasks] = useState<PersonalTask[]>(tasks.open);
   const [doneTasks, setDoneTasks] = useState<PersonalTask[]>(tasks.done);
   const [activeTab, setActiveTab] = useState("overview");
+  const [taskFilter, setTaskFilter] = useState<FilterKey>("all");
   const [activityFilter, setActivityFilter] = useState("all");
 
   const handleComplete = useCallback(async (id: string) => {
@@ -115,10 +126,34 @@ export function HomeContent({
     router.refresh();
   }, [router, userId]);
 
-  const today = toLocalDateString(new Date());
+  // Home has two independent timer controls on screen at once (a task row's
+  // TaskTimerButton and the shell's RunningTimerChip) — either can start or
+  // stop a timer the other doesn't know about (e.g. stop from the header chip
+  // while a row still shows its own "running" state). One listener here
+  // refreshes the server data so runningTimersByTask re-seeds and every row
+  // corrects itself, instead of each row polling or listening individually.
+  useEffect(() => {
+    function onTimersChanged() {
+      router.refresh();
+    }
+    window.addEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
+    return () => window.removeEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
+  }, [router]);
+
   const now = new Date().toISOString();
   const meetingsCount = schedule.filter((a) => a.scheduled_at >= now).length;
-  const tasksDueTodayCount = openTasks.filter((t) => t.due_date === today).length;
+  const tomorrowISO = useMemo(() => addDays(todayISO, 1), [todayISO]);
+  const { overdue: overdueTasks, dueToday } = useMemo(
+    () => groupTasksByDue(openTasks, todayISO, tomorrowISO),
+    [openTasks, todayISO, tomorrowISO],
+  );
+  const tasksDueTodayCount = dueToday.length;
+  const overdueCount = overdueTasks.length;
+
+  const handleOverdueClick = useCallback(() => {
+    setActiveTab("tasks");
+    setTaskFilter("overdue");
+  }, []);
 
   const filteredActivity = useMemo(
     () => recentActivity.filter((a) => ACTIVITY_FILTERS.find((f) => f.key === activityFilter)?.match(a.entity_type) ?? true),
@@ -148,7 +183,7 @@ export function HomeContent({
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6 mt-4">
-            {isItAgency && (
+            {timeTrackingEnabled && (
               <div>
                 <h2 className="text-sm font-semibold text-muted-foreground mb-2">My Work</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -165,6 +200,10 @@ export function HomeContent({
                   initialOpen={openTasks}
                   initialDone={doneTasks}
                   currentUserId={userId}
+                  today={todayISO}
+                  projectBoardEnabled={projectBoardEnabled}
+                  timeTrackingEnabled={timeTrackingEnabled}
+                  runningTimersByTask={runningTimersByTask}
                   onComplete={handleComplete}
                   onDelete={handleDelete}
                   onCreated={handleCreated}
@@ -195,6 +234,12 @@ export function HomeContent({
               initialOpen={openTasks}
               initialDone={doneTasks}
               currentUserId={userId}
+              today={todayISO}
+              projectBoardEnabled={projectBoardEnabled}
+              timeTrackingEnabled={timeTrackingEnabled}
+              runningTimersByTask={runningTimersByTask}
+              filter={taskFilter}
+              onFilterChange={setTaskFilter}
               onComplete={handleComplete}
               onDelete={handleDelete}
               onCreated={handleCreated}
@@ -225,11 +270,13 @@ export function HomeContent({
         className="lg:w-[300px]"
         meetingsCount={meetingsCount}
         tasksDueTodayCount={tasksDueTodayCount}
+        overdueCount={overdueCount}
         activitiesCount={recentActivity.length}
         unreadCount={inboxSnapshot.unreadCount}
         applicationTrackingEnabled={applicationTrackingEnabled}
         tip={tip}
         onNewTaskClick={() => setActiveTab("tasks")}
+        onOverdueClick={handleOverdueClick}
       />
     </div>
   );

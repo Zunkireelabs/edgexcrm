@@ -66,6 +66,7 @@ import { useGlobalSearch } from "@/contexts/global-search-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
+import { RunningTimerChip } from "./running-timer-chip";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
@@ -295,6 +296,8 @@ interface DashboardShellProps {
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
   aiAssistantEnabled?: boolean;
+  /** FEATURES.TIME_TRACKING for the tenant — gates the global running-timer chip. See running-timer-chip.tsx. */
+  timeTrackingEnabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -315,6 +318,7 @@ export function DashboardShell({
   stagingLists = [],
   archiveLists = [],
   aiAssistantEnabled: aiAssistantEnabledProp = false,
+  timeTrackingEnabled = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -1091,6 +1095,10 @@ export function DashboardShell({
                   <span className="hidden sm:inline">Ask Orca</span>
                 </button>
               )}
+
+              {/* Running-timer chip — hidden entirely (not just its requests 404) when the
+                  tenant doesn't have time-tracking. See running-timer-chip.tsx. */}
+              {timeTrackingEnabled && <RunningTimerChip />}
 
               {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
               <BranchSwitcher

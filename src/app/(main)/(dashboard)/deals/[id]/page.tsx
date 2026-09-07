@@ -14,12 +14,14 @@ export default async function DealDetailRoute({ params }: Props) {
   const tenantData = await getCurrentUserTenant();
   if (!tenantData) redirect("/login");
   if (!getFeatureAccess(tenantData.tenant.industry_id, FEATURES.DEALS)) notFound();
+  const projectBoardEnabled = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD);
 
   return (
     <DealDetailPage
       dealId={id}
       role={tenantData.role as UserRole}
       currentUserId={tenantData.userId}
+      projectBoardEnabled={projectBoardEnabled}
     />
   );
 }
