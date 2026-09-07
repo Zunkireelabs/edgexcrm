@@ -180,22 +180,27 @@ jobs:
       # pipeline consistent by construction. supabase/seed.sql creates both.
       # Self-verifying: a 0-row insert raises instead of leaving the suite to
       # fail later with a misleading "database unreachable".
-      - name: Seed one lead fixture (the email send suite probes public.leads)
+      - name: Seed lead fixtures (the email send suite probes public.leads)
         run: |
           psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
           DO $$
           DECLARE n int;
           BEGIN
+            -- FIVE leads, not one: send.test.ts §5.1 selects .limit(4) and asserts
+            -- it got >= 4 distinct lead ids, because the chunked-materialization
+            -- case it pins down needs one colliding (source_id, lead_id) pair and
+            -- at least three non-colliding ones in the same statement.
             INSERT INTO public.leads (tenant_id, pipeline_id, first_name, last_name, email)
-            SELECT p.tenant_id, p.id, 'CI', 'Fixture', 'ci-fixture@zunkiree.invalid'
+            SELECT p.tenant_id, p.id, 'CI', 'Fixture ' || g,
+                   'ci-fixture-' || g || '@zunkiree.invalid'
             FROM public.pipelines p
-            ORDER BY p.created_at
-            LIMIT 1;
+            CROSS JOIN generate_series(1, 5) AS g
+            WHERE p.id = (SELECT id FROM public.pipelines ORDER BY created_at LIMIT 1);
             GET DIAGNOSTICS n = ROW_COUNT;
-            IF n <> 1 THEN
-              RAISE EXCEPTION 'lead fixture not created (% rows) — is supabase/seed.sql still creating a tenant + pipeline?', n;
+            IF n <> 5 THEN
+              RAISE EXCEPTION 'lead fixtures not created (% of 5) — is supabase/seed.sql still creating a tenant + pipeline?', n;
             END IF;
-            RAISE NOTICE 'lead fixture created';
+            RAISE NOTICE 'lead fixtures created: %', n;
           END $$;
           SQL
 
