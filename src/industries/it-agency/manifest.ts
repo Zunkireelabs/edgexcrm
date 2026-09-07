@@ -14,6 +14,12 @@ import { emailMeta } from "../_shared/features/email/meta";
 import { outreachMeta } from "../_shared/features/outreach/meta";
 import { aiConfig } from "./ai/agent";
 
+// Re-exported for discoverability — the sidebar's declarative layout lives in
+// nav-layout.ts (kept separate since manifest.ts already crosses the Server
+// → Client Component boundary), but shell.tsx just imports it directly.
+export { IT_AGENCY_NAV_LAYOUT } from "./nav-layout";
+export type { ItAgencyNavEntryKey } from "./nav-layout";
+
 export const manifest: IndustryManifest = {
   id: INDUSTRIES.IT_AGENCY,
   features: [

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, Fragment } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -66,6 +66,7 @@ import { useGlobalSearch } from "@/contexts/global-search-context";
 import { AIAssistantPanel } from "./ai-assistant-panel";
 import { NotificationsDropdown } from "./notifications-dropdown";
 import { BranchSwitcher } from "./branch-switcher";
+import { RunningTimerChip } from "./running-timer-chip";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import { Badge } from "@/components/ui/badge";
 import type { SidebarEntry, SidebarGroup, SidebarItem } from "@/industries/_types";
@@ -80,6 +81,8 @@ import { LeadsOrganiseNavGroup } from "@/components/dashboard/leads-organise-nav
 import { ArchiveNavLinks } from "@/components/dashboard/archive-nav-links";
 import { ReviewNavBadge } from "@/components/dashboard/orca/review-nav-badge";
 import { requireOrcaAccess } from "@/lib/ai/orca-access";
+import { IT_AGENCY_NAV_LAYOUT, type ItAgencyNavEntryKey } from "@/industries/it-agency/nav-layout";
+import { resolveNavSections } from "@/industries/_nav-sections";
 
 // Universal nav items — every tenant sees these regardless of industry.
 // Industry-scoped items (e.g. Check-In, Forms) come from the tenant's
@@ -295,6 +298,8 @@ interface DashboardShellProps {
   archiveLists?: Pick<LeadList, "id" | "name" | "slug">[];
   /** Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts. */
   aiAssistantEnabled?: boolean;
+  /** FEATURES.TIME_TRACKING for the tenant — gates the global running-timer chip. See running-timer-chip.tsx. */
+  timeTrackingEnabled?: boolean;
   children: React.ReactNode;
 }
 
@@ -315,6 +320,7 @@ export function DashboardShell({
   stagingLists = [],
   archiveLists = [],
   aiAssistantEnabled: aiAssistantEnabledProp = false,
+  timeTrackingEnabled = false,
   children,
 }: DashboardShellProps) {
   const pathname = usePathname();
@@ -681,159 +687,160 @@ export function DashboardShell({
               industrySidebarItems.find(
                 (e): e is SidebarItem => !("children" in e) && (e as SidebarItem).href === href
               );
-            return (
-              <>
-                {/* Home — standalone, no section header */}
-                {navAllowed("/home") && renderNavItem({ href: "/home", label: "Home", icon: House })}
 
-                {/* Intelligence */}
-                <NavSectionHeader label="Intelligence" collapsed={sidebarCollapsed} />
-                {navAllowed("/dashboard") && renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard })}
-                {navAllowed("/knowledge-bases") && renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library })}
+            function renderLeadsOrganiseSlot(): React.ReactNode {
+              if (!(stagingLists.length > 0 && navAllowed("/leads-organise"))) return null;
+              return (
+                <Suspense fallback={
+                  <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
+                    <span className="w-[18px] h-[18px] shrink-0" />
+                    Leads Organise
+                  </div>
+                }>
+                  <LeadsOrganiseNavGroup
+                    lists={stagingLists}
+                    onNavigate={() => setMobileOpen(false)}
+                    collapsed={sidebarCollapsed}
+                  />
+                </Suspense>
+              );
+            }
 
-                {/* Sales */}
-                <NavSectionHeader label="Sales" collapsed={sidebarCollapsed} />
-                {stagingLists.length > 0 && navAllowed("/leads-organise") && (
-                  <Suspense key="leads-organise-nav" fallback={
+            function renderLeadsFunnelsSlot(): React.ReactNode {
+              if (!navAllowed("/leads")) return null;
+              const processingLists = leadLists
+                .filter((l) => l.funnel_key === "lead_processing")
+                .sort((a, b) => a.sort_order - b.sort_order);
+              const salesLists = leadLists
+                .filter((l) => l.funnel_key === "sales_leads")
+                .sort((a, b) => a.sort_order - b.sort_order);
+              const ungroupedLists = leadLists.filter((l) => l.funnel_key == null);
+              const isAdminUser = role === "owner" || role === "admin";
+
+              if (processingLists.length === 0 && salesLists.length === 0) {
+                return ungroupedLists.length > 0 ? (
+                  <Suspense fallback={
                     <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
-                      <span className="w-[18px] h-[18px] shrink-0" />
-                      Leads Organise
+                      <Users className="w-[18px] h-[18px] shrink-0" />
+                      All Leads
                     </div>
                   }>
-                    <LeadsOrganiseNavGroup
-                      lists={stagingLists}
+                    <LeadListsNavGroup
+                      lists={ungroupedLists}
                       onNavigate={() => setMobileOpen(false)}
                       collapsed={sidebarCollapsed}
+                      isAdmin={isAdminUser}
                     />
                   </Suspense>
-                )}
-                {navAllowed("/leads") && (() => {
-                  // Funnel grouping is it_agency-only — non-it_agency tenants always fall
-                  // through to the ungrouped/All Leads path below, even if a list somehow
-                  // carries a funnel_key (belt-and-suspenders; the write path is gated too).
-                  const processingLists = isItAgency
-                    ? leadLists
-                        .filter((l) => l.funnel_key === "lead_processing")
-                        .sort((a, b) => a.sort_order - b.sort_order)
-                    : [];
-                  const salesLists = isItAgency
-                    ? leadLists
-                        .filter((l) => l.funnel_key === "sales_leads")
-                        .sort((a, b) => a.sort_order - b.sort_order)
-                    : [];
-                  const ungroupedLists = isItAgency
-                    ? leadLists.filter((l) => l.funnel_key == null)
-                    : leadLists;
-                  const isAdminUser = role === "owner" || role === "admin";
+                ) : (
+                  renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
+                );
+              }
 
-                  if (processingLists.length === 0 && salesLists.length === 0) {
-                    return ungroupedLists.length > 0 ? (
-                      <Suspense key="lead-lists-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
-                          <Users className="w-[18px] h-[18px] shrink-0" />
-                          All Leads
-                        </div>
-                      }>
-                        <LeadListsNavGroup
-                          lists={ungroupedLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          collapsed={sidebarCollapsed}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                    ) : (
-                      renderNavItem({ href: "/leads", label: "All Leads", icon: Users, badge: counts.unread_leads || undefined })
-                    );
-                  }
+              return (
+                <>
+                  <Suspense key="lead-processing-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
+                      <Filter className="w-[18px] h-[18px] shrink-0" />
+                      Lead Processing
+                    </div>
+                  }>
+                    <LeadFunnelNavGroup
+                      funnelKey="lead_processing"
+                      label="Lead Processing"
+                      icon={Filter}
+                      lists={processingLists}
+                      onNavigate={() => setMobileOpen(false)}
+                      collapsed={sidebarCollapsed}
+                      isAdmin={isAdminUser}
+                    />
+                  </Suspense>
+                  <Suspense key="sales-leads-nav" fallback={
+                    <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
+                      <Target className="w-[18px] h-[18px] shrink-0" />
+                      Sales Leads
+                    </div>
+                  }>
+                    <LeadFunnelNavGroup
+                      funnelKey="sales_leads"
+                      label="Sales Leads"
+                      icon={Target}
+                      lists={salesLists}
+                      onNavigate={() => setMobileOpen(false)}
+                      collapsed={sidebarCollapsed}
+                      isAdmin={isAdminUser}
+                    />
+                  </Suspense>
+                  {ungroupedLists.length > 0 && (
+                    <Suspense key="lead-lists-nav" fallback={
+                      <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
+                        <Users className="w-[18px] h-[18px] shrink-0" />
+                        All Leads
+                      </div>
+                    }>
+                      <LeadListsNavGroup
+                        lists={ungroupedLists}
+                        onNavigate={() => setMobileOpen(false)}
+                        collapsed={sidebarCollapsed}
+                        isAdmin={isAdminUser}
+                      />
+                    </Suspense>
+                  )}
+                </>
+              );
+            }
 
-                  return (
-                    <>
-                      <Suspense key="lead-processing-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
-                          <Filter className="w-[18px] h-[18px] shrink-0" />
-                          Lead Processing
-                        </div>
-                      }>
-                        <LeadFunnelNavGroup
-                          funnelKey="lead_processing"
-                          label="Lead Processing"
-                          icon={Filter}
-                          lists={processingLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          collapsed={sidebarCollapsed}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                      <Suspense key="sales-leads-nav" fallback={
-                        <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
-                          <Target className="w-[18px] h-[18px] shrink-0" />
-                          Sales Leads
-                        </div>
-                      }>
-                        <LeadFunnelNavGroup
-                          funnelKey="sales_leads"
-                          label="Sales Leads"
-                          icon={Target}
-                          lists={salesLists}
-                          onNavigate={() => setMobileOpen(false)}
-                          collapsed={sidebarCollapsed}
-                          isAdmin={isAdminUser}
-                        />
-                      </Suspense>
-                      {ungroupedLists.length > 0 && (
-                        <Suspense key="lead-lists-nav" fallback={
-                          <div className="w-full flex items-center gap-3 px-3 py-1.5 rounded-[8px] text-[13px] leading-5 font-medium text-[#666666]">
-                            <Users className="w-[18px] h-[18px] shrink-0" />
-                            All Leads
-                          </div>
-                        }>
-                          <LeadListsNavGroup
-                            lists={ungroupedLists}
-                            onNavigate={() => setMobileOpen(false)}
-                            collapsed={sidebarCollapsed}
-                            isAdmin={isAdminUser}
-                          />
-                        </Suspense>
-                      )}
-                    </>
-                  );
-                })()}
-                {itItem("/outreach") && renderIndustryEntry(itItem("/outreach")!)}
-                {archiveLists.length > 0 && (
-                  <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} collapsed={sidebarCollapsed} />
-                )}
-                {navAllowed("/pipeline") && renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban })}
+            function renderArchiveListsSlot(): React.ReactNode {
+              if (archiveLists.length === 0) return null;
+              return <ArchiveNavLinks lists={archiveLists} onNavigate={() => setMobileOpen(false)} collapsed={sidebarCollapsed} />;
+            }
 
-                {/* Revenue */}
-                <NavSectionHeader label="Revenue" collapsed={sidebarCollapsed} />
-                {itItem("/proposals") && renderIndustryEntry(itItem("/proposals")!)}
-                {itItem("/deals") && renderIndustryEntry(itItem("/deals")!)}
-                {itItem("/services") && renderIndustryEntry(itItem("/services")!)}
+            // Resolves one entry key to its rendered node (or null — a
+            // section whose entries all resolve to null renders no header,
+            // see the map below).
+            function resolveEntry(key: ItAgencyNavEntryKey): React.ReactNode {
+              if (key.startsWith("universal:")) {
+                switch (key) {
+                  case "universal:/home":
+                    return navAllowed("/home") ? renderNavItem({ href: "/home", label: "Home", icon: House }) : null;
+                  case "universal:/dashboard":
+                    return navAllowed("/dashboard") ? renderNavItem({ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }) : null;
+                  case "universal:/knowledge-bases":
+                    return navAllowed("/knowledge-bases") ? renderNavItem({ href: "/knowledge-bases", label: "Company Knowledge", icon: Library }) : null;
+                  case "universal:/pipeline":
+                    return navAllowed("/pipeline") ? renderNavItem({ href: "/pipeline", label: "Pipeline", icon: Kanban }) : null;
+                  case "universal:/inbox":
+                    return navAllowed("/inbox") ? renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare }) : null;
+                  case "universal:/team":
+                    return navAllowed("/team") ? renderNavItem({ href: "/team", label: "Org Structure", icon: Network }) : null;
+                  case "universal:/people":
+                    return navAllowed("/people") ? renderNavItem({ href: "/people", label: "People", icon: UsersRound }) : null;
+                  case "universal:/leave":
+                    return navAllowed("/leave") ? renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock }) : null;
+                  case "universal:/attendance":
+                    return navAllowed("/attendance") ? renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck }) : null;
+                  default:
+                    return null;
+                }
+              }
+              if (key === "slot:leads-organise") return renderLeadsOrganiseSlot();
+              if (key === "slot:leads-funnels") return renderLeadsFunnelsSlot();
+              if (key === "slot:archive-lists") return renderArchiveListsSlot();
+              // Remaining keys are industry hrefs resolved from the manifest.
+              const entry = itItem(key);
+              return entry ? renderIndustryEntry(entry) : null;
+            }
 
-                {/* Clients */}
-                <NavSectionHeader label="Clients" collapsed={sidebarCollapsed} />
-                {itItem("/accounts") && renderIndustryEntry(itItem("/accounts")!)}
-                {itItem("/contacts") && renderIndustryEntry(itItem("/contacts")!)}
-
-                {/* Delivery */}
-                <NavSectionHeader label="Delivery" collapsed={sidebarCollapsed} />
-                {itItem("/projects") && renderIndustryEntry(itItem("/projects")!)}
-                {itItem("/tasks") && renderIndustryEntry(itItem("/tasks")!)}
-                {itItem("/time-tracking") && renderIndustryEntry(itItem("/time-tracking")!)}
-                {itItem("/approvals") && renderIndustryEntry(itItem("/approvals")!)}
-
-                {/* Communication */}
-                <NavSectionHeader label="Communication" collapsed={sidebarCollapsed} />
-                {navAllowed("/inbox") && renderNavItem({ href: "/inbox", label: "Inbox", icon: MessageSquare })}
-
-                {/* Organization */}
-                <NavSectionHeader label="Organization" collapsed={sidebarCollapsed} />
-                {navAllowed("/team") && renderNavItem({ href: "/team", label: "Org Structure", icon: Network })}
-                {navAllowed("/people") && renderNavItem({ href: "/people", label: "People", icon: UsersRound })}
-                {navAllowed("/leave") && renderNavItem({ href: "/leave", label: "Leave", icon: CalendarClock })}
-                {navAllowed("/attendance") && renderNavItem({ href: "/attendance", label: "Attendance", icon: CalendarCheck })}
-                {itItem("/resourcing") && renderIndustryEntry(itItem("/resourcing")!)}
-                {itItem("/resourcing/utilization") && renderIndustryEntry(itItem("/resourcing/utilization")!)}
+            return (
+              <>
+                {resolveNavSections(IT_AGENCY_NAV_LAYOUT, resolveEntry).map((section) => (
+                  <Fragment key={section.id}>
+                    {section.label && <NavSectionHeader label={section.label} collapsed={sidebarCollapsed} />}
+                    {section.items.map(({ key, node }) => (
+                      <Fragment key={key}>{node}</Fragment>
+                    ))}
+                  </Fragment>
+                ))}
               </>
             );
           })() : isRealEstate ? (() => {
@@ -1091,6 +1098,10 @@ export function DashboardShell({
                   <span className="hidden sm:inline">Ask Orca</span>
                 </button>
               )}
+
+              {/* Running-timer chip — hidden entirely (not just its requests 404) when the
+                  tenant doesn't have time-tracking. See running-timer-chip.tsx. */}
+              {timeTrackingEnabled && <RunningTimerChip />}
 
               {/* Branch Switcher — Enterprise only; admin gets dropdown, branch-scoped gets static badge */}
               <BranchSwitcher

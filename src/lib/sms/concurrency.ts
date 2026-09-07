@@ -4,6 +4,14 @@
 // recipients during Phase 3B testing with `TypeError: fetch failed`, and
 // Admizz's real audience is ~16,000. Any per-recipient DB fan-out on the send
 // path must go through this instead of a raw Promise.all(items.map(...)).
+//
+// BLAST-F1-F2-FIX-BRIEF.md §F2: the SMS blast send route's own compose loop
+// no longer uses this — composeRecipientMessage is now pure/synchronous
+// (opt-out tokens are bulk-minted up front via ensureOptOutTokens,
+// optout.ts), so there is no per-row DB fan-out left to bound there. This
+// helper stays in place for its other caller, the email outbound send path
+// (src/lib/email/outbound/send.ts), which still fans out a per-message
+// Resend call.
 
 export async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
   if (items.length === 0) return [];

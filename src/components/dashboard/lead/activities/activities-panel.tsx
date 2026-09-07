@@ -72,6 +72,8 @@ interface ActivitiesPanelProps {
   threads: EmailThread[];
   setThreads: React.Dispatch<React.SetStateAction<EmailThread[]>>;
   threadsLoading: boolean;
+  /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
+  projectBoardEnabled?: boolean;
 }
 
 const SUB_TABS: { id: SubTab; label: string; icon: React.ReactNode }[] = [
@@ -109,6 +111,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
   threads,
   setThreads,
   threadsLoading,
+  projectBoardEnabled,
 }: ActivitiesPanelProps, ref) {
   const [activeTab, setActiveTab] = useState<SubTab>("all");
   const notesTabRef = useRef<NotesTabRef>(null);
@@ -448,6 +451,7 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                 currentUserId={currentUserId}
                 context={{ leadId }}
                 emptyLabel="No tasks assigned for this lead yet."
+                projectBoardEnabled={projectBoardEnabled}
               />
             </CardContent>
           </Card>

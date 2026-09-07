@@ -87,6 +87,20 @@ export interface SidebarGroup {
 export type SidebarEntry = SidebarItem | SidebarGroup;
 
 /**
+ * One flat section of a sidebar: a non-collapsible header followed by its
+ * entries at the same indent level. Distinct from SidebarGroup, which renders
+ * a collapsible parent with indented children.
+ */
+export interface NavSection {
+  /** Stable id — React key, and reserved for future collapse persistence. */
+  id: string;
+  /** Header text. Omit for a headerless section (e.g. the standalone Home row). */
+  label?: string;
+  /** Ordered entry keys — see NavEntryKey. */
+  entries: readonly string[];
+}
+
+/**
  * Per-industry feature registration. Carries optional config that the
  * shared feature implementation reads to behave per-industry.
  */

@@ -116,6 +116,113 @@ jobs:
 
       - run: npm run test
 
+  # Runs the suites that need a real Postgres + PostgREST, which `Test` above
+  # cannot: it has no database, so ~26 tests covering SMS credit idempotency,
+  # suppression lists and opt-out called ctx.skip() on EVERY run while the suite
+  # still reported green. Review, not CI, caught the two HIGH credit-RPC bugs
+  # those tests pin down. Separate job (not folded into `Test`) so the fast
+  # feedback loop stays fast — the two run in parallel, so there is no
+  # wall-clock cost — and so a failure here is attributable at a glance.
+  #
+  # The sequence mirrors the documented local setup exactly; do not shortcut it.
+  # `[db.migrations] enabled = false` in supabase/config.toml means `supabase
+  # start` applies NO migrations — the schema comes from the stage-derived
+  # baseline loaded by [db.seed], and migrate-apply.sh then replays 128 -> HEAD
+  # on top of it. That replay only became possible on 2026-09-07, when migs 180
+  # and 223 stopped hard-seeding tenant-specific data (#508); before that the
+  # chain could not run on a fresh database at all, which is precisely why this
+  # job did not exist.
+  test-db:
+    name: Test (database-backed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      # `supabase start` on a fresh runner already initialises the DB, but reset is
+      # explicit and deterministic: it re-applies the [db.seed] sql_paths
+      # (baseline/schema.sql -> ledger.sql -> reference.sql -> seed.sql).
+      # Schema-only: those four files carry 13 INSERTs total (reference lookups,
+      # the ledger, one synthetic tenant) and zero rows of customer data.
+      - name: Load baseline schema + ledger (seed paths in supabase/config.toml)
+        run: supabase db reset
+
+      - name: Replay migrations 128 -> HEAD onto the baseline
+        run: ./scripts/migrate-apply.sh local
+
+      - name: Seed local tenant + admin user
+        run: ./scripts/local-db-setup.sh
+
+      # email/outbound/send.test.ts probes `public.leads` and needs one row to
+      # exist; the other five probe `tenants`, which the seed creates. The
+      # baseline seeds ZERO leads, so that suite has only ever run on developer
+      # machines that happened to have leads left over from other work — it is
+      # non-deterministic by construction, and nobody noticed because it skipped
+      # silently. Fixture here keeps CI honest; the suite should really create
+      # its own (logged as a follow-up rather than widened into this PR).
+      #
+      # Inserted through `pipelines` rather than `tenants`: leads.pipeline_id is
+      # NOT NULL (added after the baseline was cut, so it is not visible in
+      # baseline/schema.sql's column list), and joining this way keeps tenant and
+      # pipeline consistent by construction. supabase/seed.sql creates both.
+      # Self-verifying: a 0-row insert raises instead of leaving the suite to
+      # fail later with a misleading "database unreachable".
+      - name: Seed lead fixtures (the email send suite probes public.leads)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE n int;
+          BEGIN
+            -- FIVE leads, not one: send.test.ts §5.1 selects .limit(4) and asserts
+            -- it got >= 4 distinct lead ids, because the chunked-materialization
+            -- case it pins down needs one colliding (source_id, lead_id) pair and
+            -- at least three non-colliding ones in the same statement.
+            INSERT INTO public.leads (tenant_id, pipeline_id, first_name, last_name, email)
+            SELECT p.tenant_id, p.id, 'CI', 'Fixture ' || g,
+                   'ci-fixture-' || g || '@zunkiree.invalid'
+            FROM public.pipelines p
+            CROSS JOIN generate_series(1, 5) AS g
+            WHERE p.id = (SELECT id FROM public.pipelines ORDER BY created_at LIMIT 1);
+            GET DIAGNOSTICS n = ROW_COUNT;
+            IF n <> 5 THEN
+              RAISE EXCEPTION 'lead fixtures not created (% of 5) — is supabase/seed.sql still creating a tenant + pipeline?', n;
+            END IF;
+            RAISE NOTICE 'lead fixtures created: %', n;
+          END $$;
+          SQL
+
+      - name: Run database-backed suites
+        env:
+          # NOT `CI` — GitHub sets that in every job, including the plain `Test`
+          # one which has no database by design. This var is the promise that a
+          # database exists, so a skip here is a hard failure.
+          REQUIRE_LOCAL_DB: "1"
+        run: |
+          npx vitest run \
+            src/lib/sms/credits-idempotency.test.ts \
+            src/lib/sms/suppression.test.ts \
+            src/lib/sms/optout.test.ts \
+            src/lib/email/outbound/send.test.ts \
+            src/lib/email/outbound/suppression.test.ts \
+            src/lib/email/outbound/unsubscribe.test.ts
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
+
   build:
     name: Build
     runs-on: ubuntu-latest

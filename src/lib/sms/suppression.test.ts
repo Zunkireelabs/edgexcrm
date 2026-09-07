@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createClient } from "@supabase/supabase-js";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // DB-backed, same precedent as credits-idempotency.test.ts / optout.test.ts:
 // skips cleanly when the local Supabase stack isn't up. CI's Test job has no
@@ -44,6 +45,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "sms suppression list"));
 describe("loadSuppressedPhones / suppressPhone", () => {
   it("loadSuppressedPhones returns exactly the intersection of the batch and the suppression list", async (ctx) => {
     if (!localDbAvailable) {

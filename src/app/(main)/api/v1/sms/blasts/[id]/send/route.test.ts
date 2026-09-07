@@ -12,6 +12,7 @@ const requireSmsAccessMock = vi.fn();
 const resolveAudienceMock = vi.fn();
 const loadTenantSmsSettingsMock = vi.fn();
 const composeRecipientMessageMock = vi.fn();
+const ensureOptOutTokensMock = vi.fn();
 const inngestSendMock = vi.fn();
 
 vi.mock("@/lib/sms/api-guard", () => ({ requireSmsAccess: requireSmsAccessMock }));
@@ -19,6 +20,7 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn().mockResolvedValu
 vi.mock("@/lib/sms/audience", () => ({ resolveAudience: resolveAudienceMock }));
 vi.mock("@/lib/sms/settings", () => ({ loadTenantSmsSettings: loadTenantSmsSettingsMock }));
 vi.mock("@/lib/sms/compose", () => ({ composeRecipientMessage: composeRecipientMessageMock }));
+vi.mock("@/lib/sms/optout", () => ({ ensureOptOutTokens: ensureOptOutTokensMock }));
 vi.mock("@/lib/inngest/client", () => ({ inngest: { send: inngestSendMock } }));
 
 const AUTH = { userId: "user-1", tenantId: "tenant-1", role: "owner" } as unknown as AuthContext;
@@ -145,10 +147,18 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
       max_recipients_per_blast: 500,
       low_credit_threshold: 200,
     });
-    composeRecipientMessageMock.mockReset().mockImplementation(async (_db, _tenantId, _settings, _body, row) => ({
+    composeRecipientMessageMock.mockReset().mockImplementation((_settings, _body, row) => ({
       text: `rendered for ${row.leadId}`,
       segments: { encoding: "gsm7", chars: 20, segments: 1, credits: 1, charsRemaining: 140 },
     }));
+    // Bulk token map — one fake token per phone, keyed the way route.ts reads
+    // it back (tokenByPhone.get(row.phoneE164)). §F2: no per-recipient DB
+    // round trip left on this path, so this mock is synchronous-shaped too.
+    ensureOptOutTokensMock.mockReset().mockImplementation(async (_db, recipients: { phoneE164: string }[]) => {
+      const map = new Map<string, string>();
+      for (const r of recipients) map.set(r.phoneE164, `token-${r.phoneE164}`);
+      return map;
+    });
     inngestSendMock.mockReset().mockResolvedValue(undefined);
   });
 
@@ -200,11 +210,17 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
     expect(json.error.code).toBe("INSUFFICIENT_CREDITS");
     expect(json.error.details).toMatchObject({ shortfall: 7, balance: 3 });
     expect(inngestSendMock).not.toHaveBeenCalled();
-    // Rows were still materialized (order is fixed: materialize -> cap -> reserve).
+    // Rows were still materialized (order is fixed: cap -> materialize -> reserve;
+    // the cap passed here, so materialization ran before the reserve failure).
     expect(fake.messages).toHaveLength(1);
   });
 
-  it("max_recipients_per_blast REJECTS rather than truncates — no reserve, no Inngest event", async () => {
+  it("max_recipients_per_blast REJECTS BEFORE materializing any row — no reserve, no Inngest event (§F1)", async () => {
+    // BLAST-F1-F2-FIX-BRIEF.md §F1: the cap check used to run AFTER
+    // compose/materialize, so an over-cap call still wrote every row as
+    // 'queued' before 422ing (the rows were never rolled back). The fix
+    // moves the check before any row is written — this is the required
+    // "over-cap send → 422 and sms_messages row count for that blast is 0" test.
     const fake = fakeDb();
     loadTenantSmsSettingsMock.mockResolvedValue({
       sender_label: null,
@@ -229,11 +245,65 @@ describe("POST /api/v1/sms/blasts/[id]/send", () => {
     expect(res.status).toBe(422);
     expect(json.error.code).toBe("MAX_RECIPIENTS_EXCEEDED");
     expect(json.error.details).toMatchObject({ count: 2, max: 1 });
-    // Not truncated: both rows were materialized, not just 1.
-    expect(fake.messages).toHaveLength(2);
+    // Nothing materialized — the pre-fix bug wrote both rows before 422ing.
+    expect(fake.messages).toHaveLength(0);
+    expect(fake.insertCallCount()).toBe(0);
     // Cap check happens BEFORE reserve — no RPC call, no event.
     expect(fake.rpcCalls).toHaveLength(0);
     expect(inngestSendMock).not.toHaveBeenCalled();
+  });
+
+  it("regression: an over-cap send followed by a shrunk retry reserves/dispatches ONLY the shrunk audience (§F1 retry-after-shrink bypass)", async () => {
+    // The confirmed bypass chain (BLAST-F1-F2-FIX-BRIEF.md §F1): call 1 over
+    // cap used to materialize the FULL audience as 'queued' before 422ing;
+    // call 2 with a shrunk audience saw every lead as already-materialized
+    // (nothing new to compose), so the cap check passed against the SHRUNK
+    // count while the credit reserve and dispatcher still covered the
+    // ORIGINAL full audience. With the fix, call 1 materializes nothing, so
+    // call 2 has no leftover rows to slip past the cap on.
+    const fake = fakeDb();
+    loadTenantSmsSettingsMock.mockResolvedValue({
+      sender_label: null,
+      optout_footer: null,
+      timezone: null,
+      quiet_hours_start: 8,
+      quiet_hours_end: 20,
+      quiet_hours_enabled: true,
+      max_recipients_per_blast: 1,
+      low_credit_threshold: 200,
+    });
+    requireSmsAccessMock.mockResolvedValue({ ok: true, auth: AUTH, db: fake.db });
+    const { POST } = await import("./route");
+
+    // Call 1: audience of 3 vs cap 1 → 422, nothing materialized.
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: {
+        matched: 3,
+        sendable: [sendableRow("1"), sendableRow("2"), sendableRow("3")],
+        suppressed: [],
+        excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 },
+      },
+    });
+    const first = await POST(fakeReq(), { params });
+    expect(first.status).toBe(422);
+    expect(fake.messages).toHaveLength(0);
+    expect(fake.rpcCalls).toHaveLength(0);
+    expect(inngestSendMock).not.toHaveBeenCalled();
+
+    // Call 2 (shrunk): audience of 1, under the cap.
+    resolveAudienceMock.mockResolvedValue({
+      ok: true,
+      audience: { matched: 1, sendable: [sendableRow("1")], suppressed: [], excluded: { noPhone: 0, foreignNumber: 0, malformed: 0, suppressed: 0, duplicatePhone: 0 } },
+    });
+    const second = await POST(fakeReq(), { params });
+    const json = (await second.json()) as { data: { blast: { reserved_credits: number; recipients_total: number } } };
+
+    expect(second.status).toBe(200);
+    expect(fake.messages).toHaveLength(1); // only the shrunk audience — never the original 3
+    expect(json.data.blast.reserved_credits).toBe(1); // reserved for 1, not the original 3
+    expect(json.data.blast.recipients_total).toBe(1);
+    expect(inngestSendMock).toHaveBeenCalledTimes(1);
   });
 
   it("rejects a whitespace-only body — 3B's ' ' draft placeholder must never be sendable", async () => {

@@ -44,6 +44,8 @@ interface LeadTabsProps {
   onSaveItinerary?: (itinerary: Itinerary) => Promise<void>;
   /** Keeps the parent's lead state in sync when the overview Tag control changes it. */
   onTagChange?: (tags: string[]) => void;
+  /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
+  projectBoardEnabled?: boolean;
 }
 
 export interface LeadTabsRef {
@@ -52,7 +54,7 @@ export interface LeadTabsRef {
 
 export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
   function LeadTabs(
-    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange },
+    { lead, notes, activities, teamMemberEmails, teamMemberNames, customFields, activeTab, onTabChange, onNotesChange, onCustomFieldsChange, checklists, onChecklistsChange, isAdmin, canEdit, canManageNotes, currentUserId, industryId, tenantName, tenantLogoUrl, onSaveItinerary, onTagChange, projectBoardEnabled },
     ref
   ) {
     const activitiesPanelRef = useRef<ActivitiesPanelRef>(null);
@@ -200,6 +202,7 @@ export const LeadTabs = forwardRef<LeadTabsRef, LeadTabsProps>(
             threads={threads}
             setThreads={setThreads}
             threadsLoading={threadsLoading}
+            projectBoardEnabled={projectBoardEnabled}
           />
         </TabsContent>
 
