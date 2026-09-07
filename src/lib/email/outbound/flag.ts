@@ -9,6 +9,16 @@ export function isEmailOutboundEnabled(): boolean {
 // DEFAULT, because the failure mode of getting this wrong is mailing 16,684
 // real students. Any env that does not explicitly set EMAIL_OUTBOUND_SANDBOX=false
 // stays sandboxed (see env-guard.ts).
+//
+// IMPORTANT — this is a RECIPIENT REDIRECT, not a send-suppressor. Sandboxed
+// mode still calls the real Resend API (see env-guard.ts's applyEmailEnvGuard)
+// — it only rewrites the To: address and prefixes the subject. Whether a real
+// network call to Resend happens at all is decided separately, by
+// EMAIL_TRANSPORT (outbound/transport.ts) — that is the actual send/no-send
+// switch. Conflating the two is exactly what caused F3
+// (docs/BLAST-FINDINGS-2026-09-06.md): a sandboxed local run still burned real
+// Resend quota from the production domain, because nothing here ever stopped
+// the provider call.
 export function isEmailOutboundSandbox(): boolean {
   return process.env.EMAIL_OUTBOUND_SANDBOX !== "false";
 }

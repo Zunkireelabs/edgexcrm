@@ -15,7 +15,7 @@ Last updated: 2026-07-10 (it_agency Delivery **Tiers 0–4 batch BUILT ON BRANCH
 
 Cheap to add, cheap to drop. One-line per idea. If an idea matures, promote it to "Approved for dev" with a paragraph of intent.
 
-_(empty — add items here as they come up)_
+- `EmailSenderCard` (Settings → Communications) has no admin gate — a non-admin can see an editable Save button that 403s server-side with a meaningless generic error toast. Same defect class as PR #500's `/tasks` complaint and PR #514's Finding 3 (`EmailBlastSettingsCard`, fixed). Flagged 2026-09-07 during #514 review; deliberately not fixed in that PR to keep it scoped to the one new card.
 
 ---
 

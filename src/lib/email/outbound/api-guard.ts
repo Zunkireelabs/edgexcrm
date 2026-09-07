@@ -33,3 +33,21 @@ export async function requireEmailCampaignsAccess(): Promise<EmailBlastGuardResu
   const db = await scopedClient(auth);
   return { ok: true, auth, db };
 }
+
+// Narrower than requireEmailCampaignsAccess(): stops at the industry-feature
+// gate and does NOT require bulk_email_enabled. For reads that are not
+// themselves a bulk-email action — e.g. GET on the recipient-cap setting,
+// which every tenant with the Communications panel visible needs to render
+// without an error, whether or not bulk email has been switched on for them
+// yet (migration 211's bulk_email_enabled defaults to false).
+export async function requireEmailCampaignsFeature(): Promise<EmailBlastGuardResult> {
+  const auth = await authenticateRequest();
+  if (!auth) return { ok: false, response: apiUnauthorized() };
+
+  if (!getFeatureAccess(auth.industryId, FEATURES.EMAIL_CAMPAIGNS)) {
+    return { ok: false, response: apiForbidden() };
+  }
+
+  const db = await scopedClient(auth);
+  return { ok: true, auth, db };
+}

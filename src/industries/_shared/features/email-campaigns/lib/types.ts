@@ -88,3 +88,11 @@ export interface EmailBlastAudiencePreviewResponse {
   pageSize: number;
   total: number;
 }
+
+// GET /api/v1/email-blasts/settings response shape (F4,
+// docs/BLAST-F3-F4-FIX-BRIEF.md). Mirrors SmsSettings' max_recipients_per_blast
+// field — only field surfaced here today; daily_send_cap/bulk_email_enabled
+// (migration 211) are ops-managed, not admin-editable through this route.
+export interface EmailBlastSettings {
+  max_recipients_per_blast: number;
+}

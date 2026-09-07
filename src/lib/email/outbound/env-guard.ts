@@ -1,10 +1,18 @@
 import { isEmailOutboundSandbox } from "./flag";
 
-// The single highest-value safety mechanism in this feature. Mirrors
+// A RECIPIENT-REDIRECT safety net, not a send-suppressor — do not read this
+// module as "the switch that stops emails from going out." Mirrors
 // src/lib/sms/env-guard.ts. isEmailOutboundSandbox() defaults to TRUE (see
 // flag.ts), so unless an environment explicitly sets EMAIL_OUTBOUND_SANDBOX=
-// false, every outbound send below is silently redirected to a fixed
-// test-recipient list — it must be impossible to bypass this by accident.
+// false, every outbound send below is redirected to a fixed test-recipient
+// list instead of the real recipient — but the underlying provider call still
+// happens. Whether that provider call is real or faked is decided by
+// EMAIL_TRANSPORT (outbound/transport.ts), a separate, independent gate.
+//
+// This distinction matters: sandboxed + EMAIL_TRANSPORT=resend still spends
+// real Resend quota, from the production domain (see sender.ts /
+// PLATFORM_EMAIL_HOST), just to a redirected address — that gap is F3
+// (docs/BLAST-FINDINGS-2026-09-06.md), and it's why transport.ts exists.
 //
 // applyEmailEnvGuard() is called from send.ts immediately before the provider
 // call, per-row, so there is no code path between "recipient resolved from

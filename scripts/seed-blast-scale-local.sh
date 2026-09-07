@@ -94,11 +94,28 @@ INSERT INTO public.sms_credit_accounts (tenant_id, balance, lifetime_granted)
 VALUES ('$TENANT_ID', 50000, 50000)
 ON CONFLICT (tenant_id) DO UPDATE SET balance = 50000, lifetime_granted = GREATEST(sms_credit_accounts.lifetime_granted, 50000);
 
--- 4. Email: enable bulk send, raise the daily cap above LEAD_COUNT so the
---    test send completes in one pass instead of throttling across days.
-INSERT INTO public.tenant_email_settings (tenant_id, from_name, from_address, reply_to, domain_verified, bulk_email_enabled, daily_send_cap)
-VALUES ('$TENANT_ID', 'Blast Scale Test', 'test@local.test', 'test@local.test', true, true, 20000)
-ON CONFLICT (tenant_id) DO UPDATE SET bulk_email_enabled = true, daily_send_cap = 20000;
+-- 4. Email: enable bulk send, raise the daily cap AND the per-blast recipient
+--    cap (F4, migration 228 — added after this script was first written)
+--    above LEAD_COUNT so the test send completes in one pass instead of
+--    throttling across days or being rejected outright by MAX_RECIPIENTS_EXCEEDED.
+--
+--    domain_verified is deliberately FALSE (bounce-cause investigation,
+--    2026-09-07): a prior version of this script set it TRUE with
+--    from_address='test@local.test', which is never actually verified with
+--    Resend. sender.ts (see src/lib/email/sender.ts) only uses from_address
+--    when domain_verified is true, so that config made every real send in
+--    this tenant use test@local.test as the From: address — and Resend
+--    deterministically rejected 100% of those with "The local.test domain is
+--    not verified" (confirmed via the leftover email_messages rows from the
+--    2026-09-06 run, source_id 5464a828-d265-47ab-b48f-1f2c0bd08823: 5,400/5,400
+--    attempted rows failed with that exact error). This is what was originally
+--    misreported as a "3-12% provider_error bounce rate" — it was actually a
+--    100% failure of every row actually attempted, not a partial/random one.
+--    false here matches every other tenant without a real custom domain:
+--    sender.ts falls back to the safe, real, verified platform address.
+INSERT INTO public.tenant_email_settings (tenant_id, from_name, from_address, reply_to, domain_verified, bulk_email_enabled, daily_send_cap, max_recipients_per_blast)
+VALUES ('$TENANT_ID', 'Blast Scale Test', 'test@local.test', 'test@local.test', false, true, 20000, 20000)
+ON CONFLICT (tenant_id) DO UPDATE SET domain_verified = false, bulk_email_enabled = true, daily_send_cap = 20000, max_recipients_per_blast = 20000;
 
 COMMIT;
 SQL

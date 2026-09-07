@@ -40,6 +40,31 @@ async function loadBatchIds(tenantId: string, blastId: string): Promise<string[]
   return ((data ?? []) as unknown as QueuedIdRow[]).map((r) => r.id);
 }
 
+// F5 (docs/BLAST-FINDINGS-2026-09-06.md) — a row that was mid-send when its
+// worker step crashed is left in 'sending' forever: loadBatchIds above only
+// ever selects 'queued', so once the main loop runs out of queued rows it
+// has no way to notice a stranded 'sending' row exists at all, and would
+// otherwise proceed straight to finalize as if nothing were left. This is
+// the ONLY other place a row can be waiting on something — feed whatever's
+// here back into sendQueuedEmailBatch, which already knows how to safely
+// reclaim-or-permanently-fail a stranded row (§5.2 in send.ts) and already
+// protects against double-sending a row that's still genuinely in flight.
+// Not staleness-filtered here on purpose: sendQueuedEmailBatch itself is the
+// one place that decision is made, so there is only one implementation of
+// "is this actually stale" to keep in sync.
+async function loadStrandedSendingIds(tenantId: string, blastId: string): Promise<string[]> {
+  const db = await scopedClientForTenant(tenantId);
+  const { data } = await db
+    .from("email_messages")
+    .select("id")
+    .eq("source", "blast")
+    .eq("source_id", blastId)
+    .eq("status", "sending")
+    .order("created_at", { ascending: true })
+    .limit(MAX_RECIPIENTS_PER_CALL);
+  return ((data ?? []) as unknown as QueuedIdRow[]).map((r) => r.id);
+}
+
 // UTC midnight — the same clock sendQueuedEmailBatch's daily-cap check reads
 // (getDailyCapStatus). Resuming at any other boundary would let the worker
 // wake up before the cap has actually reset and immediately throttle again.
@@ -58,6 +83,13 @@ interface BlastCounts {
   failed: number;
   cancelled: number;
   suppressed: number;
+  // F5 (docs/BLAST-FINDINGS-2026-09-06.md) — total rows actually materialized
+  // for this blast. sent+failed+cancelled+suppressed can legitimately fall
+  // short of this (a row still 'queued'/'sending') while the blast is mid-flight
+  // — that's normal. finalizeEmailBlast is the one caller for whom a shortfall
+  // is NOT normal (it should only ever run once nothing is left outstanding),
+  // so it's the one that checks total against the other four.
+  total: number;
 }
 
 // Live counts straight off email_messages — the source of truth. Shared by
@@ -85,6 +117,7 @@ export async function computeBlastCounts(tenantId: string, blastId: string): Pro
     failed: rows.filter((r) => r.status === "failed" || r.status === "bounced").length,
     cancelled: rows.filter((r) => r.status === "cancelled").length,
     suppressed: rows.filter((r) => r.status === "suppressed").length,
+    total: rows.length,
   };
 }
 
@@ -104,11 +137,30 @@ export async function finalizeEmailBlast(
   const { data: currentBlast } = await db.from("email_blasts").select("status").eq("id", blastId).maybeSingle();
   const wasCancelled = (currentBlast as unknown as BlastStatusRow | null)?.status === "cancelled";
 
-  const { sent, failed, cancelled, suppressed } = await computeBlastCounts(tenantId, blastId);
+  const { sent, failed, cancelled, suppressed, total } = await computeBlastCounts(tenantId, blastId);
+  // F5 (docs/BLAST-FINDINGS-2026-09-06.md) — a real incident finalized a
+  // blast as 'sent' with 12,100 of 16,000 rows still 'queued'. The caller
+  // (email-blast-send.ts's main loop) is supposed to only reach this point
+  // once nothing is outstanding — including reclaiming any row stranded in
+  // 'sending' by a crashed prior run, see loadStrandedSendingIds — but this
+  // is the last line of defense: sent+failed+cancelled+suppressed should
+  // always equal every row actually materialized. If it doesn't, something
+  // is still 'queued' or 'sending' that this run never accounted for, and
+  // finalize must NEVER report that as a clean 'sent' — that is exactly the
+  // false-success bug. Surface it loudly (an unaccounted-for recipient is
+  // worth paging on) and mark the blast the way a human would want to find
+  // it: something needs attention, not "all good."
+  const unaccounted = total - (sent + failed + cancelled + suppressed);
 
   let finalStatus: string;
   if (wasCancelled) {
     finalStatus = "cancelled";
+  } else if (unaccounted > 0) {
+    logger.error(
+      { tenantId, blastId, unaccounted, total, sent, failed, cancelled, suppressed },
+      "[finalizeEmailBlast] rows unaccounted for at finalize time (still 'queued' or 'sending') — refusing to report a false 'sent'; marking partially_failed"
+    );
+    finalStatus = "partially_failed";
   } else if (failed === 0 && cancelled === 0) {
     finalStatus = "sent";
   } else if (sent === 0) {
@@ -153,6 +205,25 @@ export const emailBlastSend = inngest.createFunction(
       // Cancelled before this run even started (e.g. a re-emitted resume
       // event racing a /cancel that landed first) — finalize is a no-op
       // status stamp, nothing to send.
+      //
+      // F5 follow-up (docs/BLAST-FINDINGS-2026-09-06.md): /cancel only flips
+      // 'queued' rows to 'cancelled' — it never touches a row that happened
+      // to be 'sending' at that exact moment (e.g. left behind by an earlier
+      // crashed run of THIS blast). Without this reclaim pass, that row
+      // would never be revisited, on a blast that will never run this loop
+      // again. finalizeEmailBlast's wasCancelled branch always wins over the
+      // unaccounted-for check, so the blast correctly stays 'cancelled'
+      // either way — this just gives that stray row a real chance to
+      // resolve first, instead of leaving it orphaned forever.
+      const strandedIds = await step.run("load-stranded-sending-precancelled", () => loadStrandedSendingIds(tenantId, blastId));
+      if (strandedIds.length > 0) {
+        await step.run("reclaim-stranded-precancelled", () => sendQueuedEmailBatch(tenantId, strandedIds, { capCaller: "blast" }));
+        logger.info(
+          { tenantId, blastId, strandedCount: strandedIds.length },
+          "[email-blast-send] reclaimed row(s) stranded in 'sending' on an already-cancelled blast"
+        );
+      }
+
       const outcome = await step.run("finalize-precancelled", () => finalizeEmailBlast(tenantId, blastId));
       return { blastId, ...outcome };
     }
@@ -230,6 +301,25 @@ export const emailBlastSend = inngest.createFunction(
       if (ids.length === MAX_RECIPIENTS_PER_CALL) {
         await step.sleep(`sleep-after-batch-${batchIndex}`, "2s");
       }
+    }
+
+    // F5 (docs/BLAST-FINDINGS-2026-09-06.md) — the loop above only ever looks
+    // for 'queued' rows, so a row stranded in 'sending' by a crashed prior
+    // run (this blast's own earlier attempt) is invisible to it and would
+    // otherwise go straight to finalize unaccounted for. One last pass here
+    // gives sendQueuedEmailBatch's existing reclaim-or-permanently-fail logic
+    // (§5.2 in send.ts) a chance to actually run on it before finalize's own
+    // unaccounted-for check (the final safety net, not the primary fix).
+    const strandedIds = await step.run("load-stranded-sending", () => loadStrandedSendingIds(tenantId, blastId));
+    if (strandedIds.length > 0) {
+      const reclaimResult = await step.run("reclaim-stranded", () => sendQueuedEmailBatch(tenantId, strandedIds, { capCaller: "blast" }));
+      totalSent += reclaimResult.sent;
+      totalFailed += reclaimResult.failed;
+      totalSuppressed += reclaimResult.suppressed;
+      logger.info(
+        { tenantId, blastId, strandedCount: strandedIds.length, reclaimed: reclaimResult },
+        "[email-blast-send] reclaimed row(s) stranded in 'sending' from a prior crashed run"
+      );
     }
 
     const outcome = await step.run("finalize", () => finalizeEmailBlast(tenantId, blastId));
