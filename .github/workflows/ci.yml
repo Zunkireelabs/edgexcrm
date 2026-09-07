@@ -116,6 +116,70 @@ jobs:
 
       - run: npm run test
 
+  # Runs the suites that need a real Postgres + PostgREST, which `Test` above
+  # cannot: it has no database, so ~26 tests covering SMS credit idempotency,
+  # suppression lists and opt-out called ctx.skip() on EVERY run while the suite
+  # still reported green. Review, not CI, caught the two HIGH credit-RPC bugs
+  # those tests pin down. Separate job (not folded into `Test`) so the fast
+  # feedback loop stays fast — the two run in parallel, so there is no
+  # wall-clock cost — and so a failure here is attributable at a glance.
+  #
+  # The sequence mirrors the documented local setup exactly; do not shortcut it.
+  # `[db.migrations] enabled = false` in supabase/config.toml means `supabase
+  # start` applies NO migrations — the schema comes from the stage-derived
+  # baseline loaded by [db.seed], and migrate-apply.sh then replays 128 -> HEAD
+  # on top of it. That replay only became possible on 2026-09-07, when migs 180
+  # and 223 stopped hard-seeding tenant-specific data (#508); before that the
+  # chain could not run on a fresh database at all, which is precisely why this
+  # job did not exist.
+  test-db:
+    name: Test (database-backed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start local Supabase
+        run: supabase start
+
+      # `supabase start` on a fresh runner already initialises the DB, but reset is
+      # explicit and deterministic: it re-applies the [db.seed] sql_paths
+      # (baseline/schema.sql -> ledger.sql -> reference.sql -> seed.sql).
+      # Schema-only: those four files carry 13 INSERTs total (reference lookups,
+      # the ledger, one synthetic tenant) and zero rows of customer data.
+      - name: Load baseline schema + ledger (seed paths in supabase/config.toml)
+        run: supabase db reset
+
+      - name: Replay migrations 128 -> HEAD onto the baseline
+        run: ./scripts/migrate-apply.sh local
+
+      - name: Seed local tenant + admin user
+        run: ./scripts/local-db-setup.sh
+
+      - name: Run database-backed suites
+        run: |
+          npx vitest run \
+            src/lib/sms/credits-idempotency.test.ts \
+            src/lib/sms/suppression.test.ts \
+            src/lib/sms/optout.test.ts \
+            src/lib/email/outbound/send.test.ts \
+            src/lib/email/outbound/suppression.test.ts \
+            src/lib/email/outbound/unsubscribe.test.ts
+
+      - name: Stop local Supabase
+        if: always()
+        run: supabase stop --no-backup
+
   build:
     name: Build
     runs-on: ubuntu-latest

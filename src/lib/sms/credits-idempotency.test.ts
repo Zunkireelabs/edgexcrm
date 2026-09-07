@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createClient } from "@supabase/supabase-js";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // Regression test for REVIEW HIGH-1 / HIGH-2 (docs/SMS-PHASE1-REVIEW.md): a
 // retried sms_credits_reserve/sms_credits_settle call with the same ref_id
@@ -35,6 +36,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "sms credit reserve/settle idempotency"));
 describe("sms_credits_reserve / sms_credits_settle idempotency", () => {
   it("a repeated reserve with the same ref_id debits the account exactly once", async (ctx) => {
     if (!localDbAvailable) {

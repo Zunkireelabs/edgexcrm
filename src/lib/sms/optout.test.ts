@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { generateOptOutToken, optOutUrl } from "./optout";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // §F2 regression coverage (BLAST-F1-F2-FIX-BRIEF.md): ensureOptOutTokens
 // replaces getOrCreateOptOutToken's per-recipient round trip on the blast
@@ -60,6 +61,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "sms opt-out tokens"));
 describe("generateOptOutToken", () => {
   it("is 10 characters, base62, and varies between calls", () => {
     const a = generateOptOutToken();
