@@ -5,10 +5,6 @@ import { Check, UserCircle2, X } from "lucide-react";
 import { MemberAvatar } from "@/components/ui/member-avatar";
 import type { TeamMember } from "../hooks/use-projects";
 
-function memberLabel(m: TeamMember): string {
-  return m.name || m.email.split("@")[0];
-}
-
 interface AssigneePickerProps {
   assigneeId: string | null;
   team: TeamMember[];
@@ -39,8 +35,8 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
 
   if (disabled) {
     return assignee ? (
-      <span title={assignee.email} className="inline-flex">
-        <MemberAvatar userId={assignee.user_id} name={memberLabel(assignee)} size={28} />
+      <span title={assignee.name} className="inline-flex">
+        <MemberAvatar userId={assignee.user_id} name={assignee.name} size={28} />
       </span>
     ) : (
       <UserCircle2 className="h-5 w-5 text-muted-foreground/40" />
@@ -55,12 +51,12 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
         className={showName
           ? "inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 -mx-1 transition-colors hover:bg-gray-100"
           : "inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors hover:ring-2 hover:ring-violet-300"}
-        title={assignee?.email ?? "Set assignee"}
+        title={assignee?.name ?? "Set assignee"}
       >
         {assignee ? (
           <>
-            <MemberAvatar userId={assignee.user_id} name={memberLabel(assignee)} size={28} />
-            {showName && <span className="truncate text-sm text-gray-700">{memberLabel(assignee)}</span>}
+            <MemberAvatar userId={assignee.user_id} name={assignee.name} size={28} />
+            {showName && <span className="truncate text-sm text-gray-700">{assignee.name}</span>}
           </>
         ) : showName ? (
           <>
@@ -82,8 +78,8 @@ export function AssigneePicker({ assigneeId, team, onChange, disabled, showName 
                 onClick={() => handleSelect(m.user_id)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-gray-50 text-left"
               >
-                <MemberAvatar userId={m.user_id} name={memberLabel(m)} />
-                <span className="truncate text-gray-700">{memberLabel(m)}</span>
+                <MemberAvatar userId={m.user_id} name={m.name} />
+                <span className="truncate text-gray-700">{m.name}</span>
                 {m.user_id === assigneeId && <Check className="h-3 w-3 text-violet-600 ml-auto shrink-0" />}
               </button>
             ))}

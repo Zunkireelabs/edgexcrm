@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { AccountForm } from "../components/account-form";
-import { ProjectForm } from "../components/project-form";
+import { ProjectForm } from "../../project-board/components/project-form";
 import { ContactForm } from "../../crm-contacts/components/contact-form";
 import {
   AccountSummaryCard,

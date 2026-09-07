@@ -8,7 +8,7 @@ import type { Project, ProjectEvent } from "@/types/database";
 
 interface ReportsTabProps {
   projectId: string;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onEventRecorded: () => void;
   project: Project;
   events: ProjectEvent[];
@@ -18,7 +18,7 @@ interface ReportsTabProps {
 
 export function ReportsTab({
   projectId,
-  isAdmin,
+  canManageProjects,
   onEventRecorded,
   project,
   events,
@@ -45,13 +45,13 @@ export function ReportsTab({
         tasks={reconciliation.tasks}
         rollup={reconciliation.rollup}
         loading={reconciliation.loading}
-        isAdmin={isAdmin}
+        canManageProjects={canManageProjects}
         onReconcile={handleReconcile}
       />
       <StatusReportsPanel
         reports={statusReports.reports}
         loading={statusReports.loading}
-        isAdmin={isAdmin}
+        canManageProjects={canManageProjects}
         onCreateDraft={statusReports.createDraft}
         onPublish={handlePublish}
         onRefetch={statusReports.refetch}

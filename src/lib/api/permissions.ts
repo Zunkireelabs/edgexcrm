@@ -14,6 +14,9 @@ export interface PositionPermissions {
   canManageHR?: boolean;                                           // controls org-wide HR access (all employee_profiles/departments/skills/allocations). Absent ⇒ default per resolver (self/direct-reports only).
   canExport?: boolean;                                            // controls access to the leads Export button. Absent => default per resolver (owner/admin only).
   canSendSms?: boolean;                                           // controls write access to the SMS blast feature. Absent => default per resolver (owner/admin only).
+  canManageProjects?: boolean;                                    // controls write access to it_agency delivery: projects + sub-resources, task delete/reconcile. Absent ⇒ default per resolver (owner/admin only).
+  canApproveTime?: boolean;                                       // controls time-entry approve/reject, compliance, the approvals queue. Absent ⇒ default per resolver (owner/admin only).
+  canManageBilling?: boolean;                                     // controls project invoices + the is_billable task field guard. Absent ⇒ default per resolver (owner/admin only).
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -32,13 +35,21 @@ export interface ResolvedPermissions {
   canManageHR: boolean;
   canExport: boolean;
   canSendSms: boolean;
+  canManageProjects: boolean;                   // it_agency delivery write access
+  canApproveTime: boolean;                      // time approvals / compliance
+  canManageBilling: boolean;                    // project invoices + is_billable guard
   dashboardWidgets: Set<string> | null;        // null = all
 }
 
 export function resolvePermissions(
-  role: UserRole,
+  rawRole: UserRole,
   positionPermissions: PositionPermissions | null,
 ): ResolvedPermissions {
+  // normalizeRole is now a validating identity boundary (the backfill in migration
+  // 227 removed every legacy `counselor` row). Kept as the single seam where the
+  // next role migration plugs in — and so a missed call site can't silently widen
+  // an own-scope member to the whole tenant.
+  const role = normalizeRole(rawRole);
   const baseTier: ResolvedPermissions["baseTier"] =
     role === "owner" ? "owner" : role === "admin" ? "admin" : "member";
 
@@ -58,13 +69,16 @@ export function resolvePermissions(
       canManageHR: true,
       canExport: true,
       canSendSms: true,
+      canManageProjects: true,
+      canApproveTime: true,
+      canManageBilling: true,
       dashboardWidgets: null,
     };
   }
 
   // No position configured → derive from role (reproduces today's behavior exactly).
   if (!positionPermissions) {
-    const leadScope = role === "counselor" ? "own" : "all";
+    const leadScope = role === "staff" ? "own" : "all";
     return {
       baseTier: "member",
       allowedNavKeys: null,
@@ -73,12 +87,15 @@ export function resolvePermissions(
       leadScope,
       sharedPoolListIds: new Set(),
       canAssignLeads: false,
-      canEditLeads: role === "counselor", // counselors edit own; viewers don't
-      canManageApplications: role === "counselor", // counselors can manage by default; viewers cannot
-      canManageClasses: role === "counselor", // counselors can manage by default; viewers cannot
+      canEditLeads: role === "staff", // own-scope staff edit own; viewers don't
+      canManageApplications: role === "staff", // own-scope staff can manage by default; viewers cannot
+      canManageClasses: role === "staff", // own-scope staff can manage by default; viewers cannot
       canManageHR: false, // HR data is sensitive — position must explicitly grant it
       canExport: false, // only owner/admin export by default
       canSendSms: false, // only owner/admin send SMS blasts by default
+      canManageProjects: false, // delivery write access — position must explicitly grant it
+      canApproveTime: false, // time approvals — position must explicitly grant it
+      canManageBilling: false, // project billing — position must explicitly grant it
       dashboardWidgets: null,
     };
   }
@@ -99,6 +116,9 @@ export function resolvePermissions(
     canManageHR: p.canManageHR === true,
     canExport: false, // export is owner/admin only; position config cannot grant it
     canSendSms: false, // sending SMS is owner/admin only; position config cannot grant it
+    canManageProjects: p.canManageProjects === true,
+    canApproveTime: p.canApproveTime === true,
+    canManageBilling: p.canManageBilling === true,
     dashboardWidgets:
       p.dashboard && p.dashboard.widgets && p.dashboard.widgets.mode === "allow"
         ? new Set(p.dashboard.widgets.keys)
@@ -140,6 +160,15 @@ export function canManageClasses(p: ResolvedPermissions): boolean {
 }
 export function canManageHR(p: ResolvedPermissions): boolean {
   return p.canManageHR;
+}
+export function canManageProjects(p: ResolvedPermissions): boolean {
+  return p.canManageProjects;
+}
+export function canApproveTime(p: ResolvedPermissions): boolean {
+  return p.canApproveTime;
+}
+export function canManageBilling(p: ResolvedPermissions): boolean {
+  return p.canManageBilling;
 }
 // canEnrollStudents moved to src/lib/api/class-attendance.ts — it now reads the
 // class_managers grant table (admin-managed, per-user) instead of this hardcoded
@@ -218,6 +247,17 @@ export function resolveEffectiveBranch(
   return validBranchIds.includes(cookieVal) ? cookieVal : null;
 }
 
+/**
+ * Validating boundary for the raw `tenant_users.role` / `invite_tokens.role`
+ * string read out of the DB. Migration 227 backfilled the last legacy `counselor`
+ * rows to `staff`, so there is no live mapping today — this is the identity/cast
+ * seam kept at every DB read boundary, the single place the next role migration
+ * plugs its mapping into.
+ */
+export function normalizeRole(raw: string): UserRole {
+  return raw as UserRole;
+}
+
 // ── Role derivation (positions → legacy role) ──────────────────────
 export function deriveRole(
   baseTier: "owner" | "admin" | "member",
@@ -225,7 +265,7 @@ export function deriveRole(
 ): UserRole {
   if (baseTier === "owner") return "owner";
   if (baseTier === "admin") return "admin";
-  return leadScope === "own" ? "counselor" : "viewer";
+  return leadScope === "own" ? "staff" : "viewer";
 }
 
 // ── Position permissions shape validator ───────────────────────────
@@ -324,6 +364,21 @@ export function validatePositionPermissions(input: unknown): string | null {
   // canSendSms (optional)
   if (p.canSendSms !== undefined && typeof p.canSendSms !== "boolean") {
     return "permissions.canSendSms must be a boolean";
+  }
+
+  // canManageProjects (optional)
+  if (p.canManageProjects !== undefined && typeof p.canManageProjects !== "boolean") {
+    return "permissions.canManageProjects must be a boolean";
+  }
+
+  // canApproveTime (optional)
+  if (p.canApproveTime !== undefined && typeof p.canApproveTime !== "boolean") {
+    return "permissions.canApproveTime must be a boolean";
+  }
+
+  // canManageBilling (optional)
+  if (p.canManageBilling !== undefined && typeof p.canManageBilling !== "boolean") {
+    return "permissions.canManageBilling must be a boolean";
   }
 
   // dashboard

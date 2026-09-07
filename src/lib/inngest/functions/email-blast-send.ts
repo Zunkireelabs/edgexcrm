@@ -1,5 +1,6 @@
 import { inngest } from "@/lib/inngest/client";
 import { scopedClientForTenant } from "@/lib/supabase/scoped";
+import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { sendQueuedEmailBatch } from "@/lib/email/outbound/send";
 import { logger } from "@/lib/logger";
 
@@ -65,8 +66,20 @@ interface BlastCounts {
 // mid-flight, across an arbitrary number of throttle/resume cycles.
 export async function computeBlastCounts(tenantId: string, blastId: string): Promise<BlastCounts> {
   const db = await scopedClientForTenant(tenantId);
-  const { data: statusRows } = await db.from("email_messages").select("status").eq("source", "blast").eq("source_id", blastId);
-  const rows = (statusRows ?? []) as unknown as MessageStatusRow[];
+  // Paginated: an unpaged select here silently caps at PostgREST's 1000-row
+  // default. This function is called both by the mid-flight throttle branch
+  // (the "Throttled" banner's counts) and finalize — a real Admizz-scale
+  // blast (the 3,118-row incident this branch fixes is already over the cap)
+  // would show wrong live counts during the send and a wrong final tally.
+  const rows = await fetchAllRows<MessageStatusRow>((offset, limit) =>
+    db
+      .from("email_messages")
+      .select("status")
+      .eq("source", "blast")
+      .eq("source_id", blastId)
+      .order("id", { ascending: true })
+      .range(offset, offset + limit - 1) as unknown as Promise<PageResult<MessageStatusRow>>
+  );
   return {
     sent: rows.filter((r) => r.status === "sent" || r.status === "delivered").length,
     failed: rows.filter((r) => r.status === "failed" || r.status === "bounced").length,

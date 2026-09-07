@@ -1,4 +1,8 @@
-export type UserRole = "owner" | "admin" | "viewer" | "counselor";
+// `staff` is the own-scope member tier — a member scoped to their own leads.
+// Renamed from the legacy value `counselor` in Phase B (migration 227 backfilled
+// the rows and dropped `counselor` from the DB CHECK). normalizeRole() remains the
+// validating boundary at every DB read.
+export type UserRole = "owner" | "admin" | "viewer" | "staff";
 
 // Industry types for tenant classification
 export type IndustryId =
@@ -528,7 +532,7 @@ export interface InviteToken {
   id: string;
   tenant_id: string;
   email: string;
-  role: "admin" | "viewer" | "counselor";
+  role: "admin" | "viewer" | "staff";
   token: string;
   expires_at: string;
   accepted_at: string | null;

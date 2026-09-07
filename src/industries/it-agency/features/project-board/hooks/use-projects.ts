@@ -4,13 +4,15 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { toast } from "sonner";
 import type { Account, Project } from "@/types/database";
 
+// Minimal roster projection from GET /api/v1/team?minimal=1 — {user_id, name}
+// only, and reachable by any tenant member (viewers/counselors included), unlike
+// the full /api/v1/team which is admin/nav-gated. The project board only ever
+// needs a name to label assignee/owner pickers; anything that needs role,
+// position, or rates (resourcing, cost/margin) calls the full endpoint.
+// `name` is always a non-empty string server-side (name → email → "Unknown").
 export interface TeamMember {
-  id: string;
   user_id: string;
-  email: string;
-  name?: string | null;
-  role: string;
-  default_hourly_rate: number | null;
+  name: string;
 }
 
 // Project augmented with contact count extracted from PostgREST embed
@@ -39,7 +41,7 @@ export function useProjects() {
       const [pRes, aRes, tRes, hRes] = await Promise.all([
         fetch("/api/v1/projects").then((r) => r.json()),
         fetch("/api/v1/accounts").then((r) => r.json()),
-        fetch("/api/v1/team").then((r) => r.json()),
+        fetch("/api/v1/team?minimal=1").then((r) => r.json()),
         fetch("/api/v1/time-entries/summary?dimension=project").then((r) => r.json()),
       ]);
 

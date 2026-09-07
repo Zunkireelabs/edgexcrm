@@ -35,10 +35,27 @@ const ALL_PROJECT_STATUSES: ProjectStatus[] = [
 const ALL_TASK_STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
 const ALL_PRIORITIES: TaskPriority[] = ["low", "normal", "high", "urgent"];
 
-export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
+interface WorkspaceFilterOptions {
+  /** When set and the tasks workspace has no explicit `assignee`/`task_status`
+   *  in the URL, default to "my open work" (assignee = me, status = To Do +
+   *  In Progress). An explicit URL param always wins so existing shared links
+   *  keep their meaning. */
+  currentUserId?: string;
+}
+
+/** Default task-status filter for the tasks workspace: open work only. */
+const DEFAULT_OPEN_TASK_STATUSES: TaskStatus[] = ["todo", "in_progress"];
+
+export function useWorkspaceFilters(
+  defaultView: WorkspaceView = "board",
+  opts: WorkspaceFilterOptions = {},
+) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
+
+  const isTasksWorkspace = defaultView === "tasks";
+  const wantMyWorkDefault = isTasksWorkspace && !!opts.currentUserId;
 
   const rawStatus = searchParams.get("status");
   const parsedStatuses: ProjectStatus[] = rawStatus
@@ -48,7 +65,9 @@ export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
   const rawTaskStatus = searchParams.get("task_status");
   const parsedTaskStatuses: TaskStatus[] = rawTaskStatus
     ? (rawTaskStatus.split(",").filter((s) => ALL_TASK_STATUSES.includes(s as TaskStatus)) as TaskStatus[])
-    : [];
+    : wantMyWorkDefault
+      ? [...DEFAULT_OPEN_TASK_STATUSES]
+      : [];
 
   const rawPriority = searchParams.get("priority");
   const parsedPriorities: TaskPriority[] = rawPriority
@@ -65,7 +84,9 @@ export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
     owner: searchParams.get("owner") || "__all__",
     showCancelled: searchParams.get("cancelled") === "1",
     statuses: parsedStatuses,
-    assignee: searchParams.get("assignee") || "__all__",
+    assignee:
+      searchParams.get("assignee") ||
+      (wantMyWorkDefault ? (opts.currentUserId as string) : "__all__"),
     taskStatuses: parsedTaskStatuses,
     priorities: parsedPriorities,
     tags: parsedTags,
@@ -104,13 +125,23 @@ export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
       }
 
       if (next.assignee !== undefined) {
-        if (next.assignee === "__all__") params.delete("assignee");
-        else params.set("assignee", next.assignee);
+        // When "my open work" is the default, "Everyone" must be written
+        // explicitly — deleting the param would silently re-apply the default.
+        if (next.assignee === "__all__") {
+          if (wantMyWorkDefault) params.set("assignee", "__all__");
+          else params.delete("assignee");
+        } else {
+          params.set("assignee", next.assignee);
+        }
       }
 
       if (next.taskStatuses !== undefined) {
-        if (next.taskStatuses.length === 0) params.delete("task_status");
-        else params.set("task_status", next.taskStatuses.join(","));
+        if (next.taskStatuses.length === 0) {
+          if (wantMyWorkDefault) params.set("task_status", "all");
+          else params.delete("task_status");
+        } else {
+          params.set("task_status", next.taskStatuses.join(","));
+        }
       }
 
       if (next.priorities !== undefined) {
@@ -130,7 +161,7 @@ export function useWorkspaceFilters(defaultView: WorkspaceView = "board") {
 
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
-    [searchParams, router, pathname]
+    [searchParams, router, pathname, wantMyWorkDefault]
   );
 
   return { filters, setFilters };

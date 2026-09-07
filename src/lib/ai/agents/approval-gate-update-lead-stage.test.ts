@@ -142,7 +142,7 @@ const ADMIN_USER: TenantUserRow = {
 const COUNSELOR_USER: TenantUserRow = {
   user_id: "counselor-1",
   tenant_id: TENANT_ID,
-  role: "counselor",
+  role: "staff",
   position_id: null,
   branch_id: null,
   tenants: { industry_id: "education_consultancy", plan: "free", entitlement_overrides: {} },
@@ -573,7 +573,7 @@ describe("runWriteApprovalGate — update_lead_stage execution (5.4c-2a)", () =>
 
     expect(applyLeadPatchMock).toHaveBeenCalledTimes(1);
     const authArg = applyLeadPatchMock.mock.calls[0][0];
-    expect(authArg).toMatchObject({ userId: "counselor-1", role: "counselor" });
+    expect(authArg).toMatchObject({ userId: "counselor-1", role: "staff" });
     expect(client._lead()).toMatchObject({ id: LEAD_ID, list_id: null, assigned_to: "someone-else" }); // unchanged
 
     expect(aiWriteActions).toHaveLength(1);

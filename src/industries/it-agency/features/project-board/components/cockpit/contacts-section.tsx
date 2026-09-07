@@ -59,10 +59,10 @@ function rolePill(role: ProjectContactRole) {
 interface ContactsSectionProps {
   projectId: string;
   accountId: string;
-  isAdmin: boolean;
+  canManageProjects: boolean;
 }
 
-export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSectionProps) {
+export function ContactsSection({ projectId, accountId, canManageProjects }: ContactsSectionProps) {
   const [contactLinks, setContactLinks] = useState<ContactLink[]>([]);
   const [loading, setLoading] = useState(true);
   const [contactPickerOpen, setContactPickerOpen] = useState(false);
@@ -139,7 +139,7 @@ export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSecti
           <Users className="h-4 w-4 text-muted-foreground" />
           Contacts
         </h2>
-        {isAdmin && (
+        {canManageProjects && (
           <Button size="sm" onClick={() => setContactPickerOpen(true)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Add contact
@@ -156,7 +156,7 @@ export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSecti
           ) : contactLinks.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground text-sm">
               No contacts linked.
-              {isAdmin && (
+              {canManageProjects && (
                 <Button
                   variant="link"
                   size="sm"
@@ -192,7 +192,7 @@ export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSecti
                       </div>
                       {rolePill(cl.role)}
                     </div>
-                    {isAdmin && (
+                    {canManageProjects && (
                       <div className="flex items-center gap-1 opacity-0 group-hover/row:opacity-100 transition-opacity shrink-0">
                         {isChanging ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
@@ -242,7 +242,7 @@ export function ContactsSection({ projectId, accountId, isAdmin }: ContactsSecti
         </CardContent>
       </Card>
 
-      {isAdmin && (
+      {canManageProjects && (
         <ProjectContactPicker
           mode="pick-contact"
           projectId={projectId}

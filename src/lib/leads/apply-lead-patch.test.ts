@@ -242,6 +242,9 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     canManageApplications: false,
     canManageClasses: false,
     canManageHR: false,
+    canManageProjects: false,
+    canApproveTime: false,
+    canManageBilling: false,
     canExport: false,
     canSendSms: false,
     dashboardWidgets: null,
@@ -251,7 +254,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     userId: "user-1",
     email: "user1@example.com",
     tenantId: "tenant-1",
-    role: "counselor",
+    role: "staff",
     industryId: "education_consultancy",
     positionId: "pos-1",
     positionSlug: null,
@@ -301,7 +304,7 @@ describe("applyLeadPatch — governance branches", () => {
   it("§4.2 — a team-scoped manager CAN touch a lead assigned to their own branch member, even if the lead's own branch_id is stale/wrong", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "member-x", branch_id: "branch-other", list_id: null },
-      tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "counselor", positions: { slug: "counselor" } } },
+      tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "staff", positions: { slug: "counselor" } } },
     });
     const auth = fixtureAuth({
       branchId: "branch-mgr",
@@ -316,7 +319,7 @@ describe("applyLeadPatch — governance branches", () => {
   it("§4.2 — a team-scoped manager cannot touch a lead that isn't in their branch and isn't assigned to any of their branch members", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "member-x", branch_id: "branch-other", list_id: null },
-      tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "counselor", positions: { slug: "counselor" } } },
+      tenantUsers: { "member-y": { user_id: "member-y", branch_id: "branch-mgr", role: "staff", positions: { slug: "counselor" } } },
     });
     const auth = fixtureAuth({
       branchId: "branch-mgr",
@@ -331,7 +334,7 @@ describe("applyLeadPatch — governance branches", () => {
   it("§4.2 — a team-scoped manager cannot assign to a target outside their branch", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: "branch-mgr", list_id: null },
-      tenantUsers: { "member-outside": { user_id: "member-outside", branch_id: "branch-other", role: "counselor", positions: { slug: "counselor" } } },
+      tenantUsers: { "member-outside": { user_id: "member-outside", branch_id: "branch-other", role: "staff", positions: { slug: "counselor" } } },
     });
     const auth = fixtureAuth({
       branchId: "branch-mgr",
@@ -345,7 +348,7 @@ describe("applyLeadPatch — governance branches", () => {
   it("chain forward — an allowed chain target (lead-executive -> counselor, same branch) passes", async () => {
     await setFakeDb({
       leads: { id: "lead-1", pipeline_id: "pipe-1", assigned_to: "user-1", branch_id: null, list_id: null, status: "s", lead_type: "lead" },
-      tenantUsers: { "counselor-user": { user_id: "counselor-user", branch_id: "branch-1", role: "counselor", positions: { slug: "counselor" } } },
+      tenantUsers: { "counselor-user": { user_id: "counselor-user", branch_id: "branch-1", role: "staff", positions: { slug: "counselor" } } },
     });
     const auth = fixtureAuth({
       positionSlug: "lead-executive",
@@ -388,7 +391,7 @@ describe("applyLeadPatch — governance branches", () => {
       },
       leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
       tenantUsers: {
-        "prev-holder": { user_id: "prev-holder", branch_id: "branch-1", role: "counselor", positions: { slug: "counselor" } },
+        "prev-holder": { user_id: "prev-holder", branch_id: "branch-1", role: "staff", positions: { slug: "counselor" } },
       },
     });
     const auth = fixtureAuth({
@@ -412,7 +415,7 @@ describe("applyLeadPatch — governance branches", () => {
       },
       leadAssignmentHistory: [{ lead_id: "lead-1", to_user_id: "user-1", from_user_id: "prev-holder" }],
       tenantUsers: {
-        "prev-holder": { user_id: "prev-holder", branch_id: "branch-1", role: "counselor", positions: { slug: "counselor" } },
+        "prev-holder": { user_id: "prev-holder", branch_id: "branch-1", role: "staff", positions: { slug: "counselor" } },
         "not-a-peer": { user_id: "not-a-peer", branch_id: "branch-1", role: "application-executive", positions: { slug: "application-executive" } },
       },
     });
@@ -435,7 +438,7 @@ describe("applyLeadPatch — governance branches", () => {
       },
       leadAssignmentHistory: [], // no prior handoff recorded for user-1
       tenantUsers: {
-        "someone-else": { user_id: "someone-else", branch_id: "branch-1", role: "counselor", positions: { slug: "counselor" } },
+        "someone-else": { user_id: "someone-else", branch_id: "branch-1", role: "staff", positions: { slug: "counselor" } },
       },
     });
     const auth = fixtureAuth({

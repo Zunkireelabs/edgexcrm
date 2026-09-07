@@ -1,7 +1,6 @@
 import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
-import { canSeeNav, deriveRole, resolvePermissions, positionPermissionsFromEmbed } from "@/lib/api/permissions";
+import { canSeeNav, deriveRole, resolvePermissions, normalizeRole, positionPermissionsFromEmbed } from "@/lib/api/permissions";
 import type { PositionPermissions } from "@/lib/api/permissions";
-import type { UserRole } from "@/types/database";
 import { scopedClient } from "@/lib/supabase/scoped";
 import {
   apiSuccess,
@@ -95,12 +94,13 @@ export async function GET(request: Request) {
 
   const enriched = members.map((m) => {
     // Position is the source of truth for assignability — resolve it, don't read legacy `role`.
-    const { canEditLeads } = resolvePermissions(m.role as UserRole, positionPermissionsFromEmbed(m.positions));
+    const normalizedRole = normalizeRole(m.role as string);
+    const { canEditLeads } = resolvePermissions(normalizedRole, positionPermissionsFromEmbed(m.positions));
     const positionData = Array.isArray(m.positions) ? m.positions[0] : m.positions;
     return {
       id: m.id,
       user_id: m.user_id,
-      role: m.role,
+      role: normalizedRole,
       position_id: m.position_id,
       branch_id: m.branch_id,
       name: nameMap.get(m.user_id) ?? null,

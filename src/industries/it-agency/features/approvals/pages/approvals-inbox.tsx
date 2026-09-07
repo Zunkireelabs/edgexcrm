@@ -45,7 +45,7 @@ interface ApprovalsData {
 }
 
 interface ApprovalsInboxPageProps {
-  role: string;
+  canApproveTime: boolean;
 }
 
 const APPROVE_PATH: Record<ApprovalRow["kind"], (id: string) => string> = {
@@ -211,8 +211,7 @@ function formatHours(minutes: number): string {
 
 // ── Main page ────────────────────────────────────────────────────────
 
-export function ApprovalsInboxPage({ role }: ApprovalsInboxPageProps) {
-  const isAdmin = role === "owner" || role === "admin";
+export function ApprovalsInboxPage({ canApproveTime }: ApprovalsInboxPageProps) {
 
   const [data, setData] = useState<ApprovalsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -239,8 +238,8 @@ export function ApprovalsInboxPage({ role }: ApprovalsInboxPageProps) {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) fetchApprovals();
-  }, [isAdmin, fetchApprovals]);
+    if (canApproveTime) fetchApprovals();
+  }, [canApproveTime, fetchApprovals]);
 
   function removeRow(kind: ApprovalRow["kind"], id: string) {
     setData((prev) => {
@@ -342,12 +341,12 @@ export function ApprovalsInboxPage({ role }: ApprovalsInboxPageProps) {
 
   // ── Not authorized ──────────────────────────────────────────────
 
-  if (!isAdmin) {
+  if (!canApproveTime) {
     return (
       <div className="flex flex-col items-center justify-center min-h-64 text-center">
         <CheckSquare className="h-10 w-10 text-muted-foreground mb-3" />
         <p className="font-medium">You don&apos;t have permission to access approvals</p>
-        <p className="text-sm text-muted-foreground mt-1">This page is only available to admins and owners.</p>
+        <p className="text-sm text-muted-foreground mt-1">Ask an owner or admin to enable timesheet approvals on your position.</p>
       </div>
     );
   }

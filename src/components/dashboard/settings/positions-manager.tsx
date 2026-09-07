@@ -59,6 +59,9 @@ interface PositionPermissions {
   canManageApplications?: boolean;
   canManageHR?: boolean;
   canExport?: boolean;
+  canManageProjects?: boolean;
+  canApproveTime?: boolean;
+  canManageBilling?: boolean;
   dashboard: { widgets: { mode: "all" } | { mode: "allow"; keys: string[] } };
 }
 
@@ -99,6 +102,9 @@ function buildDefaultForm(navCatalog: NavItem[], widgetCatalog: WidgetItem[]) {
     canManageApplications: false,
     canManageHR: false,
     canExport: false,
+    canManageProjects: false,
+    canApproveTime: false,
+    canManageBilling: false,
     widgetsMode: "all" as "all" | "allow",
     widgetKeys: [] as string[],
     _navCatalog: navCatalog,
@@ -123,6 +129,9 @@ function permissionsFromForm(form: FormState): PositionPermissions {
     ...(form.base_tier === "member" ? { canEditLeads: form.leadScope === "own" ? true : form.canEditLeads } : {}),
     ...(form.base_tier === "member" ? { canManageApplications: form.canManageApplications } : {}),
     ...(form.base_tier === "member" ? { canManageHR: form.canManageHR } : {}),
+    ...(form.base_tier === "member" ? { canManageProjects: form.canManageProjects } : {}),
+    ...(form.base_tier === "member" ? { canApproveTime: form.canApproveTime } : {}),
+    ...(form.base_tier === "member" ? { canManageBilling: form.canManageBilling } : {}),
     dashboard: form.widgetsMode === "all"
       ? { widgets: { mode: "all" } }
       : { widgets: { mode: "allow", keys: form.widgetKeys } },
@@ -145,6 +154,9 @@ function formFromPosition(position: Position, navCatalog: NavItem[], widgetCatal
     canManageApplications: p.canManageApplications === true,
     canManageHR: p.canManageHR === true,
     canExport: p.canExport === true,
+    canManageProjects: p.canManageProjects === true,
+    canApproveTime: p.canApproveTime === true,
+    canManageBilling: p.canManageBilling === true,
     widgetsMode: p.dashboard.widgets.mode,
     widgetKeys: p.dashboard.widgets.mode === "allow" ? p.dashboard.widgets.keys : [],
     _navCatalog: navCatalog,
@@ -620,6 +632,54 @@ export function PositionsManager({ navCatalog, widgetCatalog }: PositionsManager
                   Allows viewing and editing every employee profile, department, skill, and
                   project allocation. Without this, members only see their own profile
                   (or their direct reports&apos; profiles, if they manage anyone).
+                </p>
+              </div>
+            )}
+
+            {/* Delivery capabilities (member tier only) — it_agency Projects/Time/Billing */}
+            {form.base_tier === "member" && (
+              <div className="space-y-1.5">
+                <Label>Delivery</Label>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="can-manage-projects"
+                    checked={form.canManageProjects}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, canManageProjects: Boolean(c) }))
+                    }
+                  />
+                  <label htmlFor="can-manage-projects" className="text-sm cursor-pointer">
+                    Manage projects &amp; tasks
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="can-approve-time"
+                    checked={form.canApproveTime}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, canApproveTime: Boolean(c) }))
+                    }
+                  />
+                  <label htmlFor="can-approve-time" className="text-sm cursor-pointer">
+                    Approve timesheets
+                  </label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="can-manage-billing"
+                    checked={form.canManageBilling}
+                    onCheckedChange={(c) =>
+                      setForm((f) => ({ ...f, canManageBilling: Boolean(c) }))
+                    }
+                  />
+                  <label htmlFor="can-manage-billing" className="text-sm cursor-pointer">
+                    Manage project billing
+                  </label>
+                </div>
+                <p className="text-xs text-muted-foreground pl-6">
+                  Create and edit projects, project sub-records, and delete tasks; approve or
+                  reject time entries; manage project invoices. Without these, delivery pages
+                  are read-only for this position. Owner/Admin always have all three.
                 </p>
               </div>
             )}

@@ -252,7 +252,7 @@ function ReportSections({ report }: { report: ProjectStatusReport }) {
 interface StatusReportsPanelProps {
   reports: ProjectStatusReport[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onCreateDraft: (fields: DraftFields) => Promise<boolean>;
   onPublish: (id: string) => Promise<boolean>;
   onRefetch: () => void;
@@ -266,7 +266,7 @@ interface StatusReportsPanelProps {
 export function StatusReportsPanel({
   reports,
   loading,
-  isAdmin,
+  canManageProjects,
   onCreateDraft,
   onPublish,
   onRefetch,
@@ -356,7 +356,7 @@ export function StatusReportsPanel({
         )}
       </CardHeader>
       <CardContent className="space-y-4">
-        {isAdmin && (
+        {canManageProjects && (
           <div className="space-y-3">
             <div className="rounded-md border border-dashed p-2 text-xs text-muted-foreground">
               <span>
@@ -424,7 +424,7 @@ export function StatusReportsPanel({
           <div key={r.id} className="rounded-md border p-3 space-y-2 bg-muted/30">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground">Draft · {r.report_date}</span>
-              {isAdmin && (
+              {canManageProjects && (
                 <Button size="sm" onClick={() => onPublish(r.id)}>
                   <Send className="h-3.5 w-3.5 mr-1.5" />
                   Publish
@@ -445,7 +445,7 @@ export function StatusReportsPanel({
                 {formatSnapshotHours(r.hours_actual_snapshot)}h / {formatSnapshotHours(r.hours_estimate_snapshot)}h
               </p>
             </div>
-            {isAdmin && (
+            {canManageProjects && (
               <Button size="sm" variant="outline" className="shrink-0" onClick={() => setShareReportId(r.id)}>
                 <Share2 className="h-3.5 w-3.5 mr-1.5" />
                 Share

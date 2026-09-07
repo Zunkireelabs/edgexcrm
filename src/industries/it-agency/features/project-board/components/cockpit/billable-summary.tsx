@@ -15,10 +15,10 @@ import type { TimeEntry } from "@/types/database";
 interface BillableSummaryProps {
   projectId: string;
   // Cost/margin exposes staff-cost information — admin/owner only.
-  isAdmin: boolean;
+  canManageBilling: boolean;
 }
 
-export function BillableSummary({ projectId, isAdmin }: BillableSummaryProps) {
+export function BillableSummary({ projectId, canManageBilling }: BillableSummaryProps) {
   const [entries, setEntries] = useState<TimeEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -63,13 +63,13 @@ export function BillableSummary({ projectId, isAdmin }: BillableSummaryProps) {
             <span className="text-muted-foreground">Billable amount</span>
             <span className="font-medium tabular-nums">${billableAmount.toFixed(2)}</span>
           </div>
-          {isAdmin && (
+          {canManageBilling && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Cost</span>
               <span className="font-medium tabular-nums">${costAmount.toFixed(2)}</span>
             </div>
           )}
-          {isAdmin && (
+          {canManageBilling && (
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Margin</span>
               <span className={`font-medium tabular-nums ${negativeMargin ? "text-destructive" : ""}`}>

@@ -151,7 +151,7 @@ export function KanbanBoard({
 
   const isAdmin = role === "admin" || role === "owner";
   const canEdit = canEditLeads ?? role !== "viewer";
-  const restrictSelf = restrictToSelf ?? role === "counselor";
+  const restrictSelf = restrictToSelf ?? role === "staff";
   const canCreateLead = canEdit;
 
   useEffect(() => {
