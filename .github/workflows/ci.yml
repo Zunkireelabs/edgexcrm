@@ -167,17 +167,37 @@ jobs:
         run: ./scripts/local-db-setup.sh
 
       # email/outbound/send.test.ts probes `public.leads` and needs one row to
-      # exist; the other five suites probe `tenants`, which the seed creates.
-      # The baseline seeds ZERO leads, so that suite has only ever run on
-      # developer machines that happened to have leads left over from other
-      # work — it is non-deterministic by construction. Fixture here keeps CI
-      # honest; the suite should really create its own (tracked as follow-up).
+      # exist; the other five probe `tenants`, which the seed creates. The
+      # baseline seeds ZERO leads, so that suite has only ever run on developer
+      # machines that happened to have leads left over from other work — it is
+      # non-deterministic by construction, and nobody noticed because it skipped
+      # silently. Fixture here keeps CI honest; the suite should really create
+      # its own (logged as a follow-up rather than widened into this PR).
+      #
+      # Inserted through `pipelines` rather than `tenants`: leads.pipeline_id is
+      # NOT NULL (added after the baseline was cut, so it is not visible in
+      # baseline/schema.sql's column list), and joining this way keeps tenant and
+      # pipeline consistent by construction. supabase/seed.sql creates both.
+      # Self-verifying: a 0-row insert raises instead of leaving the suite to
+      # fail later with a misleading "database unreachable".
       - name: Seed one lead fixture (the email send suite probes public.leads)
         run: |
-          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -c \
-            "INSERT INTO public.leads (tenant_id, first_name, last_name, email)
-             SELECT id, 'CI', 'Fixture', 'ci-fixture@zunkiree.invalid'
-             FROM public.tenants ORDER BY created_at LIMIT 1;"
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          DECLARE n int;
+          BEGIN
+            INSERT INTO public.leads (tenant_id, pipeline_id, first_name, last_name, email)
+            SELECT p.tenant_id, p.id, 'CI', 'Fixture', 'ci-fixture@zunkiree.invalid'
+            FROM public.pipelines p
+            ORDER BY p.created_at
+            LIMIT 1;
+            GET DIAGNOSTICS n = ROW_COUNT;
+            IF n <> 1 THEN
+              RAISE EXCEPTION 'lead fixture not created (% rows) — is supabase/seed.sql still creating a tenant + pipeline?', n;
+            END IF;
+            RAISE NOTICE 'lead fixture created';
+          END $$;
+          SQL
 
       - name: Run database-backed suites
         env:
