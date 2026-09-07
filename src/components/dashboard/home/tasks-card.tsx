@@ -1,15 +1,25 @@
 "use client";
 
-import { useState } from "react";
 import { ClipboardList } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { NewTaskRow } from "./new-task-row";
 import { TaskRow } from "@/components/dashboard/tasks/task-row";
+import { addDays } from "@/lib/hr/dates";
+import { summarizeOpenTasks } from "@/lib/home/task-grouping";
 import type { PersonalTask } from "@/lib/supabase/queries";
+
+/**
+ * Home Overview's task card is a capped SUMMARY, not a third task surface —
+ * see the Phase 4 rule this Phase 5 pass acts on
+ * (docs/IT-AGENCY-PHASE5-DELIVERY-NAV-IA-BRIEF.md §Phase 2): Home → Tasks is
+ * the canonical "everything assigned to me" surface, /tasks is the canonical
+ * "project work" surface, and every other task view must be a summary that
+ * links into one of those two.
+ */
+const MAX_VISIBLE = 5;
 
 interface TasksCardProps {
   initialOpen: PersonalTask[];
-  initialDone: PersonalTask[];
   currentUserId: string;
   /** Tenant-local "today" as YYYY-MM-DD — see todayInTz in @/lib/hr/dates. */
   today: string;
@@ -19,11 +29,12 @@ interface TasksCardProps {
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreated: (task: Record<string, unknown>) => void;
+  /** Switches Home to the Tasks tab — the canonical surface this card summarizes. */
+  onViewAll: () => void;
 }
 
 export function TasksCard({
   initialOpen,
-  initialDone,
   currentUserId,
   today,
   projectBoardEnabled,
@@ -32,34 +43,25 @@ export function TasksCard({
   onComplete,
   onDelete,
   onCreated,
+  onViewAll,
 }: TasksCardProps) {
-  const [showCompleted, setShowCompleted] = useState(false);
+  const tomorrow = addDays(today, 1);
+  const { visible, total } = summarizeOpenTasks(initialOpen, today, tomorrow, MAX_VISIBLE);
 
   return (
     <Card className="border-sidebar-border rounded-xl">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm font-semibold">My Tasks</CardTitle>
-          {initialDone.length > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowCompleted((v) => !v)}
-              className="text-xs text-blue-600 hover:underline"
-            >
-              {showCompleted ? "Hide completed" : `Show completed (${initialDone.length})`}
-            </button>
-          )}
-        </div>
+        <CardTitle className="text-sm font-semibold">My Tasks</CardTitle>
       </CardHeader>
       <CardContent className="pt-0 space-y-1">
-        {initialOpen.length === 0 && !showCompleted ? (
+        {visible.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-6 gap-2 text-center">
             <ClipboardList className="h-8 w-8 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">You have no open tasks.</p>
           </div>
         ) : (
           <div className="space-y-0.5">
-            {initialOpen.map((task) => (
+            {visible.map((task) => (
               <TaskRow
                 key={task.id}
                 task={task}
@@ -74,25 +76,14 @@ export function TasksCard({
           </div>
         )}
 
-        {showCompleted && initialDone.length > 0 && (
-          <div className="mt-3 pt-3 border-t border-border">
-            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-              Completed
-            </p>
-            <div className="space-y-0.5">
-              {initialDone.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  today={today}
-                  completed
-                  projectBoardEnabled={projectBoardEnabled}
-                  onComplete={onComplete}
-                  onDelete={onDelete}
-                />
-              ))}
-            </div>
-          </div>
+        {total > 0 && (
+          <button
+            type="button"
+            onClick={onViewAll}
+            className="w-full text-left text-xs text-blue-600 hover:underline pt-1"
+          >
+            View all {total} task{total === 1 ? "" : "s"}
+          </button>
         )}
 
         <div className="pt-2">
