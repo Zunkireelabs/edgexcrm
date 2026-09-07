@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { localRawClient } from "./test-support";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // DB-backed, same precedent as src/lib/sms/credits-idempotency.test.ts /
 // optout.test.ts: skips cleanly when the local Supabase stack isn't up.
@@ -41,6 +42,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "email outbound send"));
 beforeEach(() => {
   sendMock.mockReset();
   sendMock.mockImplementation(async (payload: { to: string[] }) => ({

@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { localRawClient, localScopedClient } from "./test-support";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // DB-backed, same precedent as src/lib/sms/suppression.test.ts: skips cleanly
 // when the local Supabase stack isn't up. CI's Test job has no database.
@@ -20,6 +21,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "email outbound suppression"));
 describe("loadSuppressedEmails / suppressEmail", () => {
   it("loadSuppressedEmails returns exactly the intersection of the batch and the suppression list, normalized", async (ctx) => {
     if (!localDbAvailable) {
