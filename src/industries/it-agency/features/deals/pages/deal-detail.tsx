@@ -74,6 +74,8 @@ interface DealDetailPageProps {
   dealId: string;
   role: UserRole;
   currentUserId: string;
+  /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
+  projectBoardEnabled?: boolean;
 }
 
 const CURRENCIES = ["NPR", "USD", "INR", "EUR"];
@@ -105,7 +107,7 @@ function formatDate(dateString: string | null): string {
 
 interface TeamMember { user_id: string; email: string; name?: string | null; }
 
-export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPageProps) {
+export function DealDetailPage({ dealId, role, currentUserId, projectBoardEnabled }: DealDetailPageProps) {
   const router = useRouter();
   const isAdmin = role === "owner" || role === "admin";
 
@@ -717,6 +719,7 @@ export function DealDetailPage({ dealId, role, currentUserId }: DealDetailPagePr
           currentUserId={currentUserId}
           context={{ dealId }}
           emptyLabel="No tasks for this deal yet."
+          projectBoardEnabled={projectBoardEnabled}
         />
       </div>
 

@@ -1,6 +1,11 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { createClient } from "@supabase/supabase-js";
 import { generateOptOutToken, optOutUrl } from "./optout";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
+
+// §F2 regression coverage (BLAST-F1-F2-FIX-BRIEF.md): ensureOptOutTokens
+// replaces getOrCreateOptOutToken's per-recipient round trip on the blast
+// send path. Same local-DB skip precedent as the rest of this file.
 
 // Token-format/composition tests run everywhere (no DB). The
 // getOrCreateOptOutToken concurrency test hits the real local Postgres, same
@@ -31,8 +36,13 @@ function localScopedClient(tenantId: string) {
         select(columns: string) {
           return db.from(table).select(columns).eq("tenant_id", tenantId);
         },
-        upsert(rows: Record<string, unknown>, options: { onConflict: string; ignoreDuplicates?: boolean }) {
-          const withTenant = { ...rows, tenant_id: tenantId };
+        upsert(
+          rows: Record<string, unknown> | Record<string, unknown>[],
+          options: { onConflict: string; ignoreDuplicates?: boolean }
+        ) {
+          const withTenant = Array.isArray(rows)
+            ? rows.map((r) => ({ ...r, tenant_id: tenantId }))
+            : { ...rows, tenant_id: tenantId };
           return db.from(table).upsert(withTenant, options);
         },
       };
@@ -51,6 +61,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "sms opt-out tokens"));
 describe("generateOptOutToken", () => {
   it("is 10 characters, base62, and varies between calls", () => {
     const a = generateOptOutToken();
@@ -131,4 +145,71 @@ describe("getOrCreateOptOutToken — race safety", () => {
     const second = await getOrCreateOptOutToken(scoped, tenantId, phone, null);
     expect(second).toBe(first);
   });
+});
+
+describe("ensureOptOutTokens — bulk mint/read (§F2)", () => {
+  it("returns a stable token for a phone that already has one", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureOptOutTokens } = await import("./optout");
+    const scoped = localScopedClient(tenantId);
+    const phone = `+9779800${Math.floor(Math.random() * 900000 + 100000)}`;
+
+    const first = await ensureOptOutTokens(scoped, [{ phoneE164: phone, leadId: null }]);
+    const second = await ensureOptOutTokens(scoped, [{ phoneE164: phone, leadId: null }]);
+
+    expect(first.get(phone)).toBeTruthy();
+    expect(second.get(phone)).toBe(first.get(phone));
+  });
+
+  it("resolves a duplicate phone in one audience to a single row and token", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureOptOutTokens } = await import("./optout");
+    const scoped = localScopedClient(tenantId);
+    const phone = `+9779800${Math.floor(Math.random() * 900000 + 100000)}`;
+
+    const result = await ensureOptOutTokens(scoped, [
+      { phoneE164: phone, leadId: null },
+      { phoneE164: phone, leadId: null },
+    ]);
+
+    expect(result.size).toBe(1);
+    expect(result.get(phone)).toBeTruthy();
+
+    const { count } = await db
+      .from("sms_optout_tokens")
+      .select("token", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("phone_e164", phone);
+    expect(count).toBe(1);
+  });
+
+  it("resolves every phone across >1,000 distinct phones (proves the pagination)", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { ensureOptOutTokens } = await import("./optout");
+    const scoped = localScopedClient(tenantId);
+    const base = Math.floor(Math.random() * 900) + 100;
+    const phones = Array.from({ length: 1200 }, (_, i) => `+977${base}${String(i).padStart(7, "0")}`);
+
+    const result = await ensureOptOutTokens(
+      scoped,
+      phones.map((phoneE164) => ({ phoneE164, leadId: null }))
+    );
+
+    expect(result.size).toBe(phones.length);
+    for (const phone of phones) {
+      expect(result.get(phone)).toBeTruthy();
+    }
+  }, 30000);
 });

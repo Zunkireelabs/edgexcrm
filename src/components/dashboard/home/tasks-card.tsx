@@ -6,12 +6,16 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { NewTaskRow } from "./new-task-row";
 import { TaskRow } from "@/components/dashboard/tasks/task-row";
 import type { PersonalTask } from "@/lib/supabase/queries";
-import { toLocalDateString } from "@/lib/date";
 
 interface TasksCardProps {
   initialOpen: PersonalTask[];
   initialDone: PersonalTask[];
   currentUserId: string;
+  /** Tenant-local "today" as YYYY-MM-DD — see todayInTz in @/lib/hr/dates. */
+  today: string;
+  projectBoardEnabled: boolean;
+  timeTrackingEnabled: boolean;
+  runningTimersByTask: Record<string, string>;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreated: (task: Record<string, unknown>) => void;
@@ -21,13 +25,15 @@ export function TasksCard({
   initialOpen,
   initialDone,
   currentUserId,
+  today,
+  projectBoardEnabled,
+  timeTrackingEnabled,
+  runningTimersByTask,
   onComplete,
   onDelete,
   onCreated,
 }: TasksCardProps) {
   const [showCompleted, setShowCompleted] = useState(false);
-
-  const today = toLocalDateString(new Date());
 
   return (
     <Card className="border-sidebar-border rounded-xl">
@@ -58,6 +64,9 @@ export function TasksCard({
                 key={task.id}
                 task={task}
                 today={today}
+                projectBoardEnabled={projectBoardEnabled}
+                timeTrackingEnabled={timeTrackingEnabled}
+                runningTimerId={runningTimersByTask[task.id] ?? null}
                 onComplete={onComplete}
                 onDelete={onDelete}
               />
@@ -77,6 +86,7 @@ export function TasksCard({
                   task={task}
                   today={today}
                   completed
+                  projectBoardEnabled={projectBoardEnabled}
                   onComplete={onComplete}
                   onDelete={onDelete}
                 />

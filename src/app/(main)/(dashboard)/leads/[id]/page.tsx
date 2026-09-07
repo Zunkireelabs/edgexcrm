@@ -43,6 +43,7 @@ export default async function LeadDetailPage({
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
   const hasClasses = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CLASSES);
   const checkInActive = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.CHECK_IN);
+  const projectBoardEnabled = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.PROJECT_BOARD);
 
   const leadListId = (lead as unknown as { list_id?: string | null }).list_id ?? null;
   const [notes, checklists, activities, submissionHistory, listPipelineResult, fallbackStages, entityResult, industryResult, allLists] = await Promise.all([
@@ -326,6 +327,7 @@ export default async function LeadDetailPage({
       checkInActive={checkInActive}
       consentEnabled={consentEnabled}
       consentSigned={consentSigned}
+      projectBoardEnabled={projectBoardEnabled}
     />
   );
 }

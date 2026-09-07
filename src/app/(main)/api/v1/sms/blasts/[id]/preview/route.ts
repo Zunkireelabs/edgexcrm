@@ -8,7 +8,7 @@ import { composeRecipientMessage, estimateFooter, resolveFooter } from "@/lib/sm
 import { renderMessage } from "@/lib/sms/render";
 import { countSegments, type SegmentInfo } from "@/lib/sms/segments";
 import { resolveSendWindow } from "@/lib/sms/quiet-hours";
-import { getOrCreateOptOutToken, optOutUrl } from "@/lib/sms/optout";
+import { ensureOptOutTokens, optOutUrl } from "@/lib/sms/optout";
 import { filterTreeSchema } from "@/lib/filters/schema";
 import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
@@ -84,13 +84,16 @@ export async function POST(request: NextRequest, { params }: RouteParams) {
 
   if (audience.sendable.length > 0) {
     const picked = audience.sendable.slice(0, SAMPLE_COUNT);
-    const composed = await Promise.all(
-      picked.map((r) => composeRecipientMessage(db, auth.tenantId, settings, messageBody, r))
+    // Small, fixed-size sample (SAMPLE_COUNT) — the per-recipient round trip
+    // ensureOptOutTokens exists to avoid at blast scale is a non-issue here.
+    const tokenByPhone = await ensureOptOutTokens(
+      db,
+      picked.map((r) => ({ phoneE164: r.phoneE164, leadId: r.leadId }))
     );
+    const composed = picked.map((r) => composeRecipientMessage(settings, messageBody, r, tokenByPhone.get(r.phoneE164)!));
     samples = composed.map((c) => c.text);
     segmentsList = composed.map((c) => c.segments);
-    const firstToken = await getOrCreateOptOutToken(db, auth.tenantId, picked[0].phoneE164, picked[0].leadId);
-    footerForOverhead = resolveFooter(settings.optout_footer, optOutUrl(firstToken));
+    footerForOverhead = resolveFooter(settings.optout_footer, optOutUrl(tokenByPhone.get(picked[0].phoneE164)!));
   } else {
     const footer = estimateFooter(settings.optout_footer);
     const text = renderMessage({ body: messageBody, lead: {}, senderLabel: settings.sender_label, optOutFooter: footer });

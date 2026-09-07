@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { X, CheckCircle2, Circle } from "lucide-react";
 import { PRIORITY_CONFIG } from "@/industries/it-agency/features/project-board/components/priority-pill";
+import { TaskContextChip } from "./task-context-chip";
+import { TaskTimerButton } from "./task-timer-button";
 import type { TaskPriority, TaskStatus } from "@/types/database";
 
 export interface TaskRowItem {
@@ -25,6 +26,12 @@ interface TaskRowProps {
   completed?: boolean;
   /** Show who the task is assigned to — useful on lead/deal task lists where the viewer isn't necessarily the assignee. */
   showAssignee?: boolean;
+  /** Gates whether the project chip links to the cockpit — see TaskContextChip. */
+  projectBoardEnabled?: boolean;
+  /** Renders a start/stop control on this row when true AND the task has a project. */
+  timeTrackingEnabled?: boolean;
+  /** Active timer id for this task, if one is already running. */
+  runningTimerId?: string | null;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
 }
@@ -34,15 +41,15 @@ export function TaskRow({
   today,
   completed = false,
   showAssignee = false,
+  projectBoardEnabled = false,
+  timeTrackingEnabled = false,
+  runningTimerId = null,
   onComplete,
   onDelete,
 }: TaskRowProps) {
   const [acting, setActing] = useState(false);
   const isOverdue = !completed && task.due_date && task.due_date < today;
   const priorityCfg = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.normal;
-  const leadName = task.leads
-    ? [task.leads.first_name, task.leads.last_name].filter(Boolean).join(" ")
-    : null;
 
   async function handleComplete() {
     setActing(true);
@@ -91,23 +98,13 @@ export function TaskRow({
           {showAssignee && task.assignee_name && (
             <span className="text-xs text-muted-foreground">→ {task.assignee_name}</span>
           )}
-          {leadName && task.leads && (
-            <Link href={`/leads/${task.leads.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
-              {leadName}
-            </Link>
-          )}
-          {task.deals && (
-            <Link href={`/deals/${task.deals.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
-              {task.deals.name}
-            </Link>
-          )}
-          {task.projects && (
-            <Link href={`/projects/${task.projects.id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate">
-              {task.projects.name}
-            </Link>
-          )}
+          <TaskContextChip task={task} projectBoardEnabled={projectBoardEnabled} />
         </div>
       </div>
+
+      {timeTrackingEnabled && task.projects && (
+        <TaskTimerButton taskId={task.id} initialTimerId={runningTimerId} />
+      )}
 
       <button
         type="button"

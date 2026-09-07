@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { generateUnsubscribeToken, injectUnsubscribe } from "./unsubscribe";
 import { localRawClient, localScopedClient } from "./test-support";
+import { requireLocalDbInCi } from "@/lib/test-support/require-db-in-ci";
 
 // Token-format/composition tests run everywhere (no DB). The
 // getOrCreateUnsubscribeToken concurrency test hits the real local Postgres,
@@ -23,6 +24,10 @@ beforeAll(async () => {
   }
 }, 5000);
 
+
+// Skipping is correct locally (no `supabase start`); in CI it is a hard failure.
+// See src/lib/test-support/require-db-in-ci.ts for why.
+beforeAll(() => requireLocalDbInCi(localDbAvailable, "email outbound unsubscribe"));
 describe("generateUnsubscribeToken", () => {
   it("is 10 characters, base62, and varies between calls", () => {
     const a = generateUnsubscribeToken();

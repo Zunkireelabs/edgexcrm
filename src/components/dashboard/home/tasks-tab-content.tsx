@@ -1,13 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 import { ChevronDown, ChevronRight, Circle, CheckCircle2, ClipboardList, X } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { toLocalDateString } from "@/lib/date";
+import { addDays } from "@/lib/hr/dates";
+import { groupTasksByDue } from "@/lib/home/task-grouping";
 import { NewTaskRow } from "./new-task-row";
+import { TaskContextChip } from "@/components/dashboard/tasks/task-context-chip";
+import { TaskTimerButton } from "@/components/dashboard/tasks/task-timer-button";
 import { PRIORITY_CONFIG } from "@/industries/it-agency/features/project-board/components/priority-pill";
 import type { PersonalTask } from "@/lib/supabase/queries";
 
@@ -15,24 +17,26 @@ interface TasksTabContentProps {
   initialOpen: PersonalTask[];
   initialDone: PersonalTask[];
   currentUserId: string;
+  /** Tenant-local "today" as YYYY-MM-DD — see todayInTz in @/lib/hr/dates. */
+  today: string;
+  projectBoardEnabled: boolean;
+  timeTrackingEnabled: boolean;
+  runningTimersByTask: Record<string, string>;
+  /** Lifted to home-content.tsx so the rail's Overdue stat can open this tab pre-filtered — see home-content.tsx's activeTab. */
+  filter: FilterKey;
+  onFilterChange: (filter: FilterKey) => void;
   onComplete: (id: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
   onCreated: (task: Record<string, unknown>) => void;
 }
 
-type FilterKey = "all" | "overdue" | "completed";
+export type FilterKey = "all" | "overdue" | "completed";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: "all", label: "All" },
   { key: "overdue", label: "Overdue" },
   { key: "completed", label: "Completed" },
 ];
-
-function addDays(dateStr: string, days: number) {
-  const d = new Date(`${dateStr}T00:00:00`);
-  d.setDate(d.getDate() + days);
-  return toLocalDateString(d);
-}
 
 function dueLabel(dueDate: string, today: string, tomorrow: string) {
   if (dueDate === today) return "Today";
@@ -46,6 +50,9 @@ function TaskRow({
   tomorrow,
   completed,
   acting,
+  projectBoardEnabled,
+  timeTrackingEnabled,
+  runningTimerId,
   onToggle,
   onDelete,
 }: {
@@ -54,13 +61,13 @@ function TaskRow({
   tomorrow: string;
   completed: boolean;
   acting: boolean;
+  projectBoardEnabled: boolean;
+  timeTrackingEnabled: boolean;
+  runningTimerId: string | null;
   onToggle: () => void;
   onDelete?: () => void;
 }) {
   const priorityCfg = PRIORITY_CONFIG[task.priority] ?? PRIORITY_CONFIG.normal;
-  const leadName = task.leads
-    ? [task.leads.first_name, task.leads.last_name].filter(Boolean).join(" ")
-    : null;
 
   return (
     <div className="group flex items-center gap-3 py-2 px-1 rounded-md hover:bg-gray-50 transition-colors">
@@ -82,11 +89,7 @@ function TaskRow({
         <p className={cn("text-sm truncate", completed ? "line-through text-muted-foreground" : "text-foreground font-medium")}>
           {task.title}
         </p>
-        {leadName && task.lead_id && (
-          <Link href={`/leads/${task.lead_id}`} prefetch={false} className="text-xs text-blue-600 hover:underline truncate shrink-0">
-            {leadName}
-          </Link>
-        )}
+        <TaskContextChip task={task} projectBoardEnabled={projectBoardEnabled} />
       </div>
 
       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border shrink-0 ${priorityCfg.cls}`}>
@@ -96,6 +99,10 @@ function TaskRow({
       <span className="text-xs text-muted-foreground w-16 text-right shrink-0">
         {task.due_date ? dueLabel(task.due_date, today, tomorrow) : ""}
       </span>
+
+      {timeTrackingEnabled && task.projects && (
+        <TaskTimerButton taskId={task.id} initialTimerId={runningTimerId} />
+      )}
 
       {onDelete && !completed && (
         <button
@@ -119,6 +126,9 @@ function TaskGroup({
   tomorrow,
   completed = false,
   acting,
+  projectBoardEnabled,
+  timeTrackingEnabled,
+  runningTimersByTask,
   onToggle,
   onDelete,
 }: {
@@ -128,6 +138,9 @@ function TaskGroup({
   tomorrow: string;
   completed?: boolean;
   acting: string | null;
+  projectBoardEnabled: boolean;
+  timeTrackingEnabled: boolean;
+  runningTimersByTask: Record<string, string>;
   onToggle: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
@@ -160,6 +173,9 @@ function TaskGroup({
               tomorrow={tomorrow}
               completed={completed}
               acting={acting === task.id}
+              projectBoardEnabled={projectBoardEnabled}
+              timeTrackingEnabled={timeTrackingEnabled}
+              runningTimerId={runningTimersByTask[task.id] ?? null}
               onToggle={() => onToggle(task.id)}
               onDelete={() => onDelete(task.id)}
             />
@@ -174,36 +190,24 @@ export function TasksTabContent({
   initialOpen,
   initialDone,
   currentUserId,
+  today,
+  projectBoardEnabled,
+  timeTrackingEnabled,
+  runningTimersByTask,
+  filter,
+  onFilterChange,
   onComplete,
   onDelete,
   onCreated,
 }: TasksTabContentProps) {
-  const [filter, setFilter] = useState<FilterKey>("all");
   const [acting, setActing] = useState<string | null>(null);
 
-  const today = toLocalDateString(new Date());
-  const tomorrow = addDays(today, 1);
+  const tomorrow = useMemo(() => addDays(today, 1), [today]);
 
-  const { overdue, dueToday, dueTomorrow, later } = useMemo(() => {
-    const overdue: PersonalTask[] = [];
-    const dueToday: PersonalTask[] = [];
-    const dueTomorrow: PersonalTask[] = [];
-    const later: PersonalTask[] = [];
-    for (const t of initialOpen) {
-      if (!t.due_date) {
-        later.push(t);
-      } else if (t.due_date < today) {
-        overdue.push(t);
-      } else if (t.due_date === today) {
-        dueToday.push(t);
-      } else if (t.due_date === tomorrow) {
-        dueTomorrow.push(t);
-      } else {
-        later.push(t);
-      }
-    }
-    return { overdue, dueToday, dueTomorrow, later };
-  }, [initialOpen, today, tomorrow]);
+  const { overdue, dueToday, dueTomorrow, later } = useMemo(
+    () => groupTasksByDue(initialOpen, today, tomorrow),
+    [initialOpen, today, tomorrow],
+  );
 
   async function handleComplete(id: string) {
     setActing(id);
@@ -248,6 +252,9 @@ export function TasksTabContent({
                   tomorrow={tomorrow}
                   completed={false}
                   acting={acting === task.id}
+                  projectBoardEnabled={projectBoardEnabled}
+                  timeTrackingEnabled={timeTrackingEnabled}
+                  runningTimerId={runningTimersByTask[task.id] ?? null}
                   onToggle={() => handleComplete(task.id)}
                   onDelete={() => handleDelete(task.id)}
                 />
@@ -265,7 +272,7 @@ export function TasksTabContent({
             size="sm"
             variant={filter === f.key ? "default" : "outline"}
             className={cn("h-7 px-2.5 text-xs rounded-full", filter === f.key && "pointer-events-none")}
-            onClick={() => setFilter(f.key)}
+            onClick={() => onFilterChange(f.key)}
           >
             {f.label}
           </Button>
@@ -294,18 +301,21 @@ export function TasksTabContent({
                   tomorrow={tomorrow}
                   completed
                   acting={false}
+                  projectBoardEnabled={projectBoardEnabled}
+                  timeTrackingEnabled={timeTrackingEnabled}
+                  runningTimerId={null}
                   onToggle={() => {}}
                 />
               ))}
             </div>
           ) : filter === "overdue" ? (
-            <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} onToggle={handleComplete} onDelete={handleDelete} />
+            <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
           ) : (
             <div>
-              <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Due today" tasks={dueToday} today={today} tomorrow={tomorrow} acting={acting} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Due tomorrow" tasks={dueTomorrow} today={today} tomorrow={tomorrow} acting={acting} onToggle={handleComplete} onDelete={handleDelete} />
-              <TaskGroup title="Later" tasks={later} today={today} tomorrow={tomorrow} acting={acting} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Overdue" tasks={overdue} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Due today" tasks={dueToday} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Due tomorrow" tasks={dueTomorrow} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
+              <TaskGroup title="Later" tasks={later} today={today} tomorrow={tomorrow} acting={acting} projectBoardEnabled={projectBoardEnabled} timeTrackingEnabled={timeTrackingEnabled} runningTimersByTask={runningTimersByTask} onToggle={handleComplete} onDelete={handleDelete} />
             </div>
           )}
 
