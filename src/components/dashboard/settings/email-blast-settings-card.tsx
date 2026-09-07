@@ -88,7 +88,9 @@ export function EmailBlastSettingsCard({ isAdmin }: EmailBlastSettingsCardProps)
       </div>
 
       <div className="space-y-1.5 max-w-xs">
-        <Label htmlFor="email-blast-recipient-cap">Recipient cap per blast</Label>
+        <Label htmlFor={isAdmin ? "email-blast-recipient-cap" : undefined}>
+          Recipient cap per blast
+        </Label>
         {isAdmin ? (
           <Input
             id="email-blast-recipient-cap"
@@ -99,9 +101,7 @@ export function EmailBlastSettingsCard({ isAdmin }: EmailBlastSettingsCardProps)
             onChange={(e) => setForm(e.target.value)}
           />
         ) : (
-          <p id="email-blast-recipient-cap" className="text-sm font-medium">
-            {cap}
-          </p>
+          <p className="text-sm font-medium">{cap}</p>
         )}
         <p className="text-xs text-muted-foreground">
           {isAdmin

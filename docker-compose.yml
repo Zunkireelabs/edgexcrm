@@ -12,7 +12,6 @@ services:
       # Stage runs the SAME image as prod, so NODE_ENV is "production" here too — without this
       # line stage would default to real Resend sends from the production domain (F3).
       - EMAIL_TRANSPORT=stub
-      - PLATFORM_EMAIL_HOST=dev-lead-crm.zunkireelabs.com
     networks:
       - hosting
     labels:
