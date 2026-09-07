@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { todayInTz, addDays } from "@/lib/hr/dates";
-import { groupTasksByDue } from "./task-grouping";
+import { groupTasksByDue, summarizeOpenTasks } from "./task-grouping";
 
 describe("groupTasksByDue", () => {
   it("buckets overdue, due-today, due-tomorrow, later, and dateless tasks", () => {
@@ -57,5 +57,50 @@ describe("groupTasksByDue under a foreign tenant timezone", () => {
     const { overdue, dueToday } = groupTasksByDue([{ due_date: tenantToday }], tenantToday, tomorrow);
     expect(dueToday).toHaveLength(1);
     expect(overdue).toHaveLength(0);
+  });
+});
+
+// Home Overview's TasksCard (docs/IT-AGENCY-PHASE5-DELIVERY-NAV-IA-BRIEF.md
+// §Phase 2): a capped summary, not a third task surface — caps at 5, ordered
+// soonest-first with nulls last, and reports the TRUE total (not just
+// visible.length) for the "View all N" footer link.
+describe("summarizeOpenTasks", () => {
+  const today = "2026-03-10";
+  const tomorrow = "2026-03-11";
+
+  it("caps visible at max (default 5) but reports the true total", () => {
+    const tasks = Array.from({ length: 8 }, (_, i) => ({ id: String(i), due_date: null as string | null }));
+    const { visible, total } = summarizeOpenTasks(tasks, today, tomorrow);
+    expect(visible).toHaveLength(5);
+    expect(total).toBe(8);
+  });
+
+  it("orders soonest due date first, with null due dates last", () => {
+    const tasks = [
+      { id: "no-date", due_date: null as string | null },
+      { id: "later", due_date: "2026-03-20" },
+      { id: "tomorrow", due_date: tomorrow },
+      { id: "today", due_date: today },
+      { id: "overdue", due_date: "2026-03-05" },
+    ];
+    const { visible } = summarizeOpenTasks(tasks, today, tomorrow, 10);
+    expect(visible.map((t) => t.id)).toEqual(["overdue", "today", "tomorrow", "later", "no-date"]);
+  });
+
+  it("respects a custom max", () => {
+    const tasks = [
+      { id: "a", due_date: today },
+      { id: "b", due_date: today },
+      { id: "c", due_date: today },
+    ];
+    const { visible, total } = summarizeOpenTasks(tasks, today, tomorrow, 2);
+    expect(visible).toHaveLength(2);
+    expect(total).toBe(3);
+  });
+
+  it("total is 0 and visible is empty when there are no open tasks", () => {
+    const { visible, total } = summarizeOpenTasks([], today, tomorrow);
+    expect(visible).toEqual([]);
+    expect(total).toBe(0);
   });
 });

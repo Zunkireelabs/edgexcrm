@@ -198,7 +198,6 @@ export function HomeContent({
                 <ScheduleCard schedule={schedule} />
                 <TasksCard
                   initialOpen={openTasks}
-                  initialDone={doneTasks}
                   currentUserId={userId}
                   today={todayISO}
                   projectBoardEnabled={projectBoardEnabled}
@@ -207,6 +206,7 @@ export function HomeContent({
                   onComplete={handleComplete}
                   onDelete={handleDelete}
                   onCreated={handleCreated}
+                  onViewAll={() => setActiveTab("tasks")}
                 />
               </div>
             </div>
