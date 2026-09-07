@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server";
-import { requireEmailCampaignsAccess } from "@/lib/email/outbound/api-guard";
+import { requireEmailCampaignsAccess, requireEmailCampaignsFeature } from "@/lib/email/outbound/api-guard";
 import { requireAdmin } from "@/lib/api/auth";
 import { apiSuccess, apiForbidden, apiValidationError, apiServiceUnavailable } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
@@ -16,9 +16,12 @@ interface TenantEmailSettingsRow {
   max_recipients_per_blast?: number;
 }
 
-// GET /api/v1/email-blasts/settings
+// GET /api/v1/email-blasts/settings — feature-gated only, not bulk-email-enabled-gated.
+// Reading the recipient cap is not a bulk-email action, and every tenant with the
+// Communications panel visible needs this to succeed even before bulk email is switched
+// on for them (bulk_email_enabled defaults to false, migration 211).
 export async function GET() {
-  const guard = await requireEmailCampaignsAccess();
+  const guard = await requireEmailCampaignsFeature();
   if (!guard.ok) return guard.response;
   const { db } = guard;
 
