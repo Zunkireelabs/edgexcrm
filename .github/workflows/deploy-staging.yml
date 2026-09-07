@@ -178,6 +178,7 @@ jobs:
               echo "LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY"
               echo "LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY"
               echo "LANGFUSE_BASE_URL=https://cloud.langfuse.com"
+              echo "LANGFUSE_TRACING_ENVIRONMENT=staging"
               echo "# --- END AI env ---"
             } >> .env.local
             # Native email inbound (docs/email-productionization/INBOUND-SPINE-BRIEF.md)

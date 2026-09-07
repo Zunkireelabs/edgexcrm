@@ -1,7 +1,7 @@
 import { createClient, createServiceClient, getCachedUser } from "./server";
 import { scopedClientForTenant } from "./scoped";
-import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, Pipeline, PipelineWithCounts, UserRole, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
-import { resolvePermissions, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
+import type { Lead, LeadList, LeadNote, LeadChecklist, Tenant, FormConfig, PipelineStage, Pipeline, PipelineWithCounts, TaskStatus, TaskPriority, Branch, ImportSourceReconciliationRow } from "@/types/database";
+import { resolvePermissions, normalizeRole, positionPermissionsFromEmbed, type ResolvedPermissions, type PositionPermissions } from "@/lib/api/permissions";
 import { resolveEntitlements, type Entitlements } from "@/lib/api/entitlements";
 import { branchMemberIds, getLeadMembership } from "@/lib/leads/branch-membership";
 import { isLeadCollaborator } from "@/lib/leads/collaborators";
@@ -50,14 +50,15 @@ export async function getCurrentUserTenant(): Promise<{
   const positionEmbed = Array.isArray(membership.positions)
     ? membership.positions[0] ?? null
     : membership.positions;
+  const normalizedRole = normalizeRole(membership.role as string);
   const permissions = resolvePermissions(
-    membership.role as UserRole,
+    normalizedRole,
     (positionEmbed?.permissions ?? null) as PositionPermissions | null,
   );
 
   return {
     tenant: tenant as Tenant,
-    role: membership.role,
+    role: normalizedRole,
     userId: user.id,
     positionId: (membership.position_id as string | null) ?? null,
     positionName: (positionEmbed?.name ?? null) as string | null,
@@ -750,15 +751,16 @@ export async function getTeamMembers(tenantId: string): Promise<TeamMember[]> {
     const user = userMap.get(m.user_id) ?? { email: "Unknown", name: "Unknown" };
     // Resolve position → permissions to decide assignability (position is the source of truth,
     // not the legacy `role`).
+    const normalizedRole = normalizeRole(m.role as string);
     const { canEditLeads } = resolvePermissions(
-      m.role as UserRole,
+      normalizedRole,
       positionPermissionsFromEmbed(m.positions),
     );
     const posEmbed = Array.isArray(m.positions) ? (m.positions[0] ?? null) : m.positions;
     return {
       id: m.id,
       user_id: m.user_id,
-      role: m.role,
+      role: normalizedRole,
       email: user.email,
       name: user.name,
       branch_id: (m.branch_id as string | null) ?? null,

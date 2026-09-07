@@ -24,7 +24,7 @@ interface ContactWithAccount extends Contact {
 
 interface ContactsListPageProps {
   tenantId: string;
-  role: "owner" | "admin" | "viewer" | "counselor";
+  role: "owner" | "admin" | "viewer" | "staff";
 }
 
 type SortField = "name" | "email" | "title" | "created";

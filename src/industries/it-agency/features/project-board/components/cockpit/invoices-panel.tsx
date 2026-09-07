@@ -23,7 +23,7 @@ interface InvoicesPanelProps {
 }
 
 // Self-fetching (mirrors BillableSummary) — only ever mounted for
-// isAdmin && project.is_billable (see project-cockpit.tsx), so the fetch
+// canManageBilling && project.is_billable (see project-cockpit.tsx), so the fetch
 // never fires for a visitor who shouldn't see it.
 export function InvoicesPanel({ projectId, currency }: InvoicesPanelProps) {
   const { invoices, billableMilestones, loading, generateInvoice, refetch } = useProjectInvoices(projectId);

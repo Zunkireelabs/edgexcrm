@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
+import { canApproveTime } from "@/lib/api/permissions";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiValidationError, apiError } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.TIME_TRACKING)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canApproveTime(auth.permissions)) return apiForbidden();
 
   const db = await scopedClient(auth);
 

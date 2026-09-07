@@ -25,11 +25,11 @@ const ENGAGEMENT_MODELS: { value: EngagementModel; label: string }[] = [
 
 interface QualifyPanelProps {
   project: Project;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   onQualify: (payload: Record<string, unknown>) => Promise<boolean>;
 }
 
-export function QualifyPanel({ project, isAdmin, onQualify }: QualifyPanelProps) {
+export function QualifyPanel({ project, canManageProjects, onQualify }: QualifyPanelProps) {
   // Seeded from the deal/proposal handoff (mig 134), if any — an editable
   // draft the PM confirms or overrides, not a fait accompli. startDate /
   // targetEndDate have no seed source and stay blank.
@@ -92,7 +92,7 @@ export function QualifyPanel({ project, isAdmin, onQualify }: QualifyPanelProps)
     );
   }
 
-  if (!isAdmin) {
+  if (!canManageProjects) {
     return (
       <Card className="border-amber-200 bg-amber-50/40">
         <CardHeader>

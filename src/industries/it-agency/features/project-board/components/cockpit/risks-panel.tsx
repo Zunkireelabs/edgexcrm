@@ -42,13 +42,13 @@ function age(openedAt: string, resolvedAt: string | null): string {
 interface RisksPanelProps {
   risks: ProjectRisk[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   team: TeamMember[];
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
   onUpdate: (riskId: string, patch: Record<string, unknown>) => Promise<boolean>;
 }
 
-export function RisksPanel({ risks, loading, isAdmin, team, onCreate, onUpdate }: RisksPanelProps) {
+export function RisksPanel({ risks, loading, canManageProjects, team, onCreate, onUpdate }: RisksPanelProps) {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -89,7 +89,7 @@ export function RisksPanel({ risks, loading, isAdmin, team, onCreate, onUpdate }
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Risks</CardTitle>
-        {isAdmin && (
+        {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             Raise
@@ -97,7 +97,7 @@ export function RisksPanel({ risks, loading, isAdmin, team, onCreate, onUpdate }
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && isAdmin && (
+        {adding && canManageProjects && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             <Input placeholder="What's the risk?" value={title} onChange={(e) => setTitle(e.target.value)} />
             <div className="flex gap-2 flex-wrap items-center">
@@ -176,9 +176,9 @@ export function RisksPanel({ risks, loading, isAdmin, team, onCreate, onUpdate }
                   assigneeId={risk.owner_id}
                   team={team}
                   onChange={(userId) => onUpdate(risk.id, { owner_id: userId })}
-                  disabled={!isAdmin}
+                  disabled={!canManageProjects}
                 />
-                {isAdmin ? (
+                {canManageProjects ? (
                   <Select value={risk.status} onValueChange={(v) => onUpdate(risk.id, { status: v })}>
                     <SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger>
                     <SelectContent>

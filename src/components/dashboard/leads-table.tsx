@@ -83,6 +83,7 @@ import { toast } from "sonner";
 import { AddLeadSheet } from "@/components/dashboard/add-lead-sheet";
 import { LeadPreviewPanel } from "@/components/dashboard/lead-preview-panel";
 import { MergeDialog } from "@/components/dashboard/lead/merge-dialog";
+import { getLeadFullName, getLeadInitials } from "@/components/dashboard/lead/lead-name";
 import type { Lead, LeadList, PipelineStage, UserRole, TenantEntity, Branch } from "@/types/database";
 import { useBadgeCounts } from "@/hooks/use-badge-counts";
 import {
@@ -209,12 +210,6 @@ interface LeadsTableProps {
 
 // Maps a position slug to the list slug a lead should move to when assigned to that position (New Leads triage only).
 const POSITION_ROUTE_MAP = POSITION_ROUTE_MAP_WITH_ADMIN;
-
-function getInitials(firstName?: string | null, lastName?: string | null): string {
-  const first = firstName?.charAt(0)?.toUpperCase() || "";
-  const last = lastName?.charAt(0)?.toUpperCase() || "";
-  return first + last || "?";
-}
 
 const MIN_COLUMN_WIDTH = 60;
 
@@ -1166,8 +1161,8 @@ export function LeadsTable({
           comparison = new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           break;
         case "name": {
-          const nameA = `${a.first_name || ""} ${a.last_name || ""}`.trim().toLowerCase();
-          const nameB = `${b.first_name || ""} ${b.last_name || ""}`.trim().toLowerCase();
+          const nameA = getLeadFullName(a, "").toLowerCase();
+          const nameB = getLeadFullName(b, "").toLowerCase();
           comparison = nameA.localeCompare(nameB);
           break;
         }
@@ -1707,7 +1702,7 @@ export function LeadsTable({
       exportCols.map((col): string => {
         switch (col.key) {
           case "name":
-            return `${lead.first_name || ""} ${lead.last_name || ""}`.trim();
+            return getLeadFullName(lead, "");
           case "email":
             return lead.email || "";
           case "phone":
@@ -2728,7 +2723,7 @@ export function LeadsTable({
             ) : (
               paginatedLeads.map((lead) => {
                 const isSelected = selectedIds.has(lead.id);
-                const initials = getInitials(lead.first_name, lead.last_name);
+                const initials = getLeadInitials(lead);
 
                 return (
                   <tr

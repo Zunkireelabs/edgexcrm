@@ -31,7 +31,7 @@ const COUNSELOR_AUTH = {
   positionSlug: null,
   branchId: null,
   branchMemberIds: [],
-  permissions: resolvePermissions("counselor", null), // leadScope: "own"
+  permissions: resolvePermissions("staff", null), // leadScope: "own"
 } as unknown as AuthContext;
 
 function fakeReq(body: unknown): NextRequest {

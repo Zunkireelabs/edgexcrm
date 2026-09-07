@@ -1,21 +1,27 @@
 "use client";
 
-import { useMemo, Suspense } from "react";
+import { useMemo, useState, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useProjects, type ProjectWithMetrics } from "../hooks/use-projects";
 import { useWorkspaceFilters } from "../hooks/use-workspace-filters";
 import { WorkspaceHeader } from "../components/workspace-header";
+import { ProjectForm } from "../components/project-form";
 import { BoardView } from "../components/views/board-view";
 import { TableView } from "../components/views/table-view";
 import type { ProjectWithAccount } from "../components/project-card";
-import type { ProjectStatus } from "@/types/database";
+import type { Project, ProjectStatus } from "@/types/database";
 
 interface ProjectWorkspacePageProps {
   tenantId: string;
   role: string;
+  canManageProjects: boolean;
 }
 
-function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePageProps) {
+function WorkspaceInner({ tenantId: _tenantId, canManageProjects }: ProjectWorkspacePageProps) {
+  const router = useRouter();
+  const canCreate = canManageProjects;
+  const [createOpen, setCreateOpen] = useState(false);
   const { projects, accounts, team, accountMap, teamMap, hoursMap, loading, refetch, setProjects } =
     useProjects();
   const { filters, setFilters } = useWorkspaceFilters();
@@ -25,7 +31,9 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
     return projects
       .map((p) => ({
         ...p,
-        account_name: accountMap.get(p.account_id)?.name ?? "Unknown account",
+        account_name: p.account_id
+          ? accountMap.get(p.account_id)?.name ?? "Unknown account"
+          : "Internal",
       }))
       .filter((p) => {
         if (!filters.showCancelled && p.status === "cancelled") return false;
@@ -73,6 +81,19 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
         team={team}
         projectCount={filtered.length}
         onClearFilters={handleClearFilters}
+        canCreate={canCreate}
+        onNewProject={() => setCreateOpen(true)}
+      />
+
+      <ProjectForm
+        accounts={accounts}
+        team={team}
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={(project: Project) => {
+          setProjects((prev) => [{ ...project, contact_count: 0 } as ProjectWithMetrics, ...prev]);
+          router.push(`/projects/${project.id}`);
+        }}
       />
 
       {filters.view === "table" ? (
@@ -82,6 +103,9 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           teamMap={teamMap}
           onProjectUpdated={handleProjectUpdated}
           onClearFilters={handleClearFilters}
+          hasAnyProjects={projects.length > 0}
+          canCreate={canCreate}
+          onNewProject={() => setCreateOpen(true)}
         />
       ) : (
         <BoardView
@@ -92,6 +116,9 @@ function WorkspaceInner({ tenantId: _tenantId, role: _role }: ProjectWorkspacePa
           onProjectUpdated={handleProjectUpdated}
           onRefetch={refetch}
           onClearFilters={handleClearFilters}
+          hasAnyProjects={projects.length > 0}
+          canCreate={canCreate}
+          onNewProject={() => setCreateOpen(true)}
         />
       )}
     </div>

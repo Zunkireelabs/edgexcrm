@@ -147,11 +147,19 @@ jobs:
     runs-on: ubuntu-latest
     # Waits on migrate: proceeds when it succeeded (migrations applied) OR was
     # skipped (no migrations in this push); never deploys when migrate failed,
-    # so new code can't land on a half-migrated DB.
-    needs: [build-push, migrate]
+    # so new code can't land on a half-migrated DB. Also requires migrate-check
+    # to have SUCCEEDED (not just not-failed): migrate-check failing or being
+    # cancelled leaves `migrate` skipped (a job whose `needs` failed is itself
+    # skipped), which without this line would read as the benign "no migrations
+    # in this push" case and deploy anyway — the fail-open bug fixed here.
+    # migrate-check must be listed in `needs:` for `needs.migrate-check.result`
+    # to resolve to anything other than null (GitHub Actions only populates
+    # `needs.<job>` for jobs actually declared in `needs:`).
+    needs: [build-push, migrate-check, migrate]
     if: >-
       always() &&
       needs.build-push.result == 'success' &&
+      needs.migrate-check.result == 'success' &&
       (needs.migrate.result == 'success' || needs.migrate.result == 'skipped')
     environment: production
     steps:
@@ -239,6 +247,14 @@ jobs:
               echo "LANGFUSE_PUBLIC_KEY=$LANGFUSE_PUBLIC_KEY"
               echo "LANGFUSE_SECRET_KEY=$LANGFUSE_SECRET_KEY"
               echo "LANGFUSE_BASE_URL=https://cloud.langfuse.com"
+              # Tags every trace/observation with its origin environment. Without this
+              # the SDK falls back to "default" and prod + stage traces are
+              # INDISTINGUISHABLE in the shared Langfuse project — which matters
+              # because stage carries real un-anonymised Admizz PII, so an
+              # Admizz-tenant trace could have come from either box. Read
+              # automatically by langfuse@3 (getEnv("LANGFUSE_TRACING_ENVIRONMENT"));
+              # must match /^(?!langfuse)[a-z0-9_-]+$/ or the SDK rejects it.
+              echo "LANGFUSE_TRACING_ENVIRONMENT=production"
               echo "# --- END AI env ---"
             } >> .env.local
             # Native email inbound (docs/email-productionization/INBOUND-SPINE-BRIEF.md)

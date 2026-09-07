@@ -28,7 +28,7 @@ export interface ChangeRequestPrefill {
 interface ChangeRequestsPanelProps {
   changeRequests: ProjectChangeRequest[];
   loading: boolean;
-  isAdmin: boolean;
+  canManageProjects: boolean;
   prefill: ChangeRequestPrefill | null;
   onPrefillConsumed: () => void;
   onCreate: (payload: Record<string, unknown>) => Promise<boolean>;
@@ -39,7 +39,7 @@ interface ChangeRequestsPanelProps {
 export function ChangeRequestsPanel({
   changeRequests,
   loading,
-  isAdmin,
+  canManageProjects,
   prefill,
   onPrefillConsumed,
   onCreate,
@@ -84,7 +84,7 @@ export function ChangeRequestsPanel({
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
         <CardTitle className="text-sm">Change requests</CardTitle>
-        {isAdmin && (
+        {canManageProjects && (
           <Button variant="ghost" size="sm" onClick={() => setAdding((v) => !v)}>
             <Plus className="h-3.5 w-3.5 mr-1.5" />
             New
@@ -92,7 +92,7 @@ export function ChangeRequestsPanel({
         )}
       </CardHeader>
       <CardContent className="space-y-3">
-        {adding && isAdmin && (
+        {adding && canManageProjects && (
           <div className="rounded-md border p-3 space-y-2 bg-muted/30">
             {originIssueId && (
               <p className="text-xs text-muted-foreground">Promoted from an issue</p>
@@ -154,7 +154,7 @@ export function ChangeRequestsPanel({
                 <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cfg.className}`}>
                   {cfg.label}
                 </span>
-                {cr.status === "proposed" && isAdmin && (
+                {cr.status === "proposed" && canManageProjects && (
                   <>
                     <Button variant="ghost" size="sm" onClick={() => onApprove(cr.id, cr.client_approved)} title="Approve">
                       <Check className="h-3.5 w-3.5 text-green-600" />

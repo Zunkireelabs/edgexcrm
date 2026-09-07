@@ -28,7 +28,7 @@ export default async function ContactsRoutePage() {
     return (
       <ContactsListPage
         tenantId={tenantData.tenant.id}
-        role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
+        role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
       />
     );
   }
@@ -114,7 +114,7 @@ export default async function ContactsRoutePage() {
           memberNames={memberNames}
           stages={stages}
           formMap={formMap}
-          role={tenantData.role as "owner" | "admin" | "viewer" | "counselor"}
+          role={tenantData.role as "owner" | "admin" | "viewer" | "staff"}
           tenantId={tenantData.tenant.id}
           teamMembers={teamMembers}
           entities={entities}

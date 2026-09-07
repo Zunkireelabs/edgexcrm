@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
-import { authenticateRequest, requireAdmin } from "@/lib/api/auth";
+import { authenticateRequest } from "@/lib/api/auth";
+import { canManageProjects } from "@/lib/api/permissions";
 import { apiSuccess, apiUnauthorized, apiForbidden, apiNotFound, apiError } from "@/lib/api/response";
 import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
@@ -19,7 +20,7 @@ export async function POST(_request: NextRequest, { params }: Props) {
   const auth = await authenticateRequest();
   if (!auth) return apiUnauthorized();
   if (!getFeatureAccess(auth.industryId, FEATURES.PROJECT_BOARD)) return apiForbidden();
-  if (!requireAdmin(auth)) return apiForbidden();
+  if (!canManageProjects(auth.permissions)) return apiForbidden();
 
   const db = await scopedClient(auth);
   const { data: project } = await db.from("projects").select("id").eq("id", id).maybeSingle();

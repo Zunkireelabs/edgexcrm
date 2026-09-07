@@ -4,6 +4,7 @@ import { apiSuccess, apiNotFound, apiConflict, apiError, apiValidationError, api
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveAudience, type AudienceRow } from "@/lib/email/outbound/audience";
 import { composeRecipientEmail } from "@/lib/email/outbound/compose";
+import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
 import { inngest } from "@/lib/inngest/client";
 import { EMPTY_TREE, type FilterTree } from "@/lib/filters/types";
 import { createRequestLogger } from "@/lib/logger";
@@ -104,15 +105,30 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const newRows = [...audience.sendable.map((r) => toRow(r, "queued")), ...audience.suppressed.map((r) => toRow(r, "suppressed"))];
 
-  for (let i = 0; i < newRows.length; i += MATERIALIZE_CHUNK_SIZE) {
-    const chunk = newRows.slice(i, i + MATERIALIZE_CHUNK_SIZE);
-    const { error: upsertError } = await db
-      .from("email_messages")
-      .upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true });
-    if (upsertError) {
-      log.error({ err: upsertError, blastId: id, chunkStart: i, chunkSize: chunk.length }, "Failed to materialize email_messages rows");
-      return apiServiceUnavailable("Failed to materialize recipient rows");
+  // Chunking alone isn't sufficient — it shipped once already (2026-09-01)
+  // and still failed outright on a live 3,118-row blast, with no way to tell
+  // why and no way to resume short of re-clicking Send. Retrying a single
+  // failed chunk (most failures at this scale are transient — a pooler
+  // recycle, a momentary PostgREST blip) and logging exactly which chunk
+  // failed and the real DB error are what chunking by itself didn't provide.
+  // See src/lib/outbound/materialize-chunks.ts.
+  const materializeResult = await materializeInChunks(
+    newRows,
+    async (chunk) => db.from("email_messages").upsert(chunk, { onConflict: "source_id,lead_id", ignoreDuplicates: true }),
+    {
+      chunkSize: MATERIALIZE_CHUNK_SIZE,
+      onRetry: ({ chunkIndex, attempt, error }) =>
+        log.warn({ blastId: id, chunkIndex, attempt, err: error }, "Retrying email_messages chunk after a transient failure"),
     }
+  );
+  if (!materializeResult.ok) {
+    log.error(
+      { err: materializeResult.error, blastId: id, chunkIndex: materializeResult.failedChunkIndex, chunkSize: materializeResult.failedChunkSize },
+      "Failed to materialize email_messages rows"
+    );
+    // requestId lets this exact failure be found in logs without a timestamp
+    // guess — the gap that made the 2026-09-06 incidents unrecoverable.
+    return apiServiceUnavailable(`Failed to materialize recipient rows (ref: ${requestId})`);
   }
 
   // 3. Emit the Inngest event, set status='queued'. sendQueuedEmailBatch

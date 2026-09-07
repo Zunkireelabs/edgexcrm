@@ -24,7 +24,7 @@ import type { TimeEntryWithJoins } from "../hooks/use-time-entries";
 
 interface ApprovalsQueuePageProps {
   tenantId: string;
-  role: string;
+  canApproveTime: boolean;
 }
 
 // ── Data fetching ────────────────────────────────────────────────
@@ -199,8 +199,7 @@ function ApprovalEntryRow({
 
 // ── Main page ────────────────────────────────────────────────────
 
-export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
-  const isAdmin = role === "owner" || role === "admin";
+export function ApprovalsQueuePage({ canApproveTime }: ApprovalsQueuePageProps) {
 
   const [entries, setEntries] = useState<TimeEntryWithJoins[]>([]);
   const [memberRateMap, setMemberRateMap] = useState<Map<string, number | null>>(new Map());
@@ -383,13 +382,13 @@ export function ApprovalsQueuePage({ role }: ApprovalsQueuePageProps) {
 
   // ── Not authorized ─────────────────────────────────────────────
 
-  if (!isAdmin) {
+  if (!canApproveTime) {
     return (
       <div className="flex flex-col items-center justify-center min-h-64 text-center">
         <CheckSquare className="h-10 w-10 text-muted-foreground mb-3" />
         <p className="font-medium">You don&apos;t have permission to access approvals</p>
         <p className="text-sm text-muted-foreground mt-1">
-          This page is only available to admins and owners.
+          Ask an owner or admin to enable timesheet approvals on your position.
         </p>
       </div>
     );

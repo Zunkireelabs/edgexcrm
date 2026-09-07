@@ -76,6 +76,9 @@ function baseAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     canManageApplications: true,
     canManageClasses: true,
     canManageHR: true,
+    canManageProjects: true,
+    canApproveTime: true,
+    canManageBilling: true,
     canExport: true,
     canSendSms: true,
     dashboardWidgets: null,
@@ -174,11 +177,14 @@ describe("resolveAudience — permission scoping (the whole reason this goes thr
       canManageApplications: true,
       canManageClasses: true,
       canManageHR: false,
+      canManageProjects: false,
+      canApproveTime: false,
+      canManageBilling: false,
       canExport: false,
       canSendSms: false,
       dashboardWidgets: null,
     };
-    const auth = baseAuth({ role: "counselor", permissions: counselorPermissions });
+    const auth = baseAuth({ role: "staff", permissions: counselorPermissions });
 
     const result = await resolveAudience(auth, EMPTY_TREE, { user, service: instrumentedService, db });
 

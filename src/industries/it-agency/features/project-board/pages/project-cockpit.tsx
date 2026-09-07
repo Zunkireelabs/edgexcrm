@@ -25,11 +25,19 @@ import type { ProjectStatus } from "@/types/database";
 interface ProjectCockpitPageProps {
   projectId: string;
   role: string;
+  currentUserId: string;
   // Tenant slug, for the AI-synth vision-preview flag (lib/ai-preview.ts).
   tenantSlug: string | null;
+  // Resolved from the caller's position (getCurrentUserTenant().permissions).
+  // canManageProjects: create/edit projects + sub-records, delete tasks.
+  // canManageBilling: project invoices + cost/margin visibility.
+  canManageProjects: boolean;
+  canManageBilling: boolean;
 }
 
-export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockpitPageProps) {
+export function ProjectCockpitPage({ projectId, role, currentUserId, tenantSlug, canManageProjects, canManageBilling }: ProjectCockpitPageProps) {
+  // isAdmin stays role-based: it only gates the AI-synth vision preview (a
+  // dogfood/demo flag), not delivery write access.
   const isAdmin = role === "owner" || role === "admin";
   const aiPreviewEnabled = AI_SYNTH_PREVIEW.enabledFor(tenantSlug, isAdmin);
   const [activeTab, setActiveTab] = useState("overview");
@@ -37,7 +45,7 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
     project,
     events,
     accountName,
-    ownerEmail,
+    ownerName,
     loading,
     refetch,
     refetchEvents,
@@ -82,7 +90,7 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
         <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground flex-wrap">
           {accountName && <span>{accountName}</span>}
           {project.engagement_model && <span>· {project.engagement_model.replace("_", " ")}</span>}
-          {ownerEmail && <span>· Owner: {ownerEmail}</span>}
+          {ownerName && <span>· Owner: {ownerName}</span>}
           {project.target_end_date && <span>· Due {project.target_end_date}</span>}
         </div>
       </div>
@@ -100,27 +108,27 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
             </TabsList>
             <TabsContent value="overview" className="flex flex-col gap-4 mt-4">
               {aiPreviewEnabled && <AiSummaryCard />}
-              <BriefEditor project={project} isAdmin={isAdmin} onSave={(brief) => updateProject({ brief })} />
-              <QualifyPanel project={project} isAdmin={isAdmin} onQualify={qualifyProject} />
+              <BriefEditor project={project} canManageProjects={canManageProjects} onSave={(brief) => updateProject({ brief })} />
+              <QualifyPanel project={project} canManageProjects={canManageProjects} onQualify={qualifyProject} />
               <TasksSummaryCard projectId={projectId} onViewAllTasks={() => setActiveTab("tasks")} />
             </TabsContent>
             <TabsContent value="delivery" className="mt-4">
               <DeliveryTab
                 projectId={projectId}
-                isAdmin={isAdmin}
+                canManageProjects={canManageProjects}
                 onProjectChanged={refetch}
                 onEventRecorded={refetchEvents}
               />
             </TabsContent>
             <TabsContent value="tasks" className="mt-4">
               <ActiveTimersProvider>
-                <TasksSection projectId={projectId} isAdmin={isAdmin} />
+                <TasksSection projectId={projectId} canManageProjects={canManageProjects} currentUserId={currentUserId} />
               </ActiveTimersProvider>
             </TabsContent>
             <TabsContent value="reports" className="mt-4">
               <ReportsTab
                 projectId={projectId}
-                isAdmin={isAdmin}
+                canManageProjects={canManageProjects}
                 onEventRecorded={refetchEvents}
                 project={project}
                 events={events}
@@ -128,17 +136,17 @@ export function ProjectCockpitPage({ projectId, role, tenantSlug }: ProjectCockp
               />
             </TabsContent>
             <TabsContent value="timeline" className="mt-4">
-              <TimelinePanel events={events} loading={loading} isAdmin={isAdmin} onAddRetroLesson={addRetroLesson} />
+              <TimelinePanel events={events} loading={loading} canManageProjects={canManageProjects} onAddRetroLesson={addRetroLesson} />
             </TabsContent>
           </Tabs>
         </div>
 
         <aside className="space-y-4 lg:sticky lg:top-4 self-start">
-          {project.is_billable && <BillableSummary projectId={projectId} isAdmin={isAdmin} />}
-          {isAdmin && project.is_billable && (
+          {project.is_billable && <BillableSummary projectId={projectId} canManageBilling={canManageBilling} />}
+          {canManageBilling && project.is_billable && (
             <InvoicesPanel projectId={projectId} currency={project.currency ?? "NPR"} />
           )}
-          <ContactsSection projectId={projectId} accountId={project.account_id} isAdmin={isAdmin} />
+          <ContactsSection projectId={projectId} accountId={project.account_id} canManageProjects={canManageProjects} />
         </aside>
       </div>
     </div>

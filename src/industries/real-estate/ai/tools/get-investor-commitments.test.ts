@@ -37,7 +37,7 @@ function fixtureAuth(overrides: Partial<AuthContext> = {}): AuthContext {
     userId: "user-1",
     email: "test@example.com",
     tenantId: "tenant-1",
-    role: "counselor",
+    role: "staff",
     industryId: "real_estate",
     positionId: null,
     positionSlug: null,

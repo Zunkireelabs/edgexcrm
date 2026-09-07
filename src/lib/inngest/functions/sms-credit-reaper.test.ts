@@ -61,17 +61,25 @@ function fakeService(blasts: FakeBlast[], settledRefIds: string[]) {
 
 function fakeScoped(messages: FakeMessage[]) {
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
+  const orderCalls: { col: string; opts: unknown }[] = [];
   const db = {
     from(table: string) {
       if (table === "sms_messages") {
         return {
           select: () => ({
             eq: (col: string, val: string) => ({
-              in: () =>
-                Promise.resolve({
-                  data: messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit })),
-                  error: null,
-                }),
+              in: () => ({
+                // offset paging needs a deterministic total order — paginate.ts ORDERING CONTRACT.
+                order: (ocol: string, opts: unknown) => {
+                  orderCalls.push({ col: ocol, opts });
+                  return {
+                    range: (from: number, to: number) => {
+                      const filtered = messages.filter((m) => (col === "blast_id" ? m.blast_id === val : true)).map((m) => ({ provider_credit: m.provider_credit }));
+                      return Promise.resolve({ data: filtered.slice(from, to + 1), error: null });
+                    },
+                  };
+                },
+              }),
             }),
           }),
         };
@@ -83,7 +91,7 @@ function fakeScoped(messages: FakeMessage[]) {
       return Promise.resolve({ data: { ok: true, diff: (args.p_reserved as number) - (args.p_actual as number) }, error: null });
     },
   };
-  return { db, rpcCalls };
+  return { db, rpcCalls, orderCalls };
 }
 
 describe("smsCreditReaper", () => {
@@ -151,5 +159,36 @@ describe("smsCreditReaper", () => {
     const candidates = await findUnsettledTerminalBlasts();
 
     expect(candidates).toEqual([]);
+  });
+
+  it("totals charged credits across a real Admizz-scale (1500+) blast, not just the first 1000 (PostgREST page-cap trap)", async () => {
+    // The charged-credits query is paginated for the same reason the send
+    // route's credit-total query is (src/lib/supabase/paginate.ts): an
+    // unpaged select silently caps at 1000 rows, which would under-total
+    // provider_credit and settle the reservation against the wrong actual.
+    const blast: FakeBlast = { id: "blast-big", tenant_id: "tenant-1", reserved_credits: 2000, status: "sent" };
+    createServiceClientMock.mockResolvedValue(fakeService([blast], []));
+
+    const messages: FakeMessage[] = Array.from({ length: 1500 }, () => ({ blast_id: "blast-big", status: "delivered", provider_credit: 1 }));
+    const scoped = fakeScoped(messages);
+    scopedClientForTenantMock.mockResolvedValue(scoped.db);
+
+    const { reapBlast } = await import("./sms-credit-reaper");
+    const outcome = await reapBlast(blast);
+
+    expect(outcome).toMatchObject({ blastId: "blast-big", actual: 1500 });
+    expect(scoped.rpcCalls[0].args.p_actual).toBe(1500);
+  });
+
+  it("orders the paged charged-credits query by a deterministic key before ranging", async () => {
+    const blast: FakeBlast = { id: "blast-ord", tenant_id: "tenant-1", reserved_credits: 5, status: "sent" };
+    createServiceClientMock.mockResolvedValue(fakeService([blast], []));
+    const scoped = fakeScoped([{ blast_id: "blast-ord", status: "delivered", provider_credit: 1 }]);
+    scopedClientForTenantMock.mockResolvedValue(scoped.db);
+
+    const { reapBlast } = await import("./sms-credit-reaper");
+    await reapBlast(blast);
+
+    expect(scoped.orderCalls).toContainEqual({ col: "id", opts: { ascending: true } });
   });
 });

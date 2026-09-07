@@ -103,7 +103,7 @@ describe("application_funnel_summary aggregation", () => {
   it("counselor scoping: returns zero counts when the counselor has no assigned leads", async () => {
     const db = fakeDb({ application_stages: STAGES, applications: APPLICATIONS, leads: [] });
     const result = (await applicationFunnelSummaryTool.execute(
-      fixtureCtx(db, fixtureAuth({ role: "counselor", permissions: COUNSELOR_PERMISSIONS })),
+      fixtureCtx(db, fixtureAuth({ role: "staff", permissions: COUNSELOR_PERMISSIONS })),
       {},
     )) as { byStage: Array<{ count: number }>; byStatus: unknown[]; deadlinesNext14Days: { count: number } };
     expect(result.byStage.every((s) => s.count === 0)).toBe(true);
