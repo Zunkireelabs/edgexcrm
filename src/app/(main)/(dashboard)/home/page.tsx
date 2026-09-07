@@ -5,6 +5,7 @@ import {
   getLeads,
   getMySchedule,
   getMyTasks,
+  getMyActiveTimers,
   getMyInboxSnapshot,
   getMyRecentActivity,
   getLeaveForHome,
@@ -14,6 +15,7 @@ import { canManageHR } from "@/lib/api/permissions";
 import { HomeContent } from "@/components/dashboard/home/home-content";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { todayInTz } from "@/lib/hr/dates";
 import { deriveHomeTip } from "@/lib/home/tips";
 
 export default async function HomePage() {
@@ -25,11 +27,13 @@ export default async function HomePage() {
 
   const { tenant, userId, permissions } = tenantData;
   const isEducation = tenant.industry_id === "education_consultancy";
-  const isItAgency = tenant.industry_id === "it_agency";
   const outreachEnabled = getFeatureAccess(tenant.industry_id, FEATURES.OUTREACH);
   const applicationTrackingEnabled = getFeatureAccess(tenant.industry_id, FEATURES.APPLICATION_TRACKING);
+  const projectBoardEnabled = getFeatureAccess(tenant.industry_id, FEATURES.PROJECT_BOARD);
+  const timeTrackingEnabled = getFeatureAccess(tenant.industry_id, FEATURES.TIME_TRACKING);
+  const todayISO = todayInTz(tenant.timezone ?? "Asia/Kathmandu");
 
-  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, outreachDue, tenantUserResult] =
+  const [schedule, tasks, myLeads, recentActivity, inboxSnapshot, leaveSummary, outreachDue, runningTimersByTask, tenantUserResult] =
     await Promise.all([
       getMySchedule(tenant.id, userId),
       getMyTasks(tenant.id, userId),
@@ -38,6 +42,7 @@ export default async function HomePage() {
       getMyInboxSnapshot(tenant.id, userId),
       getLeaveForHome(tenant.id, userId, canManageHR(permissions)),
       outreachEnabled ? getOutreachDueForHome(tenant.id, userId) : Promise.resolve(0),
+      timeTrackingEnabled ? getMyActiveTimers(tenant.id, userId) : Promise.resolve({}),
       (await createServiceClient())
         .from("tenant_users")
         .select("id")
@@ -68,7 +73,10 @@ export default async function HomePage() {
       recentActivity={recentActivity}
       inboxSnapshot={inboxSnapshot}
       isEducation={isEducation}
-      isItAgency={isItAgency}
+      todayISO={todayISO}
+      projectBoardEnabled={projectBoardEnabled}
+      timeTrackingEnabled={timeTrackingEnabled}
+      runningTimersByTask={runningTimersByTask}
       applicationTrackingEnabled={applicationTrackingEnabled}
       currentTenantUserId={currentTenantUserId}
       leaveSummary={leaveSummary}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarDays, CheckCircle2, Activity, MessageSquare, Lightbulb, Plus, Send, ListTodo } from "lucide-react";
+import { CalendarDays, CheckCircle2, AlertCircle, Activity, MessageSquare, Lightbulb, Plus, Send, ListTodo } from "lucide-react";
 import { CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -10,17 +10,20 @@ import type { HomeTip } from "@/lib/home/tips";
 interface DayGlanceRailProps {
   meetingsCount: number;
   tasksDueTodayCount: number;
+  overdueCount: number;
   activitiesCount: number;
   unreadCount: number;
   applicationTrackingEnabled: boolean;
   tip: HomeTip;
   onNewTaskClick: () => void;
+  onOverdueClick: () => void;
   className?: string;
 }
 
 const STATS_CONFIG = [
   { key: "meetings", icon: CalendarDays, label: "Meetings" },
   { key: "tasksDueToday", icon: CheckCircle2, label: "Tasks due today" },
+  { key: "overdue", icon: AlertCircle, label: "Overdue" },
   { key: "activities", icon: Activity, label: "Activities" },
   { key: "unread", icon: MessageSquare, label: "Unread messages" },
 ] as const;
@@ -28,16 +31,19 @@ const STATS_CONFIG = [
 export function DayGlanceRail({
   meetingsCount,
   tasksDueTodayCount,
+  overdueCount,
   activitiesCount,
   unreadCount,
   applicationTrackingEnabled,
   tip,
   onNewTaskClick,
+  onOverdueClick,
   className,
 }: DayGlanceRailProps) {
   const values: Record<(typeof STATS_CONFIG)[number]["key"], number> = {
     meetings: meetingsCount,
     tasksDueToday: tasksDueTodayCount,
+    overdue: overdueCount,
     activities: activitiesCount,
     unread: unreadCount,
   };
@@ -50,15 +56,35 @@ export function DayGlanceRail({
             Your day at a glance
           </CardTitle>
           <div className="grid grid-cols-2 gap-3">
-            {STATS_CONFIG.map(({ key, icon: Icon, label }) => (
-              <div key={key} className="flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5">
-                <Icon className="h-5 w-5 text-muted-foreground shrink-0 self-center" />
-                <div className="flex-1 text-center">
-                  <p className="text-lg font-semibold leading-none text-foreground">{values[key]}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{label}</p>
+            {STATS_CONFIG.map(({ key, icon: Icon, label }) => {
+              // Overdue is clickable (opens the Tasks tab pre-filtered) but stays the same
+              // visual weight as the others — three overdue follow-ups on a Monday is
+              // normal, not an incident, so no red alarm treatment here.
+              const isOverdue = key === "overdue";
+              const content = (
+                <>
+                  <Icon className="h-5 w-5 text-muted-foreground shrink-0 self-center" />
+                  <div className="flex-1 text-center">
+                    <p className="text-lg font-semibold leading-none text-foreground">{values[key]}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{label}</p>
+                  </div>
+                </>
+              );
+              return isOverdue ? (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={onOverdueClick}
+                  className="flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5 text-left hover:bg-muted transition-colors"
+                >
+                  {content}
+                </button>
+              ) : (
+                <div key={key} className="flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5">
+                  {content}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
