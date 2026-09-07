@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Play, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { notifyTimersChanged } from "@/lib/timers/timer-events";
+import { isTimerStopped } from "@/lib/timers/stop-result";
 
 interface TaskTimerButtonProps {
   taskId: string;
@@ -25,6 +26,15 @@ export function TaskTimerButton({ taskId, initialTimerId = null, className }: Ta
   const [pending, setPending] = useState(false);
   const running = timerId !== null;
 
+  // The row instance persists across a router.refresh() (same task.id key in
+  // the parent's .map()), so a change made elsewhere — the header chip's stop
+  // button, another tab — only reaches this button via the re-seeded prop
+  // after HomeContent's TIMERS_CHANGED_EVENT listener refreshes. useState's
+  // initial value alone would miss that; this syncs local state to it.
+  useEffect(() => {
+    setTimerId(initialTimerId);
+  }, [initialTimerId]);
+
   async function handleClick(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -32,7 +42,7 @@ export function TaskTimerButton({ taskId, initialTimerId = null, className }: Ta
     try {
       if (timerId) {
         const res = await fetch(`/api/v1/timers/${timerId}/stop`, { method: "POST" });
-        if (res.ok) {
+        if (isTimerStopped(res)) {
           setTimerId(null);
           notifyTimersChanged();
         }

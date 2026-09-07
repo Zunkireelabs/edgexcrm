@@ -56,11 +56,16 @@ export function DayGlanceRail({
             Your day at a glance
           </CardTitle>
           <div className="grid grid-cols-2 gap-3">
-            {STATS_CONFIG.map(({ key, icon: Icon, label }) => {
+            {STATS_CONFIG.map(({ key, icon: Icon, label }, index) => {
               // Overdue is clickable (opens the Tasks tab pre-filtered) but stays the same
               // visual weight as the others — three overdue follow-ups on a Monday is
               // normal, not an incident, so no red alarm treatment here.
               const isOverdue = key === "overdue";
+              // An odd tile count leaves the last one alone on its own row at
+              // half width in a 2-col grid — span it full width instead of
+              // leaving it dangling next to empty space.
+              const isLast = index === STATS_CONFIG.length - 1;
+              const spanClass = isLast && STATS_CONFIG.length % 2 === 1 ? "col-span-2" : "";
               const content = (
                 <>
                   <Icon className="h-5 w-5 text-muted-foreground shrink-0 self-center" />
@@ -75,12 +80,12 @@ export function DayGlanceRail({
                   key={key}
                   type="button"
                   onClick={onOverdueClick}
-                  className="flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5 text-left hover:bg-muted transition-colors"
+                  className={cn("flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5 text-left hover:bg-muted transition-colors", spanClass)}
                 >
                   {content}
                 </button>
               ) : (
-                <div key={key} className="flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5">
+                <div key={key} className={cn("flex items-start gap-2 rounded-lg border-0 bg-sidebar-bg shadow-sm px-3 py-2.5", spanClass)}>
                   {content}
                 </div>
               );

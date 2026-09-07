@@ -101,6 +101,8 @@ interface LeadDetailV2Props {
   checkInActive?: boolean;
   consentEnabled?: boolean;
   consentSigned?: boolean;
+  /** Gates whether a project-linked task's chip links to the cockpit — resolved server-side via getFeatureAccess, never re-derived here. */
+  projectBoardEnabled?: boolean;
 }
 
 interface LeadDraft {
@@ -180,6 +182,7 @@ export function LeadDetailV2({
   checkInActive,
   consentEnabled = false,
   consentSigned = false,
+  projectBoardEnabled,
 }: LeadDetailV2Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -934,6 +937,7 @@ export function LeadDetailV2({
             industryId={tenant.industry_id}
             tenantName={tenant.name}
             tenantLogoUrl={tenant.logo_url}
+            projectBoardEnabled={projectBoardEnabled}
             onTagChange={(tags) => setCurrentLead((prev) => ({ ...prev, tags } as Lead))}
             onSaveItinerary={async (itinerary) => {
               // Merge against live state (not the stale `lead` prop) so saving the

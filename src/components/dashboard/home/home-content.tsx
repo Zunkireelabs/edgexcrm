@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { GreetingHeader } from "./greeting-header";
@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { addDays } from "@/lib/hr/dates";
 import { groupTasksByDue } from "@/lib/home/task-grouping";
+import { TIMERS_CHANGED_EVENT } from "@/lib/timers/timer-events";
 import type { ScheduleActivity, PersonalTask, MyTasksResult, InboxSnapshot, RecentActivityItem, LeaveHomeSummary } from "@/lib/supabase/queries";
 import type { HomeTip } from "@/lib/home/tips";
 import type { Lead, TaskStatus } from "@/types/database";
@@ -124,6 +125,20 @@ export function HomeContent({
     }
     router.refresh();
   }, [router, userId]);
+
+  // Home has two independent timer controls on screen at once (a task row's
+  // TaskTimerButton and the shell's RunningTimerChip) — either can start or
+  // stop a timer the other doesn't know about (e.g. stop from the header chip
+  // while a row still shows its own "running" state). One listener here
+  // refreshes the server data so runningTimersByTask re-seeds and every row
+  // corrects itself, instead of each row polling or listening individually.
+  useEffect(() => {
+    function onTimersChanged() {
+      router.refresh();
+    }
+    window.addEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
+    return () => window.removeEventListener(TIMERS_CHANGED_EVENT, onTimersChanged);
+  }, [router]);
 
   const now = new Date().toISOString();
   const meetingsCount = schedule.filter((a) => a.scheduled_at >= now).length;
