@@ -40,6 +40,7 @@ export default async function DashboardLayout({
 
   const maxBranches = tenantData.entitlements.maxBranches;
   const hasLeadLists = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.LEAD_LISTS);
+  const timeTrackingEnabled = getFeatureAccess(tenantData.tenant.industry_id, FEATURES.TIME_TRACKING);
   // Env flag AND tenants.ai_enabled (migration 174) — see src/lib/ai/flag.ts.
   // tenantData.tenant is already loaded above, so this is free (no extra query).
   const aiAssistantEnabled = isAssistantEnabled() && tenantData.tenant.ai_enabled;
@@ -134,6 +135,7 @@ export default async function DashboardLayout({
             stagingLists={stagingLists}
             archiveLists={archiveLists}
             aiAssistantEnabled={aiAssistantEnabled}
+            timeTrackingEnabled={timeTrackingEnabled}
           >
             {children}
           </DashboardShell>
