@@ -205,6 +205,25 @@ export const emailBlastSend = inngest.createFunction(
       // Cancelled before this run even started (e.g. a re-emitted resume
       // event racing a /cancel that landed first) — finalize is a no-op
       // status stamp, nothing to send.
+      //
+      // F5 follow-up (docs/BLAST-FINDINGS-2026-09-06.md): /cancel only flips
+      // 'queued' rows to 'cancelled' — it never touches a row that happened
+      // to be 'sending' at that exact moment (e.g. left behind by an earlier
+      // crashed run of THIS blast). Without this reclaim pass, that row
+      // would never be revisited, on a blast that will never run this loop
+      // again. finalizeEmailBlast's wasCancelled branch always wins over the
+      // unaccounted-for check, so the blast correctly stays 'cancelled'
+      // either way — this just gives that stray row a real chance to
+      // resolve first, instead of leaving it orphaned forever.
+      const strandedIds = await step.run("load-stranded-sending-precancelled", () => loadStrandedSendingIds(tenantId, blastId));
+      if (strandedIds.length > 0) {
+        await step.run("reclaim-stranded-precancelled", () => sendQueuedEmailBatch(tenantId, strandedIds, { capCaller: "blast" }));
+        logger.info(
+          { tenantId, blastId, strandedCount: strandedIds.length },
+          "[email-blast-send] reclaimed row(s) stranded in 'sending' on an already-cancelled blast"
+        );
+      }
+
       const outcome = await step.run("finalize-precancelled", () => finalizeEmailBlast(tenantId, blastId));
       return { blastId, ...outcome };
     }
