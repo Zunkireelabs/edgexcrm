@@ -18,7 +18,16 @@ interface EmailBlastSettings {
   max_recipients_per_blast: number;
 }
 
-export function EmailBlastSettingsCard() {
+interface EmailBlastSettingsCardProps {
+  // Passed down from useSettingsModal()'s isSettingsAdmin rather than read via
+  // the hook directly — this card lives outside the settings-modal folder and
+  // shouldn't couple to the modal's context provider (PR #514 review, Finding
+  // 3). PATCH is admin-only server-side; a non-admin gets a read-only value
+  // instead of an Input + Save button they can't use.
+  isAdmin: boolean;
+}
+
+export function EmailBlastSettingsCard({ isAdmin }: EmailBlastSettingsCardProps) {
   const [cap, setCap] = useState<number | null>(null);
   const [form, setForm] = useState("");
   const [loading, setLoading] = useState(true);
@@ -51,7 +60,12 @@ export function EmailBlastSettingsCard() {
       });
       const json = await res.json();
       if (!res.ok) {
-        const firstError = Object.values(json.errors ?? {}).flat()[0] as string | undefined;
+        // apiValidationError() returns { errors: {...} }; apiForbidden() returns
+        // { error: { message } } — a real 403 (e.g. non-admin somehow reaching
+        // this path) fell through both lookups to the generic fallback before
+        // this second read was added (PR #514 review, Finding 3).
+        const firstError =
+          (Object.values(json.errors ?? {}).flat()[0] as string | undefined) ?? (json.error?.message as string | undefined);
         toast.error(firstError ?? "Failed to save settings");
         return;
       }
@@ -75,22 +89,32 @@ export function EmailBlastSettingsCard() {
 
       <div className="space-y-1.5 max-w-xs">
         <Label htmlFor="email-blast-recipient-cap">Recipient cap per blast</Label>
-        <Input
-          id="email-blast-recipient-cap"
-          type="number"
-          min={1}
-          max={20000}
-          value={form}
-          onChange={(e) => setForm(e.target.value)}
-        />
+        {isAdmin ? (
+          <Input
+            id="email-blast-recipient-cap"
+            type="number"
+            min={1}
+            max={20000}
+            value={form}
+            onChange={(e) => setForm(e.target.value)}
+          />
+        ) : (
+          <p id="email-blast-recipient-cap" className="text-sm font-medium">
+            {cap}
+          </p>
+        )}
         <p className="text-xs text-muted-foreground">
-          A blast to more leads than this is rejected, not truncated. Current: {cap}.
+          {isAdmin
+            ? `A blast to more leads than this is rejected, not truncated. Current: ${cap}.`
+            : "A blast to more leads than this is rejected, not truncated. Ask an owner or admin to change it."}
         </p>
       </div>
 
-      <Button onClick={handleSave} disabled={saving} size="sm">
-        {saving ? "Saving…" : "Save"}
-      </Button>
+      {isAdmin && (
+        <Button onClick={handleSave} disabled={saving} size="sm">
+          {saving ? "Saving…" : "Save"}
+        </Button>
+      )}
     </div>
   );
 }

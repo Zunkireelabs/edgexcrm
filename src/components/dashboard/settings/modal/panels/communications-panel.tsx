@@ -13,7 +13,7 @@ import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
 
 export function CommunicationsPanel() {
-  const { tenant, industryId } = useSettingsModal();
+  const { tenant, industryId, isSettingsAdmin } = useSettingsModal();
   const hasEmail = getFeatureAccess(industryId, FEATURES.EMAIL);
   const hasEmailCampaigns = getFeatureAccess(industryId, FEATURES.EMAIL_CAMPAIGNS);
 
@@ -24,7 +24,7 @@ export function CommunicationsPanel() {
       </PanelSection>
       {hasEmailCampaigns && (
         <PanelSection>
-          <EmailBlastSettingsCard />
+          <EmailBlastSettingsCard isAdmin={isSettingsAdmin} />
         </PanelSection>
       )}
       <PanelSection>
