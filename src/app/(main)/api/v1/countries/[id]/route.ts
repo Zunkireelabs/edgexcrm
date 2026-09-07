@@ -12,6 +12,7 @@ import { createRequestLogger } from "@/lib/logger";
 import { scopedClient } from "@/lib/supabase/scoped";
 import { getFeatureAccess } from "@/industries/_loader";
 import { FEATURES } from "@/industries/_registry";
+import { normalizeCatalogName, findCatalogNameConflict } from "@/lib/leads/catalog-name";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -40,9 +41,12 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   const patch: Record<string, unknown> = {};
   if (body.name !== undefined) {
-    const trimmed = String(body.name ?? "").trim();
-    if (!trimmed) return apiValidationError({ name: ["name is required"] });
-    patch.name = trimmed;
+    const cleanedName = normalizeCatalogName(body.name);
+    if (!cleanedName) return apiValidationError({ name: ["name is required"] });
+    if (await findCatalogNameConflict(db, "countries", cleanedName, id)) {
+      return apiValidationError({ name: ["A country with this name already exists"] });
+    }
+    patch.name = cleanedName;
   }
   if (body.description !== undefined) patch.description = body.description ? String(body.description).trim() : null;
   if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
