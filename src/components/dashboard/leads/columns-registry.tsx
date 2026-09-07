@@ -10,7 +10,7 @@ import { StageSelector } from "@/components/dashboard/leads/stage-selector";
 import { QualifyRowButton } from "@/components/dashboard/leads/qualify-row-button";
 import { AssigneeSelector, AssigneeChip } from "@/components/dashboard/leads/assignee-selector";
 import type { Lead, LeadList, PipelineStage } from "@/types/database";
-import { normalizeDestinations } from "@/lib/leads/destination-normalize";
+import { normalizeDestinations, normalizeFieldOfStudy } from "@/lib/leads/destination-normalize";
 import { getLeadFullName } from "@/components/dashboard/lead/lead-name";
 
 // Fixed cap for the mobile card-style sub-block (not part of desktop column resize).
@@ -1113,9 +1113,15 @@ export function getLeadColumns(
   // still only have the value in custom_fields. Prefer the real column so
   // current write paths (check-in, add-lead) show up; fall back to the
   // legacy custom_fields value so old data isn't hidden.
+  //
+  // Both values run through the same destination-normalize.ts cleanup the
+  // "Destination" column (below) and the lead detail sidebar already apply —
+  // this custom-field fallback column was the one place in the app that
+  // still rendered the raw, un-decoration-stripped value (found 2026-09-07,
+  // client-reported flag-emoji duplicates in the Destinations filter).
   const PROMOTED_CF_VALUE: Record<string, (lead: Lead) => string> = {
-    field_of_study: (lead) => lead.field_of_study ?? "",
-    countries: (lead) => (lead.destinations ?? []).join(", "),
+    field_of_study: (lead) => normalizeFieldOfStudy(lead.field_of_study) ?? "",
+    countries: (lead) => (lead.destinations ? normalizeDestinations(lead.destinations) : []).join(", "),
   };
 
   const customCols: LeadColumn[] = customFieldKeys.map((key) => {
