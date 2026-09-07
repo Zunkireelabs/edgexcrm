@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef, useImperativeHandle, forwardRef } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   Phone, Mail, Calendar, Clock, FileText, CheckSquare, ChevronDown,
   ArrowRight, Archive, CheckCircle2, Pencil, Users, UserMinus, UserPlus,
@@ -136,10 +137,22 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
       notes: string;
       created_at: string;
       updated_at: string | null;
-      institution_name: string | null;
+      university_name: string | null;
       created_by: string | null;
       notes_updated_by: string | null;
       notes_updated_at: string | null;
+    }[]
+  >([]);
+  // Notes-tab entries (application_notes) across all of this lead's applications,
+  // flattened and tagged with the application they belong to.
+  const [appNoteEntries, setAppNoteEntries] = useState<
+    {
+      id: string;
+      application_id: string;
+      content: string;
+      user_id: string | null;
+      created_at: string;
+      university_name: string | null;
     }[]
   >([]);
 
@@ -176,12 +189,31 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
           notes: string | null;
           created_at: string;
           updated_at: string | null;
-          institution_name: string | null;
+          university_name: string | null;
           created_by: string | null;
           notes_updated_by: string | null;
           notes_updated_at: string | null;
+          application_notes?: {
+            id: string;
+            application_id: string;
+            content: string;
+            user_id: string | null;
+            created_at: string;
+          }[];
         }[];
         setAppNotes(apps.filter((a): a is typeof apps[number] & { notes: string } => Boolean(a.notes && a.notes.trim())));
+        setAppNoteEntries(
+          apps.flatMap((a) =>
+            (a.application_notes ?? []).map((n) => ({
+              id: n.id,
+              application_id: n.application_id,
+              content: n.content,
+              user_id: n.user_id,
+              created_at: n.created_at,
+              university_name: a.university_name,
+            }))
+          )
+        );
       }
     } catch {
       // silent — non-critical
@@ -593,7 +625,8 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
               | { kind: "system"; id: string; at: string; event: LeadActivity }
               | { kind: "note"; id: string; at: string; note: LeadNote }
               | { kind: "activity"; id: string; at: string; record: LeadActivityRecord }
-              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null; authorId: string | null };
+              | { kind: "app_note"; id: string; at: string; content: string; institution: string | null; authorId: string | null }
+              | { kind: "app_note_entry"; id: string; at: string; content: string; institution: string | null; authorId: string | null; applicationId: string };
 
             // Audit events (skip note_added — replaced by actual note items below)
             const sysItems: UnifiedItem[] = systemActivities
@@ -617,11 +650,20 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
             // moving this entry in the timeline.
             const appNoteItems: UnifiedItem[] = appNotes.map((a) => ({
               kind: "app_note", id: `appnote-${a.id}`, at: a.notes_updated_at ?? a.created_at,
-              content: a.notes, institution: a.institution_name,
+              content: a.notes, institution: a.university_name,
               authorId: a.notes_updated_by ?? a.created_by,
             }));
 
-            const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems]
+            // Notes added via an application's own Notes tab (application_notes) —
+            // tagged with which application they belong to, per the client's ask
+            // that an application update be traceable back to its application.
+            const appNoteEntryItems: UnifiedItem[] = appNoteEntries.map((n) => ({
+              kind: "app_note_entry", id: `appnote-entry-${n.id}`, at: n.created_at,
+              content: n.content, institution: n.university_name,
+              authorId: n.user_id, applicationId: n.application_id,
+            }));
+
+            const all: UnifiedItem[] = [...sysItems, ...noteItems, ...activityItems, ...appNoteItems, ...appNoteEntryItems]
               .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
             if (all.length === 0) return (
@@ -742,7 +784,43 @@ export const ActivitiesPanel = forwardRef<ActivitiesPanelRef, ActivitiesPanelPro
                             </div>
                             <div className="min-w-0 pb-3 flex-1">
                               <p className="text-sm text-foreground">
-                                Application note{item.institution ? ` · ${item.institution}` : ""}
+                                Application note{item.institution ? ` · Course: ${item.institution}` : ""}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
+                                {item.content}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {[
+                                  formatTimeOnly(item.at),
+                                  resolveActorLabel(item.authorId, currentUserId, teamMemberNames, teamMemberEmails),
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      if (item.kind === "app_note_entry") {
+                        return (
+                          <div key={item.id} className="flex gap-3">
+                            <div className="flex flex-col items-center">
+                              <div className="h-6 w-6 rounded-full border border-border bg-background flex items-center justify-center shrink-0">
+                                <FileText className="h-3.5 w-3.5 text-muted-foreground" />
+                              </div>
+                              {!isLast && <div className="w-px bg-border flex-1 mt-1" />}
+                            </div>
+                            <div className="min-w-0 pb-3 flex-1">
+                              <p className="text-sm text-foreground">
+                                Note added
+                                {item.institution && (
+                                  <>
+                                    {" · "}
+                                    <Link href={`/applications/${item.applicationId}`} className="hover:underline">
+                                      Course: {item.institution}
+                                    </Link>
+                                  </>
+                                )}
                               </p>
                               <p className="text-xs text-muted-foreground mt-0.5 whitespace-pre-wrap break-words">
                                 {item.content}

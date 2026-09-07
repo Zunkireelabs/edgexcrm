@@ -175,6 +175,20 @@ export async function PATCH(request: NextRequest, { params }: Props) {
 
   if (patch.stage_id !== undefined) {
     events.push(
+      // Distinct audit_logs row (not just the generic application.updated one
+      // above) so the Activity tab's dedicated stage_changed rendering — which
+      // reads changes.patch.new.status — actually fires. Previously this only
+      // emitted an event and never wrote to audit_logs, so stage moves silently
+      // never appeared in the application's own Activity tab.
+      createAuditLog({
+        tenantId: auth.tenantId,
+        userId: auth.userId,
+        action: "application.stage_changed",
+        entityType: "application",
+        entityId: id,
+        changes: { patch: { old: existingRow, new: patch } },
+        requestId,
+      }),
       emitEvent({
         tenantId: auth.tenantId,
         type: "application.stage_changed",
