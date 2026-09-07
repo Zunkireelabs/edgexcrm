@@ -13,6 +13,11 @@ process.env.NEXT_PUBLIC_SUPABASE_URL = "http://127.0.0.1:54321";
 process.env.SUPABASE_SERVICE_ROLE_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU";
 process.env.EMAIL_OUTBOUND_SANDBOX = "false"; // env-guard itself is covered separately in env-guard.test.ts
+// This whole file exercises the real (mocked) Resend call path — explicit
+// opt-in required now that send.ts defaults to the stub transport outside
+// production (F3, docs/BLAST-FINDINGS-2026-09-06.md). The stub path itself is
+// covered by transport.test.ts and the "stub transport" describe block below.
+process.env.EMAIL_TRANSPORT = "resend";
 
 const sendMock = vi.fn();
 vi.mock("../index", async (importOriginal) => {
@@ -479,6 +484,33 @@ describe("send.ts — suppression safety net and daily cap (§4.6)", () => {
       } else if (insertedForTenant) {
         await db.from("tenant_email_settings").delete().eq("tenant_id", tenantId);
       }
+    }
+  });
+});
+
+describe("send.ts — stub transport (F3, docs/BLAST-FINDINGS-2026-09-06.md)", () => {
+  it("EMAIL_TRANSPORT=stub never calls the provider, and marks the row 'sent' with a synthetic provider id", async (ctx) => {
+    if (!localDbAvailable) {
+      ctx.skip();
+      return;
+    }
+
+    const { sendQueuedEmailBatch } = await import("./send");
+
+    const row = await insertMessage({ to_email: `stub.${Date.now()}@example.com` });
+
+    const previous = process.env.EMAIL_TRANSPORT;
+    process.env.EMAIL_TRANSPORT = "stub";
+    try {
+      const result = await sendQueuedEmailBatch(tenantId, [row.id]);
+      expect(result.sent).toBe(1);
+      expect(sendMock).not.toHaveBeenCalled();
+
+      const final = await readMessage(row.id);
+      expect(final.status).toBe("sent");
+      expect(final.provider_message_id).toMatch(/^stub_/);
+    } finally {
+      process.env.EMAIL_TRANSPORT = previous;
     }
   });
 });
