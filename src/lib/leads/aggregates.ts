@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { stripDecoration } from "@/lib/leads/destination-normalize";
 
 export interface WeekBucketCounts {
   all: number;
@@ -417,11 +418,36 @@ export interface DestinationFacetOption {
  * as getCollaboratorFacet; no self-exclusion param exists on this axis (lead_
  * aggregates() has no p_destination filter param, same as `source`), so unlike
  * collaborator/assignee there is nothing to omit from `params` here.
+ *
+ * Merges decoration-only duplicates (e.g. "UK" / "🇬🇧 UK") client-side, the
+ * same way key-info-section.tsx and columns-registry.tsx already display a
+ * single lead's destinations — migration 208's GROUP BY is on the raw stored
+ * string, so leads whose flag-emoji-prefixed value predates
+ * destination-normalize.ts (or was never backfilled — see
+ * scripts/destination-consolidate.ts) still show up as their own row here.
+ * Always displays the decoration-stripped spelling (never the emoji-prefixed
+ * one) regardless of which raw variant had the higher count — consistent
+ * with every other place in the app a lead's destinations are ever shown.
  */
 export async function getDestinationFacet(params: SourceFacetParams): Promise<DestinationFacetOption[]> {
   const rows = await fetchFacetRows(params);
-  return rows
+  const raw = rows
     .filter((row) => row.dimension === "destination")
     .map((row) => ({ name: row.key, count: Number(row.cnt) }))
     .sort((a, b) => b.count - a.count);
+
+  const merged = new Map<string, DestinationFacetOption>(); // lowercased, decoration-stripped key -> option
+  for (const option of raw) {
+    const cleaned = stripDecoration(option.name);
+    if (!cleaned) continue;
+    const key = cleaned.toLowerCase();
+    const existing = merged.get(key);
+    if (existing) {
+      existing.count += option.count;
+    } else {
+      merged.set(key, { name: cleaned, count: option.count });
+    }
+  }
+
+  return [...merged.values()].sort((a, b) => b.count - a.count);
 }
