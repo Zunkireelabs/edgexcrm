@@ -9,6 +9,10 @@ services:
       - .env.local
     environment:
       - NODE_OPTIONS=--max-old-space-size=2048
+      # Production is the ONE environment that reaches the real Resend API (F3,
+      # docs/BLAST-FINDINGS-2026-09-06.md). Declared explicitly here rather than inferred
+      # from NODE_ENV, because the same image sets NODE_ENV=production on stage too.
+      - EMAIL_TRANSPORT=resend
     networks:
       - hosting
     labels:

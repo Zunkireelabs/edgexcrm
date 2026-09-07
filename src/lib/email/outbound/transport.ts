@@ -18,11 +18,16 @@ export type EmailTransportMode = "stub" | "resend";
 /**
  * Fail-closed: a real Resend send only happens when NODE_ENV is exactly
  * "production", OR the environment explicitly opts in with
- * EMAIL_TRANSPORT=resend. Everywhere else — including a staging box, a CI
- * runner, or a laptop with a real RESEND_API_KEY in .env.local — defaults to
- * "stub" with no action required. A developer must set EMAIL_TRANSPORT=resend
- * deliberately to reach the real provider; EMAIL_TRANSPORT=stub is honored
- * even in production, for a deliberate dry run.
+ * EMAIL_TRANSPORT=resend. The NODE_ENV check is a backstop, not the primary
+ * mechanism — stage and prod run the SAME Docker image (Dockerfile sets
+ * NODE_ENV=production unconditionally), so NODE_ENV alone cannot tell them
+ * apart. Both deployed environments instead set EMAIL_TRANSPORT explicitly in
+ * their own docker-compose*.yml (prod=resend, stage=stub); a CI runner or a
+ * laptop with a real RESEND_API_KEY in .env.local falls through to the
+ * NODE_ENV backstop and gets "stub". A developer must set
+ * EMAIL_TRANSPORT=resend deliberately to reach the real provider;
+ * EMAIL_TRANSPORT=stub is honored even in production, for a deliberate dry
+ * run.
  */
 export function getEmailTransportMode(): EmailTransportMode {
   const explicit = process.env.EMAIL_TRANSPORT;
