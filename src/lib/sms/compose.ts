@@ -1,7 +1,6 @@
-import type { ScopedClient } from "@/lib/supabase/scoped";
 import { renderMessage } from "./render";
 import { countSegments, type SegmentInfo } from "./segments";
-import { getOrCreateOptOutToken, optOutUrl } from "./optout";
+import { optOutUrl } from "./optout";
 
 // Shared final-render path for BOTH /preview (samples + credit estimate) and
 // /send (materialized sms_messages.body) — §5/§6 of SMS-PHASE3A-BRIEF.md are
@@ -48,14 +47,17 @@ export interface ComposedMessage {
   segments: SegmentInfo;
 }
 
-export async function composeRecipientMessage(
-  db: ScopedClient,
-  tenantId: string,
+// Pure/synchronous by design (BLAST-F1-F2-FIX-BRIEF.md §F2) — the caller
+// resolves `token` up front via ensureOptOutTokens (optout.ts), bulk-minted
+// for the whole audience, instead of this function doing its own
+// insert+select round trip per recipient. Keeps this on the hot per-row
+// compose loop without any DB fan-out behind it.
+export function composeRecipientMessage(
   settings: TenantSmsSettingsRow,
   body: string,
-  recipient: { phoneE164: string; leadId: string | null; lead: Record<string, unknown> }
-): Promise<ComposedMessage> {
-  const token = await getOrCreateOptOutToken(db, tenantId, recipient.phoneE164, recipient.leadId);
+  recipient: { lead: Record<string, unknown> },
+  token: string
+): ComposedMessage {
   const footer = resolveFooter(settings.optout_footer, optOutUrl(token));
   const text = renderMessage({ body, lead: recipient.lead, senderLabel: settings.sender_label, optOutFooter: footer });
   return { text, segments: countSegments(text) };

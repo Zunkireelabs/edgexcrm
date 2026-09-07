@@ -5,7 +5,7 @@ import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { resolveAudience, type AudienceRow } from "@/lib/sms/audience";
 import { loadTenantSmsSettings } from "@/lib/sms/settings";
 import { composeRecipientMessage } from "@/lib/sms/compose";
-import { mapWithConcurrency } from "@/lib/sms/concurrency";
+import { ensureOptOutTokens } from "@/lib/sms/optout";
 import { materializeInChunks } from "@/lib/outbound/materialize-chunks";
 import { fetchAllRows, type PageResult } from "@/lib/supabase/paginate";
 import { inngest } from "@/lib/inngest/client";
@@ -43,8 +43,19 @@ const MATERIALIZE_CHUNK_SIZE = 200;
 const EXISTING_ROWS_PAGE_SIZE = 1000;
 
 // POST /api/v1/sms/blasts/[id]/send — SMS-PHASE3A-BRIEF.md §6. Order is
-// fixed and load-bearing: re-resolve -> materialize rows -> enforce cap ->
+// fixed and load-bearing: re-resolve -> enforce cap -> materialize rows ->
 // reserve -> emit event. Do not reorder.
+//
+// The cap check moved BEFORE materialize (BLAST-F1-F2-FIX-BRIEF.md §F1,
+// BLAST-FINDINGS-2026-09-06.md) because the old materialize-then-cap order
+// had a retry-after-shrink bypass: an over-cap call composed + materialized
+// the FULL audience as 'queued' rows, then 422'd without rolling them back;
+// a shrunk retry saw those rows as already-materialized (so nothing new to
+// compose), the cap check passed against the shrunk audience, but the
+// credit-reservation total and the dispatcher (which selects by
+// blast_id + status, not by the audience that triggered this call) still
+// covered every row from the original over-cap attempt. Checking the cap
+// against `audience.sendable.length` before any row exists closes that.
 export async function POST(_request: NextRequest, { params }: RouteParams) {
   const requestId = crypto.randomUUID();
   const log = createRequestLogger({ requestId, method: "POST", path: "/api/v1/sms/blasts/[id]/send" });
@@ -91,7 +102,17 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
 
   const settings = await loadTenantSmsSettings(db);
 
-  // 2. Materialize ALL intended sms_messages rows up front — queued for
+  // 2. Enforce max_recipients_per_blast BEFORE any compose/materialize —
+  // reject with the count, never truncate. See the §F1 note above the
+  // function for why this must run before rows are written.
+  if (audience.sendable.length > settings.max_recipients_per_blast) {
+    return apiError("MAX_RECIPIENTS_EXCEEDED", `Audience (${audience.sendable.length}) exceeds the ${settings.max_recipients_per_blast}-recipient cap for this tenant`, 422, {
+      count: audience.sendable.length,
+      max: settings.max_recipients_per_blast,
+    });
+  }
+
+  // 3. Materialize ALL intended sms_messages rows up front — queued for
   // sendable, suppressed for the DNC-list rows (an auditable record of who
   // was NOT texted, not a silent skip). Idempotency backbone per migration
   // 203: a retried call must never double-materialize a lead.
@@ -128,8 +149,29 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
   }
   const alreadyMaterialized = new Set(existingRows.map((r) => r.lead_id));
 
-  async function composeRow(row: AudienceRow, status: "queued" | "suppressed") {
-    const composed = await composeRecipientMessage(db, auth.tenantId, settings, blastRow.body, row);
+  const newSendable = audience.sendable.filter((r) => !alreadyMaterialized.has(r.leadId));
+  const newSuppressed = audience.suppressed.filter((r) => !alreadyMaterialized.has(r.leadId));
+
+  // Bulk-mint/read opt-out tokens for the full new-recipient set up front —
+  // BLAST-F1-F2-FIX-BRIEF.md §F2. Replaces a per-recipient insert+select
+  // round trip (getOrCreateOptOutToken via composeRecipientMessage): 16,000
+  // recipients used to mean 32,000 sequential PostgREST calls, which timed
+  // out the local connection pool (PGRST003) and, on Supabase hosted,
+  // starves the app-wide PostgREST pool shared by every tenant. See
+  // ensureOptOutTokens (optout.ts) for the chunking mechanics.
+  const newRecipients = [...newSendable, ...newSuppressed];
+  const tokenByPhone = await ensureOptOutTokens(
+    db,
+    newRecipients.map((r) => ({ phoneE164: r.phoneE164, leadId: r.leadId }))
+  );
+
+  // Now pure/synchronous — no DB work left on this per-row path, so no
+  // concurrency limiter is needed here (see concurrency.ts's header for why
+  // mapWithConcurrency existed on this call site before §F2).
+  function composeRow(row: AudienceRow, status: "queued" | "suppressed") {
+    const token = tokenByPhone.get(row.phoneE164);
+    if (!token) throw new Error(`composeRow: missing opt-out token for ${row.phoneE164}`);
+    const composed = composeRecipientMessage(settings, blastRow.body, row, token);
     return {
       blast_id: id,
       lead_id: row.leadId,
@@ -144,21 +186,10 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
     };
   }
 
-  const newSendable = audience.sendable.filter((r) => !alreadyMaterialized.has(r.leadId));
-  const newSuppressed = audience.suppressed.filter((r) => !alreadyMaterialized.has(r.leadId));
-
-  // Bounded concurrency, not a raw Promise.all — composeRow's
-  // getOrCreateOptOutToken call is an insert+select round trip per recipient,
-  // and an unbounded fan-out took down local Supabase at 249 recipients
-  // during 3B testing (TypeError: fetch failed). Admizz's real audience is
-  // ~16,000, so this is on the real send path, not a local-only edge case.
-  // See docs/SMS-PHASE4-BRIEF.md item 4.
-  const COMPOSE_CONCURRENCY = 25;
-  const [queuedRows, suppressedRows] = await Promise.all([
-    mapWithConcurrency(newSendable, COMPOSE_CONCURRENCY, (r) => composeRow(r, "queued")),
-    mapWithConcurrency(newSuppressed, COMPOSE_CONCURRENCY, (r) => composeRow(r, "suppressed")),
-  ]);
-  const newRows = [...queuedRows, ...suppressedRows];
+  const newRows = [
+    ...newSendable.map((r) => composeRow(r, "queued")),
+    ...newSuppressed.map((r) => composeRow(r, "suppressed")),
+  ];
 
   if (newRows.length > 0) {
     const materializeResult = await materializeInChunks(newRows, async (chunk) => db.from("sms_messages").insert(chunk), {
@@ -173,14 +204,6 @@ export async function POST(_request: NextRequest, { params }: RouteParams) {
       );
       return apiServiceUnavailable(`Failed to materialize recipient rows (ref: ${requestId})`);
     }
-  }
-
-  // 3. Enforce max_recipients_per_blast — reject with the count, never truncate.
-  if (audience.sendable.length > settings.max_recipients_per_blast) {
-    return apiError("MAX_RECIPIENTS_EXCEEDED", `Audience (${audience.sendable.length}) exceeds the ${settings.max_recipients_per_blast}-recipient cap for this tenant`, 422, {
-      count: audience.sendable.length,
-      max: settings.max_recipients_per_blast,
-    });
   }
 
   // Full total across existing + newly-materialized queued rows — correct on
