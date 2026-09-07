@@ -11,17 +11,21 @@
 // blast feature could be called complete and still fail at 16,000 recipients
 // (docs/BLAST-FINDINGS-2026-09-06.md).
 //
-// So: skipping is fine locally, and a hard failure in CI. If the
-// "Test (database-backed)" job ever stops booting Supabase, this fails loudly
-// instead of quietly reverting to the state it was built to fix.
+// So: skipping is fine wherever no database is promised, and a hard failure
+// wherever one is. The switch is REQUIRE_LOCAL_DB, set ONLY by the
+// "Test (database-backed)" job — deliberately not `CI`, which GitHub sets in
+// every job including the plain `Test` one that has no database on purpose.
+// If that job ever stops booting Supabase, this fails loudly instead of quietly
+// reverting to the state it was built to fix.
 export function requireLocalDbInCi(available: boolean, suite: string): void {
   if (available) return;
-  if (!process.env.CI) return; // local dev without `supabase start` — skipping is correct
+  if (!process.env.REQUIRE_LOCAL_DB) return; // no database promised here — skipping is correct
   throw new Error(
-    `${suite}: local Supabase is unreachable at 127.0.0.1:54321, but CI=true. ` +
-      `DB-backed suites must never silently skip in CI — the "Test (database-backed)" job ` +
-      `is responsible for booting the stack (supabase start -> db reset -> ` +
-      `scripts/migrate-apply.sh local -> scripts/local-db-setup.sh). ` +
-      `Fix the job; do not relax this guard.`
+    `${suite}: the suite's setup probe failed while REQUIRE_LOCAL_DB is set. ` +
+      `Either the local Supabase stack is unreachable at 127.0.0.1:54321, or it is up but ` +
+      `missing the fixture row the probe reads. DB-backed suites must never silently skip ` +
+      `where a database was promised — the "Test (database-backed)" job owns that setup ` +
+      `(supabase start -> db reset -> scripts/migrate-apply.sh local -> ` +
+      `scripts/local-db-setup.sh -> lead fixture). Fix the job; do not relax this guard.`
   );
 }

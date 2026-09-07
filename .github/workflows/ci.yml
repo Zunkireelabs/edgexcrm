@@ -166,7 +166,25 @@ jobs:
       - name: Seed local tenant + admin user
         run: ./scripts/local-db-setup.sh
 
+      # email/outbound/send.test.ts probes `public.leads` and needs one row to
+      # exist; the other five suites probe `tenants`, which the seed creates.
+      # The baseline seeds ZERO leads, so that suite has only ever run on
+      # developer machines that happened to have leads left over from other
+      # work — it is non-deterministic by construction. Fixture here keeps CI
+      # honest; the suite should really create its own (tracked as follow-up).
+      - name: Seed one lead fixture (the email send suite probes public.leads)
+        run: |
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -c \
+            "INSERT INTO public.leads (tenant_id, first_name, last_name, email)
+             SELECT id, 'CI', 'Fixture', 'ci-fixture@zunkiree.invalid'
+             FROM public.tenants ORDER BY created_at LIMIT 1;"
+
       - name: Run database-backed suites
+        env:
+          # NOT `CI` — GitHub sets that in every job, including the plain `Test`
+          # one which has no database by design. This var is the promise that a
+          # database exists, so a skip here is a hard failure.
+          REQUIRE_LOCAL_DB: "1"
         run: |
           npx vitest run \
             src/lib/sms/credits-idempotency.test.ts \
